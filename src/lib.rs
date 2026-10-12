@@ -1,5 +1,5 @@
-//! - video_matrices: pure color matrix coefficients
 //! - video_frame: pure video frame ownership
+//! - audio_format: pure audio format helpers
 
 pub mod bitstream;
 pub mod dstr;
@@ -32,6 +32,7 @@ pub mod video_fourcc;
 pub mod format_conversion;
 pub mod video_matrices;
 pub mod video_frame;
+pub mod audio_format;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -63,3 +64,4 @@ pub use video_fourcc::{VideoFormat, video_format_from_fourcc};
 pub use format_conversion::{y_plane_size, chroma_420_size, chroma_422_size, uyvy_to_yuy2_line};
 pub use video_matrices::{ColorSpace, identity_matrix, limited_to_full_scale};
 pub use video_frame::VideoFrame;
+pub use audio_format::{AudioFormat, SpeakerLayout, audio_size};

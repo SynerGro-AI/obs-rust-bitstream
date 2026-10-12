@@ -1,6 +1,5 @@
-//! - animation_timeline: pure animation timeline
-//! - physics: pure physics settings
 //! - settings_assist: pure AI settings assist
+//! - performance_capture: pure actor performance capture
 
 pub mod bitstream;
 pub mod dstr;
@@ -101,6 +100,7 @@ pub mod bone;
 pub mod animation_timeline;
 pub mod physics;
 pub mod settings_assist;
+pub mod performance_capture;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -200,3 +200,4 @@ pub use bone::{Bone, BoneError};
 pub use animation_timeline::{AnimationTimeline, TimelineError};
 pub use physics::PhysicsSettings;
 pub use settings_assist::SettingsAssist;
+pub use performance_capture::{PerformanceCapture, CaptureError};

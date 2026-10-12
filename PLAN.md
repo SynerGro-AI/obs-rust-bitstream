@@ -109,6 +109,7 @@ The pure foundation is solid and tested.
 - **animation_timeline** — pure animation timeline. Differential wired.
 - **physics** — pure physics settings with AI assist. Differential wired.
 - **settings_assist** — pure AI assist for any settings bag. Differential wired.
+- **performance_capture** — pure actor performance capture. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

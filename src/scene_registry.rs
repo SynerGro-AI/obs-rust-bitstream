@@ -23,6 +23,7 @@ impl From<SceneError> for SceneRegistryError {
             SceneError::EmptyName => SceneRegistryError::EmptyName,
             SceneError::DuplicateItem => SceneRegistryError::DuplicateItem,
             SceneError::MissingItem => SceneRegistryError::Missing,
+            SceneError::EmptySource => SceneRegistryError::EmptyName,
         }
     }
 }
@@ -102,7 +103,7 @@ mod tests {
     fn differential() {
         let mut r = SceneRegistry::new();
         r.add("scene").unwrap();
-        r.get_mut("scene").unwrap().add_item("cam").unwrap();
+        r.get_mut("scene").unwrap().add_item("cam", "camera_src").unwrap();
         assert!(r.get("scene").unwrap().contains("cam"));
     }
 }

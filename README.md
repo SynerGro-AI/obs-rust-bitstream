@@ -86,6 +86,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **hotkey_registry** | Hotkey registry | Pure name-to-hotkey map |
 | **scene_collection** | Scene collection | Pure named set of scenes |
 | **collection_registry** | Collection registry | Pure name-to-collection map |
+| **transition** | Transition | Pure scene switch |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -97,7 +98,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Seventy-five foundation modules with tests
+- [x] Seventy-six foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -110,6 +111,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Module registration + registry complete
 - [x] Display pure layer: context + registry complete
 - [x] Hotkey pure layer: hotkey + registry complete
+- [ ] Transition pure layer started (transition)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

@@ -85,6 +85,7 @@ The pure foundation is solid and tested.
 - **hotkey_registry** — pure hotkey registry, owned by Core. Differential wired.
 - **scene_collection** — pure scene collection. Differential wired.
 - **collection_registry** — pure collection registry, owned by Core. Differential wired.
+- **transition** — pure scene transition. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

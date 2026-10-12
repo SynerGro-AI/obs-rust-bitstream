@@ -38,6 +38,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **pipe** | In-memory pipe | Pure write/read |
 | **frame_rate** | Frame-rate helpers | Pure rational FPS |
 | **audio_math** | Audio math | Pure mul ↔ dB |
+| **video_fourcc** | Fourcc mapping | Pure u32 → format |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -49,9 +50,9 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Twenty-seven foundation modules with tests
+- [x] Twenty-eight foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
-- [ ] Media-io pure layer started (frame-rate, audio-math)
+- [ ] Media-io pure layer started (frame-rate, audio-math, video-fourcc)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

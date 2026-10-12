@@ -32,6 +32,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 ## Media-io layer (started)
 - **frame_rate** — pure FPS rational helpers. Differential wired.
 - **audio_math** — pure mul ↔ dB conversion. Differential wired.
+- **video_fourcc** — pure fourcc to format mapping. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 
 ## Util foundation complete

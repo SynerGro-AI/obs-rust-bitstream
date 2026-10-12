@@ -77,6 +77,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **filter_context** | Filter context | Pure name + id + settings |
 | **filter_chain** | Filter chain | Pure ordered filter list |
 | **filter_registry** | Filter registry | Pure name-to-filter map |
+| **core** | Core root | Pure owner of all registries |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -88,7 +89,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Sixty-six foundation modules with tests
+- [x] Sixty-seven foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -97,6 +98,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Source pure layer: context + registry complete for source, output, encoder, service
 - [ ] Scene pure layer started (scene_context, scene_registry, scene_item)
 - [x] Filter pure layer: context + chain + registry complete
+- [x] Core root owns all registries
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

@@ -1,5 +1,5 @@
-//! - calldata: pure named parameter bag
 //! - decl: pure declaration-string parser
+//! - obs_data: pure settings bag
 
 pub mod bitstream;
 pub mod dstr;
@@ -51,6 +51,7 @@ pub mod signal;
 pub mod proc;
 pub mod calldata;
 pub mod decl;
+pub mod obs_data;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -101,3 +102,4 @@ pub use signal::SignalHandler;
 pub use proc::ProcHandler;
 pub use calldata::{Calldata, CallValue, CallType, CallError};
 pub use decl::{parse_decl, DeclInfo, DeclParam, DeclError, ParamFlags};
+pub use obs_data::{ObsData, DataValue, DataError};

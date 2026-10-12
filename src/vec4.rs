@@ -19,22 +19,27 @@ pub struct Vec4 {
 impl Vec4 {
     pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0, w: 0.0 };
 
+    #[inline]
     pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
         Self { x, y, z, w }
     }
 
+    #[inline]
     pub fn add(self, other: Self) -> Self {
         Self::new(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w)
     }
 
+    #[inline]
     pub fn sub(self, other: Self) -> Self {
         Self::new(self.x - other.x, self.y - other.y, self.z - other.z, self.w - other.w)
     }
 
+    #[inline]
     pub fn mul(self, other: Self) -> Self {
         Self::new(self.x * other.x, self.y * other.y, self.z * other.z, self.w * other.w)
     }
 
+    #[inline]
     pub fn div(self, other: Self) -> Option<Self> {
         if other.x == 0.0 || other.y == 0.0 || other.z == 0.0 || other.w == 0.0 {
             None
@@ -43,18 +48,28 @@ impl Vec4 {
         }
     }
 
+    /// Fast path for graphics: assumes non-zero divisor.
+    #[inline]
+    pub fn div_fast(self, other: Self) -> Self {
+        Self::new(self.x / other.x, self.y / other.y, self.z / other.z, self.w / other.w)
+    }
+
+    #[inline]
     pub fn mulf(self, f: f32) -> Self {
         Self::new(self.x * f, self.y * f, self.z * f, self.w * f)
     }
 
+    #[inline]
     pub fn dot(self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w
     }
 
+    #[inline]
     pub fn length_sq(self) -> f32 {
         self.dot(self)
     }
 
+    #[inline]
     pub fn length(self) -> f32 {
         let sq = self.length_sq();
         if sq <= 0.0 {

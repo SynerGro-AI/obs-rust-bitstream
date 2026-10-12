@@ -18,6 +18,7 @@ pub struct Matrix4 {
 }
 
 impl Matrix4 {
+    #[inline]
     pub fn identity() -> Self {
         Self {
             x: Vec4::new(1.0, 0.0, 0.0, 0.0),
@@ -27,11 +28,13 @@ impl Matrix4 {
         }
     }
 
+    #[inline]
     pub fn from_columns(x: Vec4, y: Vec4, z: Vec4, t: Vec4) -> Self {
         Self { x, y, z, t }
     }
 
     /// Affine multiply (rotation/scale columns + translation).
+    #[inline]
     pub fn mul(self, other: Self) -> Self {
         let x = self.transform_vec(other.x);
         let y = self.transform_vec(other.y);
@@ -40,6 +43,7 @@ impl Matrix4 {
         Self { x, y, z, t }
     }
 
+    #[inline]
     fn transform_vec(self, v: Vec4) -> Vec4 {
         Vec4::new(
             self.x.x * v.x + self.y.x * v.y + self.z.x * v.z,
@@ -49,6 +53,7 @@ impl Matrix4 {
         )
     }
 
+    #[inline]
     fn transform_point(self, v: Vec4) -> Vec4 {
         let r = self.transform_vec(v);
         Vec4::new(r.x + self.t.x, r.y + self.t.y, r.z + self.t.z, 1.0)

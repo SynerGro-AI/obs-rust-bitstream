@@ -17,22 +17,27 @@ pub struct Vec2 {
 impl Vec2 {
     pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
 
+    #[inline]
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
+    #[inline]
     pub fn add(self, other: Self) -> Self {
         Self::new(self.x + other.x, self.y + other.y)
     }
 
+    #[inline]
     pub fn sub(self, other: Self) -> Self {
         Self::new(self.x - other.x, self.y - other.y)
     }
 
+    #[inline]
     pub fn mul(self, other: Self) -> Self {
         Self::new(self.x * other.x, self.y * other.y)
     }
 
+    #[inline]
     pub fn div(self, other: Self) -> Option<Self> {
         if other.x == 0.0 || other.y == 0.0 {
             None
@@ -41,18 +46,28 @@ impl Vec2 {
         }
     }
 
+    /// Fast path for graphics: assumes non-zero divisor.
+    #[inline]
+    pub fn div_fast(self, other: Self) -> Self {
+        Self::new(self.x / other.x, self.y / other.y)
+    }
+
+    #[inline]
     pub fn mulf(self, f: f32) -> Self {
         Self::new(self.x * f, self.y * f)
     }
 
+    #[inline]
     pub fn dot(self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y
     }
 
+    #[inline]
     pub fn length_sq(self) -> f32 {
         self.dot(self)
     }
 
+    #[inline]
     pub fn length(self) -> f32 {
         self.length_sq().sqrt()
     }

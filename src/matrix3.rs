@@ -19,6 +19,7 @@ pub struct Matrix3 {
 }
 
 impl Matrix3 {
+    #[inline]
     pub fn identity() -> Self {
         Self {
             x: Vec3::new(1.0, 0.0, 0.0),
@@ -28,13 +29,14 @@ impl Matrix3 {
         }
     }
 
+    #[inline]
     pub fn from_columns(x: Vec3, y: Vec3, z: Vec3, t: Vec3) -> Self {
         Self { x, y, z, t }
     }
 
     /// Multiply two 3x4 matrices (rotation/scale part + translation).
+    #[inline]
     pub fn mul(self, other: Self) -> Self {
-        // Simplified: treat as affine. Full general mul can be expanded later.
         let x = self.transform_vec(other.x);
         let y = self.transform_vec(other.y);
         let z = self.transform_vec(other.z);
@@ -42,6 +44,7 @@ impl Matrix3 {
         Self { x, y, z, t }
     }
 
+    #[inline]
     fn transform_vec(self, v: Vec3) -> Vec3 {
         Vec3::new(
             self.x.x * v.x + self.y.x * v.y + self.z.x * v.z,
@@ -50,6 +53,7 @@ impl Matrix3 {
         )
     }
 
+    #[inline]
     fn transform_point(self, v: Vec3) -> Vec3 {
         self.transform_vec(v).add(self.t)
     }

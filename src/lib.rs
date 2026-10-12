@@ -10,6 +10,7 @@
 //! - flight_replay: pure recorded flight playback
 //! - wind: pure environment wind force
 //! - plane_renderer: pure flight-to-skeleton renderer
+//! - camera_follow: pure flight camera follow
 
 pub mod bitstream;
 pub mod dstr;
@@ -122,6 +123,7 @@ pub mod flight_session;
 pub mod flight_replay;
 pub mod wind;
 pub mod plane_renderer;
+pub mod camera_follow;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -233,3 +235,4 @@ pub use flight_session::FlightSession;
 pub use flight_replay::FlightReplay;
 pub use wind::Wind;
 pub use plane_renderer::PlaneRenderer;
+pub use camera_follow::CameraFollow;

@@ -121,6 +121,7 @@ The pure foundation is solid and tested.
 - **flight_replay** — pure recorded flight playback. Differential wired.
 - **wind** — pure environment wind force. Differential wired.
 - **plane_renderer** — pure flight-to-skeleton renderer. Differential wired.
+- **camera_follow** — pure flight camera follow. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

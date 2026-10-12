@@ -1,5 +1,5 @@
-//! - signal: pure signal handler
 //! - proc: pure procedure handler
+//! - calldata: pure named parameter bag
 
 pub mod bitstream;
 pub mod dstr;
@@ -49,6 +49,7 @@ pub mod bounds;
 pub mod half;
 pub mod signal;
 pub mod proc;
+pub mod calldata;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -97,3 +98,4 @@ pub use bounds::Bounds;
 pub use half::{f32_to_f16, f16_to_f32};
 pub use signal::SignalHandler;
 pub use proc::ProcHandler;
+pub use calldata::{Calldata, CallValue};

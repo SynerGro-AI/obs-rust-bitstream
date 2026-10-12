@@ -10,6 +10,7 @@ use crate::bone::Bone;
 use crate::environment::Environment;
 use crate::learning_pipeline::LearningPipeline;
 use crate::pilot::Pilot;
+use crate::wind::Wind;
 
 #[derive(Clone, Debug)]
 pub struct FlightSession {
@@ -46,6 +47,7 @@ impl FlightSession {
         for _ in 0..steps {
             let lift = pilot.choose_lift(&pipeline);
             pipeline.step_plane(plane, lift, dt);
+            Wind::apply(env, plane, dt);
             self.altitudes.push(plane.local().t.y);
         }
     }
@@ -81,5 +83,16 @@ mod tests {
         let mut plane = Bone::new("plane").unwrap();
         s.run(&env, &pilot, &mut plane, 10, 0.1);
         assert!(s.rose());
+    }
+
+    #[test]
+    fn wind_moves_horizontal() {
+        let mut s = FlightSession::new();
+        let mut env = Environment::new("earth").unwrap();
+        env.set_wind_x(10.0);
+        let pilot = Pilot::new(15.0);
+        let mut plane = Bone::new("plane").unwrap();
+        s.run(&env, &pilot, &mut plane, 5, 0.1);
+        assert!((plane.local().t.x - 5.0).abs() < 0.001);
     }
 }

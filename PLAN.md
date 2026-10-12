@@ -118,6 +118,7 @@ The pure foundation is solid and tested.
 - **environment** — pure world physics governor. Differential wired.
 - **pilot** — pure lesson-driven pilot. Differential wired.
 - **flight_session** — pure closed-loop flight session. Differential wired.
+- **flight_replay** — pure recorded flight playback. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

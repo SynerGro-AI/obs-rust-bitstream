@@ -7,6 +7,7 @@
 //! - environment: pure world physics governor
 //! - pilot: pure lesson-driven pilot
 //! - flight_session: pure closed-loop flight session
+//! - flight_replay: pure recorded flight playback
 
 pub mod bitstream;
 pub mod dstr;
@@ -116,6 +117,7 @@ pub mod learning_pipeline;
 pub mod environment;
 pub mod pilot;
 pub mod flight_session;
+pub mod flight_replay;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -224,3 +226,4 @@ pub use learning_pipeline::LearningPipeline;
 pub use environment::{Environment, EnvironmentError};
 pub use pilot::Pilot;
 pub use flight_session::FlightSession;
+pub use flight_replay::FlightReplay;

@@ -26,6 +26,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **file_serializer** — pure file serializer. Differential wired.
 - **buffered_serializer** — pure buffered serializer. Differential wired.
 - **cf_lexer** — pure CF lexer. Differential wired.
+- **config_parser** — pure config string parser. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 - CI that runs cargo test on every push.
 

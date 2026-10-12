@@ -128,6 +128,7 @@ The pure foundation is solid and tested.
 - **camera_rig** — pure multi-camera rig. Differential wired.
 - **camera_cut** — pure camera cut. Differential wired.
 - **material** — pure material. Differential wired.
+- **lighting** — pure material × light evaluation. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

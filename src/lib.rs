@@ -1,5 +1,6 @@
-//! - render_item: pure render item
 //! - render_list: pure render list
+//! - camera: pure camera
+//! - projector: pure 2D-to-3D projector
 
 pub mod bitstream;
 pub mod dstr;
@@ -94,6 +95,8 @@ pub mod canvas;
 pub mod canvas_registry;
 pub mod render_item;
 pub mod render_list;
+pub mod camera;
+pub mod projector;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -187,3 +190,5 @@ pub use canvas::{Canvas, CanvasError};
 pub use canvas_registry::{CanvasRegistry, CanvasRegistryError};
 pub use render_item::RenderItem;
 pub use render_list::RenderList;
+pub use camera::Camera;
+pub use projector::Projector;

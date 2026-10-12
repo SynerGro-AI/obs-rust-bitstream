@@ -165,6 +165,14 @@ impl ObsData {
         self.values.len()
     }
 
+    /// Merge another bag into this one. Keys in `other` overwrite.
+    /// Matches OBS obs_data_apply. Defaults are not touched.
+    pub fn apply(&mut self, other: &ObsData) {
+        for (k, v) in &other.values {
+            self.values.insert(k.clone(), v.clone());
+        }
+    }
+
     /// Serialize values to a compact JSON object string.
     /// Nested objects and arrays are included. No unwraps.
     pub fn to_json(&self) -> String {
@@ -408,5 +416,19 @@ mod tests {
     fn json_bad() {
         assert_eq!(ObsData::from_json("not json"), Err(DataError::BadJson));
         assert_eq!(ObsData::from_json("{"), Err(DataError::BadJson));
+    }
+
+    #[test]
+    fn apply_overwrites() {
+        let mut base = ObsData::new();
+        base.set_int("w", 1280).unwrap();
+        base.set_string("name", "old").unwrap();
+        let mut patch = ObsData::new();
+        patch.set_string("name", "new").unwrap();
+        patch.set_bool("on", true).unwrap();
+        base.apply(&patch);
+        assert_eq!(base.get_string("name").unwrap(), "new");
+        assert_eq!(base.get_int("w").unwrap(), 1280);
+        assert_eq!(base.get_bool("on").unwrap(), true);
     }
 }

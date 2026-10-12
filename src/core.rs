@@ -8,6 +8,7 @@
 
 use crate::encoder_registry::EncoderRegistry;
 use crate::filter_registry::FilterRegistry;
+use crate::module_registry::ModuleRegistry;
 use crate::output_registry::OutputRegistry;
 use crate::scene_registry::SceneRegistry;
 use crate::service_registry::ServiceRegistry;
@@ -21,6 +22,7 @@ pub struct Core {
     services: ServiceRegistry,
     scenes: SceneRegistry,
     filters: FilterRegistry,
+    modules: ModuleRegistry,
 }
 
 impl Core {
@@ -74,6 +76,14 @@ impl Core {
 
     pub fn filters_mut(&mut self) -> &mut FilterRegistry {
         &mut self.filters
+    }
+
+    pub fn modules(&self) -> &ModuleRegistry {
+        &self.modules
+    }
+
+    pub fn modules_mut(&mut self) -> &mut ModuleRegistry {
+        &mut self.modules
     }
 }
 

@@ -21,6 +21,8 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **text_lookup** | HashMap store with escape expansion | Differential on insert/get |
 | **path_extension** | Safe extension extractor | None on null/empty |
 | **bmem** | Alloc size check + alignment contract | 32-byte alignment |
+| **util_uint64** | Exact mul-then-div | 128-bit intermediate, div-zero safe |
+| **util_uint128** | Add / mul64_64 | Native u128 |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -32,7 +34,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Ten foundation modules with tests
+- [x] Twelve foundation modules with tests
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

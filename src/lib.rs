@@ -1,18 +1,6 @@
-//! Public foundation for the OBS Studio rewrite in Rust.
-//!
-//! Work smarter: reusable patterns + AI assistance cover many modules
-//! with far fewer actions.
-//!
-//! - bitstream: Position trait (wrap vs no-wrap is type-level)
-//! - dstr: safe path fixes infinite-loop and overflow
-//! - utf8: safe truncation never splits a multibyte character
-//! - diff: reusable differential test helper (wired into modules)
-//! - crc32: standard CRC32 with known test vectors
-//! - ai: simple config to switch Grok / Claude / Seraphina for automated help
-//! - array_serializer: Vec-based output serializer + LE helpers
-//! - text_lookup: HashMap store with escape expansion
-//! - path_extension: safe extension extractor (None on null/empty)
 //! - bmem: allocation size check + 32-byte alignment contract
+//! - util_uint64: exact mul-then-div with 128-bit intermediate
+//! - util_uint128: safe add / mul64_64 using native u128
 
 pub mod bitstream;
 pub mod dstr;
@@ -24,6 +12,8 @@ pub mod array_serializer;
 pub mod text_lookup;
 pub mod path_extension;
 pub mod bmem;
+pub mod util_uint64;
+pub mod util_uint128;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -34,3 +24,5 @@ pub use array_serializer::ArrayOutput;
 pub use text_lookup::TextLookup;
 pub use path_extension::path_extension;
 pub use bmem::{is_valid_alloc_size, alignment};
+pub use util_uint64::util_mul_div64;
+pub use util_uint128::{U128, util_add128, util_mul64_64};

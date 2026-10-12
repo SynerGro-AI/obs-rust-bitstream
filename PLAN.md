@@ -14,6 +14,8 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **text_lookup** — HashMap store with escape expansion. Differential wired.
 - **path_extension** — safe extension extractor (None on null/empty). Differential wired.
 - **bmem** — allocation size check + 32-byte alignment contract. Differential wired.
+- **util_uint64** — exact (num * mul) / div via 128-bit intermediate. Differential wired.
+- **util_uint128** — safe add and mul64_64 using native u128. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 - CI that runs cargo test on every push.
 

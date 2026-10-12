@@ -32,6 +32,8 @@ pub struct Core {
     collections: CollectionRegistry,
     transitions: TransitionRegistry,
     current_scene: Option<String>,
+    program_scene: Option<String>,
+    preview_scene: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -195,6 +197,32 @@ impl Core {
     pub fn current_scene(&self) -> Option<&str> {
         self.current_scene.as_deref()
     }
+
+    /// Set the program scene. Returns TypeNotRegistered if the scene does not exist.
+    pub fn set_program_scene(&mut self, name: &str) -> Result<(), CoreError> {
+        if !self.scenes.contains(name) {
+            return Err(CoreError::TypeNotRegistered);
+        }
+        self.program_scene = Some(name.to_string());
+        Ok(())
+    }
+
+    pub fn program_scene(&self) -> Option<&str> {
+        self.program_scene.as_deref()
+    }
+
+    /// Set the preview scene. Returns TypeNotRegistered if the scene does not exist.
+    pub fn set_preview_scene(&mut self, name: &str) -> Result<(), CoreError> {
+        if !self.scenes.contains(name) {
+            return Err(CoreError::TypeNotRegistered);
+        }
+        self.preview_scene = Some(name.to_string());
+        Ok(())
+    }
+
+    pub fn preview_scene(&self) -> Option<&str> {
+        self.preview_scene.as_deref()
+    }
 }
 
 #[cfg(test)]
@@ -247,5 +275,17 @@ mod tests {
         c.set_current_scene("Main").unwrap();
         assert_eq!(c.current_scene(), Some("Main"));
         assert!(matches!(c.set_current_scene("missing"), Err(CoreError::TypeNotRegistered)));
+    }
+
+    #[test]
+    fn program_preview() {
+        let mut c = Core::new();
+        c.scenes_mut().add("Main").unwrap();
+        c.scenes_mut().add("Overlay").unwrap();
+        c.set_program_scene("Main").unwrap();
+        c.set_preview_scene("Overlay").unwrap();
+        assert_eq!(c.program_scene(), Some("Main"));
+        assert_eq!(c.preview_scene(), Some("Overlay"));
+        assert!(matches!(c.set_program_scene("missing"), Err(CoreError::TypeNotRegistered)));
     }
 }

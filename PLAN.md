@@ -61,6 +61,9 @@ decl (declaration-string parser).
 Threading and ref-count wrappers can be added later.
 The pure foundation is solid and tested.
 
+## Data pure layer (started)
+- **obs_data** — pure settings bag with defaults. Differential wired.
+
 ## Graphics pure layer solid
 The high-leverage pure surface of graphics is now covered:
 vec2, vec3, vec4, matrix3, matrix4, quat, axisang, plane, bounds, half.

@@ -73,6 +73,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **service_registry** | Service registry | Pure name-to-service map |
 | **scene_context** | Scene context | Pure ordered item list |
 | **scene_registry** | Scene registry | Pure name-to-scene map |
+| **scene_item** | Scene item | Pure transform + visibility |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -84,14 +85,14 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Sixty-two foundation modules with tests
+- [x] Sixty-three foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
 - [x] Callback pure layer solid (signal, proc, calldata, decl)
 - [ ] Data pure layer started (obs_data, obs_properties)
 - [x] Source pure layer: context + registry complete for source, output, encoder, service
-- [ ] Scene pure layer started (scene_context, scene_registry)
+- [ ] Scene pure layer started (scene_context, scene_registry, scene_item)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

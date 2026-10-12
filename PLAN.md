@@ -72,6 +72,7 @@ The pure foundation is solid and tested.
 - **service_registry** — pure service registry. Differential wired.
 - **scene_context** — pure scene context. Differential wired.
 - **scene_registry** — pure scene registry. Differential wired.
+- **scene_item** — pure scene item with transform. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

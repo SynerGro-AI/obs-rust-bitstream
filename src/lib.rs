@@ -1,5 +1,5 @@
-//! - scene_context: pure scene context
 //! - scene_registry: pure scene registry
+//! - scene_item: pure scene item with transform
 
 pub mod bitstream;
 pub mod dstr;
@@ -63,6 +63,7 @@ pub mod encoder_registry;
 pub mod service_registry;
 pub mod scene_context;
 pub mod scene_registry;
+pub mod scene_item;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -125,3 +126,4 @@ pub use encoder_registry::{EncoderRegistry, EncoderRegistryError};
 pub use service_registry::{ServiceRegistry, ServiceRegistryError};
 pub use scene_context::{SceneContext, SceneError};
 pub use scene_registry::{SceneRegistry, SceneRegistryError};
+pub use scene_item::{SceneItem, Transform, SceneItemError};

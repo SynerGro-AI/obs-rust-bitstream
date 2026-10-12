@@ -1,33 +1,33 @@
 # Public OBS Rust Rewrite — Foundational Plan
 
-This repo is the public starting point.
+Goal: beat the ~800 scripts already finished upstream by using ~10% of the API actions.
+**Work smarter, not harder.**
 
-## Current foundation
-- Perfect bitstream port with Position trait (wrap vs no-wrap is type-level)
-- C ABI shims that preserve original quirks
-- Unit tests that prove the math
-- Parser tools that recognize the pattern
-- CI that runs cargo test
-- **dstr foundation module** (safe path fixes infinite-loop on empty find + overflow)
+## Current foundation (high-leverage patterns)
+- **bitstream** — Position trait (wrap vs no-wrap is type-level). One abstraction covers the ABI quirk forever.
+- **dstr** — safe path fixes infinite-loop on empty find + overflow.
+- **utf8** — safe truncation that never splits a multibyte character (fixes the 255-byte filename crash).
+- Parser tools that recognize the patterns and emit skeletons pointing at them.
+- CI that runs cargo test on every push.
+
+## Smart multiplier
+One perfect pattern (Position, safe truncation, bug-fix tests) applies to many files.
+Parser + quirks table turns one action into coverage for dozens of modules.
 
 ## Next steps (in order)
-
-1. Differential test suite against the original C oracle (obs-c-oracle style)
-2. Expand dstr with full C ABI shims and more tests
-3. Port next util modules using the same perfect pattern:
-   - utf8 (fix mid-character truncation at 255 bytes)
-   - path_extension, serializers, crc32, etc.
-4. Workspace layout for multiple crates (obs-util-rust, obs-graphics-rust, ...)
-5. Integration notes for dropping into obs-rust/obs-studio
-6. Optimize hot paths, re-test, fuzz
-7. Keep pushing — public, free, open
+1. Strengthen the parser to emit more complete, testable skeletons in one pass.
+2. Differential test harness (vs C oracle) that can be reused across modules.
+3. Batch-apply the patterns to the remaining util files (path_extension, serializers, crc32, bmem, etc.).
+4. Workspace layout so new crates drop in with the same structure.
+5. Keep the public repo growing with high-leverage commits.
 
 ## Principles
 - Foundation first
 - Math is perfect (prove it with tests)
 - Preserve public C ABI
 - Fix the bugs in the safe path
+- Work smarter: reusable patterns > one-off ports
 - AI-assisted contributions welcome
 
 ## How to contribute
-Clone, cargo test, open a PR. Point the parser at the next .c file and improve the generated skeleton until the tests pass.
+Clone, cargo test, open a PR. Point the parser at the next .c file; improve the generated skeleton until the tests pass. The patterns are already here.

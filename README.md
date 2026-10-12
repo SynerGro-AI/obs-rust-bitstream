@@ -60,6 +60,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **signal** | Signal handler | Pure connect + emit |
 | **proc** | Procedure handler | Pure add + call |
 | **calldata** | Call data | Pure named params |
+| **decl** | Decl parser | Pure signal/proc strings |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -71,11 +72,11 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Forty-nine foundation modules with tests
+- [x] Fifty foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
-- [ ] Callback pure layer started (signal, proc, calldata)
+- [ ] Callback pure layer started (signal, proc, calldata, decl)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

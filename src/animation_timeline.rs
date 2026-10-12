@@ -66,18 +66,37 @@ impl AnimationTimeline {
         self.keys.len()
     }
 
-    /// Sample the last key at or before `time` for the named bone
-    /// and apply it to the bone's local translation.
+    /// Sample the named bone at `time` with linear interpolation
+    /// between the surrounding keyframes and apply it.
     pub fn apply(&self, bone: &mut Bone, time: f32) {
-        let mut best: Option<&Keyframe> = None;
+        let name = bone.name();
+        let mut prev: Option<&Keyframe> = None;
+        let mut next: Option<&Keyframe> = None;
         for k in &self.keys {
-            if k.bone == bone.name() && k.time_secs <= time {
-                best = Some(k);
+            if k.bone != name {
+                continue;
+            }
+            if k.time_secs <= time {
+                prev = Some(k);
+            } else if next.is_none() {
+                next = Some(k);
+                break;
             }
         }
-        if let Some(k) = best {
-            bone.set_local_translation(k.x, k.y, k.z);
-        }
+        let (x, y, z) = match (prev, next) {
+            (Some(a), Some(b)) if b.time_secs > a.time_secs => {
+                let t = ((time - a.time_secs) / (b.time_secs - a.time_secs)).clamp(0.0, 1.0);
+                (
+                    a.x + (b.x - a.x) * t,
+                    a.y + (b.y - a.y) * t,
+                    a.z + (b.z - a.z) * t,
+                )
+            }
+            (Some(a), _) => (a.x, a.y, a.z),
+            (_, Some(b)) => (b.x, b.y, b.z),
+            _ => return,
+        };
+        bone.set_local_translation(x, y, z);
     }
 }
 
@@ -101,10 +120,10 @@ mod tests {
     fn differential() {
         let mut timeline = AnimationTimeline::new("wave", 1.0).unwrap();
         timeline.add_key(0.0, "spine", 0.0, 0.0, 0.0);
-        timeline.add_key(0.5, "spine", 0.0, 1.0, 0.0);
+        timeline.add_key(1.0, "spine", 0.0, 2.0, 0.0);
         let mut bone = Bone::new("spine").unwrap();
-        timeline.apply(&mut bone, 0.6);
-        assert_eq!(bone.local().t.y, 1.0);
+        timeline.apply(&mut bone, 0.5);
+        assert!((bone.local().t.y - 1.0).abs() < 0.001);
         assert_eq!(timeline.key_count(), 2);
     }
 }

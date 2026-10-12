@@ -59,6 +59,33 @@ impl Core {
         self.filters.add(name, type_id).map_err(|_| CoreError::Duplicate)
     }
 
+    /// Load a module by id. Empty and duplicate ids are rejected.
+    pub fn load_module(&mut self, id: &str) -> Result<(), CoreError> {
+        self.modules.add(id).map_err(|e| match e {
+            crate::module_registry::ModuleRegistryError::EmptyId => CoreError::EmptyName,
+            crate::module_registry::ModuleRegistryError::Duplicate => CoreError::Duplicate,
+            crate::module_registry::ModuleRegistryError::Missing => CoreError::TypeNotRegistered,
+        })
+    }
+
+    /// Register a source type on a loaded module.
+    pub fn register_source_type(&mut self, module_id: &str, type_id: &str) -> Result<(), CoreError> {
+        let m = self.modules.get_mut(module_id).map_err(|_| CoreError::TypeNotRegistered)?;
+        m.register_source(type_id).map_err(|e| match e {
+            crate::module::ModuleError::EmptyId => CoreError::EmptyName,
+            crate::module::ModuleError::Duplicate => CoreError::Duplicate,
+        })
+    }
+
+    /// Register a filter type on a loaded module.
+    pub fn register_filter_type(&mut self, module_id: &str, type_id: &str) -> Result<(), CoreError> {
+        let m = self.modules.get_mut(module_id).map_err(|_| CoreError::TypeNotRegistered)?;
+        m.register_filter(type_id).map_err(|e| match e {
+            crate::module::ModuleError::EmptyId => CoreError::EmptyName,
+            crate::module::ModuleError::Duplicate => CoreError::Duplicate,
+        })
+    }
+
     pub fn sources(&self) -> &SourceRegistry {
         &self.sources
     }

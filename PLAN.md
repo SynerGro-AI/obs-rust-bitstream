@@ -18,6 +18,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **util_uint128** — safe add and mul64_64 using native u128. Differential wired.
 - **deque** — safe double-ended queue (circular buffer). Differential wired.
 - **darray** — safe dynamic array (Vec wrapper). Differential wired.
+- **config** — pure in-memory config store with defaults. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 - CI that runs cargo test on every push.
 

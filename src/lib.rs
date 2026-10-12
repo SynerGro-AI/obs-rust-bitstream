@@ -1,5 +1,5 @@
-//! - darray: safe dynamic array (Vec wrapper)
 //! - config: pure in-memory config store with defaults
+//! - lexer: pure base-token lexer
 
 pub mod bitstream;
 pub mod dstr;
@@ -16,6 +16,7 @@ pub mod util_uint128;
 pub mod deque;
 pub mod darray;
 pub mod config;
+pub mod lexer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -31,3 +32,4 @@ pub use util_uint128::{U128, util_add128, util_mul64_64};
 pub use deque::{Deque, ByteDeque};
 pub use darray::DArray;
 pub use config::Config;
+pub use lexer::{Lexer, Token, TokenType};

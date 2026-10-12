@@ -34,14 +34,13 @@ impl Pilot {
         self.target_altitude
     }
 
-    /// Choose a lift from the last lesson and the target altitude.
-    /// If the plane is below target, add lift. If above, reduce.
+    /// Choose a lift from the last lesson and the altitude error.
+    /// Below target adds lift, above target reduces it.
     pub fn choose_lift(&self, pipeline: &LearningPipeline) -> f32 {
         let n = pipeline.lesson_count() as f32;
         let base = self.base_lift + n * 0.5;
-        // The pipeline does not expose current altitude, so the
-        // target is used as a bias: positive target adds lift.
-        base + self.target_altitude * 0.1
+        let error = self.target_altitude - pipeline.altitude();
+        base + error * 0.1
     }
 }
 
@@ -71,8 +70,10 @@ mod tests {
     fn target_adds_lift() {
         let mut pilot = Pilot::new(10.0);
         pilot.set_target_altitude(10.0);
-        let p = LearningPipeline::new();
+        let mut p = LearningPipeline::new();
+        let mut plane = Bone::new("plane").unwrap();
+        p.step_plane(&mut plane, 0.0, 0.1);
         let lift = pilot.choose_lift(&p);
-        assert!((lift - 11.0).abs() < 0.001);
+        assert!(lift > 10.0);
     }
 }

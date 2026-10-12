@@ -62,6 +62,11 @@ impl LearningPipeline {
         self.lessons.len()
     }
 
+    /// Current altitude of the last recorded experience, or 0.
+    pub fn altitude(&self) -> f32 {
+        self.experiences.last().map(|e| e.altitude).unwrap_or(0.0)
+    }
+
     /// Step a plane (bone) under gravity + drag + applied lift.
     /// Records the experience. Extracts a lesson only if the
     /// physics step actually moved the body.

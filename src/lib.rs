@@ -1,5 +1,5 @@
-//! - util_uint128: safe add / mul64_64 using native u128
 //! - deque: safe double-ended queue (circular buffer semantics)
+//! - darray: safe dynamic array (Vec wrapper)
 
 pub mod bitstream;
 pub mod dstr;
@@ -14,6 +14,7 @@ pub mod bmem;
 pub mod util_uint64;
 pub mod util_uint128;
 pub mod deque;
+pub mod darray;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -27,3 +28,4 @@ pub use bmem::{is_valid_alloc_size, alignment};
 pub use util_uint64::util_mul_div64;
 pub use util_uint128::{U128, util_add128, util_mul64_64};
 pub use deque::{Deque, ByteDeque};
+pub use darray::DArray;

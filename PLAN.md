@@ -61,6 +61,9 @@ decl (declaration-string parser).
 Threading and ref-count wrappers can be added later.
 The pure foundation is solid and tested.
 
+## Source pure layer (started)
+- **source_context** — pure source context (name, settings, properties, signal, proc). Differential wired.
+
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.
 - **obs_properties** — pure property list. Differential wired.

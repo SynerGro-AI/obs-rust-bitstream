@@ -11,6 +11,8 @@
 //! - ai: simple config to switch Grok / Claude / Seraphina for automated help
 //! - array_serializer: Vec-based output serializer + LE helpers
 //! - text_lookup: HashMap store with escape expansion
+//! - path_extension: safe extension extractor (None on null/empty)
+//! - bmem: allocation size check + 32-byte alignment contract
 
 pub mod bitstream;
 pub mod dstr;
@@ -20,6 +22,8 @@ pub mod crc32;
 pub mod ai;
 pub mod array_serializer;
 pub mod text_lookup;
+pub mod path_extension;
+pub mod bmem;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -28,3 +32,5 @@ pub use crc32::crc32;
 pub use ai::{AiAssistant, AiConfig, Backend};
 pub use array_serializer::ArrayOutput;
 pub use text_lookup::TextLookup;
+pub use path_extension::path_extension;
+pub use bmem::{is_valid_alloc_size, alignment};

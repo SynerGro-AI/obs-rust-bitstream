@@ -19,12 +19,14 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **ai** | AI/SI integration scaffold | Simple config for Grok, Claude, or Seraphina |
 | **array_serializer** | Vec-based output serializer + LE helpers | Differential on short writes |
 | **text_lookup** | HashMap store with escape expansion | Differential on insert/get |
+| **path_extension** | Safe extension extractor | None on null/empty |
+| **bmem** | Alloc size check + alignment contract | 32-byte alignment |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
 ## Status
 
-- [x] Eight foundation modules with tests
+- [x] Ten foundation modules with tests
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired
@@ -47,6 +49,8 @@ src/
   ai.rs
   array_serializer.rs
   text_lookup.rs
+  path_extension.rs
+  bmem.rs
 tools/
   obs_cpp_to_rust_parser.py
 .github/workflows/ci.yml

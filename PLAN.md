@@ -12,6 +12,8 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **ai** — simple config scaffold to switch Grok / Claude / Seraphina for automated assistance.
 - **array_serializer** — Vec-based output serializer + little-endian helpers. Differential wired.
 - **text_lookup** — HashMap store with escape expansion. Differential wired.
+- **path_extension** — safe extension extractor (None on null/empty). Differential wired.
+- **bmem** — allocation size check + 32-byte alignment contract. Differential wired.
 - Parser tools that point at the patterns.
 - CI that runs cargo test on every push.
 

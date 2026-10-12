@@ -37,6 +37,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **video_matrices** — pure color matrix coefficients. Differential wired.
 - **video_frame** — pure video frame ownership. Differential wired.
 - **audio_format** — pure audio format helpers. Differential wired.
+- **video_scaler** — pure scale info and size helpers. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 
 ## Util foundation complete

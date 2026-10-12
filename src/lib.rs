@@ -1,5 +1,5 @@
-//! - video_frame: pure video frame ownership
 //! - audio_format: pure audio format helpers
+//! - video_scaler: pure scale info and size helpers
 
 pub mod bitstream;
 pub mod dstr;
@@ -33,6 +33,7 @@ pub mod format_conversion;
 pub mod video_matrices;
 pub mod video_frame;
 pub mod audio_format;
+pub mod video_scaler;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -65,3 +66,4 @@ pub use format_conversion::{y_plane_size, chroma_420_size, chroma_422_size, uyvy
 pub use video_matrices::{ColorSpace, identity_matrix, limited_to_full_scale};
 pub use video_frame::VideoFrame;
 pub use audio_format::{AudioFormat, SpeakerLayout, audio_size};
+pub use video_scaler::{ScaleInfo, lerp_weight};

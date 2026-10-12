@@ -26,6 +26,7 @@ pub enum DataError {
     EmptyName,
     MissingKey,
     TypeMismatch,
+    BadJson,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -173,6 +174,97 @@ impl ObsData {
         }
         format!("{{{}}}", parts.join(","))
     }
+
+    /// Parse a compact JSON object into values.
+    /// Supports strings, ints, doubles, bools, nested objects, and arrays.
+    /// Returns an error on malformed input. No unwraps.
+    pub fn from_json(s: &str) -> Result<Self, DataError> {
+        let s = s.trim();
+        if !s.starts_with('{') || !s.ends_with('}') {
+            return Err(DataError::BadJson);
+        }
+        let inner = &s[1..s.len() - 1];
+        let mut data = ObsData::new();
+        if inner.trim().is_empty() {
+            return Ok(data);
+        }
+        for pair in split_top(inner, ',') {
+            let (k, v) = split_once_top(pair, ':').ok_or(DataError::BadJson)?;
+            let key = unquote(k.trim()).ok_or(DataError::BadJson)?;
+            let value = parse_value(v.trim()).ok_or(DataError::BadJson)?;
+            data.set(&key, value)?;
+        }
+        Ok(data)
+    }
+}
+
+fn unquote(s: &str) -> Option<String> {
+    if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+        Some(s[1..s.len() - 1].replace("\\\"", "\"").replace("\\\\", "\\"))
+    } else {
+        None
+    }
+}
+
+fn parse_value(s: &str) -> Option<DataValue> {
+    if s == "true" {
+        Some(DataValue::Bool(true))
+    } else if s == "false" {
+        Some(DataValue::Bool(false))
+    } else if s.starts_with('"') {
+        unquote(s).map(DataValue::String)
+    } else if s.starts_with('{') {
+        ObsData::from_json(s).ok().map(|o| DataValue::Object(Box::new(o)))
+    } else if s.starts_with('[') && s.ends_with(']') {
+        let inner = &s[1..s.len() - 1];
+        if inner.trim().is_empty() {
+            return Some(DataValue::Array(Vec::new()));
+        }
+        let mut items = Vec::new();
+        for part in split_top(inner, ',') {
+            items.push(parse_value(part.trim())?);
+        }
+        Some(DataValue::Array(items))
+    } else if s.contains('.') {
+        s.parse::<f64>().ok().map(DataValue::Double)
+    } else {
+        s.parse::<i64>().ok().map(DataValue::Int)
+    }
+}
+
+/// Split on a separator only at the top level (not inside strings, objects, or arrays).
+fn split_top(s: &str, sep: char) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let bytes = s.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        let c = b as char;
+        if c == '"' && (i == 0 || bytes[i - 1] != b'\\') {
+            in_str = !in_str;
+        }
+        if !in_str {
+            if c == '{' || c == '[' {
+                depth += 1;
+            } else if c == '}' || c == ']' {
+                depth -= 1;
+            } else if c == sep && depth == 0 {
+                out.push(&s[start..i]);
+                start = i + 1;
+            }
+        }
+    }
+    out.push(&s[start..]);
+    out
+}
+
+fn split_once_top(s: &str, sep: char) -> Option<(&str, &str)> {
+    let parts = split_top(s, sep);
+    if parts.len() < 2 {
+        return None;
+    }
+    Some((parts[0], &s[parts[0].len() + 1..]))
 }
 
 fn escape_json(s: &str) -> String {
@@ -298,5 +390,23 @@ mod tests {
         let json = parent.to_json();
         assert!(json.contains("\"video\":{"));
         assert!(json.contains("\"ids\":[1,2]"));
+    }
+
+    #[test]
+    fn json_parse_round_trip() {
+        let mut d = ObsData::new();
+        d.set_string("name", "cam").unwrap();
+        d.set_int("w", 1280).unwrap();
+        d.set_bool("on", false).unwrap();
+        let parsed = ObsData::from_json(&d.to_json()).unwrap();
+        assert_eq!(parsed.get_string("name").unwrap(), "cam");
+        assert_eq!(parsed.get_int("w").unwrap(), 1280);
+        assert_eq!(parsed.get_bool("on").unwrap(), false);
+    }
+
+    #[test]
+    fn json_bad() {
+        assert_eq!(ObsData::from_json("not json"), Err(DataError::BadJson));
+        assert_eq!(ObsData::from_json("{"), Err(DataError::BadJson));
     }
 }

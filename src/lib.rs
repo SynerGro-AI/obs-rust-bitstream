@@ -1,5 +1,5 @@
-//! - audio_monitor: pure audio monitor
 //! - monitor_registry: pure monitor registry
+//! - recording: pure recording
 
 pub mod bitstream;
 pub mod dstr;
@@ -80,6 +80,7 @@ pub mod transition;
 pub mod transition_registry;
 pub mod audio_monitor;
 pub mod monitor_registry;
+pub mod recording;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -159,3 +160,4 @@ pub use transition::{Transition, TransitionError};
 pub use transition_registry::{TransitionRegistry, TransitionRegistryError};
 pub use audio_monitor::{AudioMonitor, MonitorError};
 pub use monitor_registry::{MonitorRegistry, MonitorRegistryError};
+pub use recording::{Recording, RecordingError};

@@ -90,6 +90,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **transition_registry** | Transition registry | Pure name-to-transition map |
 | **audio_monitor** | Audio monitor | Pure volume + mute |
 | **monitor_registry** | Monitor registry | Pure name-to-monitor map |
+| **recording** | Recording | Pure start/stop + path |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -101,7 +102,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Seventy-nine foundation modules with tests
+- [x] Eighty foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -116,6 +117,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Hotkey pure layer: hotkey + registry complete
 - [x] Transition pure layer: transition + registry complete
 - [x] Audio monitor pure layer: monitor + registry complete
+- [ ] Recording pure layer started (recording)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

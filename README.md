@@ -68,6 +68,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **output_context** | Output context | Pure name + settings + active |
 | **encoder_context** | Encoder context | Pure name + codec + type |
 | **service_context** | Service context | Pure name + id + settings |
+| **output_registry** | Output registry | Pure name-to-output map |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -79,13 +80,13 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Fifty-seven foundation modules with tests
+- [x] Fifty-eight foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
 - [x] Callback pure layer solid (signal, proc, calldata, decl)
 - [ ] Data pure layer started (obs_data, obs_properties)
-- [ ] Source pure layer started (source_context through service_context)
+- [ ] Source pure layer started (contexts + source/output registries)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

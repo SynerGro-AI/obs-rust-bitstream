@@ -21,29 +21,41 @@ pub fn parse_config_string(input: &str) -> Config {
 
     let mut i = 0;
     while i < toks.len() {
-        let t = &toks[i];
-        match t.kind {
-            CfTokenType::Other if t.text == "[" => {
-                // Section header: [name]
-                if i + 2 < toks.len() && toks[i + 1].kind == CfTokenType::Name && toks[i + 2].text == "]" {
-                    current_section = toks[i + 1].text.to_string();
-                    i += 3;
-                    continue;
+        // Section: [ name ]
+        if toks[i].text == "[" {
+            if let Some(name_tok) = toks.get(i + 1) {
+                if name_tok.kind == CfTokenType::Name {
+                    if toks.get(i + 2).map(|t| t.text == "]").unwrap_or(false) {
+                        current_section = name_tok.text.to_string();
+                        i += 3;
+                        continue;
+                    }
                 }
             }
-            CfTokenType::Name | CfTokenType::Num => {
-                // Possible key = value
-                if i + 2 < toks.len() && toks[i + 1].text == "=" {
-                    let key = t.text;
-                    let value = toks[i + 2].text.trim_matches(|c| c == '"' || c == '\'');
+        }
+
+        // key = value (skip whitespace tokens)
+        if matches!(toks[i].kind, CfTokenType::Name | CfTokenType::Num) {
+            // Look ahead for =
+            let mut j = i + 1;
+            while j < toks.len() && matches!(toks[j].kind, CfTokenType::SpaceTab) {
+                j += 1;
+            }
+            if j < toks.len() && toks[j].text == "=" {
+                j += 1;
+                while j < toks.len() && matches!(toks[j].kind, CfTokenType::SpaceTab) {
+                    j += 1;
+                }
+                if j < toks.len() {
+                    let key = toks[i].text;
+                    let value = toks[j].text.trim_matches(|c| c == '"' || c == '\'');
                     if !current_section.is_empty() {
                         cfg.set_string(&current_section, key, value);
                     }
-                    i += 3;
+                    i = j + 1;
                     continue;
                 }
             }
-            _ => {}
         }
         i += 1;
     }

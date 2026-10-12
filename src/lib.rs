@@ -1,6 +1,5 @@
-//! - scene_item: pure scene item with transform
-//! - filter_context: pure filter context
 //! - filter_chain: pure ordered filter list
+//! - filter_registry: pure filter registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -67,6 +66,7 @@ pub mod scene_registry;
 pub mod scene_item;
 pub mod filter_context;
 pub mod filter_chain;
+pub mod filter_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -132,3 +132,4 @@ pub use scene_registry::{SceneRegistry, SceneRegistryError};
 pub use scene_item::{SceneItem, Transform, SceneItemError};
 pub use filter_context::{FilterContext, FilterError};
 pub use filter_chain::{FilterChain, FilterChainError};
+pub use filter_registry::{FilterRegistry, FilterRegistryError};

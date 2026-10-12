@@ -63,6 +63,7 @@ The pure foundation is solid and tested.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.
+- **obs_properties** — pure property list. Differential wired.
 
 ## Graphics pure layer solid
 The high-leverage pure surface of graphics is now covered:

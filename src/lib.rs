@@ -1,5 +1,5 @@
-//! - decl: pure declaration-string parser
 //! - obs_data: pure settings bag
+//! - obs_properties: pure property list
 
 pub mod bitstream;
 pub mod dstr;
@@ -52,6 +52,7 @@ pub mod proc;
 pub mod calldata;
 pub mod decl;
 pub mod obs_data;
+pub mod obs_properties;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -103,3 +104,4 @@ pub use proc::ProcHandler;
 pub use calldata::{Calldata, CallValue, CallType, CallError};
 pub use decl::{parse_decl, DeclInfo, DeclParam, DeclError, ParamFlags};
 pub use obs_data::{ObsData, DataValue, DataError};
+pub use obs_properties::{Properties, Property, PropertyType, PropsError};

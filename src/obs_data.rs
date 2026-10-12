@@ -15,6 +15,8 @@ pub enum DataValue {
     Int(i64),
     Double(f64),
     Bool(bool),
+    /// Nested object. Matches OBS obs_data_set_obj.
+    Object(Box<ObsData>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,7 +26,7 @@ pub enum DataError {
     TypeMismatch,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ObsData {
     values: HashMap<String, DataValue>,
     defaults: HashMap<String, DataValue>,
@@ -49,6 +51,11 @@ impl ObsData {
 
     pub fn set_bool(&mut self, name: &str, v: bool) -> Result<(), DataError> {
         self.set(name, DataValue::Bool(v))
+    }
+
+    /// Store a nested object under a name.
+    pub fn set_obj(&mut self, name: &str, obj: ObsData) -> Result<(), DataError> {
+        self.set(name, DataValue::Object(Box::new(obj)))
     }
 
     pub fn set_default_string(&mut self, name: &str, v: &str) -> Result<(), DataError> {
@@ -107,6 +114,15 @@ impl ObsData {
     pub fn get_bool(&self, name: &str) -> Result<bool, DataError> {
         match self.lookup(name) {
             Some(DataValue::Bool(v)) => Ok(*v),
+            Some(_) => Err(DataError::TypeMismatch),
+            None => Err(DataError::MissingKey),
+        }
+    }
+
+    /// Get a nested object. Fails if the key is missing or not an object.
+    pub fn get_obj(&self, name: &str) -> Result<&ObsData, DataError> {
+        match self.lookup(name) {
+            Some(DataValue::Object(o)) => Ok(o.as_ref()),
             Some(_) => Err(DataError::TypeMismatch),
             None => Err(DataError::MissingKey),
         }
@@ -177,5 +193,22 @@ mod tests {
         let mut d = ObsData::new();
         d.set_double("gain", 1.5).unwrap();
         assert_eq!(d.get_double("gain").unwrap(), 1.5);
+    }
+
+    #[test]
+    fn nested_object() {
+        let mut child = ObsData::new();
+        child.set_int("width", 1280).unwrap();
+        let mut parent = ObsData::new();
+        parent.set_obj("video", child).unwrap();
+        let got = parent.get_obj("video").unwrap();
+        assert_eq!(got.get_int("width").unwrap(), 1280);
+    }
+
+    #[test]
+    fn nested_mismatch() {
+        let mut d = ObsData::new();
+        d.set_int("x", 1).unwrap();
+        assert_eq!(d.get_obj("x"), Err(DataError::TypeMismatch));
     }
 }

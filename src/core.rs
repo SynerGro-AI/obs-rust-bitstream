@@ -46,6 +46,7 @@ pub struct Core {
     replays: ReplayRegistry,
     virtual_cams: VirtualCamRegistry,
     profiles: ProfileRegistry,
+    current_profile: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -284,6 +285,19 @@ impl Core {
         &mut self.profiles
     }
 
+    /// Set the current profile. Returns TypeNotRegistered if it does not exist.
+    pub fn set_current_profile(&mut self, name: &str) -> Result<(), CoreError> {
+        if !self.profiles.contains(name) {
+            return Err(CoreError::TypeNotRegistered);
+        }
+        self.current_profile = Some(name.to_string());
+        Ok(())
+    }
+
+    pub fn current_profile(&self) -> Option<&str> {
+        self.current_profile.as_deref()
+    }
+
     /// Swap program and preview. No-op if either is unset.
     pub fn transition_to_preview(&mut self) -> bool {
         if self.program_scene.is_some() && self.preview_scene.is_some() {
@@ -369,5 +383,14 @@ mod tests {
         assert!(c.transition_to_preview());
         assert_eq!(c.program_scene(), Some("Overlay"));
         assert_eq!(c.preview_scene(), Some("Main"));
+    }
+
+    #[test]
+    fn current_profile() {
+        let mut c = Core::new();
+        c.profiles_mut().add("Default").unwrap();
+        c.set_current_profile("Default").unwrap();
+        assert_eq!(c.current_profile(), Some("Default"));
+        assert!(matches!(c.set_current_profile("missing"), Err(CoreError::TypeNotRegistered)));
     }
 }

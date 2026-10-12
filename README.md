@@ -36,6 +36,8 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **config_parser** | Config string parser | Pure ini → Config |
 | **source_profiler** | Source profiler stub | Pure local deltas |
 | **pipe** | In-memory pipe | Pure write/read |
+| **frame_rate** | Frame-rate helpers | Pure rational FPS |
+| **audio_math** | Audio math | Pure mul ↔ dB |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -47,8 +49,9 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Twenty-five foundation modules with tests
+- [x] Twenty-seven foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
+- [ ] Media-io pure layer started (frame-rate, audio-math)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

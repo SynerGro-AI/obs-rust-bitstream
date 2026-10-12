@@ -23,6 +23,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **bmem** | Alloc size check + alignment contract | 32-byte alignment |
 | **util_uint64** | Exact mul-then-div | 128-bit intermediate, div-zero safe |
 | **util_uint128** | Add / mul64_64 | Native u128 |
+| **deque** | Double-ended queue | Safe circular buffer |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -34,7 +35,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Twelve foundation modules with tests
+- [x] Thirteen foundation modules with tests
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

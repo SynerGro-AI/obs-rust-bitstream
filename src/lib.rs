@@ -1,5 +1,5 @@
-//! - display_context: pure display / preview context
 //! - display_registry: pure display registry
+//! - hotkey: pure hotkey
 
 pub mod bitstream;
 pub mod dstr;
@@ -72,6 +72,7 @@ pub mod module;
 pub mod module_registry;
 pub mod display_context;
 pub mod display_registry;
+pub mod hotkey;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -143,3 +144,4 @@ pub use module::{Module, ModuleError};
 pub use module_registry::{ModuleRegistry, ModuleRegistryError};
 pub use display_context::{DisplayContext, DisplayError};
 pub use display_registry::{DisplayRegistry, DisplayRegistryError};
+pub use hotkey::{Hotkey, HotkeyError};

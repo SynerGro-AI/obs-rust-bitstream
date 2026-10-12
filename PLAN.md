@@ -81,6 +81,7 @@ The pure foundation is solid and tested.
 - **module_registry** — pure module registry, owned by Core. Differential wired.
 - **display_context** — pure display / preview context. Differential wired.
 - **display_registry** — pure display registry, owned by Core. Differential wired.
+- **hotkey** — pure hotkey. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

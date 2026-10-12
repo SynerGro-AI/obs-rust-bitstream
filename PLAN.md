@@ -101,6 +101,7 @@ The pure foundation is solid and tested.
 - **profile_registry** — pure profile registry, owned by Core. Differential wired.
 - **canvas** — pure canvas. Differential wired.
 - **canvas_registry** — pure canvas registry, owned by Core. Differential wired.
+- **render_item** — pure render item. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

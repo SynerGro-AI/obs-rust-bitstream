@@ -13,6 +13,7 @@ pub enum PropertyType {
     Int,
     Float,
     Text,
+    List,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,6 +24,8 @@ pub struct Property {
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub step: Option<f64>,
+    /// Options for a List property. Empty for other types.
+    pub options: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,6 +53,7 @@ impl Properties {
             min: None,
             max: None,
             step: None,
+            options: Vec::new(),
         })
     }
 
@@ -68,6 +72,7 @@ impl Properties {
             min: Some(min as f64),
             max: Some(max as f64),
             step: Some(step as f64),
+            options: Vec::new(),
         })
     }
 
@@ -86,6 +91,7 @@ impl Properties {
             min: Some(min),
             max: Some(max),
             step: Some(step),
+            options: Vec::new(),
         })
     }
 
@@ -97,6 +103,25 @@ impl Properties {
             min: None,
             max: None,
             step: None,
+            options: Vec::new(),
+        })
+    }
+
+    /// Add a list property with (value, label) options.
+    pub fn add_list(
+        &mut self,
+        name: &str,
+        description: &str,
+        options: Vec<(String, String)>,
+    ) -> Result<(), PropsError> {
+        self.add(Property {
+            name: name.to_string(),
+            description: description.to_string(),
+            ty: PropertyType::List,
+            min: None,
+            max: None,
+            step: None,
+            options,
         })
     }
 
@@ -173,5 +198,23 @@ mod tests {
         let g = p.get("gain").unwrap();
         assert_eq!(g.ty, PropertyType::Float);
         assert_eq!(g.max, Some(1.0));
+    }
+
+    #[test]
+    fn list_options() {
+        let mut p = Properties::new();
+        p.add_list(
+            "codec",
+            "Codec",
+            vec![
+                ("h264".into(), "H.264".into()),
+                ("av1".into(), "AV1".into()),
+            ],
+        )
+        .unwrap();
+        let list = p.get("codec").unwrap();
+        assert_eq!(list.ty, PropertyType::List);
+        assert_eq!(list.options.len(), 2);
+        assert_eq!(list.options[0].0, "h264");
     }
 }

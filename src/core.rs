@@ -6,6 +6,7 @@
 //!
 //! Differential: add a source through the core and read it back.
 
+use crate::display_registry::DisplayRegistry;
 use crate::encoder_registry::EncoderRegistry;
 use crate::filter_registry::FilterRegistry;
 use crate::module_registry::ModuleRegistry;
@@ -23,6 +24,7 @@ pub struct Core {
     scenes: SceneRegistry,
     filters: FilterRegistry,
     modules: ModuleRegistry,
+    displays: DisplayRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,6 +142,14 @@ impl Core {
 
     pub fn modules_mut(&mut self) -> &mut ModuleRegistry {
         &mut self.modules
+    }
+
+    pub fn displays(&self) -> &DisplayRegistry {
+        &self.displays
+    }
+
+    pub fn displays_mut(&mut self) -> &mut DisplayRegistry {
+        &mut self.displays
     }
 }
 

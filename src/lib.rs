@@ -1,5 +1,5 @@
-//! - module_registry: pure module registry
 //! - display_context: pure display / preview context
+//! - display_registry: pure display registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -71,6 +71,7 @@ pub mod core;
 pub mod module;
 pub mod module_registry;
 pub mod display_context;
+pub mod display_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -141,3 +142,4 @@ pub use core::{Core, CoreError};
 pub use module::{Module, ModuleError};
 pub use module_registry::{ModuleRegistry, ModuleRegistryError};
 pub use display_context::{DisplayContext, DisplayError};
+pub use display_registry::{DisplayRegistry, DisplayRegistryError};

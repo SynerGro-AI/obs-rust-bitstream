@@ -14,6 +14,7 @@
 //! - view_frame: pure flight view frame
 //! - light: pure light
 //! - light_rig: pure multi-light rig
+//! - camera_rig: pure multi-camera rig
 
 pub mod bitstream;
 pub mod dstr;
@@ -130,6 +131,7 @@ pub mod camera_follow;
 pub mod view_frame;
 pub mod light;
 pub mod light_rig;
+pub mod camera_rig;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -245,3 +247,4 @@ pub use camera_follow::CameraFollow;
 pub use view_frame::ViewFrame;
 pub use light::{Light, LightError};
 pub use light_rig::{LightRig, LightRigError};
+pub use camera_rig::{CameraRig, CameraRigError};

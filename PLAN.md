@@ -125,6 +125,7 @@ The pure foundation is solid and tested.
 - **view_frame** — pure flight view frame. Differential wired.
 - **light** — pure light. Differential wired.
 - **light_rig** — pure multi-light rig. Differential wired.
+- **camera_rig** — pure multi-camera rig. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

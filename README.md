@@ -126,6 +126,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **view_frame** | View frame | Pure camera + bone view matrix |
 | **light** | Light | Pure named light |
 | **light_rig** | Light rig | Pure multi-light collection |
+| **camera_rig** | Camera rig | Pure multi-camera collection |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -137,7 +138,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred fifteen foundation modules with tests
+- [x] One hundred sixteen foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -158,7 +159,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Virtual camera pure layer: cam + registry complete
 - [x] Profile pure layer: profile + registry complete
 - [x] Canvas pure layer: canvas + registry complete
-- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector, ai_animator, physics_sim, learning_pipeline, environment, pilot, flight_session, flight_replay, wind, plane_renderer, camera_follow, view_frame, light, light_rig)
+- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector, ai_animator, physics_sim, learning_pipeline, environment, pilot, flight_session, flight_replay, wind, plane_renderer, camera_follow, view_frame, light, light_rig, camera_rig)
 - [x] Physics + AI settings assist wired
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)

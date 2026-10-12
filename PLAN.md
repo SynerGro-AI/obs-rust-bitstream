@@ -129,6 +129,7 @@ The pure foundation is solid and tested.
 - **camera_cut** — pure camera cut. Differential wired.
 - **material** — pure material. Differential wired.
 - **lighting** — pure material × light evaluation. Differential wired.
+- **material_assign** — pure material-to-bone binding. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

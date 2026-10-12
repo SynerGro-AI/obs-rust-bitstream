@@ -18,6 +18,7 @@
 //! - camera_cut: pure camera cut
 //! - material: pure material
 //! - lighting: pure material × light evaluation
+//! - material_assign: pure material-to-bone binding
 
 pub mod bitstream;
 pub mod dstr;
@@ -138,6 +139,7 @@ pub mod camera_rig;
 pub mod camera_cut;
 pub mod material;
 pub mod lighting;
+pub mod material_assign;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -257,3 +259,4 @@ pub use camera_rig::{CameraRig, CameraRigError};
 pub use camera_cut::{CameraCut, CutError};
 pub use material::{Material, MaterialError};
 pub use lighting::Lighting;
+pub use material_assign::{MaterialAssign, AssignError};

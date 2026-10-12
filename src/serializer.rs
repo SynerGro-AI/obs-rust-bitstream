@@ -19,7 +19,7 @@ pub trait Serializer {
 #[derive(Clone, Debug, Default)]
 pub struct MemSerializer {
     data: Vec<u8>,
-    pos: usize,
+    pub pos: usize,
 }
 
 impl MemSerializer {

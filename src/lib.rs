@@ -5,6 +5,7 @@
 //! - physics_sim: pure AI-driven physics simulation
 //! - learning_pipeline: pure physics-governed AI learning
 //! - environment: pure world physics governor
+//! - pilot: pure lesson-driven pilot
 
 pub mod bitstream;
 pub mod dstr;
@@ -112,6 +113,7 @@ pub mod ai_animator;
 pub mod physics_sim;
 pub mod learning_pipeline;
 pub mod environment;
+pub mod pilot;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -218,3 +220,4 @@ pub use ai_animator::AiAnimator;
 pub use physics_sim::PhysicsSim;
 pub use learning_pipeline::LearningPipeline;
 pub use environment::{Environment, EnvironmentError};
+pub use pilot::Pilot;

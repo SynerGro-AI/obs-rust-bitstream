@@ -1,5 +1,5 @@
-//! - matrix3: pure 3x4 matrix
 //! - matrix4: pure 4x4 matrix
+//! - quat: pure quaternion
 
 pub mod bitstream;
 pub mod dstr;
@@ -42,6 +42,7 @@ pub mod vec3;
 pub mod vec4;
 pub mod matrix3;
 pub mod matrix4;
+pub mod quat;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -83,3 +84,4 @@ pub use vec3::Vec3;
 pub use vec4::Vec4;
 pub use matrix3::Matrix3;
 pub use matrix4::Matrix4;
+pub use quat::Quat;

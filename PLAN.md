@@ -40,7 +40,15 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **video_scaler** — pure scale info and size helpers. Differential wired.
 - **audio_buffer** — pure owned audio buffer. Differential wired.
 - **media_timing** — pure sample and frame duration helpers. Differential wired.
+- **audio_mixer** — pure gain and sum helpers. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
+
+## Media-io pure layer solid
+The high-leverage pure surface of media-io is now covered:
+frame-rate, audio-math, video-fourcc, format-conversion, video-matrices,
+video-frame, audio-format, video-scaler, audio-buffer, media-timing,
+audio-mixer. FFmpeg-backed resampler/scaler/remux can be thin wrappers
+later. The pure foundation is solid and tested.
 
 ## Util foundation complete
 The high-leverage pure surface of libobs/util is now covered.

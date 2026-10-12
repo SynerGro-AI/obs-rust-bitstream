@@ -106,6 +106,7 @@ The pure foundation is solid and tested.
 - **camera** — pure camera. Differential wired.
 - **projector** — pure 2D-to-3D projector. Differential wired.
 - **bone** — pure bone hierarchy. Differential wired.
+- **animation_timeline** — pure animation timeline. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

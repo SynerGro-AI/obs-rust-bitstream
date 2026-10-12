@@ -1,5 +1,5 @@
-//! - projector: pure 2D-to-3D projector
 //! - bone: pure bone hierarchy
+//! - animation_timeline: pure animation timeline
 
 pub mod bitstream;
 pub mod dstr;
@@ -97,6 +97,7 @@ pub mod render_list;
 pub mod camera;
 pub mod projector;
 pub mod bone;
+pub mod animation_timeline;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -193,3 +194,4 @@ pub use render_list::RenderList;
 pub use camera::Camera;
 pub use projector::Projector;
 pub use bone::{Bone, BoneError};
+pub use animation_timeline::{AnimationTimeline, TimelineError};

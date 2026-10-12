@@ -117,6 +117,7 @@ The pure foundation is solid and tested.
 - **learning_pipeline** — pure physics-governed AI learning. Differential wired.
 - **environment** — pure world physics governor. Differential wired.
 - **pilot** — pure lesson-driven pilot. Differential wired.
+- **flight_session** — pure closed-loop flight session. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

@@ -1,6 +1,8 @@
 # obs-rust-bitstream
 
-Perfect, tested foundation port of the OBS Studio `bitstream_reader` (the famous `uint8_t` wrap-at-255 bug) for the [obs-rust](https://github.com/obs-rust/obs-studio) effort.
+**Public foundation for the OBS Studio rewrite in Rust.**
+
+Perfect, tested port of the OBS Studio `bitstream_reader` (the famous `uint8_t` wrap-at-255 bug). This is the first module of a public, free, open Rust rewrite of OBS internals, following the obs-rust approach: keep the public C ABI, rewrite internals in safe Rust, fix the bugs.
 
 ## The foundational "opcode": Position trait
 
@@ -11,15 +13,27 @@ Wrap vs no-wrap is a **type-level property**:
 
 One shared bit-reading implementation. Math is perfect. Tests prove both paths.
 
-## Layout (ready for obs-rust tree)
+## Status
+
+- [x] Foundation: perfect bitstream with Position trait + C ABI shims + unit tests
+- [x] Parser tools wired (tree-sitter + quirks)
+- [x] Public repo under SynerGro-AI
+- [ ] Differential test suite against original C oracle
+- [ ] Next modules: dstr, utf8, serializers, etc.
+- [ ] Full obs-util port
+- [ ] Integration into a larger obs-rust workspace
+
+## Layout
 
 ```
 src/
   lib.rs
-  bitstream.rs          # safe core + Position + C ABI shims + unit tests
+  bitstream.rs          # safe core + Position + C ABI + tests
 tools/
-  obs_cpp_to_rust_parser.py   # tree-sitter + quirks parser that points at this pattern
+  obs_cpp_to_rust_parser.py
   README_parser.md
+.github/workflows/
+  ci.yml                # cargo test on push/PR
 ```
 
 ## Usage
@@ -30,17 +44,19 @@ cargo test
 
 All tests pass (basic bits, r8/r16, safe no-wrap past 255, ABI wrap + re-read, empty).
 
-## Foundational plan
+## Foundational plan (executing)
 
-1. **Foundation first** — this crate (Position trait + perfect bitstream).
-2. **Parser wired** — `tools/obs_cpp_to_rust_parser.py` recognizes the pattern and emits the Position approach.
-3. **Test** — unit tests already green.
-4. **Test suite** — expand differential tests against original C oracle.
-5. **Optimize** — then re-test.
-6. **Next files** — apply the same perfect pattern to more util modules (dstr, utf8, serializers, etc.).
+1. **Foundation first** — this crate.
+2. **Parser wired** — done.
+3. **Test** — unit tests green.
+4. **Test suite** — expand differential tests against C oracle.
+5. **Optimize** → re-test.
+6. **Next files** — apply the same perfect pattern to more util modules.
 7. **Repeat** — foundation → parse → test → optimize → move on.
 
-Public, free, open. Contributions and AI-assisted PRs welcome (the whole point of the obs-rust fork).
+This is the public starting point for the OBS Rust rewrite. AI-assisted contributions and PRs welcome.
+
+See also the upstream [obs-rust/obs-studio](https://github.com/obs-rust/obs-studio) effort.
 
 ## License
 

@@ -46,6 +46,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **vec3** — pure 3D vector. Differential wired.
 - **vec4** — pure 4D vector. Differential wired.
 - **matrix3** — pure 3x4 matrix. Differential wired.
+- **matrix4** — pure 4x4 matrix. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 
 ## Media-io pure layer solid

@@ -107,6 +107,8 @@ The pure foundation is solid and tested.
 - **projector** — pure 2D-to-3D projector. Differential wired.
 - **bone** — pure bone hierarchy. Differential wired.
 - **animation_timeline** — pure animation timeline. Differential wired.
+- **physics** — pure physics settings with AI assist. Differential wired.
+- **settings_assist** — pure AI assist for any settings bag. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

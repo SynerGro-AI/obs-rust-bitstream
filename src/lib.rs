@@ -1,5 +1,5 @@
-//! - hotkey_registry: pure hotkey registry
 //! - scene_collection: pure scene collection
+//! - collection_registry: pure collection registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -75,6 +75,7 @@ pub mod display_registry;
 pub mod hotkey;
 pub mod hotkey_registry;
 pub mod scene_collection;
+pub mod collection_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -149,3 +150,4 @@ pub use display_registry::{DisplayRegistry, DisplayRegistryError};
 pub use hotkey::{Hotkey, HotkeyError};
 pub use hotkey_registry::{HotkeyRegistry, HotkeyRegistryError};
 pub use scene_collection::{SceneCollection, CollectionError};
+pub use collection_registry::{CollectionRegistry, CollectionRegistryError};

@@ -85,6 +85,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **hotkey** | Hotkey | Pure name + pressed flag |
 | **hotkey_registry** | Hotkey registry | Pure name-to-hotkey map |
 | **scene_collection** | Scene collection | Pure named set of scenes |
+| **collection_registry** | Collection registry | Pure name-to-collection map |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -96,16 +97,16 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Seventy-four foundation modules with tests
+- [x] Seventy-five foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
 - [x] Callback pure layer solid (signal, proc, calldata, decl)
 - [ ] Data pure layer started (obs_data, obs_properties)
 - [x] Source pure layer: context + registry complete for source, output, encoder, service
-- [ ] Scene pure layer started (scene_context, scene_registry, scene_item, scene_collection)
+- [x] Scene pure layer: context, registry, items, collection + registry
 - [x] Filter pure layer: context + chain + registry complete
-- [x] Core root owns all registries including modules, displays, and hotkeys
+- [x] Core root owns all registries including modules, displays, hotkeys, and collections
 - [x] Module registration + registry complete
 - [x] Display pure layer: context + registry complete
 - [x] Hotkey pure layer: hotkey + registry complete

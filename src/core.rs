@@ -6,6 +6,7 @@
 //!
 //! Differential: add a source through the core and read it back.
 
+use crate::collection_registry::CollectionRegistry;
 use crate::display_registry::DisplayRegistry;
 use crate::encoder_registry::EncoderRegistry;
 use crate::hotkey_registry::HotkeyRegistry;
@@ -27,6 +28,7 @@ pub struct Core {
     modules: ModuleRegistry,
     displays: DisplayRegistry,
     hotkeys: HotkeyRegistry,
+    collections: CollectionRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -160,6 +162,14 @@ impl Core {
 
     pub fn hotkeys_mut(&mut self) -> &mut HotkeyRegistry {
         &mut self.hotkeys
+    }
+
+    pub fn collections(&self) -> &CollectionRegistry {
+        &self.collections
+    }
+
+    pub fn collections_mut(&mut self) -> &mut CollectionRegistry {
+        &mut self.collections
     }
 }
 

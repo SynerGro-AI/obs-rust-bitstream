@@ -1,5 +1,5 @@
-//! - filter_registry: pure filter registry
 //! - core: pure core root that owns the registries
+//! - module: pure module registration
 
 pub mod bitstream;
 pub mod dstr;
@@ -68,6 +68,7 @@ pub mod filter_context;
 pub mod filter_chain;
 pub mod filter_registry;
 pub mod core;
+pub mod module;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -135,3 +136,4 @@ pub use filter_context::{FilterContext, FilterError};
 pub use filter_chain::{FilterChain, FilterChainError};
 pub use filter_registry::{FilterRegistry, FilterRegistryError};
 pub use core::Core;
+pub use module::{Module, ModuleError};

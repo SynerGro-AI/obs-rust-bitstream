@@ -77,6 +77,7 @@ The pure foundation is solid and tested.
 - **filter_chain** — pure ordered filter list, wired into SourceContext. Differential wired.
 - **filter_registry** — pure filter registry. Differential wired.
 - **core** — pure core root that owns the registries. Differential wired.
+- **module** — pure module registration. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

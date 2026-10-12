@@ -1,5 +1,5 @@
-//! - audio_mixer: pure gain and sum helpers
 //! - vec2: pure 2D vector
+//! - vec3: pure 3D vector
 
 pub mod bitstream;
 pub mod dstr;
@@ -38,6 +38,7 @@ pub mod audio_buffer;
 pub mod media_timing;
 pub mod audio_mixer;
 pub mod vec2;
+pub mod vec3;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -75,3 +76,4 @@ pub use audio_buffer::AudioBuffer;
 pub use media_timing::{sample_duration_ns, frame_duration_ns, frames_to_samples};
 pub use audio_mixer::{apply_gain, sum_buffers, peak};
 pub use vec2::Vec2;
+pub use vec3::Vec3;

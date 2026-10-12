@@ -98,4 +98,4 @@ pub use bounds::Bounds;
 pub use half::{f32_to_f16, f16_to_f32};
 pub use signal::SignalHandler;
 pub use proc::ProcHandler;
-pub use calldata::{Calldata, CallValue};
+pub use calldata::{Calldata, CallValue, CallType, CallError};

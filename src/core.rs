@@ -11,6 +11,7 @@ use crate::display_registry::DisplayRegistry;
 use crate::monitor_registry::MonitorRegistry;
 use crate::recording_registry::RecordingRegistry;
 use crate::replay_registry::ReplayRegistry;
+use crate::canvas_registry::CanvasRegistry;
 use crate::profile_registry::ProfileRegistry;
 use crate::streaming_registry::StreamingRegistry;
 use crate::virtual_cam_registry::VirtualCamRegistry;
@@ -47,6 +48,7 @@ pub struct Core {
     virtual_cams: VirtualCamRegistry,
     profiles: ProfileRegistry,
     current_profile: Option<String>,
+    canvases: CanvasRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -296,6 +298,14 @@ impl Core {
 
     pub fn current_profile(&self) -> Option<&str> {
         self.current_profile.as_deref()
+    }
+
+    pub fn canvases(&self) -> &CanvasRegistry {
+        &self.canvases
+    }
+
+    pub fn canvases_mut(&mut self) -> &mut CanvasRegistry {
+        &mut self.canvases
     }
 
     /// Swap program and preview. No-op if either is unset.

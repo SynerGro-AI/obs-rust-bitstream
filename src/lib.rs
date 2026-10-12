@@ -1,5 +1,5 @@
-//! - profile_registry: pure profile registry
 //! - canvas: pure canvas
+//! - canvas_registry: pure canvas registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -91,6 +91,7 @@ pub mod virtual_cam_registry;
 pub mod profile;
 pub mod profile_registry;
 pub mod canvas;
+pub mod canvas_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -181,3 +182,4 @@ pub use virtual_cam_registry::{VirtualCamRegistry, VirtualCamRegistryError};
 pub use profile::{Profile, ProfileError};
 pub use profile_registry::{ProfileRegistry, ProfileRegistryError};
 pub use canvas::{Canvas, CanvasError};
+pub use canvas_registry::{CanvasRegistry, CanvasRegistryError};

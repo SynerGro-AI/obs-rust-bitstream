@@ -1,5 +1,5 @@
-//! - transition: pure scene transition
 //! - transition_registry: pure transition registry
+//! - audio_monitor: pure audio monitor
 
 pub mod bitstream;
 pub mod dstr;
@@ -78,6 +78,7 @@ pub mod scene_collection;
 pub mod collection_registry;
 pub mod transition;
 pub mod transition_registry;
+pub mod audio_monitor;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -155,3 +156,4 @@ pub use scene_collection::{SceneCollection, CollectionError};
 pub use collection_registry::{CollectionRegistry, CollectionRegistryError};
 pub use transition::{Transition, TransitionError};
 pub use transition_registry::{TransitionRegistry, TransitionRegistryError};
+pub use audio_monitor::{AudioMonitor, MonitorError};

@@ -41,6 +41,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **video_fourcc** | Fourcc mapping | Pure u32 → format |
 | **format_conversion** | Format helpers | Pure plane sizes + scalar |
 | **video_matrices** | Color matrices | Pure Kb/Kr + identity |
+| **video_frame** | Video frame | Pure owned planes |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -52,9 +53,9 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Thirty foundation modules with tests
+- [x] Thirty-one foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
-- [ ] Media-io pure layer started (frame-rate, audio-math, video-fourcc, format-conversion, video-matrices)
+- [ ] Media-io pure layer started (frame-rate, audio-math, video-fourcc, format-conversion, video-matrices, video-frame)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

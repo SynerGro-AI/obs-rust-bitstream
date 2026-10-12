@@ -10,6 +10,7 @@ use crate::collection_registry::CollectionRegistry;
 use crate::display_registry::DisplayRegistry;
 use crate::monitor_registry::MonitorRegistry;
 use crate::recording_registry::RecordingRegistry;
+use crate::replay_registry::ReplayRegistry;
 use crate::streaming_registry::StreamingRegistry;
 use crate::transition_registry::TransitionRegistry;
 use crate::encoder_registry::EncoderRegistry;
@@ -40,6 +41,7 @@ pub struct Core {
     monitors: MonitorRegistry,
     recordings: RecordingRegistry,
     streams: StreamingRegistry,
+    replays: ReplayRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -252,6 +254,14 @@ impl Core {
 
     pub fn streams_mut(&mut self) -> &mut StreamingRegistry {
         &mut self.streams
+    }
+
+    pub fn replays(&self) -> &ReplayRegistry {
+        &self.replays
+    }
+
+    pub fn replays_mut(&mut self) -> &mut ReplayRegistry {
+        &mut self.replays
     }
 
     /// Swap program and preview. No-op if either is unset.

@@ -94,6 +94,7 @@ The pure foundation is solid and tested.
 - **streaming** — pure streaming. Differential wired.
 - **streaming_registry** — pure streaming registry, owned by Core. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
+- **replay_registry** — pure replay registry, owned by Core. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

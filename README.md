@@ -95,6 +95,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **streaming** | Streaming | Pure start/stop + service |
 | **streaming_registry** | Streaming registry | Pure name-to-stream map |
 | **replay_buffer** | Replay buffer | Pure duration + save |
+| **replay_registry** | Replay registry | Pure name-to-buffer map |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -106,7 +107,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Eighty-four foundation modules with tests
+- [x] Eighty-five foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -115,7 +116,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Source pure layer: context + registry complete for source, output, encoder, service
 - [x] Scene pure layer: context, registry, items, collection + registry
 - [x] Filter pure layer: context + chain + registry complete
-- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, recordings, and streams
+- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, recordings, streams, and replays
 - [x] Module registration + registry complete
 - [x] Display pure layer: context + registry complete
 - [x] Hotkey pure layer: hotkey + registry complete
@@ -123,7 +124,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Audio monitor pure layer: monitor + registry complete
 - [x] Recording pure layer: recording + registry complete
 - [x] Streaming pure layer: streaming + registry complete
-- [ ] Replay buffer pure layer started (replay_buffer)
+- [x] Replay buffer pure layer: buffer + registry complete
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

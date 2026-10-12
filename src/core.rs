@@ -183,5 +183,6 @@ mod tests {
         assert!(c.create_filter("g", "gain_filter").is_ok());
         assert_eq!(c.sources().get("cam").unwrap().name(), "cam");
         assert_eq!(c.sources().get("cam").unwrap().type_id(), "ffmpeg_source");
+        assert_eq!(c.filters().get("g").unwrap().type_id(), "gain_filter");
     }
 }

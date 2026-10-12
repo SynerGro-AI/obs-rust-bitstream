@@ -42,6 +42,10 @@ impl FilterContext {
         &self.id
     }
 
+    pub fn type_id(&self) -> &str {
+        &self.id
+    }
+
     pub fn settings(&self) -> &ObsData {
         &self.settings
     }

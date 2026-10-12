@@ -111,6 +111,8 @@ The pure foundation is solid and tested.
 - **settings_assist** — pure AI assist for any settings bag. Differential wired.
 - **performance_capture** — pure actor performance capture. Differential wired.
 - **character_renderer** — pure character renderer. Differential wired.
+- **skeleton_connector** — pure AI skeleton connector. Differential wired.
+- **ai_animator** — pure AI-driven animator. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

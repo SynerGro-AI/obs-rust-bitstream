@@ -112,6 +112,8 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **settings_assist** | Settings assist | Pure AI assist for any ObsData bag |
 | **performance_capture** | Performance capture | Pure actor recording into timeline |
 | **character_renderer** | Character renderer | Pure skeleton walk + AI look |
+| **skeleton_connector** | Skeleton connector | Pure AI bone wiring |
+| **ai_animator** | AI animator | Pure AI-driven keyframe generation |
 
 All have unit tests. C ABI shims keep original quirks where required.
 

@@ -1,5 +1,5 @@
-//! - vec2: pure 2D vector
 //! - vec3: pure 3D vector
+//! - vec4: pure 4D vector
 
 pub mod bitstream;
 pub mod dstr;
@@ -39,6 +39,7 @@ pub mod media_timing;
 pub mod audio_mixer;
 pub mod vec2;
 pub mod vec3;
+pub mod vec4;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -77,3 +78,4 @@ pub use media_timing::{sample_duration_ns, frame_duration_ns, frames_to_samples}
 pub use audio_mixer::{apply_gain, sum_buffers, peak};
 pub use vec2::Vec2;
 pub use vec3::Vec3;
+pub use vec4::Vec4;

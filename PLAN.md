@@ -44,6 +44,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 ## Graphics pure layer (started)
 - **vec2** — pure 2D vector. Differential wired.
 - **vec3** — pure 3D vector. Differential wired.
+- **vec4** — pure 4D vector. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 
 ## Media-io pure layer solid

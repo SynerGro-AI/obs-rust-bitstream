@@ -1,41 +1,78 @@
 //! Safe pure SignalHandler (OBS callback/signal.h core).
 //!
 //! The C version broadcasts named signals to connected callbacks.
-//! The safe path is a HashMap of signal names to listener lists.
-//! Unknown signals and empty names are no-ops. No unwraps.
+//! The safe path stores parsed declarations (name + params) and
+//! listener lists. add_decl accepts the real OBS declaration strings.
+//! Unknown signals, empty names, and bad decls are no-ops / errors.
+//! disconnect removes a listener. No unwraps.
 //!
-//! Differential: connect + signal delivers the payload.
+//! Differential: add_decl + connect + signal delivers the payload.
 
 use std::collections::HashMap;
 
+use crate::decl::{parse_decl, DeclError, DeclInfo};
+
 #[derive(Clone, Debug)]
+struct SignalSlot {
+    decl: DeclInfo,
+    listeners: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct SignalHandler {
-    signals: HashMap<String, Vec<String>>,
+    signals: HashMap<String, SignalSlot>,
 }
 
 impl SignalHandler {
     pub fn new() -> Self {
-        Self {
-            signals: HashMap::new(),
-        }
+        Self::default()
     }
 
-    /// Declare a signal name. Empty names are ignored.
+    /// Declare a signal by name only (no params). Empty names are rejected.
     pub fn add(&mut self, name: &str) -> bool {
         if name.is_empty() {
             return false;
         }
-        self.signals.entry(name.to_string()).or_default();
+        self.signals.entry(name.to_string()).or_insert_with(|| SignalSlot {
+            decl: DeclInfo {
+                name: name.to_string(),
+                params: Vec::new(),
+            },
+            listeners: Vec::new(),
+        });
         true
+    }
+
+    /// Declare a signal from an OBS declaration string.
+    /// Example: "void activate(ptr source)"
+    pub fn add_decl(&mut self, decl_string: &str) -> Result<&str, DeclError> {
+        let info = parse_decl(decl_string)?;
+        let name = info.name.clone();
+        self.signals.entry(name.clone()).or_insert_with(|| SignalSlot {
+            decl: info,
+            listeners: Vec::new(),
+        });
+        Ok(self.signals.get(&name).map(|s| s.decl.name.as_str()).unwrap_or(""))
     }
 
     /// Connect a listener id to a signal. Returns false if the signal was not declared.
     pub fn connect(&mut self, name: &str, listener: &str) -> bool {
-        if let Some(list) = self.signals.get_mut(name) {
-            if !list.iter().any(|l| l == listener) {
-                list.push(listener.to_string());
+        if let Some(slot) = self.signals.get_mut(name) {
+            if !slot.listeners.iter().any(|l| l == listener) {
+                slot.listeners.push(listener.to_string());
             }
             true
+        } else {
+            false
+        }
+    }
+
+    /// Disconnect a listener. Returns true if it was present.
+    pub fn disconnect(&mut self, name: &str, listener: &str) -> bool {
+        if let Some(slot) = self.signals.get_mut(name) {
+            let before = slot.listeners.len();
+            slot.listeners.retain(|l| l != listener);
+            slot.listeners.len() != before
         } else {
             false
         }
@@ -45,18 +82,20 @@ impl SignalHandler {
     pub fn signal(&self, name: &str) -> Vec<String> {
         self.signals
             .get(name)
-            .cloned()
+            .map(|s| s.listeners.clone())
             .unwrap_or_default()
     }
 
     pub fn listener_count(&self, name: &str) -> usize {
-        self.signals.get(name).map(|l| l.len()).unwrap_or(0)
+        self.signals.get(name).map(|s| s.listeners.len()).unwrap_or(0)
     }
-}
 
-impl Default for SignalHandler {
-    fn default() -> Self {
-        Self::new()
+    pub fn has(&self, name: &str) -> bool {
+        self.signals.contains_key(name)
+    }
+
+    pub fn decl(&self, name: &str) -> Option<&DeclInfo> {
+        self.signals.get(name).map(|s| &s.decl)
     }
 }
 
@@ -73,6 +112,34 @@ mod tests {
     }
 
     #[test]
+    fn add_decl_parses() {
+        let mut h = SignalHandler::new();
+        assert!(h.add_decl("void activate(ptr source)").is_ok());
+        assert!(h.has("activate"));
+        let d = h.decl("activate").unwrap();
+        assert_eq!(d.params.len(), 1);
+        assert_eq!(d.params[0].name, "source");
+    }
+
+    #[test]
+    fn bad_decl_rejected() {
+        let mut h = SignalHandler::new();
+        assert!(h.add_decl("void bad(foo bar)").is_err());
+        assert!(!h.has("bad"));
+    }
+
+    #[test]
+    fn disconnect() {
+        let mut h = SignalHandler::new();
+        h.add("s");
+        h.connect("s", "a");
+        h.connect("s", "b");
+        assert!(h.disconnect("s", "a"));
+        assert_eq!(h.listener_count("s"), 1);
+        assert!(!h.disconnect("s", "missing"));
+    }
+
+    #[test]
     fn unknown_safe() {
         let h = SignalHandler::new();
         assert!(h.signal("missing").is_empty());
@@ -82,18 +149,9 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_connect() {
-        let mut h = SignalHandler::new();
-        h.add("s");
-        h.connect("s", "a");
-        h.connect("s", "a");
-        assert_eq!(h.listener_count("s"), 1);
-    }
-
-    #[test]
     fn differential() {
         let mut h = SignalHandler::new();
-        h.add("tick");
+        h.add_decl("void tick()").unwrap();
         h.connect("tick", "listener");
         assert_eq!(h.signal("tick").len(), 1);
     }

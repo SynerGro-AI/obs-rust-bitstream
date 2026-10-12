@@ -99,6 +99,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **virtual_cam** | Virtual camera | Pure start/stop |
 | **virtual_cam_registry** | Virtual camera registry | Pure name-to-cam map |
 | **profile** | Profile | Pure name + settings |
+| **profile_registry** | Profile registry | Pure name-to-profile map |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -110,7 +111,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Eighty-eight foundation modules with tests
+- [x] Eighty-nine foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -119,7 +120,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Source pure layer: context + registry complete for source, output, encoder, service
 - [x] Scene pure layer: context, registry, items, collection + registry
 - [x] Filter pure layer: context + chain + registry complete
-- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, recordings, streams, replays, and virtual cams
+- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, recordings, streams, replays, virtual cams, and profiles
 - [x] Module registration + registry complete
 - [x] Display pure layer: context + registry complete
 - [x] Hotkey pure layer: hotkey + registry complete
@@ -129,7 +130,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Streaming pure layer: streaming + registry complete
 - [x] Replay buffer pure layer: buffer + registry complete
 - [x] Virtual camera pure layer: cam + registry complete
-- [ ] Profile pure layer started (profile)
+- [x] Profile pure layer: profile + registry complete
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

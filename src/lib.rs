@@ -1,5 +1,5 @@
-//! - virtual_cam_registry: pure virtual camera registry
 //! - profile: pure profile
+//! - profile_registry: pure profile registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -89,6 +89,7 @@ pub mod replay_registry;
 pub mod virtual_cam;
 pub mod virtual_cam_registry;
 pub mod profile;
+pub mod profile_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -177,3 +178,4 @@ pub use replay_registry::{ReplayRegistry, ReplayRegistryError};
 pub use virtual_cam::{VirtualCam, VirtualCamError};
 pub use virtual_cam_registry::{VirtualCamRegistry, VirtualCamRegistryError};
 pub use profile::{Profile, ProfileError};
+pub use profile_registry::{ProfileRegistry, ProfileRegistryError};

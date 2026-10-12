@@ -11,6 +11,7 @@ use crate::display_registry::DisplayRegistry;
 use crate::monitor_registry::MonitorRegistry;
 use crate::recording_registry::RecordingRegistry;
 use crate::replay_registry::ReplayRegistry;
+use crate::profile_registry::ProfileRegistry;
 use crate::streaming_registry::StreamingRegistry;
 use crate::virtual_cam_registry::VirtualCamRegistry;
 use crate::transition_registry::TransitionRegistry;
@@ -44,6 +45,7 @@ pub struct Core {
     streams: StreamingRegistry,
     replays: ReplayRegistry,
     virtual_cams: VirtualCamRegistry,
+    profiles: ProfileRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -272,6 +274,14 @@ impl Core {
 
     pub fn virtual_cams_mut(&mut self) -> &mut VirtualCamRegistry {
         &mut self.virtual_cams
+    }
+
+    pub fn profiles(&self) -> &ProfileRegistry {
+        &self.profiles
+    }
+
+    pub fn profiles_mut(&mut self) -> &mut ProfileRegistry {
+        &mut self.profiles
     }
 
     /// Swap program and preview. No-op if either is unset.

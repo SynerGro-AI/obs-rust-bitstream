@@ -98,6 +98,7 @@ The pure foundation is solid and tested.
 - **virtual_cam** — pure virtual camera. Differential wired.
 - **virtual_cam_registry** — pure virtual camera registry, owned by Core. Differential wired.
 - **profile** — pure profile. Differential wired.
+- **profile_registry** — pure profile registry, owned by Core. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

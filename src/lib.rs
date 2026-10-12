@@ -8,6 +8,7 @@
 //! - pilot: pure lesson-driven pilot
 //! - flight_session: pure closed-loop flight session
 //! - flight_replay: pure recorded flight playback
+//! - wind: pure environment wind force
 
 pub mod bitstream;
 pub mod dstr;
@@ -118,6 +119,7 @@ pub mod environment;
 pub mod pilot;
 pub mod flight_session;
 pub mod flight_replay;
+pub mod wind;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -227,3 +229,4 @@ pub use environment::{Environment, EnvironmentError};
 pub use pilot::Pilot;
 pub use flight_session::FlightSession;
 pub use flight_replay::FlightReplay;
+pub use wind::Wind;

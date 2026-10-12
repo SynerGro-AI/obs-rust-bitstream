@@ -1,13 +1,15 @@
 //! Safe pure ViewFrame (flight view core).
 //!
 //! Combines a camera follow and a plane bone into a view matrix
-//! ready for the canvas. No unwraps.
+//! ready for the canvas. Can also use the active camera from a
+//! CameraRig. No unwraps.
 //!
 //! Differential: a bone at origin with a follow of back=5
 //! produces a view whose translation is non-zero.
 
 use crate::bone::Bone;
 use crate::camera_follow::CameraFollow;
+use crate::camera_rig::CameraRig;
 use crate::matrix4::Matrix4;
 
 #[derive(Clone, Debug)]
@@ -25,6 +27,16 @@ impl ViewFrame {
     /// Build the view matrix that looks at the bone.
     pub fn view(&self, bone: &Bone) -> Matrix4 {
         self.follow.follow(bone).view()
+    }
+
+    /// Build the view matrix from the rig's active camera.
+    /// Falls back to the follow if no camera is active.
+    pub fn view_from_rig(&self, bone: &Bone, rig: &CameraRig) -> Matrix4 {
+        if let Some(cam) = rig.active() {
+            cam.view()
+        } else {
+            self.view(bone)
+        }
     }
 }
 
@@ -46,6 +58,16 @@ mod tests {
         bone.set_local_translation(0.0, 10.0, 0.0);
         let frame = ViewFrame::new(5.0, 2.0);
         let v = frame.view(&bone);
+        assert_eq!(v.t.w, 1.0);
+    }
+
+    #[test]
+    fn rig_active_drives_view() {
+        let bone = Bone::new("plane").unwrap();
+        let mut rig = CameraRig::new();
+        rig.add("hero").unwrap();
+        let frame = ViewFrame::new(5.0, 2.0);
+        let v = frame.view_from_rig(&bone, &rig);
         assert_eq!(v.t.w, 1.0);
     }
 }

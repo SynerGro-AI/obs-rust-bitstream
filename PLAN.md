@@ -96,6 +96,7 @@ The pure foundation is solid and tested.
 - **replay_buffer** — pure replay buffer. Differential wired.
 - **replay_registry** — pure replay registry, owned by Core. Differential wired.
 - **virtual_cam** — pure virtual camera. Differential wired.
+- **virtual_cam_registry** — pure virtual camera registry, owned by Core. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

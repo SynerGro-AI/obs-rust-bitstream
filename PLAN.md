@@ -10,6 +10,8 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **diff** — reusable differential test helper (now used in modules).
 - **crc32** — standard CRC32 with the classic test vector. Differential wired.
 - **ai** — simple config scaffold to switch Grok / Claude / Seraphina for automated assistance.
+- **array_serializer** — Vec-based output serializer + little-endian helpers. Differential wired.
+- **text_lookup** — HashMap store with escape expansion. Differential wired.
 - Parser tools that point at the patterns.
 - CI that runs cargo test on every push.
 

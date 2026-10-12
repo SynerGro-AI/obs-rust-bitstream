@@ -17,12 +17,14 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **diff** | Reusable differential test helper | Wired into modules |
 | **crc32** | Standard CRC32 | Classic test vector |
 | **ai** | AI/SI integration scaffold | Simple config for Grok, Claude, or Seraphina |
+| **array_serializer** | Vec-based output serializer + LE helpers | Differential on short writes |
+| **text_lookup** | HashMap store with escape expansion | Differential on insert/get |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
 ## Status
 
-- [x] Six foundation modules with tests
+- [x] Eight foundation modules with tests
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired
@@ -43,6 +45,8 @@ src/
   diff.rs
   crc32.rs
   ai.rs
+  array_serializer.rs
+  text_lookup.rs
 tools/
   obs_cpp_to_rust_parser.py
 .github/workflows/ci.yml

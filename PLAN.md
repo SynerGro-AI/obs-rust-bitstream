@@ -130,6 +130,7 @@ The pure foundation is solid and tested.
 - **material** — pure material. Differential wired.
 - **lighting** — pure material × light evaluation. Differential wired.
 - **material_assign** — pure material-to-bone binding. Differential wired.
+- **shaded_render** — pure lit skeleton render. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

@@ -1,5 +1,5 @@
-//! - video_fourcc: pure fourcc to format mapping
 //! - format_conversion: pure plane-size and scalar helpers
+//! - video_matrices: pure color matrix coefficients
 
 pub mod bitstream;
 pub mod dstr;
@@ -30,6 +30,7 @@ pub mod frame_rate;
 pub mod audio_math;
 pub mod video_fourcc;
 pub mod format_conversion;
+pub mod video_matrices;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -59,3 +60,4 @@ pub use frame_rate::MediaFps;
 pub use audio_math::{mul_to_db, db_to_mul};
 pub use video_fourcc::{VideoFormat, video_format_from_fourcc};
 pub use format_conversion::{y_plane_size, chroma_420_size, chroma_422_size, uyvy_to_yuy2_line};
+pub use video_matrices::{ColorSpace, identity_matrix, limited_to_full_scale};

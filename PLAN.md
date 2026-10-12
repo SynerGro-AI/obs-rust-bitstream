@@ -34,6 +34,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **audio_math** — pure mul ↔ dB conversion. Differential wired.
 - **video_fourcc** — pure fourcc to format mapping. Differential wired.
 - **format_conversion** — pure plane-size and scalar helpers. Differential wired.
+- **video_matrices** — pure color matrix coefficients. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 
 ## Util foundation complete

@@ -15,6 +15,8 @@ pub enum CallValue {
     Float(f64),
     Bool(bool),
     Str(String),
+    /// Opaque pointer (usize address). Matches OBS CALL_PARAM_TYPE_PTR.
+    Ptr(usize),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +25,7 @@ pub enum CallType {
     Float,
     Bool,
     Str,
+    Ptr,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,6 +50,7 @@ impl CallValue {
             CallValue::Float(_) => CallType::Float,
             CallValue::Bool(_) => CallType::Bool,
             CallValue::Str(_) => CallType::Str,
+            CallValue::Ptr(_) => CallType::Ptr,
         }
     }
 }
@@ -71,6 +75,11 @@ impl Calldata {
 
     pub fn set_str(&mut self, name: &str, v: &str) -> Result<(), CallError> {
         self.set(name, CallValue::Str(v.to_string()))
+    }
+
+    /// Set an opaque pointer (address). Rejects empty names.
+    pub fn set_ptr(&mut self, name: &str, addr: usize) -> Result<(), CallError> {
+        self.set(name, CallValue::Ptr(addr))
     }
 
     fn set(&mut self, name: &str, value: CallValue) -> Result<(), CallError> {
@@ -117,6 +126,17 @@ impl Calldata {
             CallValue::Str(v) => Ok(v.as_str()),
             other => Err(CallError::TypeMismatch {
                 expected: CallType::Str,
+                found: other.call_type(),
+            }),
+        }
+    }
+
+    /// Get a pointer. Fails if the key is missing or the type is not Ptr.
+    pub fn get_ptr(&self, name: &str) -> Result<usize, CallError> {
+        match self.get_typed(name, CallType::Ptr)? {
+            CallValue::Ptr(v) => Ok(*v),
+            other => Err(CallError::TypeMismatch {
+                expected: CallType::Ptr,
                 found: other.call_type(),
             }),
         }
@@ -208,5 +228,26 @@ mod tests {
         cd.set_bool("flag", true).unwrap();
         assert_eq!(cd.get_bool("flag").unwrap(), true);
         assert_eq!(cd.type_of("flag"), Some(CallType::Bool));
+    }
+
+    #[test]
+    fn ptr_round_trip() {
+        let mut cd = Calldata::new();
+        cd.set_ptr("source", 0xdead).unwrap();
+        assert_eq!(cd.get_ptr("source").unwrap(), 0xdead);
+        assert_eq!(cd.type_of("source"), Some(CallType::Ptr));
+    }
+
+    #[test]
+    fn ptr_type_mismatch() {
+        let mut cd = Calldata::new();
+        cd.set_int("x", 1).unwrap();
+        assert_eq!(
+            cd.get_ptr("x"),
+            Err(CallError::TypeMismatch {
+                expected: CallType::Ptr,
+                found: CallType::Int,
+            })
+        );
     }
 }

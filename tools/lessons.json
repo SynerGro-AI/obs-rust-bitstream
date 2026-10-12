@@ -62,5 +62,17 @@
     "fix": "Safe path returns None/empty/false; ABI preserves original",
     "module": "multiple",
     "hint": "Prefer Option and early returns. Test both paths."
+  },
+  "calldata": {
+    "match": [
+      "calldata",
+      "calldata_get",
+      "calldata_set",
+      "CALL_PARAM_TYPE"
+    ],
+    "issue": "Get must require both key present and exact type; Ptr was missing; empty names accepted",
+    "fix": "Result with MissingKey vs TypeMismatch; CallValue::Ptr; reject empty names",
+    "module": "src/calldata.rs",
+    "hint": "Emit set_int/float/bool/str/ptr and get_* that return Result. Never unwrap on missing or wrong type."
   }
 }

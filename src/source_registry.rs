@@ -46,6 +46,19 @@ impl SourceRegistry {
         Ok(())
     }
 
+    /// Add a source with a type id. Rejects empty and duplicate names.
+    pub fn add_with_type(&mut self, name: &str, type_id: &str) -> Result<(), RegistryError> {
+        if name.is_empty() {
+            return Err(RegistryError::EmptyName);
+        }
+        if self.sources.contains_key(name) {
+            return Err(RegistryError::Duplicate);
+        }
+        let ctx = SourceContext::with_type(name, type_id)?;
+        self.sources.insert(name.to_string(), ctx);
+        Ok(())
+    }
+
     pub fn get(&self, name: &str) -> Result<&SourceContext, RegistryError> {
         self.sources.get(name).ok_or(RegistryError::Missing)
     }

@@ -21,6 +21,7 @@ pub enum SourceError {
 #[derive(Clone, Debug)]
 pub struct SourceContext {
     name: String,
+    type_id: String,
     settings: ObsData,
     properties: Properties,
     signals: SignalHandler,
@@ -36,6 +37,7 @@ impl SourceContext {
         }
         Ok(Self {
             name: name.to_string(),
+            type_id: String::new(),
             settings: ObsData::new(),
             properties: Properties::new(),
             signals: SignalHandler::new(),
@@ -44,8 +46,19 @@ impl SourceContext {
         })
     }
 
+    /// Create a context with a type id. Empty names are rejected.
+    pub fn with_type(name: &str, type_id: &str) -> Result<Self, SourceError> {
+        let mut s = Self::new(name)?;
+        s.type_id = type_id.to_string();
+        Ok(s)
+    }
+
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn type_id(&self) -> &str {
+        &self.type_id
     }
 
     pub fn rename(&mut self, name: &str) -> Result<(), SourceError> {

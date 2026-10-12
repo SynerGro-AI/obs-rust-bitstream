@@ -45,7 +45,7 @@ impl Core {
         if !self.modules.has_source_type(type_id) {
             return Err(CoreError::TypeNotRegistered);
         }
-        self.sources.add(name).map_err(|_| CoreError::Duplicate)
+        self.sources.add_with_type(name, type_id).map_err(|_| CoreError::Duplicate)
     }
 
     /// Create a filter only if its type id is registered by a loaded module.
@@ -182,5 +182,6 @@ mod tests {
         assert!(matches!(c.create_source("cam2", "missing"), Err(CoreError::TypeNotRegistered)));
         assert!(c.create_filter("g", "gain_filter").is_ok());
         assert_eq!(c.sources().get("cam").unwrap().name(), "cam");
+        assert_eq!(c.sources().get("cam").unwrap().type_id(), "ffmpeg_source");
     }
 }

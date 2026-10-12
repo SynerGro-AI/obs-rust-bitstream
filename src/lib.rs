@@ -1,5 +1,5 @@
-//! - service_registry: pure service registry
 //! - scene_context: pure scene context
+//! - scene_registry: pure scene registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -62,6 +62,7 @@ pub mod output_registry;
 pub mod encoder_registry;
 pub mod service_registry;
 pub mod scene_context;
+pub mod scene_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -123,3 +124,4 @@ pub use output_registry::{OutputRegistry, OutputRegistryError};
 pub use encoder_registry::{EncoderRegistry, EncoderRegistryError};
 pub use service_registry::{ServiceRegistry, ServiceRegistryError};
 pub use scene_context::{SceneContext, SceneError};
+pub use scene_registry::{SceneRegistry, SceneRegistryError};

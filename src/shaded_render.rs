@@ -9,10 +9,9 @@
 use crate::bone::Bone;
 use crate::light_rig::LightRig;
 use crate::lighting::Lighting;
-use crate::material::Material;
 use crate::material_assign::MaterialAssign;
+use crate::material_registry::MaterialRegistry;
 use crate::vec3::Vec3;
-use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct ShadedItem {
@@ -27,12 +26,12 @@ impl ShadedRender {
     pub fn shade_bone(
         bone: &Bone,
         assign: &MaterialAssign,
-        materials: &HashMap<String, Material>,
+        registry: &MaterialRegistry,
         rig: &LightRig,
     ) -> ShadedItem {
         let name = bone.name().to_string();
         let color = if let Ok(mat_name) = assign.material_of(bone.name()) {
-            if let Some(m) = materials.get(mat_name) {
+            if let Ok(m) = registry.get(mat_name) {
                 Lighting::evaluate(m, rig)
             } else {
                 Vec3::new(0.5, 0.5, 0.5)
@@ -47,20 +46,20 @@ impl ShadedRender {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::material::Material;
 
     #[test]
     fn shades_red() {
         let bone = Bone::new("plane").unwrap();
         let mut assign = MaterialAssign::new();
         assign.assign("plane", "paint").unwrap();
-        let mut materials = HashMap::new();
-        let mut m = Material::new("paint").unwrap();
-        m.set_base_color(Vec3::new(1.0, 0.0, 0.0));
-        m.set_roughness(0.0);
-        materials.insert("paint".to_string(), m);
+        let mut registry = MaterialRegistry::new();
+        registry.add("paint").unwrap();
+        registry.get_mut("paint").unwrap().set_base_color(crate::vec3::Vec3::new(1.0, 0.0, 0.0));
+        registry.get_mut("paint").unwrap().set_roughness(0.0);
         let mut rig = LightRig::new();
         rig.add("key").unwrap();
-        let item = ShadedRender::shade_bone(&bone, &assign, &materials, &rig);
+        let item = ShadedRender::shade_bone(&bone, &assign, &registry, &rig);
         assert_eq!(item.bone, "plane");
         assert!((item.color.x - 1.0).abs() < 0.001);
     }
@@ -69,9 +68,9 @@ mod tests {
     fn differential() {
         let bone = Bone::new("wing").unwrap();
         let assign = MaterialAssign::new();
-        let materials = HashMap::new();
+        let registry = MaterialRegistry::new();
         let rig = LightRig::new();
-        let item = ShadedRender::shade_bone(&bone, &assign, &materials, &rig);
+        let item = ShadedRender::shade_bone(&bone, &assign, &registry, &rig);
         assert_eq!(item.color.x, 0.5);
     }
 }

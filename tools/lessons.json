@@ -70,9 +70,66 @@
       "calldata_set",
       "CALL_PARAM_TYPE"
     ],
-    "issue": "Get must require both key present and exact type; Ptr was missing; empty names accepted",
-    "fix": "Result with MissingKey vs TypeMismatch; CallValue::Ptr; reject empty names",
+    "issue": "Get must require both key present and exact type; Ptr was missing; empty names accepted; null string was not distinct",
+    "fix": "Result with MissingKey vs TypeMismatch vs NullString; CallValue::Ptr and StrNull; reject empty names",
     "module": "src/calldata.rs",
-    "hint": "Emit set_int/float/bool/str/ptr and get_* that return Result. Never unwrap on missing or wrong type."
+    "hint": "Emit set_int/float/bool/str/ptr/str_null and get_* that return Result. Never unwrap on missing or wrong type."
+  },
+  "decl": {
+    "match": [
+      "parse_decl",
+      "decl_info",
+      "signal_decl",
+      "void "
+    ],
+    "issue": "Declaration strings are free-form; unknown types and duplicate names must be rejected",
+    "fix": "parse_decl returns DeclInfo or DeclError; reserved names rejected; default flag is in",
+    "module": "src/decl.rs",
+    "hint": "Use parse_decl. Wire via SignalHandler::add_decl / ProcHandler::add_decl."
+  },
+  "signal": {
+    "match": [
+      "signal_handler",
+      "signal_handler_add",
+      "signal_handler_signal"
+    ],
+    "issue": "Unknown signals and empty names must be no-ops; globals receive every declared signal",
+    "fix": "HashMap of DeclInfo + listeners; add_decl parses; disconnect and remove; connect_global",
+    "module": "src/signal.rs",
+    "hint": "Emit add_decl, connect, disconnect, signal_with_globals. Unknown signal does not notify globals."
+  },
+  "obs_data": {
+    "match": [
+      "obs_data",
+      "obs_data_set",
+      "obs_data_get",
+      "obs_data_apply"
+    ],
+    "issue": "Missing keys and type mismatches must fail distinctly; nested objects and arrays needed; JSON must round-trip",
+    "fix": "ObsData with defaults, Object, Array, to_json/from_json, apply. Empty names rejected.",
+    "module": "src/obs_data.rs",
+    "hint": "Use set_*/get_* Result API. apply overwrites; defaults fill missing keys."
+  },
+  "obs_properties": {
+    "match": [
+      "obs_properties",
+      "obs_property",
+      "OBS_PROPERTY"
+    ],
+    "issue": "Duplicate and empty names must be rejected; list options must round-trip",
+    "fix": "Properties Vec with Bool/Int/Float/Text/List. add_* returns Result.",
+    "module": "src/obs_properties.rs",
+    "hint": "Emit add_bool/int/float/text/list. Reject EmptyName and Duplicate."
+  },
+  "source_context": {
+    "match": [
+      "obs_source",
+      "source_context",
+      "obs_context"
+    ],
+    "issue": "Empty names must be rejected; settings, properties, signal, and proc must be owned together",
+    "fix": "SourceContext owns name + ObsData + Properties + SignalHandler + ProcHandler",
+    "module": "src/source_context.rs",
+    "hint": "Use SourceContext::new. settings_mut and signals_mut for writes."
   }
 }

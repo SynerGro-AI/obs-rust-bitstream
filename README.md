@@ -115,6 +115,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **skeleton_connector** | Skeleton connector | Pure AI bone wiring |
 | **ai_animator** | AI animator | Pure AI-driven keyframe generation |
 | **physics_sim** | Physics simulation | Pure AI-driven step under gravity |
+| **learning_pipeline** | Learning pipeline | Pure physics-governed experience and lessons |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -126,7 +127,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred four foundation modules with tests
+- [x] One hundred five foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -147,7 +148,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Virtual camera pure layer: cam + registry complete
 - [x] Profile pure layer: profile + registry complete
 - [x] Canvas pure layer: canvas + registry complete
-- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector, ai_animator, physics_sim)
+- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector, ai_animator, physics_sim, learning_pipeline)
 - [x] Physics + AI settings assist wired
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)

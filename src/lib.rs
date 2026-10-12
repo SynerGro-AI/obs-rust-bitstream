@@ -1,5 +1,5 @@
-//! - axisang: pure axis-angle
 //! - plane: pure plane
+//! - bounds: pure AABB
 
 pub mod bitstream;
 pub mod dstr;
@@ -45,6 +45,7 @@ pub mod matrix4;
 pub mod quat;
 pub mod axisang;
 pub mod plane;
+pub mod bounds;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -89,3 +90,4 @@ pub use matrix4::Matrix4;
 pub use quat::Quat;
 pub use axisang::AxisAng;
 pub use plane::Plane;
+pub use bounds::Bounds;

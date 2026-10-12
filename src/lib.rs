@@ -1,5 +1,5 @@
-//! - media_timing: pure sample and frame duration helpers
 //! - audio_mixer: pure gain and sum helpers
+//! - vec2: pure 2D vector
 
 pub mod bitstream;
 pub mod dstr;
@@ -37,6 +37,7 @@ pub mod video_scaler;
 pub mod audio_buffer;
 pub mod media_timing;
 pub mod audio_mixer;
+pub mod vec2;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -73,3 +74,4 @@ pub use video_scaler::{ScaleInfo, lerp_weight};
 pub use audio_buffer::AudioBuffer;
 pub use media_timing::{sample_duration_ns, frame_duration_ns, frames_to_samples};
 pub use audio_mixer::{apply_gain, sum_buffers, peak};
+pub use vec2::Vec2;

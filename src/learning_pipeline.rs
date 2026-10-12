@@ -9,6 +9,7 @@
 
 use crate::ai::AiAssistant;
 use crate::bone::Bone;
+use crate::environment::Environment;
 use crate::physics::PhysicsSettings;
 
 #[derive(Clone, Debug)]
@@ -45,6 +46,12 @@ impl LearningPipeline {
 
     pub fn settings_mut(&mut self) -> &mut PhysicsSettings {
         &mut self.settings
+    }
+
+    /// Apply an environment's laws so every subsequent step is
+    /// governed by that world.
+    pub fn govern(&mut self, env: &Environment) {
+        env.govern(&mut self.settings);
     }
 
     pub fn experience_count(&self) -> usize {
@@ -130,5 +137,17 @@ mod tests {
         let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
         let r = p.review(&ai);
         assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn governed_by_environment() {
+        let mut p = LearningPipeline::new();
+        let mut env = Environment::new("mars").unwrap();
+        env.set_gravity(-3.71);
+        p.govern(&env);
+        let mut plane = Bone::new("plane").unwrap();
+        p.step_plane(&mut plane, 0.0, 0.1);
+        assert!(plane.local().t.y > -0.5);
+        assert!(plane.local().t.y < 0.0);
     }
 }

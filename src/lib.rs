@@ -9,6 +9,7 @@
 //! - flight_session: pure closed-loop flight session
 //! - flight_replay: pure recorded flight playback
 //! - wind: pure environment wind force
+//! - plane_renderer: pure flight-to-skeleton renderer
 
 pub mod bitstream;
 pub mod dstr;
@@ -120,6 +121,7 @@ pub mod pilot;
 pub mod flight_session;
 pub mod flight_replay;
 pub mod wind;
+pub mod plane_renderer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -230,3 +232,4 @@ pub use pilot::Pilot;
 pub use flight_session::FlightSession;
 pub use flight_replay::FlightReplay;
 pub use wind::Wind;
+pub use plane_renderer::PlaneRenderer;

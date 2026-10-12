@@ -29,6 +29,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **lexer** | Base-token lexer | Pure &str slices |
 | **serializer** | Serializer trait | Pure memory impl + LE helpers |
 | **profiler** | Local profiler | Pure Instant deltas |
+| **task** | Task queue | Pure Vec of closures |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -40,7 +41,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Eighteen foundation modules with tests
+- [x] Nineteen foundation modules with tests
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

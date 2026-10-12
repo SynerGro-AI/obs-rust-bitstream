@@ -22,6 +22,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **lexer** — pure base-token lexer. Differential wired.
 - **serializer** — pure serializer trait + memory implementation. Differential wired.
 - **profiler** — pure local profiler. Differential wired.
+- **task** — pure task queue. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 - CI that runs cargo test on every push.
 

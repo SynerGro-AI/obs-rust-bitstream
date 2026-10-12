@@ -2,11 +2,11 @@
 name = "obs-rust-bitstream"
 version = "0.1.0"
 edition = "2021"
-description = "Perfect, tested port of OBS Studio bitstream_reader with Position trait for wrap/no-wrap. Ready for obs-rust tree."
+description = "Public foundation for the OBS Studio rewrite in Rust. Perfect bitstream port with Position trait (wrap vs no-wrap is type-level)."
 license = "GPL-2.0-or-later"
 repository = "https://github.com/SynerGro-AI/obs-rust-bitstream"
 readme = "README.md"
-keywords = ["obs", "bitstream", "rust", "obs-studio", "ffi"]
+keywords = ["obs", "bitstream", "rust", "obs-studio", "ffi", "rewrite"]
 categories = ["multimedia", "encoding"]
 
 [lib]

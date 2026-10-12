@@ -93,6 +93,7 @@ The pure foundation is solid and tested.
 - **recording_registry** — pure recording registry, owned by Core. Differential wired.
 - **streaming** — pure streaming. Differential wired.
 - **streaming_registry** — pure streaming registry, owned by Core. Differential wired.
+- **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

@@ -1,5 +1,5 @@
-//! - streaming: pure streaming
 //! - streaming_registry: pure streaming registry
+//! - replay_buffer: pure replay buffer
 
 pub mod bitstream;
 pub mod dstr;
@@ -84,6 +84,7 @@ pub mod recording;
 pub mod recording_registry;
 pub mod streaming;
 pub mod streaming_registry;
+pub mod replay_buffer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -167,3 +168,4 @@ pub use recording::{Recording, RecordingError};
 pub use recording_registry::{RecordingRegistry, RecordingRegistryError};
 pub use streaming::{Streaming, StreamingError};
 pub use streaming_registry::{StreamingRegistry, StreamingRegistryError};
+pub use replay_buffer::{ReplayBuffer, ReplayError};

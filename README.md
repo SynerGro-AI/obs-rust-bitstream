@@ -53,6 +53,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **matrix3** | 3x4 matrix | Pure identity + mul |
 | **matrix4** | 4x4 matrix | Pure identity + mul |
 | **quat** | Quaternion | Pure mul + normalize |
+| **axisang** | Axis-angle | Pure axis + angle |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -64,10 +65,10 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Forty-two foundation modules with tests
+- [x] Forty-three foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
-- [ ] Graphics pure layer started (vec2, vec3, vec4, matrix3, matrix4, quat)
+- [ ] Graphics pure layer started (vec2, vec3, vec4, matrix3, matrix4, quat, axisang)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

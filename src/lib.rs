@@ -1,5 +1,5 @@
-//! - matrix4: pure 4x4 matrix
 //! - quat: pure quaternion
+//! - axisang: pure axis-angle
 
 pub mod bitstream;
 pub mod dstr;
@@ -43,6 +43,7 @@ pub mod vec4;
 pub mod matrix3;
 pub mod matrix4;
 pub mod quat;
+pub mod axisang;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -85,3 +86,4 @@ pub use vec4::Vec4;
 pub use matrix3::Matrix3;
 pub use matrix4::Matrix4;
 pub use quat::Quat;
+pub use axisang::AxisAng;

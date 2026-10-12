@@ -21,6 +21,7 @@ struct SignalSlot {
 #[derive(Clone, Debug, Default)]
 pub struct SignalHandler {
     signals: HashMap<String, SignalSlot>,
+    globals: Vec<String>,
 }
 
 impl SignalHandler {
@@ -78,12 +79,47 @@ impl SignalHandler {
         }
     }
 
-    /// Emit a signal. Returns the list of listener ids that received it.
+    /// Connect a global listener that receives every signal.
+    pub fn connect_global(&mut self, listener: &str) -> bool {
+        if listener.is_empty() {
+            return false;
+        }
+        if !self.globals.iter().any(|l| l == listener) {
+            self.globals.push(listener.to_string());
+        }
+        true
+    }
+
+    /// Disconnect a global listener. Returns true if it was present.
+    pub fn disconnect_global(&mut self, listener: &str) -> bool {
+        let before = self.globals.len();
+        self.globals.retain(|l| l != listener);
+        self.globals.len() != before
+    }
+
+    /// Emit a signal. Returns the per-signal listeners.
+    /// Global listeners are also notified (see `signal_with_globals`).
     pub fn signal(&self, name: &str) -> Vec<String> {
         self.signals
             .get(name)
             .map(|s| s.listeners.clone())
             .unwrap_or_default()
+    }
+
+    /// Emit a signal and return both per-signal listeners and global listeners.
+    /// Globals receive every signal name, matching OBS signal_handler_signal.
+    pub fn signal_with_globals(&self, name: &str) -> (Vec<String>, Vec<String>) {
+        let locals = self.signal(name);
+        let globals = if self.has(name) {
+            self.globals.clone()
+        } else {
+            Vec::new()
+        };
+        (locals, globals)
+    }
+
+    pub fn global_count(&self) -> usize {
+        self.globals.len()
     }
 
     pub fn listener_count(&self, name: &str) -> usize {
@@ -154,5 +190,38 @@ mod tests {
         h.add_decl("void tick()").unwrap();
         h.connect("tick", "listener");
         assert_eq!(h.signal("tick").len(), 1);
+    }
+
+    #[test]
+    fn global_receives_every_signal() {
+        let mut h = SignalHandler::new();
+        h.add("activate");
+        h.add("deactivate");
+        h.connect("activate", "local");
+        assert!(h.connect_global("global"));
+        let (locals, globals) = h.signal_with_globals("activate");
+        assert_eq!(locals, vec!["local".to_string()]);
+        assert_eq!(globals, vec!["global".to_string()]);
+        let (_, globals2) = h.signal_with_globals("deactivate");
+        assert_eq!(globals2, vec!["global".to_string()]);
+    }
+
+    #[test]
+    fn global_unknown_safe() {
+        let mut h = SignalHandler::new();
+        h.connect_global("g");
+        let (locals, globals) = h.signal_with_globals("missing");
+        assert!(locals.is_empty());
+        assert!(globals.is_empty());
+    }
+
+    #[test]
+    fn disconnect_global() {
+        let mut h = SignalHandler::new();
+        h.connect_global("g");
+        assert_eq!(h.global_count(), 1);
+        assert!(h.disconnect_global("g"));
+        assert_eq!(h.global_count(), 0);
+        assert!(!h.disconnect_global("missing"));
     }
 }

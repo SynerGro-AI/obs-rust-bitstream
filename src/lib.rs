@@ -1,5 +1,5 @@
-//! - plane: pure plane
 //! - bounds: pure AABB
+//! - half: pure half-float conversion
 
 pub mod bitstream;
 pub mod dstr;
@@ -46,6 +46,7 @@ pub mod quat;
 pub mod axisang;
 pub mod plane;
 pub mod bounds;
+pub mod half;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -91,3 +92,4 @@ pub use quat::Quat;
 pub use axisang::AxisAng;
 pub use plane::Plane;
 pub use bounds::Bounds;
+pub use half::{f32_to_f16, f16_to_f32};

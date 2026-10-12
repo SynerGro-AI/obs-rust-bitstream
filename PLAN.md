@@ -51,7 +51,14 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **axisang** — pure axis-angle. Differential wired.
 - **plane** — pure plane. Differential wired.
 - **bounds** — pure AABB. Differential wired.
+- **half** — pure half-float conversion. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
+
+## Graphics pure layer solid
+The high-leverage pure surface of graphics is now covered:
+vec2, vec3, vec4, matrix3, matrix4, quat, axisang, plane, bounds, half.
+All are inlined for graphics performance and carry differential tests.
+Device/effect/shader code can be thin wrappers later.
 
 ## Media-io pure layer solid
 The high-leverage pure surface of media-io is now covered:

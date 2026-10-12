@@ -8,6 +8,7 @@
 
 use crate::collection_registry::CollectionRegistry;
 use crate::display_registry::DisplayRegistry;
+use crate::monitor_registry::MonitorRegistry;
 use crate::transition_registry::TransitionRegistry;
 use crate::encoder_registry::EncoderRegistry;
 use crate::hotkey_registry::HotkeyRegistry;
@@ -34,6 +35,7 @@ pub struct Core {
     current_scene: Option<String>,
     program_scene: Option<String>,
     preview_scene: Option<String>,
+    monitors: MonitorRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -222,6 +224,14 @@ impl Core {
 
     pub fn preview_scene(&self) -> Option<&str> {
         self.preview_scene.as_deref()
+    }
+
+    pub fn monitors(&self) -> &MonitorRegistry {
+        &self.monitors
+    }
+
+    pub fn monitors_mut(&mut self) -> &mut MonitorRegistry {
+        &mut self.monitors
     }
 
     /// Swap program and preview. No-op if either is unset.

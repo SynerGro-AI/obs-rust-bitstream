@@ -88,6 +88,7 @@ The pure foundation is solid and tested.
 - **transition** — pure scene transition. Differential wired.
 - **transition_registry** — pure transition registry, owned by Core. Differential wired.
 - **audio_monitor** — pure audio monitor. Differential wired.
+- **monitor_registry** — pure monitor registry, owned by Core. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

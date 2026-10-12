@@ -69,6 +69,7 @@ The pure foundation is solid and tested.
 - **service_context** — pure service context. Differential wired.
 - **output_registry** — pure output registry. Differential wired.
 - **encoder_registry** — pure encoder registry. Differential wired.
+- **service_registry** — pure service registry. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

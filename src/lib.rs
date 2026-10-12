@@ -1,5 +1,5 @@
-//! - output_registry: pure output registry
 //! - encoder_registry: pure encoder registry
+//! - service_registry: pure service registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -60,6 +60,7 @@ pub mod encoder_context;
 pub mod service_context;
 pub mod output_registry;
 pub mod encoder_registry;
+pub mod service_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -119,3 +120,4 @@ pub use encoder_context::{EncoderContext, EncoderType, EncoderError};
 pub use service_context::{ServiceContext, ServiceError};
 pub use output_registry::{OutputRegistry, OutputRegistryError};
 pub use encoder_registry::{EncoderRegistry, EncoderRegistryError};
+pub use service_registry::{ServiceRegistry, ServiceRegistryError};

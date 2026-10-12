@@ -25,7 +25,6 @@ impl Dstr {
         if find.is_empty() {
             return; // fix the infinite loop
         }
-        // Simple non-overlapping replace for foundation
         let mut result = Vec::new();
         let mut i = 0;
         while i < self.data.len() {
@@ -54,12 +53,13 @@ impl Default for Dstr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diff::assert_equal;
 
     #[test]
     fn empty_find_is_noop() {
         let mut s = Dstr::from_bytes(b"hello");
         s.replace(b"", b"x");
-        assert_eq!(s.as_bytes(), b"hello"); // does not loop forever
+        assert_eq!(s.as_bytes(), b"hello");
     }
 
     #[test]
@@ -67,5 +67,14 @@ mod tests {
         let mut s = Dstr::from_bytes(b"hello world");
         s.replace(b"world", b"rust");
         assert_eq!(s.as_bytes(), b"hello rust");
+    }
+
+    #[test]
+    fn differential_replace() {
+        // Safe path must be deterministic and match expected result.
+        let mut s1 = Dstr::from_bytes(b"hello world");
+        s1.replace(b"world", b"rust");
+        let expected = b"hello rust";
+        assert_equal(s1.as_bytes(), expected.as_slice(), "dstr replace");
     }
 }

@@ -6,6 +6,7 @@
 //!
 //! Differential: add keyframe + sample at time round-trips.
 
+use crate::ai::AiAssistant;
 use crate::bone::Bone;
 use crate::matrix4::Matrix4;
 use crate::vec4::Vec4;
@@ -22,6 +23,7 @@ pub struct Keyframe {
     x: f32,
     y: f32,
     z: f32,
+    ai: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -58,8 +60,37 @@ impl AnimationTimeline {
             x,
             y,
             z,
+            ai: false,
         });
         self.keys.sort_by(|a, b| a.time_secs.partial_cmp(&b.time_secs).unwrap_or(std::cmp::Ordering::Equal));
+    }
+
+    /// Add an AI-suggested keyframe. The assistant is asked for a
+    /// translation; the result is parsed as three floats if present,
+    /// otherwise the fallback is used. Marked ai=true.
+    pub fn add_ai_key(
+        &mut self,
+        time_secs: f32,
+        bone: &str,
+        fallback: (f32, f32, f32),
+        ai: &AiAssistant,
+        prompt: &str,
+    ) {
+        let reply = ai.assist(prompt);
+        let (x, y, z) = parse_xyz(&reply).unwrap_or(fallback);
+        self.keys.push(Keyframe {
+            time_secs,
+            bone: bone.to_string(),
+            x,
+            y,
+            z,
+            ai: true,
+        });
+        self.keys.sort_by(|a, b| a.time_secs.partial_cmp(&b.time_secs).unwrap_or(std::cmp::Ordering::Equal));
+    }
+
+    pub fn ai_key_count(&self) -> usize {
+        self.keys.iter().filter(|k| k.ai).count()
     }
 
     pub fn key_count(&self) -> usize {
@@ -100,6 +131,18 @@ impl AnimationTimeline {
     }
 }
 
+fn parse_xyz(s: &str) -> Option<(f32, f32, f32)> {
+    let parts: Vec<f32> = s
+        .split(|c: char| c == ',' || c == ' ' || c == '\n')
+        .filter_map(|p| p.trim().parse().ok())
+        .collect();
+    if parts.len() >= 3 {
+        Some((parts[0], parts[1], parts[2]))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +168,16 @@ mod tests {
         timeline.apply(&mut bone, 0.5);
         assert!((bone.local().t.y - 1.0).abs() < 0.001);
         assert_eq!(timeline.key_count(), 2);
+    }
+
+    #[test]
+    fn ai_key() {
+        let mut timeline = AnimationTimeline::new("assist", 1.0).unwrap();
+        let ai = crate::ai::AiAssistant::new(crate::ai::AiConfig::seraphina());
+        timeline.add_ai_key(0.5, "spine", (0.0, 1.0, 0.0), &ai, "suggest translation");
+        assert_eq!(timeline.ai_key_count(), 1);
+        let mut bone = Bone::new("spine").unwrap();
+        timeline.apply(&mut bone, 0.5);
+        assert_eq!(bone.local().t.y, 1.0);
     }
 }

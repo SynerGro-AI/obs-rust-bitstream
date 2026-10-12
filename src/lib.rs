@@ -1,5 +1,5 @@
-//! - obs_properties: pure property list
 //! - source_context: pure source context
+//! - source_registry: pure source registry
 
 pub mod bitstream;
 pub mod dstr;
@@ -54,6 +54,7 @@ pub mod decl;
 pub mod obs_data;
 pub mod obs_properties;
 pub mod source_context;
+pub mod source_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -107,3 +108,4 @@ pub use decl::{parse_decl, DeclInfo, DeclParam, DeclError, ParamFlags};
 pub use obs_data::{ObsData, DataValue, DataError};
 pub use obs_properties::{Properties, Property, PropertyType, PropsError};
 pub use source_context::{SourceContext, SourceError};
+pub use source_registry::{SourceRegistry, RegistryError};

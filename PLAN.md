@@ -63,6 +63,7 @@ The pure foundation is solid and tested.
 
 ## Source pure layer (started)
 - **source_context** — pure source context (name, settings, properties, signal, proc). Differential wired.
+- **source_registry** — pure source registry. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

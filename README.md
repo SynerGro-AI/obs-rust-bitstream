@@ -100,6 +100,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **virtual_cam_registry** | Virtual camera registry | Pure name-to-cam map |
 | **profile** | Profile | Pure name + settings |
 | **profile_registry** | Profile registry | Pure name-to-profile map |
+| **canvas** | Canvas | Pure render surface |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -111,7 +112,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Eighty-nine foundation modules with tests
+- [x] Ninety foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -131,6 +132,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Replay buffer pure layer: buffer + registry complete
 - [x] Virtual camera pure layer: cam + registry complete
 - [x] Profile pure layer: profile + registry complete
+- [ ] Canvas pure layer started (canvas)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

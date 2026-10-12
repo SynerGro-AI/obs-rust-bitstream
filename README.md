@@ -5,28 +5,30 @@
 Goal: beat the ~800 scripts already finished upstream by using ~10% of the API actions.  
 **Work smarter, not harder.**
 
-Reusable patterns (Position trait, safe truncation, bug-fix tests) + a parser that emits skeletons pointing at those patterns.
+Reusable patterns + a parser that points at them + a differential helper that can be reused everywhere.
 
 ## Foundation modules (live)
 
-| Module | What it does | Bug fixed in safe path |
-|--------|----------------|------------------------|
-| **bitstream** | Position trait makes wrap vs no-wrap a type-level property | uint8_t wraps at 255 and re-reads byte 0 |
-| **dstr** | Safe dynamic string | Infinite loop on empty find; buffer overflow on insert |
-| **utf8** | Safe truncation | Never splits a multibyte character at the 255-byte limit |
+| Module | What it does | Notes |
+|--------|----------------|-------|
+| **bitstream** | Position trait (wrap vs no-wrap is type-level) | Fixes uint8_t wrap-at-255 |
+| **dstr** | Safe dynamic string | Fixes infinite loop + overflow |
+| **utf8** | Safe truncation | Never splits a multibyte character |
+| **diff** | Reusable differential test helper | One harness for many modules |
+| **crc32** | Standard CRC32 | Classic test vector included |
 
-All have unit tests that prove the math/fixes. C ABI shims keep original quirks where required.
+All have unit tests. C ABI shims keep original quirks where required.
 
 ## Status
 
-- [x] Foundation patterns (Position, safe truncation, bug fixes)
-- [x] Three modules with tests
+- [x] Five foundation modules with tests
 - [x] Parser tools wired
+- [x] Reusable differential helper
 - [x] CI (cargo test on push/PR)
 - [x] Public under SynerGro-AI
-- [ ] Differential test harness (reusable across modules)
+- [ ] Wire differential into more modules
 - [ ] Batch application to remaining util files
-- [ ] Workspace layout for more crates
+- [ ] Workspace layout
 
 ## Layout
 
@@ -36,6 +38,8 @@ src/
   bitstream.rs
   dstr.rs
   utf8.rs
+  diff.rs
+  crc32.rs
 tools/
   obs_cpp_to_rust_parser.py
 .github/workflows/ci.yml
@@ -52,10 +56,9 @@ cargo test
 
 1. Foundation patterns first — done
 2. Parser wired — done
-3. High-leverage modules with tests — in progress
-4. Reusable differential suite
-5. Batch-apply patterns to the rest
-6. Keep pushing — public, free, open
+3. High-leverage modules + reusable differential helper — done
+4. Batch-apply to the rest
+5. Keep pushing — public, free, open
 
 AI-assisted contributions and PRs welcome.
 

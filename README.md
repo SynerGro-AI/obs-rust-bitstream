@@ -93,6 +93,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **recording** | Recording | Pure start/stop + path |
 | **recording_registry** | Recording registry | Pure name-to-recording map |
 | **streaming** | Streaming | Pure start/stop + service |
+| **streaming_registry** | Streaming registry | Pure name-to-stream map |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -104,7 +105,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Eighty-two foundation modules with tests
+- [x] Eighty-three foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -113,14 +114,14 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Source pure layer: context + registry complete for source, output, encoder, service
 - [x] Scene pure layer: context, registry, items, collection + registry
 - [x] Filter pure layer: context + chain + registry complete
-- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, and recordings
+- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, recordings, and streams
 - [x] Module registration + registry complete
 - [x] Display pure layer: context + registry complete
 - [x] Hotkey pure layer: hotkey + registry complete
 - [x] Transition pure layer: transition + registry complete
 - [x] Audio monitor pure layer: monitor + registry complete
 - [x] Recording pure layer: recording + registry complete
-- [ ] Streaming pure layer started (streaming)
+- [x] Streaming pure layer: streaming + registry complete
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

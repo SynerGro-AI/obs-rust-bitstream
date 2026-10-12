@@ -76,6 +76,11 @@ impl ProcHandler {
     pub fn decl(&self, name: &str) -> Option<&DeclInfo> {
         self.procs.get(name).map(|s| &s.decl)
     }
+
+    /// Remove a registered procedure. Returns true if it existed.
+    pub fn remove(&mut self, name: &str) -> bool {
+        self.procs.remove(name).is_some()
+    }
 }
 
 #[cfg(test)]
@@ -135,5 +140,14 @@ mod tests {
         let mut h = ProcHandler::new();
         h.add_decl("void tick()", "listener").unwrap();
         assert!(h.contains("tick"));
+    }
+
+    #[test]
+    fn remove_proc() {
+        let mut h = ProcHandler::new();
+        h.add("p", "id");
+        assert!(h.remove("p"));
+        assert!(!h.contains("p"));
+        assert!(!h.remove("p"));
     }
 }

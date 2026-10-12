@@ -133,6 +133,11 @@ impl SignalHandler {
     pub fn decl(&self, name: &str) -> Option<&DeclInfo> {
         self.signals.get(name).map(|s| &s.decl)
     }
+
+    /// Remove a declared signal and its listeners. Returns true if it existed.
+    pub fn remove(&mut self, name: &str) -> bool {
+        self.signals.remove(name).is_some()
+    }
 }
 
 #[cfg(test)]
@@ -223,5 +228,15 @@ mod tests {
         assert!(h.disconnect_global("g"));
         assert_eq!(h.global_count(), 0);
         assert!(!h.disconnect_global("missing"));
+    }
+
+    #[test]
+    fn remove_signal() {
+        let mut h = SignalHandler::new();
+        h.add("s");
+        h.connect("s", "a");
+        assert!(h.remove("s"));
+        assert!(!h.has("s"));
+        assert!(!h.remove("s"));
     }
 }

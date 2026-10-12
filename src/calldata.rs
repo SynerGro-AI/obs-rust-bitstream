@@ -15,6 +15,8 @@ pub enum CallValue {
     Float(f64),
     Bool(bool),
     Str(String),
+    /// Null string. Distinct from an empty string. Matches OBS NULL.
+    StrNull,
     /// Opaque pointer (usize address). Matches OBS CALL_PARAM_TYPE_PTR.
     Ptr(usize),
 }
@@ -36,6 +38,8 @@ pub enum CallError {
     TypeMismatch { expected: CallType, found: CallType },
     /// Empty name rejected on set.
     EmptyName,
+    /// Key exists and is a string, but the value is null.
+    NullString,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -50,6 +54,7 @@ impl CallValue {
             CallValue::Float(_) => CallType::Float,
             CallValue::Bool(_) => CallType::Bool,
             CallValue::Str(_) => CallType::Str,
+            CallValue::StrNull => CallType::Str,
             CallValue::Ptr(_) => CallType::Ptr,
         }
     }
@@ -73,8 +78,15 @@ impl Calldata {
         self.set(name, CallValue::Bool(v))
     }
 
+    /// Set a string. Empty string is allowed (distinct from null).
     pub fn set_str(&mut self, name: &str, v: &str) -> Result<(), CallError> {
         self.set(name, CallValue::Str(v.to_string()))
+    }
+
+    /// Set a null string. Matches OBS calldata_set_string(name, NULL).
+    /// Distinct from an empty string.
+    pub fn set_str_null(&mut self, name: &str) -> Result<(), CallError> {
+        self.set(name, CallValue::StrNull)
     }
 
     /// Set an opaque pointer (address). Rejects empty names.
@@ -124,11 +136,17 @@ impl Calldata {
     pub fn get_str(&self, name: &str) -> Result<&str, CallError> {
         match self.get_typed(name, CallType::Str)? {
             CallValue::Str(v) => Ok(v.as_str()),
+            CallValue::StrNull => Err(CallError::NullString),
             other => Err(CallError::TypeMismatch {
                 expected: CallType::Str,
                 found: other.call_type(),
             }),
         }
+    }
+
+    /// True if the key exists, is a string, and is null.
+    pub fn is_null_str(&self, name: &str) -> bool {
+        matches!(self.params.get(name), Some(CallValue::StrNull))
     }
 
     /// Get a pointer. Fails if the key is missing or the type is not Ptr.
@@ -220,6 +238,17 @@ mod tests {
         let mut cd = Calldata::new();
         assert_eq!(cd.set_int("", 1), Err(CallError::EmptyName));
         assert!(!cd.contains_key(""));
+    }
+
+    #[test]
+    fn null_string_distinct() {
+        let mut cd = Calldata::new();
+        cd.set_str("empty", "").unwrap();
+        cd.set_str_null("nil").unwrap();
+        assert_eq!(cd.get_str("empty").unwrap(), "");
+        assert_eq!(cd.get_str("nil"), Err(CallError::NullString));
+        assert!(cd.is_null_str("nil"));
+        assert!(!cd.is_null_str("empty"));
     }
 
     #[test]

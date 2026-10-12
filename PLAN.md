@@ -52,12 +52,14 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **plane** — pure plane. Differential wired.
 - **bounds** — pure AABB. Differential wired.
 - **half** — pure half-float conversion. Differential wired.
-## Callback pure layer (started)
-- **signal** — pure signal handler. Differential wired.
-- **proc** — pure procedure handler. Differential wired.
-- **calldata** — pure named parameter bag. Differential wired.
-- **decl** — pure declaration-string parser. Differential wired.
-- Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
+## Callback pure layer solid
+The high-leverage pure surface of callback is now covered:
+signal (decl, disconnect, globals, remove),
+proc (decl, remove),
+calldata (int/float/bool/str/null-str/ptr, key+type match),
+decl (declaration-string parser).
+Threading and ref-count wrappers can be added later.
+The pure foundation is solid and tested.
 
 ## Graphics pure layer solid
 The high-leverage pure surface of graphics is now covered:

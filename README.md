@@ -76,7 +76,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
-- [ ] Callback pure layer started (signal, proc, calldata, decl)
+- [x] Callback pure layer solid (signal, proc, calldata, decl)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

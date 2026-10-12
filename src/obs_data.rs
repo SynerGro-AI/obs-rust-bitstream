@@ -163,6 +163,34 @@ impl ObsData {
     pub fn len(&self) -> usize {
         self.values.len()
     }
+
+    /// Serialize values to a compact JSON object string.
+    /// Nested objects and arrays are included. No unwraps.
+    pub fn to_json(&self) -> String {
+        let mut parts = Vec::new();
+        for (k, v) in &self.values {
+            parts.push(format!("\"{}\":{}", escape_json(k), value_to_json(v)));
+        }
+        format!("{{{}}}", parts.join(","))
+    }
+}
+
+fn escape_json(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn value_to_json(v: &DataValue) -> String {
+    match v {
+        DataValue::String(s) => format!("\"{}\"", escape_json(s)),
+        DataValue::Int(n) => n.to_string(),
+        DataValue::Double(n) => n.to_string(),
+        DataValue::Bool(b) => if *b { "true".into() } else { "false".into() },
+        DataValue::Object(o) => o.to_json(),
+        DataValue::Array(a) => {
+            let items: Vec<String> = a.iter().map(value_to_json).collect();
+            format!("[{}]", items.join(","))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -246,5 +274,29 @@ mod tests {
         let mut d = ObsData::new();
         d.set_bool("flag", true).unwrap();
         assert_eq!(d.get_array("flag"), Err(DataError::TypeMismatch));
+    }
+
+    #[test]
+    fn json_round_trip_shape() {
+        let mut d = ObsData::new();
+        d.set_string("name", "cam").unwrap();
+        d.set_int("width", 1920).unwrap();
+        d.set_bool("on", true).unwrap();
+        let json = d.to_json();
+        assert!(json.contains("\"name\":\"cam\""));
+        assert!(json.contains("\"width\":1920"));
+        assert!(json.contains("\"on\":true"));
+    }
+
+    #[test]
+    fn json_nested() {
+        let mut child = ObsData::new();
+        child.set_int("h", 720).unwrap();
+        let mut parent = ObsData::new();
+        parent.set_obj("video", child).unwrap();
+        parent.set_array("ids", vec![DataValue::Int(1), DataValue::Int(2)]).unwrap();
+        let json = parent.to_json();
+        assert!(json.contains("\"video\":{"));
+        assert!(json.contains("\"ids\":[1,2]"));
     }
 }

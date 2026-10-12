@@ -1,5 +1,6 @@
-//! - cf_lexer: pure CF lexer
 //! - config_parser: pure config string parser
+//! - source_profiler: pure source profiler stub
+//! - pipe: pure in-memory pipe
 
 pub mod bitstream;
 pub mod dstr;
@@ -24,6 +25,8 @@ pub mod file_serializer;
 pub mod buffered_serializer;
 pub mod cf_lexer;
 pub mod config_parser;
+pub mod source_profiler;
+pub mod pipe;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -47,3 +50,5 @@ pub use file_serializer::FileSerializer;
 pub use buffered_serializer::BufferedSerializer;
 pub use cf_lexer::{CfLexer, CfToken, CfTokenType};
 pub use config_parser::parse_config_string;
+pub use source_profiler::SourceProfiler;
+pub use pipe::Pipe;

@@ -27,7 +27,15 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **buffered_serializer** — pure buffered serializer. Differential wired.
 - **cf_lexer** — pure CF lexer. Differential wired.
 - **config_parser** — pure config string parser. Differential wired.
+- **source_profiler** — pure source profiler stub. Differential wired.
+- **pipe** — pure in-memory pipe. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
+
+## Util foundation complete
+The high-leverage pure surface of libobs/util is now covered.
+Remaining OS-specific pieces (platform-*, threading-*, sse-intrin, uthash)
+can be added later as thin wrappers. The pure foundation is solid,
+tested, and ready for the next layer (media-io / graphics math) if desired.
 - CI that runs cargo test on every push.
 
 ## Smart multiplier

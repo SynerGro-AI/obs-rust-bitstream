@@ -8,6 +8,7 @@
 
 use crate::collection_registry::CollectionRegistry;
 use crate::display_registry::DisplayRegistry;
+use crate::transition_registry::TransitionRegistry;
 use crate::encoder_registry::EncoderRegistry;
 use crate::hotkey_registry::HotkeyRegistry;
 use crate::filter_registry::FilterRegistry;
@@ -29,6 +30,7 @@ pub struct Core {
     displays: DisplayRegistry,
     hotkeys: HotkeyRegistry,
     collections: CollectionRegistry,
+    transitions: TransitionRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -170,6 +172,14 @@ impl Core {
 
     pub fn collections_mut(&mut self) -> &mut CollectionRegistry {
         &mut self.collections
+    }
+
+    pub fn transitions(&self) -> &TransitionRegistry {
+        &self.transitions
+    }
+
+    pub fn transitions_mut(&mut self) -> &mut TransitionRegistry {
+        &mut self.transitions
     }
 }
 

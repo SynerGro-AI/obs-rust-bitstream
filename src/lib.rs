@@ -2,6 +2,7 @@
 //! - character_renderer: pure character renderer
 //! - skeleton_connector: pure AI skeleton connector
 //! - ai_animator: pure AI-driven animator
+//! - physics_sim: pure AI-driven physics simulation
 
 pub mod bitstream;
 pub mod dstr;
@@ -106,6 +107,7 @@ pub mod performance_capture;
 pub mod character_renderer;
 pub mod skeleton_connector;
 pub mod ai_animator;
+pub mod physics_sim;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -209,3 +211,4 @@ pub use performance_capture::{PerformanceCapture, CaptureError};
 pub use character_renderer::CharacterRenderer;
 pub use skeleton_connector::{SkeletonConnector, ConnectorError};
 pub use ai_animator::AiAnimator;
+pub use physics_sim::PhysicsSim;

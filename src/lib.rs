@@ -1,6 +1,5 @@
-//! - render_list: pure render list
-//! - camera: pure camera
 //! - projector: pure 2D-to-3D projector
+//! - bone: pure bone hierarchy
 
 pub mod bitstream;
 pub mod dstr;
@@ -97,6 +96,7 @@ pub mod render_item;
 pub mod render_list;
 pub mod camera;
 pub mod projector;
+pub mod bone;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -192,3 +192,4 @@ pub use render_item::RenderItem;
 pub use render_list::RenderList;
 pub use camera::Camera;
 pub use projector::Projector;
+pub use bone::{Bone, BoneError};

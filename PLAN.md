@@ -105,6 +105,7 @@ The pure foundation is solid and tested.
 - **render_list** — pure render list. Differential wired.
 - **camera** — pure camera. Differential wired.
 - **projector** — pure 2D-to-3D projector. Differential wired.
+- **bone** — pure bone hierarchy. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

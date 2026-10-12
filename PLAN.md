@@ -54,6 +54,7 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 - **half** — pure half-float conversion. Differential wired.
 ## Callback pure layer (started)
 - **signal** — pure signal handler. Differential wired.
+- **proc** — pure procedure handler. Differential wired.
 - Parser tools that load `tools/lessons.json` and emit skeletons already annotated with the known fixes (Position trait, safe dstr, utf8 boundary, null-safety, zero-size alloc, etc.).
 
 ## Graphics pure layer solid

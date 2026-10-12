@@ -1,5 +1,5 @@
-//! - half: pure half-float conversion
 //! - signal: pure signal handler
+//! - proc: pure procedure handler
 
 pub mod bitstream;
 pub mod dstr;
@@ -48,6 +48,7 @@ pub mod plane;
 pub mod bounds;
 pub mod half;
 pub mod signal;
+pub mod proc;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -95,3 +96,4 @@ pub use plane::Plane;
 pub use bounds::Bounds;
 pub use half::{f32_to_f16, f16_to_f32};
 pub use signal::SignalHandler;
+pub use proc::ProcHandler;

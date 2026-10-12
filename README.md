@@ -58,6 +58,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **bounds** | AABB | Pure min/max + center |
 | **half** | Half-float | Pure f32 <-> f16 |
 | **signal** | Signal handler | Pure connect + emit |
+| **proc** | Procedure handler | Pure add + call |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -69,11 +70,11 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Forty-seven foundation modules with tests
+- [x] Forty-eight foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
-- [ ] Callback pure layer started (signal)
+- [ ] Callback pure layer started (signal, proc)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

@@ -73,6 +73,8 @@ The pure foundation is solid and tested.
 - **scene_context** — pure scene context. Differential wired.
 - **scene_registry** — pure scene registry. Differential wired.
 - **scene_item** — pure scene item with transform. Differential wired.
+- **filter_context** — pure filter context. Differential wired.
+- **filter_chain** — pure ordered filter list, wired into SourceContext. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

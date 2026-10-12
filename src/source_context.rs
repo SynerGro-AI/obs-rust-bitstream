@@ -7,6 +7,7 @@
 //!
 //! Differential: create + get name / settings round-trips.
 
+use crate::filter_chain::FilterChain;
 use crate::obs_data::ObsData;
 use crate::obs_properties::Properties;
 use crate::proc::ProcHandler;
@@ -24,6 +25,7 @@ pub struct SourceContext {
     properties: Properties,
     signals: SignalHandler,
     procs: ProcHandler,
+    filters: FilterChain,
 }
 
 impl SourceContext {
@@ -38,6 +40,7 @@ impl SourceContext {
             properties: Properties::new(),
             signals: SignalHandler::new(),
             procs: ProcHandler::new(),
+            filters: FilterChain::new(),
         })
     }
 
@@ -83,6 +86,14 @@ impl SourceContext {
 
     pub fn procs_mut(&mut self) -> &mut ProcHandler {
         &mut self.procs
+    }
+
+    pub fn filters(&self) -> &FilterChain {
+        &self.filters
+    }
+
+    pub fn filters_mut(&mut self) -> &mut FilterChain {
+        &mut self.filters
     }
 }
 

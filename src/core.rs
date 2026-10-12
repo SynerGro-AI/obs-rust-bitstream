@@ -9,6 +9,7 @@
 use crate::collection_registry::CollectionRegistry;
 use crate::display_registry::DisplayRegistry;
 use crate::monitor_registry::MonitorRegistry;
+use crate::recording_registry::RecordingRegistry;
 use crate::transition_registry::TransitionRegistry;
 use crate::encoder_registry::EncoderRegistry;
 use crate::hotkey_registry::HotkeyRegistry;
@@ -36,6 +37,7 @@ pub struct Core {
     program_scene: Option<String>,
     preview_scene: Option<String>,
     monitors: MonitorRegistry,
+    recordings: RecordingRegistry,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -232,6 +234,14 @@ impl Core {
 
     pub fn monitors_mut(&mut self) -> &mut MonitorRegistry {
         &mut self.monitors
+    }
+
+    pub fn recordings(&self) -> &RecordingRegistry {
+        &self.recordings
+    }
+
+    pub fn recordings_mut(&mut self) -> &mut RecordingRegistry {
+        &mut self.recordings
     }
 
     /// Swap program and preview. No-op if either is unset.

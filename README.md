@@ -123,7 +123,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred one foundation modules with tests
+- [x] One hundred two foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -144,7 +144,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Virtual camera pure layer: cam + registry complete
 - [x] Profile pure layer: profile + registry complete
 - [x] Canvas pure layer: canvas + registry complete
-- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer)
+- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector)
 - [x] Physics + AI settings assist wired
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)

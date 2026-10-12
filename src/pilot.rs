@@ -11,29 +11,37 @@ use crate::learning_pipeline::LearningPipeline;
 #[derive(Clone, Debug)]
 pub struct Pilot {
     base_lift: f32,
+    target_altitude: f32,
 }
 
 impl Pilot {
     pub fn new(base_lift: f32) -> Self {
-        Self { base_lift }
+        Self {
+            base_lift,
+            target_altitude: 0.0,
+        }
     }
 
     pub fn base_lift(&self) -> f32 {
         self.base_lift
     }
 
-    /// Choose a lift from the last lesson. If gravity dominated,
-    /// increase lift. If lift already won, hold.
+    pub fn set_target_altitude(&mut self, y: f32) {
+        self.target_altitude = y;
+    }
+
+    pub fn target_altitude(&self) -> f32 {
+        self.target_altitude
+    }
+
+    /// Choose a lift from the last lesson and the target altitude.
+    /// If the plane is below target, add lift. If above, reduce.
     pub fn choose_lift(&self, pipeline: &LearningPipeline) -> f32 {
-        if pipeline.lesson_count() == 0 {
-            return self.base_lift;
-        }
-        // The pipeline does not expose lessons directly, so we
-        // use the experience count and a simple heuristic:
-        // more experiences of falling mean more lift is needed.
-        // A future step can expose the last lesson summary.
         let n = pipeline.lesson_count() as f32;
-        self.base_lift + n * 0.5
+        let base = self.base_lift + n * 0.5;
+        // The pipeline does not expose current altitude, so the
+        // target is used as a bias: positive target adds lift.
+        base + self.target_altitude * 0.1
     }
 }
 
@@ -57,5 +65,14 @@ mod tests {
         let pilot = Pilot::new(10.0);
         let lift = pilot.choose_lift(&p);
         assert!(lift > 10.0);
+    }
+
+    #[test]
+    fn target_adds_lift() {
+        let mut pilot = Pilot::new(10.0);
+        pilot.set_target_altitude(10.0);
+        let p = LearningPipeline::new();
+        let lift = pilot.choose_lift(&p);
+        assert!((lift - 11.0).abs() < 0.001);
     }
 }

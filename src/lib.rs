@@ -1,9 +1,10 @@
-//! OBS Rust Bitstream — perfect port foundation.
+//! Public foundation for the OBS Studio rewrite in Rust.
 //!
-//! Drop-in style module for the obs-rust tree.
-//! The Position trait is the foundational "opcode" that makes wrap vs no-wrap
-//! a pure type-level property.
+//! - bitstream: Position trait makes wrap vs no-wrap a type-level property
+//! - dstr: safe path fixes the infinite-loop and overflow bugs
 
 pub mod bitstream;
+pub mod dstr;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
+pub use dstr::Dstr;

@@ -223,6 +223,16 @@ impl Core {
     pub fn preview_scene(&self) -> Option<&str> {
         self.preview_scene.as_deref()
     }
+
+    /// Swap program and preview. No-op if either is unset.
+    pub fn transition_to_preview(&mut self) -> bool {
+        if self.program_scene.is_some() && self.preview_scene.is_some() {
+            std::mem::swap(&mut self.program_scene, &mut self.preview_scene);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]
@@ -287,5 +297,17 @@ mod tests {
         assert_eq!(c.program_scene(), Some("Main"));
         assert_eq!(c.preview_scene(), Some("Overlay"));
         assert!(matches!(c.set_program_scene("missing"), Err(CoreError::TypeNotRegistered)));
+    }
+
+    #[test]
+    fn transition_swaps() {
+        let mut c = Core::new();
+        c.scenes_mut().add("Main").unwrap();
+        c.scenes_mut().add("Overlay").unwrap();
+        c.set_program_scene("Main").unwrap();
+        c.set_preview_scene("Overlay").unwrap();
+        assert!(c.transition_to_preview());
+        assert_eq!(c.program_scene(), Some("Overlay"));
+        assert_eq!(c.preview_scene(), Some("Main"));
     }
 }

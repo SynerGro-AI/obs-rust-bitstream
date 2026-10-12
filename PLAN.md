@@ -91,6 +91,7 @@ The pure foundation is solid and tested.
 - **monitor_registry** — pure monitor registry, owned by Core. Differential wired.
 - **recording** — pure recording. Differential wired.
 - **recording_registry** — pure recording registry, owned by Core. Differential wired.
+- **streaming** — pure streaming. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

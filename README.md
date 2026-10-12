@@ -80,6 +80,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **core** | Core root | Pure owner of all registries |
 | **module** | Module | Pure type registration |
 | **module_registry** | Module registry | Pure name-to-module map |
+| **display_context** | Display | Pure preview / program window |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -91,7 +92,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Sixty-nine foundation modules with tests
+- [x] Seventy foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -102,6 +103,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Filter pure layer: context + chain + registry complete
 - [x] Core root owns all registries including modules
 - [x] Module registration + registry complete
+- [ ] Display pure layer started (display_context)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

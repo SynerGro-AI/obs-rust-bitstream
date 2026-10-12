@@ -1,5 +1,5 @@
-//! - quat: pure quaternion
 //! - axisang: pure axis-angle
+//! - plane: pure plane
 
 pub mod bitstream;
 pub mod dstr;
@@ -44,6 +44,7 @@ pub mod matrix3;
 pub mod matrix4;
 pub mod quat;
 pub mod axisang;
+pub mod plane;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -87,3 +88,4 @@ pub use matrix3::Matrix3;
 pub use matrix4::Matrix4;
 pub use quat::Quat;
 pub use axisang::AxisAng;
+pub use plane::Plane;

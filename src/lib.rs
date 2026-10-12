@@ -15,6 +15,7 @@
 //! - light: pure light
 //! - light_rig: pure multi-light rig
 //! - camera_rig: pure multi-camera rig
+//! - camera_cut: pure camera cut
 
 pub mod bitstream;
 pub mod dstr;
@@ -132,6 +133,7 @@ pub mod view_frame;
 pub mod light;
 pub mod light_rig;
 pub mod camera_rig;
+pub mod camera_cut;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -248,3 +250,4 @@ pub use view_frame::ViewFrame;
 pub use light::{Light, LightError};
 pub use light_rig::{LightRig, LightRigError};
 pub use camera_rig::{CameraRig, CameraRigError};
+pub use camera_cut::{CameraCut, CutError};

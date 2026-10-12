@@ -136,6 +136,6 @@ pub use scene_item::{SceneItem, Transform, SceneItemError};
 pub use filter_context::{FilterContext, FilterError};
 pub use filter_chain::{FilterChain, FilterChainError};
 pub use filter_registry::{FilterRegistry, FilterRegistryError};
-pub use core::Core;
+pub use core::{Core, CoreError};
 pub use module::{Module, ModuleError};
 pub use module_registry::{ModuleRegistry, ModuleRegistryError};

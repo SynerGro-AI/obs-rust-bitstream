@@ -25,9 +25,38 @@ pub struct Core {
     modules: ModuleRegistry,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoreError {
+    TypeNotRegistered,
+    Duplicate,
+    EmptyName,
+}
+
 impl Core {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a source only if its type id is registered by a loaded module.
+    pub fn create_source(&mut self, name: &str, type_id: &str) -> Result<(), CoreError> {
+        if name.is_empty() {
+            return Err(CoreError::EmptyName);
+        }
+        if !self.modules.has_source_type(type_id) {
+            return Err(CoreError::TypeNotRegistered);
+        }
+        self.sources.add(name).map_err(|_| CoreError::Duplicate)
+    }
+
+    /// Create a filter only if its type id is registered by a loaded module.
+    pub fn create_filter(&mut self, name: &str, type_id: &str) -> Result<(), CoreError> {
+        if name.is_empty() {
+            return Err(CoreError::EmptyName);
+        }
+        if !self.modules.has_filter_type(type_id) {
+            return Err(CoreError::TypeNotRegistered);
+        }
+        self.filters.add(name, type_id).map_err(|_| CoreError::Duplicate)
     }
 
     pub fn sources(&self) -> &SourceRegistry {
@@ -113,5 +142,18 @@ mod tests {
         assert_eq!(c.sources().get("cam").unwrap().settings().get_int("w").unwrap(), 1920);
         assert_eq!(c.outputs().get("stream").unwrap().name(), "stream");
         assert_eq!(c.scenes().get("Main").unwrap().len(), 0);
+    }
+
+    #[test]
+    fn create_requires_registered_type() {
+        let mut c = Core::new();
+        c.modules_mut().add("obs-ffmpeg").unwrap();
+        c.modules_mut().get_mut("obs-ffmpeg").unwrap().register_source("ffmpeg_source").unwrap();
+        c.modules_mut().get_mut("obs-ffmpeg").unwrap().register_filter("gain_filter").unwrap();
+
+        assert!(c.create_source("cam", "ffmpeg_source").is_ok());
+        assert!(matches!(c.create_source("cam2", "missing"), Err(CoreError::TypeNotRegistered)));
+        assert!(c.create_filter("g", "gain_filter").is_ok());
+        assert_eq!(c.sources().get("cam").unwrap().name(), "cam");
     }
 }

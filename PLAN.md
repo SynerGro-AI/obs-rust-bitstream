@@ -123,6 +123,8 @@ The pure foundation is solid and tested.
 - **plane_renderer** — pure flight-to-skeleton renderer. Differential wired.
 - **camera_follow** — pure flight camera follow. Differential wired.
 - **view_frame** — pure flight view frame. Differential wired.
+- **light** — pure light. Differential wired.
+- **light_rig** — pure multi-light rig. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

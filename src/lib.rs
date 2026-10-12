@@ -12,6 +12,8 @@
 //! - plane_renderer: pure flight-to-skeleton renderer
 //! - camera_follow: pure flight camera follow
 //! - view_frame: pure flight view frame
+//! - light: pure light
+//! - light_rig: pure multi-light rig
 
 pub mod bitstream;
 pub mod dstr;
@@ -126,6 +128,8 @@ pub mod wind;
 pub mod plane_renderer;
 pub mod camera_follow;
 pub mod view_frame;
+pub mod light;
+pub mod light_rig;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -239,3 +243,5 @@ pub use wind::Wind;
 pub use plane_renderer::PlaneRenderer;
 pub use camera_follow::CameraFollow;
 pub use view_frame::ViewFrame;
+pub use light::{Light, LightError};
+pub use light_rig::{LightRig, LightRigError};

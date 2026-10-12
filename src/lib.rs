@@ -1,5 +1,5 @@
-//! - lexer: pure base-token lexer
 //! - serializer: pure serializer trait + memory implementation
+//! - profiler: pure local profiler
 
 pub mod bitstream;
 pub mod dstr;
@@ -18,6 +18,7 @@ pub mod darray;
 pub mod config;
 pub mod lexer;
 pub mod serializer;
+pub mod profiler;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -35,3 +36,4 @@ pub use darray::DArray;
 pub use config::Config;
 pub use lexer::{Lexer, Token, TokenType};
 pub use serializer::{Serializer, MemSerializer, s_w8, s_wl16, s_wl32, s_wl64};
+pub use profiler::Profiler;

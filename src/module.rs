@@ -56,6 +56,10 @@ impl Module {
         self.sources.iter().any(|x| x == id)
     }
 
+    pub fn has_filter(&self, id: &str) -> bool {
+        self.filters.iter().any(|x| x == id)
+    }
+
     pub fn source_count(&self) -> usize {
         self.sources.len()
     }

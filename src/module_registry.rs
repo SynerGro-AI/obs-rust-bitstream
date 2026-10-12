@@ -67,6 +67,16 @@ impl ModuleRegistry {
     pub fn len(&self) -> usize {
         self.modules.len()
     }
+
+    /// True if any loaded module registered this source type id.
+    pub fn has_source_type(&self, id: &str) -> bool {
+        self.modules.values().any(|m| m.has_source(id))
+    }
+
+    /// True if any loaded module registered this filter type id.
+    pub fn has_filter_type(&self, id: &str) -> bool {
+        self.modules.values().any(|m| m.has_filter(id))
+    }
 }
 
 #[cfg(test)]
@@ -103,5 +113,16 @@ mod tests {
         r.add("obs-ffmpeg").unwrap();
         r.get_mut("obs-ffmpeg").unwrap().register_source("ffmpeg_source").unwrap();
         assert!(r.get("obs-ffmpeg").unwrap().has_source("ffmpeg_source"));
+    }
+
+    #[test]
+    fn type_lookup() {
+        let mut r = ModuleRegistry::new();
+        r.add("obs-ffmpeg").unwrap();
+        r.get_mut("obs-ffmpeg").unwrap().register_source("ffmpeg_source").unwrap();
+        r.get_mut("obs-ffmpeg").unwrap().register_filter("gain_filter").unwrap();
+        assert!(r.has_source_type("ffmpeg_source"));
+        assert!(r.has_filter_type("gain_filter"));
+        assert!(!r.has_source_type("missing"));
     }
 }

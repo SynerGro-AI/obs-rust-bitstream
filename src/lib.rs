@@ -1,5 +1,5 @@
-//! - file_serializer: pure file serializer
 //! - buffered_serializer: pure buffered serializer
+//! - cf_lexer: pure CF lexer
 
 pub mod bitstream;
 pub mod dstr;
@@ -22,6 +22,7 @@ pub mod profiler;
 pub mod task;
 pub mod file_serializer;
 pub mod buffered_serializer;
+pub mod cf_lexer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -43,3 +44,4 @@ pub use profiler::Profiler;
 pub use task::TaskQueue;
 pub use file_serializer::FileSerializer;
 pub use buffered_serializer::BufferedSerializer;
+pub use cf_lexer::{CfLexer, CfToken, CfTokenType};

@@ -1,5 +1,5 @@
-//! - video_scaler: pure scale info and size helpers
 //! - audio_buffer: pure owned audio buffer
+//! - media_timing: pure sample and frame duration helpers
 
 pub mod bitstream;
 pub mod dstr;
@@ -35,6 +35,7 @@ pub mod video_frame;
 pub mod audio_format;
 pub mod video_scaler;
 pub mod audio_buffer;
+pub mod media_timing;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -69,3 +70,4 @@ pub use video_frame::VideoFrame;
 pub use audio_format::{AudioFormat, SpeakerLayout, audio_size};
 pub use video_scaler::{ScaleInfo, lerp_weight};
 pub use audio_buffer::AudioBuffer;
+pub use media_timing::{sample_duration_ns, frame_duration_ns, frames_to_samples};

@@ -24,6 +24,12 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 
 All have unit tests. C ABI shims keep original quirks where required.
 
+## Parser
+
+`tools/obs_cpp_to_rust_parser.py` loads `tools/lessons.json` and generates
+Rust skeletons that already document the learned fixes. Add new lessons
+as you discover more quirks — the next parse gets smarter automatically.
+
 ## Status
 
 - [x] Ten foundation modules with tests

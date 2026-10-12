@@ -1,0 +1,66 @@
+{
+  "bitstream": {
+    "match": [
+      "bitstream",
+      "bitstream_reader"
+    ],
+    "issue": "uint8_t position wraps at 255, causing re-reads from start",
+    "fix": "Position trait: usize (safe, no wrap) vs u8 (ABI, wrapping_add)",
+    "module": "src/bitstream.rs",
+    "hint": "Emit Reader<P: Position>. Safe path stops at end; ABI wraps."
+  },
+  "dstr": {
+    "match": [
+      "dstr",
+      "dstr_replace",
+      "dstr_insert"
+    ],
+    "issue": "Empty find string causes infinite loop; capacity overflow possible",
+    "fix": "Safe replace: empty needle is no-op; grow carefully or use Vec",
+    "module": "src/dstr.rs",
+    "hint": "Use Dstr with checked operations. Differential vs C ABI."
+  },
+  "utf8": {
+    "match": [
+      "utf8",
+      "truncate",
+      "os_utf8"
+    ],
+    "issue": "Truncation can cut mid-multibyte character",
+    "fix": "Walk back to valid UTF-8 boundary",
+    "module": "src/utf8.rs",
+    "hint": "Use truncate_utf8 / truncate_filename. Never split codepoints."
+  },
+  "path_extension": {
+    "match": [
+      "path_extension",
+      "os_get_path_extension"
+    ],
+    "issue": "NULL or empty path may dereference",
+    "fix": "Return None for null/empty; find last . after last separator",
+    "module": "src/path_extension.rs",
+    "hint": "path_extension(Option<&str>) -> Option<&str>"
+  },
+  "bmem": {
+    "match": [
+      "bmalloc",
+      "bmem",
+      "bzalloc"
+    ],
+    "issue": "bmalloc(0) is broken/undefined",
+    "fix": "Reject size == 0; document 32-byte alignment",
+    "module": "src/bmem.rs",
+    "hint": "is_valid_alloc_size(size) && alignment() == 32"
+  },
+  "null_safety": {
+    "match": [
+      "null",
+      "NULL",
+      "os_"
+    ],
+    "issue": "Many C helpers crash or UB on NULL",
+    "fix": "Safe path returns None/empty/false; ABI preserves original",
+    "module": "multiple",
+    "hint": "Prefer Option and early returns. Test both paths."
+  }
+}

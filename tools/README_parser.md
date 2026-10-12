@@ -1,10 +1,32 @@
-# OBS C/C++ → Rust Parser Helper
+# OBS C/C++ → Rust Parser (Learned Lessons)
 
-Wired into this foundation crate.
+The parser loads `lessons.json` and emits skeletons that already
+document the known bugs and point at the safe foundation modules.
 
-Recognizes the bitstream_reader pattern and emits the Position trait approach (wrap vs no-wrap as a type-level property).
+## Usage
 
-See the main README for the full plan:
-foundation → parse → test → test suite → optimize → test → move on.
+```bash
+python3 tools/obs_cpp_to_rust_parser.py path/to/obs/file.c [out.rs]
+```
 
-Public, free, open.
+## Adding a lesson
+
+Edit `tools/lessons.json` or call the `note_lesson` helper from Python.
+Each lesson records:
+
+- match terms
+- the original issue
+- the fix applied in the safe path
+- the module that demonstrates it
+- a short hint
+
+This keeps future generations smarter and reduces manual rework.
+
+## AI assistance
+
+For anything the lessons do not cover, feed the generated skeleton
+to the AI scaffold in `src/ai.rs` (Grok / Claude / Seraphina).
+Simple config swap is already there.
+
+Glyph planner is not required for this step; the structured lessons
+are the high-leverage “opcode” for the parser.

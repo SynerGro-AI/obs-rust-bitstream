@@ -31,6 +31,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **profiler** | Local profiler | Pure Instant deltas |
 | **task** | Task queue | Pure Vec of closures |
 | **file_serializer** | File serializer | Pure load/save via std::fs |
+| **buffered_serializer** | Buffered serializer | Pure chunked flush |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -42,7 +43,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Twenty foundation modules with tests
+- [x] Twenty-one foundation modules with tests
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

@@ -1,5 +1,5 @@
-//! - task: pure task queue
 //! - file_serializer: pure file serializer
+//! - buffered_serializer: pure buffered serializer
 
 pub mod bitstream;
 pub mod dstr;
@@ -21,6 +21,7 @@ pub mod serializer;
 pub mod profiler;
 pub mod task;
 pub mod file_serializer;
+pub mod buffered_serializer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -41,3 +42,4 @@ pub use serializer::{Serializer, MemSerializer, s_w8, s_wl16, s_wl32, s_wl64};
 pub use profiler::Profiler;
 pub use task::TaskQueue;
 pub use file_serializer::FileSerializer;
+pub use buffered_serializer::BufferedSerializer;

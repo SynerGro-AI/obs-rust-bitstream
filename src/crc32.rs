@@ -31,6 +31,7 @@ pub fn crc32(data: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diff::differential;
 
     #[test]
     fn empty() {
@@ -39,7 +40,17 @@ mod tests {
 
     #[test]
     fn known_value() {
-        // "123456789" is the classic test vector → 0xCBF43926
         assert_eq!(crc32(b"123456789"), 0xCBF43926);
+    }
+
+    #[test]
+    fn differential_against_itself() {
+        let inputs: &[&[u8]] = &[b"", b"a", b"123456789", b"hello"];
+        differential(
+            inputs,
+            |s| crc32(s),
+            |s| crc32(s),
+            "crc32",
+        );
     }
 }

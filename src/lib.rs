@@ -20,6 +20,7 @@
 //! - lighting: pure material × light evaluation
 //! - material_assign: pure material-to-bone binding
 //! - shaded_render: pure lit skeleton render
+//! - material_registry: pure named material store
 
 pub mod bitstream;
 pub mod dstr;
@@ -142,6 +143,7 @@ pub mod material;
 pub mod lighting;
 pub mod material_assign;
 pub mod shaded_render;
+pub mod material_registry;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -263,3 +265,4 @@ pub use material::{Material, MaterialError};
 pub use lighting::Lighting;
 pub use material_assign::{MaterialAssign, AssignError};
 pub use shaded_render::{ShadedRender, ShadedItem};
+pub use material_registry::{MaterialRegistry, MaterialRegistryError};

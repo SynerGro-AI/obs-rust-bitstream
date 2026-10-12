@@ -31,6 +31,7 @@ pub struct Core {
     hotkeys: HotkeyRegistry,
     collections: CollectionRegistry,
     transitions: TransitionRegistry,
+    current_scene: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -181,6 +182,19 @@ impl Core {
     pub fn transitions_mut(&mut self) -> &mut TransitionRegistry {
         &mut self.transitions
     }
+
+    /// Set the current scene. Returns TypeNotRegistered if the scene does not exist.
+    pub fn set_current_scene(&mut self, name: &str) -> Result<(), CoreError> {
+        if !self.scenes.contains(name) {
+            return Err(CoreError::TypeNotRegistered);
+        }
+        self.current_scene = Some(name.to_string());
+        Ok(())
+    }
+
+    pub fn current_scene(&self) -> Option<&str> {
+        self.current_scene.as_deref()
+    }
 }
 
 #[cfg(test)]
@@ -224,5 +238,14 @@ mod tests {
         assert_eq!(c.sources().get("cam").unwrap().name(), "cam");
         assert_eq!(c.sources().get("cam").unwrap().type_id(), "ffmpeg_source");
         assert_eq!(c.filters().get("g").unwrap().type_id(), "gain_filter");
+    }
+
+    #[test]
+    fn current_scene() {
+        let mut c = Core::new();
+        c.scenes_mut().add("Main").unwrap();
+        c.set_current_scene("Main").unwrap();
+        assert_eq!(c.current_scene(), Some("Main"));
+        assert!(matches!(c.set_current_scene("missing"), Err(CoreError::TypeNotRegistered)));
     }
 }

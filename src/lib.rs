@@ -1,5 +1,5 @@
-//! - replay_buffer: pure replay buffer
 //! - replay_registry: pure replay registry
+//! - virtual_cam: pure virtual camera
 
 pub mod bitstream;
 pub mod dstr;
@@ -86,6 +86,7 @@ pub mod streaming;
 pub mod streaming_registry;
 pub mod replay_buffer;
 pub mod replay_registry;
+pub mod virtual_cam;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -171,3 +172,4 @@ pub use streaming::{Streaming, StreamingError};
 pub use streaming_registry::{StreamingRegistry, StreamingRegistryError};
 pub use replay_buffer::{ReplayBuffer, ReplayError};
 pub use replay_registry::{ReplayRegistry, ReplayRegistryError};
+pub use virtual_cam::{VirtualCam, VirtualCamError};

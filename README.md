@@ -96,6 +96,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **streaming_registry** | Streaming registry | Pure name-to-stream map |
 | **replay_buffer** | Replay buffer | Pure duration + save |
 | **replay_registry** | Replay registry | Pure name-to-buffer map |
+| **virtual_cam** | Virtual camera | Pure start/stop |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -107,7 +108,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Eighty-five foundation modules with tests
+- [x] Eighty-six foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -125,6 +126,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Recording pure layer: recording + registry complete
 - [x] Streaming pure layer: streaming + registry complete
 - [x] Replay buffer pure layer: buffer + registry complete
+- [ ] Virtual camera pure layer started (virtual_cam)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

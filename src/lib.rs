@@ -334,6 +334,7 @@ pub mod display_capture;
 pub mod game_capture;
 pub mod audio_input;
 pub mod audio_output_source;
+pub mod group_source;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -573,3 +574,4 @@ pub use display_capture::DisplayCapture;
 pub use game_capture::{GameCapture, GameError};
 pub use audio_input::{AudioInput, AudioInputError};
 pub use audio_output_source::{AudioOutput as DesktopAudio, AudioOutputError};
+pub use group_source::{GroupSource, GroupError as GroupSourceError};

@@ -250,6 +250,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **game_capture** | Game capture | Pure game title holder |
 | **audio_input** | Audio input | Pure microphone holder |
 | **audio_output_source** | Audio output | Pure desktop audio holder |
+| **group_source** | Group source | Pure source group |
 | **replay_buffer** | Replay buffer | Pure last-N frames |
 
 All have unit tests. C ABI shims keep original quirks where required.
@@ -262,7 +263,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Two hundred thirty-nine foundation modules with tests
+- [x] Two hundred forty foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

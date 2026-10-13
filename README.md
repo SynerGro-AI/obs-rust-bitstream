@@ -182,6 +182,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **topic_background** | Topic background | Pure live background from a topic |
 | **performance** | Performance | Pure singer + music video |
 | **show_state** | Show state | Pure off / preview / live |
+| **cue_sheet** | Cue sheet | Pure show rundown |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -193,7 +194,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred seventy-one foundation modules with tests
+- [x] One hundred seventy-two foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

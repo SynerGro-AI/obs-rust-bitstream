@@ -70,6 +70,7 @@
 //! - topic_background: pure topic background
 //! - performance: pure singer performance
 //! - show_state: pure show state
+//! - cue_sheet: pure cue sheet
 
 pub mod bitstream;
 pub mod dstr;
@@ -242,6 +243,7 @@ pub mod ai_operator;
 pub mod topic_background;
 pub mod performance;
 pub mod show_state;
+pub mod cue_sheet;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -413,3 +415,4 @@ pub use ai_operator::{AiOperator, CrewState};
 pub use topic_background::TopicBackground;
 pub use performance::{Performance, PerformanceError};
 pub use show_state::{ShowState, ShowMode};
+pub use cue_sheet::CueSheet;

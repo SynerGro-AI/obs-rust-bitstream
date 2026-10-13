@@ -181,6 +181,7 @@ The pure foundation is solid and tested.
 - **topic_background** — pure topic background. Differential wired.
 - **performance** — pure singer performance. Differential wired.
 - **show_state** — pure show state. Differential wired.
+- **cue_sheet** — pure cue sheet. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

@@ -61,6 +61,30 @@ impl Macro {
         self.macros.get(name).map(|v| v.as_slice())
     }
 
+    /// Replace the sequence of a macro.
+    pub fn edit(&mut self, name: &str, keys: &[&str]) -> Result<(), MacroError> {
+        if !self.macros.contains_key(name) {
+            return Err(MacroError::Missing);
+        }
+        self.macros.insert(name.to_string(), keys.iter().map(|s| s.to_string()).collect());
+        Ok(())
+    }
+
+    /// Rename a macro.
+    pub fn rename(&mut self, from: &str, to: &str) -> Result<(), MacroError> {
+        if to.is_empty() {
+            return Err(MacroError::EmptyName);
+        }
+        let seq = self.macros.remove(from).ok_or(MacroError::Missing)?;
+        self.macros.insert(to.to_string(), seq);
+        Ok(())
+    }
+
+    /// All macro names.
+    pub fn names(&self) -> Vec<&str> {
+        self.macros.keys().map(|s| s.as_str()).collect()
+    }
+
     pub fn count(&self) -> usize {
         self.macros.len()
     }
@@ -100,5 +124,18 @@ mod tests {
         m.stop();
         assert!(m.cancel("go_live"));
         assert!(m.sequence("go_live").is_none());
+    }
+
+    #[test]
+    fn edit_and_rename() {
+        let mut m = Macro::new();
+        m.start("go_live").unwrap();
+        m.record("r");
+        m.stop();
+        m.edit("go_live", &["s", "v"]).unwrap();
+        assert_eq!(m.sequence("go_live").unwrap().len(), 2);
+        m.rename("go_live", "broadcast").unwrap();
+        assert!(m.sequence("go_live").is_none());
+        assert_eq!(m.names(), vec!["broadcast"]);
     }
 }

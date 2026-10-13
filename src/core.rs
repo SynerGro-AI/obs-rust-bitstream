@@ -632,6 +632,26 @@ impl Core {
         self.key_macros.is_recording()
     }
 
+    /// Edit a macro's sequence.
+    pub fn edit_macro(&mut self, name: &str, keys: &[&str]) -> Result<(), crate::macro_seq::MacroError> {
+        self.key_macros.edit(name, keys)
+    }
+
+    /// Rename a macro.
+    pub fn rename_macro(&mut self, from: &str, to: &str) -> Result<(), crate::macro_seq::MacroError> {
+        self.key_macros.rename(from, to)
+    }
+
+    /// Cancel a macro.
+    pub fn cancel_macro(&mut self, name: &str) -> bool {
+        self.key_macros.cancel(name)
+    }
+
+    /// All macro names.
+    pub fn macro_names(&self) -> Vec<&str> {
+        self.key_macros.names()
+    }
+
     pub fn log(&self) -> &Log {
         &self.log
     }

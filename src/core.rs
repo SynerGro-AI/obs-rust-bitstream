@@ -34,6 +34,7 @@ use crate::performance::Performance;
 use crate::program::Program;
 use crate::session::Session;
 use crate::cue_sheet::CueSheet;
+use crate::speech::Speech;
 use crate::storyboard::Storyboard;
 use crate::show_state::{ShowMode, ShowState};
 
@@ -66,6 +67,7 @@ pub struct Core {
     cues: CueSheet,
     keyer: Keyer,
     board: Storyboard,
+    speech: Speech,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,6 +173,20 @@ impl Core {
 
     pub fn board_mut(&mut self) -> &mut Storyboard {
         &mut self.board
+    }
+
+    pub fn speech(&self) -> &Speech {
+        &self.speech
+    }
+
+    pub fn speech_mut(&mut self) -> &mut Speech {
+        &mut self.speech
+    }
+
+    /// Hear a line and return the scene the director picks.
+    pub fn hear(&mut self, ai: &AiAssistant, line: &str) -> crate::ai_director::SceneKind {
+        self.speech.hear(line);
+        crate::ai_director::AiDirector::pick(ai, line)
     }
 
     /// Advance the storyboard and return the scene the director picks.

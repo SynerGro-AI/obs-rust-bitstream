@@ -549,6 +549,11 @@ impl Core {
         crate::help::Help::text(&self.binds)
     }
 
+    /// Hover description for a key.
+    pub fn hover(&self, key: &str) -> &'static str {
+        crate::help::Help::hover(key)
+    }
+
     /// Press a key and run the bound action. Returns the action name.
     pub fn press(&mut self, key: &str) -> Option<String> {
         let action = self.binds.action(key)?.to_string();

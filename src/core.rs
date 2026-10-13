@@ -496,6 +496,11 @@ impl Core {
         self.saves.save_as(name, &self.replay, format)
     }
 
+    /// Export a saved clip to a file path.
+    pub fn export(&self, name: &str, path: &str) -> Result<crate::export::Export, crate::export::ExportError> {
+        crate::export::Export::write(&self.saves, name, path)
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

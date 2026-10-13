@@ -501,6 +501,12 @@ impl Core {
         crate::export::Export::write(&self.saves, name, path)
     }
 
+    /// Export a saved clip and return its bytes.
+    pub fn export_bytes(&self, name: &str, path: &str) -> Result<Vec<u8>, crate::export::ExportError> {
+        let e = self.export(name, path)?;
+        Ok(crate::file_writer::FileWriter::encode(&e))
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

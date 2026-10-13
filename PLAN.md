@@ -245,6 +245,7 @@ The pure foundation is solid and tested.
 - **browser_source** — pure browser source. Differential wired.
 - **media_source** — pure media source. Differential wired.
 - **window_capture** — pure window capture. Differential wired.
+- **display_capture** — pure display capture. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

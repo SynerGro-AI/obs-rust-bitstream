@@ -70,6 +70,13 @@ impl Schedule {
     pub fn clear(&mut self, name: &str) {
         self.due.remove(name);
     }
+
+    /// Cancel a scheduled macro. Removes it from both frame and datetime.
+    pub fn cancel(&mut self, name: &str) -> bool {
+        let a = self.due.remove(name).is_some();
+        let b = self.at_time.remove(name).is_some();
+        a || b
+    }
 }
 
 #[cfg(test)]
@@ -103,5 +110,16 @@ mod tests {
         assert!(s.due_datetime("2026-10-13 20:00").is_empty());
         assert_eq!(s.due_datetime("2026-10-13 21:00"), vec!["evening"]);
         assert_eq!(s.datetime_of("evening"), Some("2026-10-13 21:00"));
+    }
+
+    #[test]
+    fn cancel() {
+        let mut s = Schedule::new();
+        s.at("go_live", 10).unwrap();
+        s.at_datetime("evening", "2026-10-13 21:00").unwrap();
+        assert!(s.cancel("go_live"));
+        assert!(s.cancel("evening"));
+        assert!(!s.cancel("go_live"));
+        assert_eq!(s.count(), 0);
     }
 }

@@ -47,6 +47,11 @@ impl Macro {
         self.recording = None;
     }
 
+    /// Cancel a recorded macro. Returns true if it existed.
+    pub fn cancel(&mut self, name: &str) -> bool {
+        self.macros.remove(name).is_some()
+    }
+
     /// The recorded sequence for a macro.
     pub fn sequence(&self, name: &str) -> Option<&[String]> {
         self.macros.get(name).map(|v| v.as_slice())
@@ -82,5 +87,14 @@ mod tests {
         m.record("v");
         m.stop();
         assert_eq!(m.sequence("go_live"), Some(&["r".to_string(), "s".to_string(), "v".to_string()][..]));
+    }
+
+    #[test]
+    fn cancel() {
+        let mut m = Macro::new();
+        m.start("go_live").unwrap();
+        m.stop();
+        assert!(m.cancel("go_live"));
+        assert!(m.sequence("go_live").is_none());
     }
 }

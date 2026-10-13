@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::program_record::ProgramRecord;
 use crate::tally::Tally;
 use crate::multiview::Multiview;
 use crate::studio::Studio;
@@ -82,6 +83,7 @@ pub struct Core {
     studio: Studio,
     multiview: Multiview,
     tally: Tally,
+    record: ProgramRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -418,6 +420,24 @@ impl Core {
 
     pub fn tally_mut(&mut self) -> &mut Tally {
         &mut self.tally
+    }
+
+    pub fn record(&self) -> &ProgramRecord {
+        &self.record
+    }
+
+    pub fn record_mut(&mut self) -> &mut ProgramRecord {
+        &mut self.record
+    }
+
+    /// Start recording the program.
+    pub fn start_recording(&mut self) {
+        self.record.start();
+    }
+
+    /// Stop recording the program.
+    pub fn stop_recording(&mut self) {
+        self.record.stop();
     }
 
     /// Start a fade from preview to program.

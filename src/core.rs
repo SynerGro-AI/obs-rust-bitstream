@@ -180,9 +180,9 @@ impl Core {
         Program::live_with_crew(ai, performance, camera, topic, canvas)
     }
 
-    /// Run a full show: picture and sound.
+    /// Run a full show: picture and sound. Sets the show live.
     pub fn run_full_show(
-        &self,
+        &mut self,
         ai: &AiAssistant,
         performance: &Performance,
         camera: &mut LiveCamera,
@@ -191,6 +191,8 @@ impl Core {
         time: f32,
         canvas: &mut PixelCanvas,
     ) -> (crate::output::OutputFrame, f32) {
+        self.show.set_topic(topic);
+        self.show.go_live();
         Program::live_show(ai, performance, camera, audio, topic, time, canvas)
     }
 

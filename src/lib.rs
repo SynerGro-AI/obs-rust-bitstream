@@ -42,6 +42,8 @@
 //! - video_timeline: pure AI video timeline
 //! - layer_stack: pure layer stack
 //! - onion_viewer: pure onion-skin viewer
+//! - mask: pure mask
+//! - editor_ui: pure editor panel
 
 pub mod bitstream;
 pub mod dstr;
@@ -186,6 +188,8 @@ pub mod audio_timeline;
 pub mod video_timeline;
 pub mod layer_stack;
 pub mod onion_viewer;
+pub mod mask;
+pub mod editor_ui;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -329,3 +333,5 @@ pub use audio_timeline::{AudioTimeline, Track, TimelineError as AudioTimelineErr
 pub use video_timeline::{VideoTimeline, Clip, VideoError};
 pub use layer_stack::{LayerStack, Layer, BlendMode, LayerError};
 pub use onion_viewer::{OnionViewer, OnionFrame};
+pub use mask::{Mask, MaskSet, MaskError};
+pub use editor_ui::EditorUi;

@@ -203,6 +203,7 @@ The pure foundation is solid and tested.
 - **program_stream** — pure program stream. Differential wired.
 - **virtual_camera** — pure virtual camera. Differential wired.
 - **output_bus** — pure output bus. Differential wired.
+- **frame_clock** — pure frame clock. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

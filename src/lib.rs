@@ -92,6 +92,7 @@
 //! - program_stream: pure program stream
 //! - virtual_camera: pure virtual camera
 //! - output_bus: pure output bus
+//! - frame_clock: pure frame clock
 
 pub mod bitstream;
 pub mod dstr;
@@ -286,6 +287,7 @@ pub mod program_record;
 pub mod program_stream;
 pub mod virtual_camera;
 pub mod output_bus;
+pub mod frame_clock;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -479,3 +481,4 @@ pub use program_record::ProgramRecord;
 pub use program_stream::{ProgramStream, StreamError};
 pub use virtual_camera::VirtualCamera;
 pub use output_bus::OutputBus;
+pub use frame_clock::FrameClock;

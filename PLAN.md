@@ -182,6 +182,7 @@ The pure foundation is solid and tested.
 - **performance** — pure singer performance. Differential wired.
 - **show_state** — pure show state. Differential wired.
 - **cue_sheet** — pure cue sheet. Differential wired.
+- **lower_third** — pure lower third. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

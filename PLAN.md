@@ -253,6 +253,7 @@ The pure foundation is solid and tested.
 - **organization** — pure organization. Differential wired.
 - **invite** — pure invite. Differential wired.
 - **role** — pure role. Differential wired.
+- **permission** — pure permission. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

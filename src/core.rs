@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::studio::Studio;
 use crate::options_menu::OptionsMenu;
 use crate::live_feed::LiveFeed;
 use crate::keyer::Keyer;
@@ -76,6 +77,7 @@ pub struct Core {
     effects: EffectList,
     feed: LiveFeed,
     menu: OptionsMenu,
+    studio: Studio,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -388,6 +390,14 @@ impl Core {
 
     pub fn menu_mut(&mut self) -> &mut OptionsMenu {
         &mut self.menu
+    }
+
+    pub fn studio_mode(&self) -> &Studio {
+        &self.studio
+    }
+
+    pub fn studio_mode_mut(&mut self) -> &mut Studio {
+        &mut self.studio
     }
 
     /// Switch the live camera from an arrow key.

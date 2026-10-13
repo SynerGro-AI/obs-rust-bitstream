@@ -23,6 +23,7 @@
 //! - material_registry: pure named material store
 //! - material_factory: pure preset material creator
 //! - materials_lab: pure materials science lab
+//! - periodic_table: pure periodic table
 
 pub mod bitstream;
 pub mod dstr;
@@ -148,6 +149,7 @@ pub mod shaded_render;
 pub mod material_registry;
 pub mod material_factory;
 pub mod materials_lab;
+pub mod periodic_table;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -272,3 +274,4 @@ pub use shaded_render::{ShadedRender, ShadedItem};
 pub use material_registry::{MaterialRegistry, MaterialRegistryError};
 pub use material_factory::MaterialFactory;
 pub use materials_lab::{MaterialsLab, Atom, LabError};
+pub use periodic_table::{PeriodicTable, Element};

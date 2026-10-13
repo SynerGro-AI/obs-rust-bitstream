@@ -238,6 +238,7 @@ The pure foundation is solid and tested.
 - **fade_transition** — pure fade transition. Differential wired.
 - **swipe_transition** — pure swipe transition. Differential wired.
 - **slide_transition** — pure slide transition. Differential wired.
+- **cut_transition** — pure cut transition. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

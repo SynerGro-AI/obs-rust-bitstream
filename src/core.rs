@@ -584,6 +584,7 @@ impl Core {
     pub fn press(&mut self, key: &str) -> Option<String> {
         let action = self.binds.action(key)?.to_string();
         self.log.add(&format!("press {key}: {action}"));
+        self.key_macros.record(key);
         match action.as_str() {
             "record" => self.start_recording(),
             "stream" => { let _ = self.start_stream("rtmp://live"); }
@@ -616,6 +617,7 @@ impl Core {
             Some(s) => s.to_vec(),
             None => return 0,
         };
+        self.key_macros.stop();
         let mut n = 0;
         for key in seq {
             if self.press(&key).is_some() {
@@ -623,6 +625,11 @@ impl Core {
             }
         }
         n
+    }
+
+    /// Is a macro currently recording.
+    pub fn is_recording_macro(&self) -> bool {
+        self.key_macros.is_recording()
     }
 
     pub fn log(&self) -> &Log {

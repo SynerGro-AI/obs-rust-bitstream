@@ -47,6 +47,10 @@ impl Macro {
         self.recording = None;
     }
 
+    pub fn is_recording(&self) -> bool {
+        self.recording.is_some()
+    }
+
     /// Cancel a recorded macro. Returns true if it existed.
     pub fn cancel(&mut self, name: &str) -> bool {
         self.macros.remove(name).is_some()

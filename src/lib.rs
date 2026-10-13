@@ -93,6 +93,7 @@
 //! - virtual_camera: pure virtual camera
 //! - output_bus: pure output bus
 //! - frame_clock: pure frame clock
+//! - replay_buffer: pure replay buffer
 
 pub mod bitstream;
 pub mod dstr;
@@ -288,6 +289,7 @@ pub mod program_stream;
 pub mod virtual_camera;
 pub mod output_bus;
 pub mod frame_clock;
+pub mod instant_replay;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -482,3 +484,4 @@ pub use program_stream::{ProgramStream, StreamError};
 pub use virtual_camera::VirtualCamera;
 pub use output_bus::OutputBus;
 pub use frame_clock::FrameClock;
+pub use instant_replay::InstantReplay;

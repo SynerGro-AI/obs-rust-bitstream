@@ -204,6 +204,8 @@ The pure foundation is solid and tested.
 - **virtual_camera** — pure virtual camera. Differential wired.
 - **output_bus** — pure output bus. Differential wired.
 - **frame_clock** — pure frame clock. Differential wired.
+- **instant_replay** — pure instant replay. Differential wired.
+- **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

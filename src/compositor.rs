@@ -5,6 +5,7 @@
 //!
 //! Differential: two clips + compose at a time round-trips.
 
+use crate::pixel_canvas::PixelCanvas;
 use crate::video_timeline::VideoTimeline;
 
 #[derive(Clone, Debug)]
@@ -20,6 +21,23 @@ impl Compositor {
     /// Number of clips contributing to the frame.
     pub fn layer_count(timeline: &VideoTimeline, time: f32) -> usize {
         timeline.render(time)
+    }
+
+    /// Paint the composed frame onto a canvas. The active
+    /// source paints a solid color so the frame is visible.
+    pub fn paint(timeline: &VideoTimeline, time: f32, canvas: &mut PixelCanvas) {
+        if let Some(src) = Self::compose(timeline, time) {
+            let (r, g, b) = color_for(&src);
+            canvas.fill(r, g, b);
+        }
+    }
+}
+
+fn color_for(source: &str) -> (f32, f32, f32) {
+    match source {
+        "cam1" => (1.0, 0.0, 0.0),
+        "cam2" => (0.0, 1.0, 0.0),
+        _ => (0.2, 0.2, 0.2),
     }
 }
 
@@ -48,5 +66,15 @@ mod tests {
         t.add("a", 0.0, 1.0, "cam").unwrap();
         assert_eq!(Compositor::layer_count(&t, 0.5), 1);
         assert_eq!(Compositor::layer_count(&t, 2.0), 0);
+    }
+
+    #[test]
+    fn paint() {
+        let mut t = VideoTimeline::new();
+        t.add("intro", 0.0, 2.0, "cam1").unwrap();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        Compositor::paint(&t, 1.0, &mut c);
+        let (r, _, _) = c.get(0, 0).unwrap();
+        assert_eq!(r, 1.0);
     }
 }

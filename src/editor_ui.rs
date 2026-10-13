@@ -10,6 +10,7 @@ use crate::ai::AiAssistant;
 use crate::ai_editor::AiEditor;
 use crate::adjustment::{Adjustment, AdjustKind};
 use crate::history::History;
+use crate::input_device::InputDevice;
 use crate::layer_group::GroupSet;
 use crate::layer_stack::{BlendMode, LayerStack};
 use crate::mask::MaskSet;
@@ -162,6 +163,16 @@ impl EditorUi {
         self.add_adjustment(name, kind)
     }
 
+    /// Handle an input event. Space undoes. A click records.
+    pub fn handle_input(&mut self, input: &InputDevice) {
+        if input.last_key() == Some("space") || input.last_key() == Some("z") {
+            let _ = self.history.undo();
+        }
+        if let Some((x, y)) = input.last_click() {
+            self.record(&format!("click {x},{y}"));
+        }
+    }
+
     /// Reach the AI editor from the panel.
     pub fn ai_editor(&self) -> AiEditor {
         AiEditor
@@ -222,5 +233,15 @@ mod tests {
         let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
         let _mode = AiEditor::suggest_blend(&ai, "multiply");
         let _ = ui.ai_editor();
+    }
+
+    #[test]
+    fn input_undo() {
+        let mut ui = EditorUi::new();
+        ui.record("add layer");
+        let mut input = InputDevice::new();
+        input.press("z");
+        ui.handle_input(&input);
+        assert!(!ui.history().can_undo());
     }
 }

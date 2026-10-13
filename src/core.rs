@@ -225,6 +225,25 @@ impl Core {
         Program::live_show(ai, performance, camera, audio, &topic, time, canvas)
     }
 
+    /// Run a full show using the core's keyer.
+    pub fn run_keyed_show(
+        &mut self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        audio: &AudioTimeline,
+        time: f32,
+        canvas: &mut PixelCanvas,
+    ) -> (crate::output::OutputFrame, f32) {
+        let topic = self.cues.current().unwrap_or("show").to_string();
+        self.show.set_topic(&topic);
+        self.show.go_live();
+        let _crew = crate::ai_operator::AiOperator::run(ai, camera, &topic);
+        let frame = Program::live_performance_keyed(performance, camera, &self.keyer, canvas);
+        let level = audio.render(time);
+        (frame, level)
+    }
+
     pub fn sources(&self) -> &SourceRegistry {
         &self.sources
     }

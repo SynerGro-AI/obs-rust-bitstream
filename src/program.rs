@@ -24,6 +24,23 @@ impl Program {
         session.emit(time, canvas).video
     }
 
+    /// Emit a live performance using the given keyer.
+    pub fn live_performance_keyed(
+        performance: &Performance,
+        camera: &LiveCamera,
+        keyer: &Keyer,
+        canvas: &mut PixelCanvas,
+    ) -> OutputFrame {
+        let (bg, singer) = performance.frame(camera);
+        let color = if performance.is_live() {
+            keyer.composite(singer, bg)
+        } else {
+            bg
+        };
+        canvas.fill(color.0, color.1, color.2);
+        crate::output::Output::emit(canvas)
+    }
+
     /// Emit a live performance: animation behind the keyed singer.
     pub fn live_performance(
         performance: &Performance,

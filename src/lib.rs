@@ -86,6 +86,7 @@
 //! - options_menu: pure options menu
 //! - studio: pure studio mode
 //! - studio_transition: pure studio transition
+//! - multiview: pure multiview
 
 pub mod bitstream;
 pub mod dstr;
@@ -274,6 +275,7 @@ pub mod multi_monitor;
 pub mod options_menu;
 pub mod studio;
 pub mod studio_transition;
+pub mod multiview;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -461,3 +463,4 @@ pub use multi_monitor::{MultiMonitor, ScreenError};
 pub use options_menu::{OptionsMenu, MenuError};
 pub use studio::Studio;
 pub use studio_transition::StudioTransition;
+pub use multiview::{Multiview, ViewError};

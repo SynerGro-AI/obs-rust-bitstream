@@ -10,6 +10,7 @@ use crate::ai::AiAssistant;
 use crate::ai_editor::AiEditor;
 use crate::adjustment::{Adjustment, AdjustKind};
 use crate::effect_list::EffectList;
+use crate::replay_save::SaveFormat;
 use crate::history::History;
 use crate::input_device::InputDevice;
 use crate::layer_group::GroupSet;
@@ -26,6 +27,7 @@ pub struct EditorUi {
     adjustments: Vec<Adjustment>,
     history: History,
     effects: EffectList,
+    save_format: SaveFormat,
 }
 
 impl EditorUi {
@@ -38,6 +40,7 @@ impl EditorUi {
             adjustments: Vec::new(),
             history: History::new(),
             effects: EffectList::new(),
+            save_format: SaveFormat::Clip,
         }
     }
 
@@ -184,6 +187,25 @@ impl EditorUi {
         &mut self.effects
     }
 
+    /// Current replay save format.
+    pub fn save_format(&self) -> SaveFormat {
+        self.save_format
+    }
+
+    /// Toggle the save format: Clip -> Gif -> Video -> Clip.
+    pub fn toggle_save_format(&mut self) {
+        self.save_format = match self.save_format {
+            SaveFormat::Clip => SaveFormat::Gif,
+            SaveFormat::Gif => SaveFormat::Video,
+            SaveFormat::Video => SaveFormat::Clip,
+        };
+    }
+
+    /// Set the save format directly.
+    pub fn set_save_format(&mut self, format: SaveFormat) {
+        self.save_format = format;
+    }
+
     /// Reach the AI editor from the panel.
     pub fn ai_editor(&self) -> AiEditor {
         AiEditor
@@ -254,5 +276,17 @@ mod tests {
         input.press("z");
         ui.handle_input(&input);
         assert!(!ui.history().can_undo());
+    }
+
+    #[test]
+    fn save_format_toggle() {
+        let mut ui = EditorUi::new();
+        assert_eq!(ui.save_format(), SaveFormat::Clip);
+        ui.toggle_save_format();
+        assert_eq!(ui.save_format(), SaveFormat::Gif);
+        ui.toggle_save_format();
+        assert_eq!(ui.save_format(), SaveFormat::Video);
+        ui.toggle_save_format();
+        assert_eq!(ui.save_format(), SaveFormat::Clip);
     }
 }

@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
 use crate::frame_clock::FrameClock;
 use crate::virtual_camera::VirtualCamera;
@@ -92,6 +93,7 @@ pub struct Core {
     vcam: VirtualCamera,
     clock: FrameClock,
     replay: InstantReplay,
+    saves: ReplaySave,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -483,6 +485,15 @@ impl Core {
 
     pub fn replay(&self) -> &InstantReplay {
         &self.replay
+    }
+
+    pub fn saves(&self) -> &ReplaySave {
+        &self.saves
+    }
+
+    /// Save the replay as a clip, gif, or video.
+    pub fn save_replay(&mut self, name: &str, format: SaveFormat) -> Result<(), crate::replay_save::SaveError> {
+        self.saves.save_as(name, &self.replay, format)
     }
 
     /// Start streaming the program to a target.

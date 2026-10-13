@@ -71,6 +71,10 @@ impl Atom {
         if !self.is_neutral() || self.protons == 0 {
             return false;
         }
+        // Hydrogen-1 is stable with no neutrons.
+        if self.protons == 1 && self.neutrons == 0 {
+            return true;
+        }
         let z = self.protons as f32;
         let n = self.neutrons as f32;
         let ratio = n / z;

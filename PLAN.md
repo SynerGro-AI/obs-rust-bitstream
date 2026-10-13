@@ -184,6 +184,7 @@ The pure foundation is solid and tested.
 - **cue_sheet** — pure cue sheet. Differential wired.
 - **lower_third** — pure lower third. Differential wired.
 - **keyer** — pure background keyer. Differential wired.
+- **ai_director** — pure AI scene director. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

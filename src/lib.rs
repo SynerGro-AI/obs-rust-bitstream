@@ -33,6 +33,8 @@
 //! - master_output: pure master output
 //! - eq: pure parametric EQ
 //! - compressor: pure compressor
+//! - limiter: pure limiter
+//! - gate: pure gate
 
 pub mod bitstream;
 pub mod dstr;
@@ -168,6 +170,8 @@ pub mod effect_chain;
 pub mod master_output;
 pub mod eq;
 pub mod compressor;
+pub mod limiter;
+pub mod gate;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -302,3 +306,5 @@ pub use effect_chain::{EffectChain, ChainError};
 pub use master_output::MasterOutput;
 pub use eq::{EqBand, EqError};
 pub use compressor::Compressor;
+pub use limiter::Limiter;
+pub use gate::Gate;

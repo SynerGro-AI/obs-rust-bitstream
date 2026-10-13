@@ -144,6 +144,8 @@ The pure foundation is solid and tested.
 - **master_output** — pure master output. Differential wired.
 - **eq** — pure parametric EQ. Differential wired.
 - **compressor** — pure compressor. Differential wired.
+- **limiter** — pure limiter. Differential wired.
+- **gate** — pure gate. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

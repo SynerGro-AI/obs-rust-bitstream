@@ -138,6 +138,7 @@ The pure foundation is solid and tested.
 - **compound** — pure molecule. Differential wired.
 - **reaction** — pure chemical reaction. Differential wired.
 - **audio_channel** — pure audio channel. Differential wired.
+- **audio_bus** — pure audio bus. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

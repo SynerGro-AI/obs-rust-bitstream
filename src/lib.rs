@@ -72,6 +72,7 @@
 //! - show_state: pure show state
 //! - cue_sheet: pure cue sheet
 //! - lower_third: pure lower third
+//! - keyer: pure background keyer
 
 pub mod bitstream;
 pub mod dstr;
@@ -246,6 +247,7 @@ pub mod performance;
 pub mod show_state;
 pub mod cue_sheet;
 pub mod lower_third;
+pub mod keyer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -419,3 +421,4 @@ pub use performance::{Performance, PerformanceError};
 pub use show_state::{ShowState, ShowMode};
 pub use cue_sheet::CueSheet;
 pub use lower_third::LowerThird;
+pub use keyer::Keyer;

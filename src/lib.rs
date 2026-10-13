@@ -336,6 +336,7 @@ pub mod audio_input;
 pub mod audio_output_source;
 pub mod group_source;
 pub mod organization;
+pub mod invite;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -577,3 +578,4 @@ pub use audio_input::{AudioInput, AudioInputError};
 pub use audio_output_source::{AudioOutput as DesktopAudio, AudioOutputError};
 pub use group_source::{GroupSource, GroupError as GroupSourceError};
 pub use organization::{Organization, MemberProfile, OrgError, OrgMode};
+pub use invite::{Invite, InviteError};

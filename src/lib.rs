@@ -308,6 +308,7 @@ pub mod nal_parser;
 pub mod output_delay;
 pub mod deinterlace;
 pub mod missing_files;
+pub mod fingerprint;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -521,3 +522,4 @@ pub use nal_parser::{NalParser, NalUnit, NalError};
 pub use output_delay::OutputDelay;
 pub use deinterlace::Deinterlace;
 pub use missing_files::{MissingFiles, MissingError};
+pub use fingerprint::{FingerprintStore, Fingerprint, FingerprintError};

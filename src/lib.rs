@@ -78,6 +78,7 @@
 //! - speech: pure live speech
 //! - action: pure detected action
 //! - effect: pure scene effect
+//! - effect_list: pure effect list
 
 pub mod bitstream;
 pub mod dstr;
@@ -258,6 +259,7 @@ pub mod storyboard;
 pub mod speech;
 pub mod action;
 pub mod effect;
+pub mod effect_list;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -437,3 +439,4 @@ pub use storyboard::Storyboard;
 pub use speech::Speech;
 pub use action::Action;
 pub use effect::{Effect, FxError};
+pub use effect_list::{EffectList, ListError};

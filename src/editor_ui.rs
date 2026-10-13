@@ -9,6 +9,7 @@
 use crate::ai::AiAssistant;
 use crate::ai_editor::AiEditor;
 use crate::adjustment::{Adjustment, AdjustKind};
+use crate::effect_list::EffectList;
 use crate::history::History;
 use crate::input_device::InputDevice;
 use crate::layer_group::GroupSet;
@@ -24,6 +25,7 @@ pub struct EditorUi {
     groups: GroupSet,
     adjustments: Vec<Adjustment>,
     history: History,
+    effects: EffectList,
 }
 
 impl EditorUi {
@@ -35,6 +37,7 @@ impl EditorUi {
             groups: GroupSet::new(),
             adjustments: Vec::new(),
             history: History::new(),
+            effects: EffectList::new(),
         }
     }
 
@@ -171,6 +174,14 @@ impl EditorUi {
         if let Some((x, y)) = input.last_click() {
             self.record(&format!("click {x},{y}"));
         }
+    }
+
+    pub fn effects(&self) -> &EffectList {
+        &self.effects
+    }
+
+    pub fn effects_mut(&mut self) -> &mut EffectList {
+        &mut self.effects
     }
 
     /// Reach the AI editor from the panel.

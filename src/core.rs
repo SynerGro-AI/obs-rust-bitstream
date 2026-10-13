@@ -598,6 +598,24 @@ impl Core {
         &self.log
     }
 
+    /// Undo the last action. Returns the reverse action that ran.
+    pub fn undo(&mut self) -> Option<String> {
+        let last = self.log.last()?.to_string();
+        let action = last.split(": ").nth(1)?;
+        let reverse = crate::undo::Undo::reverse(action)?.to_string();
+        match reverse.as_str() {
+            "record" => self.start_recording(),
+            "stream" => { let _ = self.start_stream("rtmp://live"); }
+            "vcam" => self.start_vcam(),
+            "stop_record" => self.stop_recording(),
+            "stop_stream" => self.stop_stream(),
+            "stop_vcam" => self.stop_vcam(),
+            _ => {}
+        }
+        self.log.add(&format!("undo: {reverse}"));
+        Some(reverse)
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

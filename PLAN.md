@@ -174,6 +174,7 @@ The pure foundation is solid and tested.
 - **output** — pure frame output. Differential wired.
 - **audio_output** — pure audio output. Differential wired.
 - **session** — pure combined session. Differential wired.
+- **preview** — pure session preview. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

@@ -544,6 +544,11 @@ impl Core {
         let _ = self.binds.bind("V", "stop_vcam");
     }
 
+    /// List the bound keys.
+    pub fn help(&self) -> String {
+        crate::help::Help::text(&self.binds)
+    }
+
     /// Press a key and run the bound action. Returns the action name.
     pub fn press(&mut self, key: &str) -> Option<String> {
         let action = self.binds.action(key)?.to_string();

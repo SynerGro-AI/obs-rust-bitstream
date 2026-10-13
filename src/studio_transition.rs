@@ -10,6 +10,12 @@ pub struct StudioTransition {
     progress: f32,
 }
 
+impl Default for StudioTransition {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StudioTransition {
     pub fn new() -> Self {
         Self { progress: 0.0 }

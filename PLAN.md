@@ -149,6 +149,7 @@ The pure foundation is solid and tested.
 - **delay** — pure delay. Differential wired.
 - **reverb** — pure reverb. Differential wired.
 - **meter** — pure peak and RMS meter. Differential wired.
+- **audio_timeline** — pure multi-track timeline. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

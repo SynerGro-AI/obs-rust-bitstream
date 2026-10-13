@@ -38,6 +38,7 @@
 //! - delay: pure delay
 //! - reverb: pure reverb
 //! - meter: pure peak and RMS meter
+//! - audio_timeline: pure multi-track timeline
 
 pub mod bitstream;
 pub mod dstr;
@@ -178,6 +179,7 @@ pub mod gate;
 pub mod delay;
 pub mod reverb;
 pub mod meter;
+pub mod audio_timeline;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -317,3 +319,4 @@ pub use gate::Gate;
 pub use delay::Delay;
 pub use reverb::Reverb;
 pub use meter::Meter;
+pub use audio_timeline::{AudioTimeline, Track, TimelineError as AudioTimelineError};

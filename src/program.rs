@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::ai_operator::{AiOperator, CrewState};
 use crate::audio_timeline::AudioTimeline;
 use crate::keyer::Keyer;
+use crate::lower_third::LowerThird;
 use crate::live_camera::LiveCamera;
 use crate::output::OutputFrame;
 use crate::performance::Performance;
@@ -102,6 +103,22 @@ impl Program {
         let level = audio.render(time);
         (frame, level)
     }
+
+    /// Emit the live show with a lower third for the topic.
+    pub fn live_show_titled(
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        audio: &AudioTimeline,
+        topic: &str,
+        time: f32,
+        canvas: &mut PixelCanvas,
+    ) -> (OutputFrame, f32, String) {
+        let (frame, level) = Self::live_show(ai, performance, camera, audio, topic, time, canvas);
+        let mut lt = LowerThird::new();
+        lt.set(topic);
+        (frame, level, lt.label().to_string())
+    }
 }
 
 #[cfg(test)]
@@ -172,5 +189,19 @@ mod tests {
         let (frame, level) = Program::live_show(&ai, &p, &mut cam, &audio, "concert", 1.0, &mut c);
         assert_eq!(frame.first, (0.2, 0.4, 0.8));
         assert!(level > 0.0);
+    }
+
+    #[test]
+    fn live_show_titled() {
+        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
+        let mut p = Performance::new("set").unwrap();
+        p.go_live();
+        let mut cam = LiveCamera::new("singer").unwrap();
+        cam.go_live();
+        let mut audio = AudioTimeline::new();
+        audio.add("voice", 0.0).unwrap();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        let (_, _, title) = Program::live_show_titled(&ai, &p, &mut cam, &audio, "concert", 1.0, &mut c);
+        assert_eq!(title, "concert");
     }
 }

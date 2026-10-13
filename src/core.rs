@@ -460,6 +460,11 @@ impl Core {
         self.vcam.stop();
     }
 
+    /// Send one frame to every running output. Returns how many received it.
+    pub fn send_frame(&mut self) -> usize {
+        crate::output_bus::OutputBus::send(&mut self.record, &mut self.stream, &mut self.vcam)
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

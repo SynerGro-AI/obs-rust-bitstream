@@ -298,6 +298,7 @@ pub mod notify;
 pub mod status;
 pub mod keybind;
 pub mod help;
+pub mod bind_profile;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -501,3 +502,4 @@ pub use notify::{Notify, NotifyError};
 pub use status::Status;
 pub use keybind::{Keybind, KeybindError};
 pub use help::Help;
+pub use bind_profile::{BindProfile, BindProfileError};

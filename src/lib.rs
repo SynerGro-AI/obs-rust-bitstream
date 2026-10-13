@@ -314,6 +314,7 @@ pub mod color_filter;
 pub mod crop_filter;
 pub mod scale_filter;
 pub mod noise_filter;
+pub mod gain_filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -533,3 +534,4 @@ pub use color_filter::ColorFilter;
 pub use crop_filter::{CropFilter, CropError};
 pub use scale_filter::{ScaleFilter, ScaleError};
 pub use noise_filter::NoiseFilter;
+pub use gain_filter::GainFilter;

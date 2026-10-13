@@ -11,6 +11,12 @@ pub struct FrameClock {
     frame: u64,
 }
 
+impl Default for FrameClock {
+    fn default() -> Self {
+        Self::new(30.0)
+    }
+}
+
 impl FrameClock {
     pub fn new(fps: f32) -> Self {
         Self {

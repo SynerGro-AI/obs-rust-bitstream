@@ -300,6 +300,7 @@ pub mod keybind;
 pub mod help;
 pub mod bind_profile;
 pub mod log;
+pub mod undo;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -505,3 +506,4 @@ pub use keybind::{Keybind, KeybindError};
 pub use help::Help;
 pub use bind_profile::{BindProfile, BindProfileError};
 pub use log::Log;
+pub use undo::Undo;

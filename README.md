@@ -216,6 +216,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **help** | Help | Pure key list |
 | **bind_profile** | Bind profile | Pure keybind save and load |
 | **log** | Log | Pure action history |
+| **undo** | Undo | Pure reverse action |
 | **replay_buffer** | Replay buffer | Pure last-N frames |
 
 All have unit tests. C ABI shims keep original quirks where required.
@@ -228,7 +229,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Two hundred five foundation modules with tests
+- [x] Two hundred six foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

@@ -8,6 +8,7 @@
 use crate::ai::AiAssistant;
 use crate::ai_operator::{AiOperator, CrewState};
 use crate::audio_timeline::AudioTimeline;
+use crate::ai_director::{AiDirector, SceneKind};
 use crate::keyer::Keyer;
 use crate::lower_third::LowerThird;
 use crate::live_camera::LiveCamera;
@@ -119,6 +120,26 @@ impl Program {
         lt.set(topic);
         (frame, level, lt.label().to_string())
     }
+
+    /// Emit the live show with the director's scene as the background.
+    pub fn live_directed(
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        line: &str,
+        canvas: &mut PixelCanvas,
+    ) -> (OutputFrame, SceneKind) {
+        let kind = AiDirector::pick(ai, line);
+        let bg = AiDirector::color(kind);
+        let keyer = Keyer::new();
+        let color = if performance.is_live() {
+            keyer.composite(camera.frame(), bg)
+        } else {
+            bg
+        };
+        canvas.fill(color.0, color.1, color.2);
+        (crate::output::Output::emit(canvas), kind)
+    }
 }
 
 #[cfg(test)]
@@ -203,5 +224,17 @@ mod tests {
         let mut c = PixelCanvas::new(4, 4).unwrap();
         let (_, _, title) = Program::live_show_titled(&ai, &p, &mut cam, &audio, "concert", 1.0, &mut c);
         assert_eq!(title, "concert");
+    }
+
+    #[test]
+    fn live_directed() {
+        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
+        let mut p = Performance::new("set").unwrap();
+        p.go_live();
+        let mut cam = LiveCamera::new("singer").unwrap();
+        cam.go_live();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        let (_, kind) = Program::live_directed(&ai, &p, &mut cam, "sunset", &mut c);
+        assert_eq!(kind, SceneKind::Sunset);
     }
 }

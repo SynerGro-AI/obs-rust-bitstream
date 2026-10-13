@@ -297,6 +297,7 @@ pub mod share;
 pub mod notify;
 pub mod status;
 pub mod keybind;
+pub mod help;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -499,3 +500,4 @@ pub use share::{Share, ShareError};
 pub use notify::{Notify, NotifyError};
 pub use status::Status;
 pub use keybind::{Keybind, KeybindError};
+pub use help::Help;

@@ -212,6 +212,7 @@ The pure foundation is solid and tested.
 - **notify** — pure notification. Differential wired.
 - **status** — pure status. Differential wired.
 - **keybind** — pure keybind. Differential wired.
+- **help** — pure help. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

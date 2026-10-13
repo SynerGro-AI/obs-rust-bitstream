@@ -157,6 +157,8 @@ The pure foundation is solid and tested.
 - **editor_ui** — pure editor panel. Differential wired.
 - **adjustment** — pure adjustment layer. Differential wired.
 - **layer_group** — pure layer group. Differential wired.
+- **selection** — pure selection. Differential wired.
+- **brush** — pure brush. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

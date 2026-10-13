@@ -46,6 +46,8 @@
 //! - editor_ui: pure editor panel
 //! - adjustment: pure adjustment layer
 //! - layer_group: pure layer group
+//! - selection: pure selection
+//! - brush: pure brush
 
 pub mod bitstream;
 pub mod dstr;
@@ -194,6 +196,8 @@ pub mod mask;
 pub mod editor_ui;
 pub mod adjustment;
 pub mod layer_group;
+pub mod selection;
+pub mod brush;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -341,3 +345,5 @@ pub use mask::{Mask, MaskSet, MaskError};
 pub use editor_ui::EditorUi;
 pub use adjustment::{Adjustment, AdjustKind, AdjustError};
 pub use layer_group::{GroupSet, LayerGroup, GroupError};
+pub use selection::{Selection, SelectionError};
+pub use brush::{Brush, BrushError};

@@ -1,9 +1,11 @@
 //! Safe pure Organization (shared media output core).
 //!
-//! One organization owns the output. Members have
-//! individual profiles. Empty names rejected. No unwraps.
+//! One organization owns the output. It can be an
+//! individual or a team. Members have individual
+//! profiles. Empty names rejected. No unwraps.
 //!
 //! Differential: add member + list round-trips.
+//! A team and an individual both work.
 
 use std::collections::BTreeMap;
 
@@ -12,6 +14,12 @@ pub enum OrgError {
     EmptyName,
     Duplicate,
     Missing,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OrgMode {
+    Individual,
+    Team,
 }
 
 #[derive(Clone, Debug)]
@@ -23,6 +31,7 @@ pub struct MemberProfile {
 #[derive(Clone, Debug)]
 pub struct Organization {
     name: String,
+    mode: OrgMode,
     members: BTreeMap<String, MemberProfile>,
 }
 
@@ -33,12 +42,32 @@ impl Organization {
         }
         Ok(Self {
             name: name.to_string(),
+            mode: OrgMode::Individual,
             members: BTreeMap::new(),
         })
     }
 
+    pub fn team(name: &str) -> Result<Self, OrgError> {
+        let mut o = Self::new(name)?;
+        o.mode = OrgMode::Team;
+        Ok(o)
+    }
+
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn mode(&self) -> &OrgMode {
+        &self.mode
+    }
+
+    pub fn is_team(&self) -> bool {
+        self.mode == OrgMode::Team
+    }
+
+    /// Switch between individual and team.
+    pub fn set_mode(&mut self, mode: OrgMode) {
+        self.mode = mode;
     }
 
     /// Add a member with an individual profile.
@@ -99,5 +128,13 @@ mod tests {
         assert_eq!(org.member("Alex").unwrap().role, "camera");
         org.remove_member("Alex").unwrap();
         assert_eq!(org.members(), vec!["Jason"]);
+    }
+
+    #[test]
+    fn individual_or_team() {
+        let solo = Organization::new("Jason").unwrap();
+        assert!(!solo.is_team());
+        let team = Organization::team("SynerGro Live").unwrap();
+        assert!(team.is_team());
     }
 }

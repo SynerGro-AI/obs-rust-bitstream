@@ -576,4 +576,4 @@ pub use game_capture::{GameCapture, GameError};
 pub use audio_input::{AudioInput, AudioInputError};
 pub use audio_output_source::{AudioOutput as DesktopAudio, AudioOutputError};
 pub use group_source::{GroupSource, GroupError as GroupSourceError};
-pub use organization::{Organization, MemberProfile, OrgError};
+pub use organization::{Organization, MemberProfile, OrgError, OrgMode};

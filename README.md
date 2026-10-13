@@ -347,6 +347,7 @@ let review = ai.review_skeleton("/* generated rust */");
 6. Keep pushing — public, free, open
 
 AI-assisted contributions and PRs welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to start.
 
 See also the upstream [obs-rust/obs-studio](https://github.com/obs-rust/obs-studio) effort.
 

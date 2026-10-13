@@ -231,6 +231,7 @@ The pure foundation is solid and tested.
 - **noise_filter** — pure noise filter. Differential wired.
 - **gain_filter** — pure gain filter. Differential wired.
 - **compressor_filter** — pure compressor. Differential wired.
+- **limiter_filter** — pure limiter. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

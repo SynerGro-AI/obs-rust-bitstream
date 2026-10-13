@@ -316,6 +316,7 @@ pub mod scale_filter;
 pub mod noise_filter;
 pub mod gain_filter;
 pub mod compressor_filter;
+pub mod limiter_filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -537,3 +538,4 @@ pub use scale_filter::{ScaleFilter, ScaleError};
 pub use noise_filter::NoiseFilter;
 pub use gain_filter::GainFilter;
 pub use compressor_filter::Compressor as CompressorFilter;
+pub use limiter_filter::Limiter as LimiterFilter;

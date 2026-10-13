@@ -196,6 +196,7 @@ The pure foundation is solid and tested.
 - **multi_monitor** — pure multi monitor. Differential wired.
 - **options_menu** — pure options menu. Differential wired.
 - **studio** — pure studio mode. Differential wired.
+- **studio_transition** — pure studio transition. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

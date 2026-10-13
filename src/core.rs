@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::log::Log;
 use crate::bind_profile::BindProfile;
 use crate::keybind::Keybind;
 use crate::frame_clock::FrameClock;
@@ -98,6 +99,7 @@ pub struct Core {
     saves: ReplaySave,
     binds: Keybind,
     bind_profile: BindProfile,
+    log: Log,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -579,6 +581,7 @@ impl Core {
     /// Press a key and run the bound action. Returns the action name.
     pub fn press(&mut self, key: &str) -> Option<String> {
         let action = self.binds.action(key)?.to_string();
+        self.log.add(&format!("press {key}: {action}"));
         match action.as_str() {
             "record" => self.start_recording(),
             "stream" => { let _ = self.start_stream("rtmp://live"); }
@@ -589,6 +592,10 @@ impl Core {
             _ => {}
         }
         Some(action)
+    }
+
+    pub fn log(&self) -> &Log {
+        &self.log
     }
 
     /// Start streaming the program to a target.

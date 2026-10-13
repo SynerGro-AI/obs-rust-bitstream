@@ -228,6 +228,7 @@ The pure foundation is solid and tested.
 - **color_filter** — pure color filter. Differential wired.
 - **crop_filter** — pure crop filter. Differential wired.
 - **scale_filter** — pure scale filter. Differential wired.
+- **noise_filter** — pure noise filter. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

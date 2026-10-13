@@ -591,8 +591,13 @@ impl Core {
     }
 
     /// Press a key and run the bound action. Returns the action name.
+    /// Returns None if the signed-in role cannot do it.
     pub fn press(&mut self, key: &str) -> Option<String> {
         let action = self.binds.action(key)?.to_string();
+        if !self.can(&action) {
+            self.log.add(&format!("denied {key}: {action}"));
+            return None;
+        }
         self.log.add(&format!("press {key}: {action}"));
         self.key_macros.record(key);
         match action.as_str() {

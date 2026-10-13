@@ -247,6 +247,7 @@ The pure foundation is solid and tested.
 - **window_capture** — pure window capture. Differential wired.
 - **display_capture** — pure display capture. Differential wired.
 - **game_capture** — pure game capture. Differential wired.
+- **audio_input** — pure audio input. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

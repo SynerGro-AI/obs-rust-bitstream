@@ -1,15 +1,17 @@
 //! Safe pure Invite (team invite core).
 //!
 //! Creates an invite for a name and role. Empty names
-//! rejected. No unwraps.
+//! and unknown roles rejected. No unwraps.
 //!
 //! Differential: create + accept round-trips.
 
 use crate::organization::{Organization, OrgError};
+use crate::role::Role;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InviteError {
     EmptyName,
+    UnknownRole,
     AlreadyMember,
 }
 
@@ -23,6 +25,9 @@ impl Invite {
     pub fn new(name: &str, role: &str) -> Result<Self, InviteError> {
         if name.is_empty() {
             return Err(InviteError::EmptyName);
+        }
+        if !Role::is_known(role) {
+            return Err(InviteError::UnknownRole);
         }
         Ok(Self {
             name: name.to_string(),
@@ -43,6 +48,11 @@ mod tests {
     #[test]
     fn empty() {
         assert!(Invite::new("", "camera").is_err());
+    }
+
+    #[test]
+    fn unknown_role() {
+        assert!(Invite::new("Alex", "unknown").is_err());
     }
 
     #[test]

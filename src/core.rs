@@ -28,6 +28,7 @@ use crate::pixel_canvas::PixelCanvas;
 use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
+use crate::keyer::Keyer;
 use crate::live_camera::LiveCamera;
 use crate::performance::Performance;
 use crate::program::Program;
@@ -62,6 +63,7 @@ pub struct Core {
     session: Session,
     show: ShowState,
     cues: CueSheet,
+    keyer: Keyer,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -151,6 +153,14 @@ impl Core {
 
     pub fn cues_mut(&mut self) -> &mut CueSheet {
         &mut self.cues
+    }
+
+    pub fn keyer(&self) -> &Keyer {
+        &self.keyer
+    }
+
+    pub fn keyer_mut(&mut self) -> &mut Keyer {
+        &mut self.keyer
     }
 
     /// Advance the rundown and set the show topic.

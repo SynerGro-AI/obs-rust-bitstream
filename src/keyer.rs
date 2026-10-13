@@ -13,6 +13,12 @@ pub struct Keyer {
     tolerance: f32,
 }
 
+impl Default for Keyer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Keyer {
     pub fn new() -> Self {
         Self {

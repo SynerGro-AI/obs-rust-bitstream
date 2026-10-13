@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::sign_in::Session as SignIn;
 use crate::organization::Organization;
 use crate::file_cache::FileCache;
 use crate::fingerprint::FingerprintStore;
@@ -110,6 +111,7 @@ pub struct Core {
     fingerprints: FingerprintStore,
     cache: FileCache,
     team: Organization,
+    signed_in: SignIn,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -717,6 +719,23 @@ impl Core {
     pub fn invite(&mut self, name: &str, role: &str) -> Result<(), crate::invite::InviteError> {
         let invite = crate::invite::Invite::new(name, role)?;
         invite.accept(&mut self.team).map_err(|_| crate::invite::InviteError::AlreadyMember)
+    }
+
+    pub fn signed_in(&self) -> &SignIn {
+        &self.signed_in
+    }
+
+    /// Sign in as a member.
+    pub fn sign_in(&mut self, name: &str, role: &str) -> Result<(), crate::sign_in::SessionError> {
+        self.signed_in.sign_in(name, role)
+    }
+
+    /// Can the signed-in member do this action.
+    pub fn can(&self, action: &str) -> bool {
+        match self.signed_in.role() {
+            Some(role) => crate::permission::Permission::can(role, action),
+            None => false,
+        }
     }
 
     pub fn log(&self) -> &Log {

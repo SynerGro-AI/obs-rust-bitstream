@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::bind_profile::BindProfile;
 use crate::keybind::Keybind;
 use crate::frame_clock::FrameClock;
 use crate::virtual_camera::VirtualCamera;
@@ -96,6 +97,7 @@ pub struct Core {
     replay: InstantReplay,
     saves: ReplaySave,
     binds: Keybind,
+    bind_profile: BindProfile,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -557,6 +559,16 @@ impl Core {
     /// Remove a key binding.
     pub fn unbind(&mut self, key: &str) {
         self.binds.unbind(key);
+    }
+
+    /// Save the current binds under a name.
+    pub fn save_binds(&mut self, name: &str) -> Result<(), crate::bind_profile::BindProfileError> {
+        self.bind_profile.save(name, &self.binds)
+    }
+
+    /// Load binds from a named profile.
+    pub fn load_binds(&mut self, name: &str) -> Result<(), crate::bind_profile::BindProfileError> {
+        self.bind_profile.load(name, &mut self.binds)
     }
 
     /// Hover description for a key.

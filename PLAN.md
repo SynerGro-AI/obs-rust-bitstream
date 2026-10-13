@@ -243,6 +243,7 @@ The pure foundation is solid and tested.
 - **text_source** — pure text source. Differential wired.
 - **color_source** — pure color source. Differential wired.
 - **browser_source** — pure browser source. Differential wired.
+- **media_source** — pure media source. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

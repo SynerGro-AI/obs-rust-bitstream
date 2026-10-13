@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::macro_seq::Macro;
 use crate::log::Log;
 use crate::bind_profile::BindProfile;
 use crate::keybind::Keybind;
@@ -100,6 +101,7 @@ pub struct Core {
     binds: Keybind,
     bind_profile: BindProfile,
     log: Log,
+    key_macros: Macro,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -592,6 +594,35 @@ impl Core {
             _ => {}
         }
         Some(action)
+    }
+
+    pub fn macros(&self) -> &Macro {
+        &self.key_macros
+    }
+
+    /// Start recording a macro.
+    pub fn start_macro(&mut self, name: &str) -> Result<(), crate::macro_seq::MacroError> {
+        self.key_macros.start(name)
+    }
+
+    /// Stop recording the macro.
+    pub fn stop_macro(&mut self) {
+        self.key_macros.stop();
+    }
+
+    /// Replay a macro. Returns how many keys ran.
+    pub fn play_macro(&mut self, name: &str) -> usize {
+        let seq = match self.key_macros.sequence(name) {
+            Some(s) => s.to_vec(),
+            None => return 0,
+        };
+        let mut n = 0;
+        for key in seq {
+            if self.press(&key).is_some() {
+                n += 1;
+            }
+        }
+        n
     }
 
     pub fn log(&self) -> &Log {

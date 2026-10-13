@@ -305,6 +305,7 @@ pub mod redo;
 pub mod macro_seq;
 pub mod schedule;
 pub mod nal_parser;
+pub mod output_delay;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -515,3 +516,4 @@ pub use redo::Redo;
 pub use macro_seq::{Macro, MacroError};
 pub use schedule::{Schedule, ScheduleError};
 pub use nal_parser::{NalParser, NalUnit, NalError};
+pub use output_delay::OutputDelay;

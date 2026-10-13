@@ -209,6 +209,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **replay_save** | Replay save | Pure replay to clip |
 | **export** | Export | Pure clip to file |
 | **file_writer** | File writer | Pure export to bytes |
+| **share** | Share | Pure post to a target |
 | **replay_buffer** | Replay buffer | Pure last-N frames |
 
 All have unit tests. C ABI shims keep original quirks where required.
@@ -221,7 +222,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred ninety-eight foundation modules with tests
+- [x] One hundred ninety-nine foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::program_stream::ProgramStream;
 use crate::program_record::ProgramRecord;
 use crate::tally::Tally;
 use crate::multiview::Multiview;
@@ -84,6 +85,7 @@ pub struct Core {
     multiview: Multiview,
     tally: Tally,
     record: ProgramRecord,
+    stream: ProgramStream,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -428,6 +430,24 @@ impl Core {
 
     pub fn record_mut(&mut self) -> &mut ProgramRecord {
         &mut self.record
+    }
+
+    pub fn stream(&self) -> &ProgramStream {
+        &self.stream
+    }
+
+    pub fn stream_mut(&mut self) -> &mut ProgramStream {
+        &mut self.stream
+    }
+
+    /// Start streaming the program to a target.
+    pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
+        self.stream.start(target)
+    }
+
+    /// Stop streaming the program.
+    pub fn stop_stream(&mut self) {
+        self.stream.stop();
     }
 
     /// Start recording the program.

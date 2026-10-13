@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::organization::Organization;
 use crate::file_cache::FileCache;
 use crate::fingerprint::FingerprintStore;
 use crate::schedule::Schedule;
@@ -108,6 +109,7 @@ pub struct Core {
     timed: Schedule,
     fingerprints: FingerprintStore,
     cache: FileCache,
+    team: Organization,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -701,6 +703,14 @@ impl Core {
     /// Rebuild a missing file from the cache. Returns the bytes.
     pub fn rebuild(&self, path: &str) -> Result<&[u8], crate::file_cache::CacheError> {
         self.cache.rebuild(path)
+    }
+
+    pub fn org(&self) -> &Organization {
+        &self.team
+    }
+
+    pub fn org_mut(&mut self) -> &mut Organization {
+        &mut self.team
     }
 
     pub fn log(&self) -> &Log {

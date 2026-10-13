@@ -35,6 +35,16 @@ pub struct Organization {
     members: BTreeMap<String, MemberProfile>,
 }
 
+impl Default for Organization {
+    fn default() -> Self {
+        Self::new("default").unwrap_or_else(|_| Self {
+            name: "default".to_string(),
+            mode: OrgMode::Individual,
+            members: BTreeMap::new(),
+        })
+    }
+}
+
 impl Organization {
     pub fn new(name: &str) -> Result<Self, OrgError> {
         if name.is_empty() {

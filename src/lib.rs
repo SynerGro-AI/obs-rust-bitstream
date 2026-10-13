@@ -60,6 +60,7 @@
 //! - ai_editor: pure AI editor access
 //! - compositor: pure video compositor
 //! - input_device: pure input device
+//! - output: pure frame output
 
 pub mod bitstream;
 pub mod dstr;
@@ -222,6 +223,7 @@ pub mod smart_skin;
 pub mod ai_editor;
 pub mod compositor;
 pub mod input_device;
+pub mod output;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -383,3 +385,4 @@ pub use smart_skin::{SmartSkin, SkinError};
 pub use ai_editor::AiEditor;
 pub use compositor::Compositor;
 pub use input_device::InputDevice;
+pub use output::{Output, OutputFrame};

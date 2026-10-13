@@ -218,6 +218,7 @@ The pure foundation is solid and tested.
 - **undo** — pure undo. Differential wired.
 - **redo** — pure redo. Differential wired.
 - **macro_seq** — pure macro. Differential wired.
+- **schedule** — pure schedule. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

@@ -303,6 +303,7 @@ pub mod log;
 pub mod undo;
 pub mod redo;
 pub mod macro_seq;
+pub mod schedule;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -511,3 +512,4 @@ pub use log::Log;
 pub use undo::Undo;
 pub use redo::Redo;
 pub use macro_seq::{Macro, MacroError};
+pub use schedule::{Schedule, ScheduleError};

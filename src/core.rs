@@ -28,6 +28,7 @@ use crate::pixel_canvas::PixelCanvas;
 use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
+use crate::effect_list::EffectList;
 use crate::keyer::Keyer;
 use crate::live_camera::LiveCamera;
 use crate::performance::Performance;
@@ -70,6 +71,7 @@ pub struct Core {
     board: Storyboard,
     speech: Speech,
     action: Action,
+    effects: EffectList,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -334,6 +336,24 @@ impl Core {
         self.show.set_topic(action);
         self.show.go_live();
         Program::live_directed(ai, performance, camera, action, canvas)
+    }
+
+    /// See an action, trigger its effect, and render the scene.
+    pub fn see_and_effect(
+        &mut self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        action: &str,
+        canvas: &mut PixelCanvas,
+    ) -> (crate::output::OutputFrame, crate::ai_director::SceneKind) {
+        let (frame, kind) = self.see_and_show(ai, performance, camera, action, canvas);
+        crate::ai_director::AiDirector::trigger(kind, &mut self.effects);
+        (frame, kind)
+    }
+
+    pub fn live_effects(&self) -> &EffectList {
+        &self.effects
     }
 
     pub fn sources(&self) -> &SourceRegistry {

@@ -9,12 +9,14 @@
 
 use crate::material::Material;
 use crate::material_registry::{MaterialRegistry, MaterialRegistryError};
+use crate::periodic_table::PeriodicTable;
 use crate::vec3::Vec3;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LabError {
     EmptyName,
     Unstable,
+    UnknownElement,
     Registry(MaterialRegistryError),
 }
 
@@ -115,6 +117,26 @@ impl MaterialsLab {
         m.set_roughness(roughness);
         Ok(())
     }
+
+    /// Synthesize an element by atomic number from the periodic table.
+    pub fn synthesize_z(
+        registry: &mut MaterialRegistry,
+        z: u32,
+    ) -> Result<(), LabError> {
+        let e = PeriodicTable::get(z).ok_or(LabError::UnknownElement)?;
+        let atom = Atom::new(e.z, e.neutrons, e.z);
+        Self::synthesize(registry, e.name, &atom)
+    }
+
+    /// Synthesize an element by symbol from the periodic table.
+    pub fn synthesize_symbol(
+        registry: &mut MaterialRegistry,
+        symbol: &str,
+    ) -> Result<(), LabError> {
+        let e = PeriodicTable::by_symbol(symbol).ok_or(LabError::UnknownElement)?;
+        let atom = Atom::new(e.z, e.neutrons, e.z);
+        Self::synthesize(registry, e.name, &atom)
+    }
 }
 
 fn hue_to_rgb(hue: f32) -> Vec3 {
@@ -166,5 +188,14 @@ mod tests {
             MaterialsLab::synthesize(&mut r, "bad", &bad),
             Err(LabError::Unstable)
         ));
+    }
+
+    #[test]
+    fn from_table() {
+        let mut r = MaterialRegistry::new();
+        MaterialsLab::synthesize_symbol(&mut r, "C").unwrap();
+        assert!(r.get("Carbon").is_ok());
+        MaterialsLab::synthesize_z(&mut r, 79).unwrap();
+        assert!(r.get("Gold").is_ok());
     }
 }

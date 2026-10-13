@@ -295,6 +295,7 @@ pub mod export;
 pub mod file_writer;
 pub mod share;
 pub mod notify;
+pub mod status;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -495,3 +496,4 @@ pub use export::{Export, ExportError};
 pub use file_writer::FileWriter;
 pub use share::{Share, ShareError};
 pub use notify::{Notify, NotifyError};
+pub use status::Status;

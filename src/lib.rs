@@ -25,6 +25,7 @@
 //! - materials_lab: pure materials science lab
 //! - periodic_table: pure periodic table
 //! - compound: pure molecule
+//! - reaction: pure chemical reaction
 
 pub mod bitstream;
 pub mod dstr;
@@ -152,6 +153,7 @@ pub mod material_factory;
 pub mod materials_lab;
 pub mod periodic_table;
 pub mod compound;
+pub mod reaction;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -278,3 +280,4 @@ pub use material_factory::MaterialFactory;
 pub use materials_lab::{MaterialsLab, Atom, LabError};
 pub use periodic_table::{PeriodicTable, Element};
 pub use compound::{Compound, CompoundError};
+pub use reaction::{Reaction, ReactionError};

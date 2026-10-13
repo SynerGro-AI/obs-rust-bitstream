@@ -136,6 +136,7 @@ The pure foundation is solid and tested.
 - **materials_lab** — pure materials science lab. Differential wired.
 - **periodic_table** — pure periodic table. Differential wired.
 - **compound** — pure molecule. Differential wired.
+- **reaction** — pure chemical reaction. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

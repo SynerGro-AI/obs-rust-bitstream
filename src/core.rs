@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::audit::Audit;
 use crate::sign_in::Session as SignIn;
 use crate::organization::Organization;
 use crate::file_cache::FileCache;
@@ -112,6 +113,7 @@ pub struct Core {
     cache: FileCache,
     team: Organization,
     signed_in: SignIn,
+    who: Audit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -599,6 +601,9 @@ impl Core {
             return None;
         }
         self.log.add(&format!("press {key}: {action}"));
+        if let (Some(name), Some(role)) = (self.signed_in.name(), self.signed_in.role()) {
+            self.who.record(name, role, &action);
+        }
         self.key_macros.record(key);
         match action.as_str() {
             "record" => self.start_recording(),
@@ -741,6 +746,10 @@ impl Core {
             Some(role) => crate::permission::Permission::can(role, action),
             None => false,
         }
+    }
+
+    pub fn audit(&self) -> &Audit {
+        &self.who
     }
 
     pub fn log(&self) -> &Log {

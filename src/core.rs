@@ -26,6 +26,7 @@ use crate::service_registry::ServiceRegistry;
 use crate::source_registry::SourceRegistry;
 use crate::pixel_canvas::PixelCanvas;
 use crate::preview::{Preview, PreviewFrame};
+use crate::ai::AiAssistant;
 use crate::live_camera::LiveCamera;
 use crate::performance::Performance;
 use crate::program::Program;

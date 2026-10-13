@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::live_feed::LiveFeed;
 use crate::keyer::Keyer;
 use crate::live_camera::LiveCamera;
 use crate::performance::Performance;
@@ -72,6 +73,7 @@ pub struct Core {
     speech: Speech,
     action: Action,
     effects: EffectList,
+    feed: LiveFeed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -368,6 +370,19 @@ impl Core {
 
     pub fn live_effects(&self) -> &EffectList {
         &self.effects
+    }
+
+    pub fn feed(&self) -> &LiveFeed {
+        &self.feed
+    }
+
+    pub fn feed_mut(&mut self) -> &mut LiveFeed {
+        &mut self.feed
+    }
+
+    /// Switch the live camera from an arrow key.
+    pub fn switch_camera(&mut self, input: &crate::input_device::InputDevice, cameras: &[&str]) -> Option<String> {
+        self.feed.from_key(input, cameras)
     }
 
     pub fn sources(&self) -> &SourceRegistry {

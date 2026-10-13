@@ -11,6 +11,12 @@ pub struct InstantReplay {
     frames: Vec<u64>,
 }
 
+impl Default for InstantReplay {
+    fn default() -> Self {
+        Self::new(300)
+    }
+}
+
 impl InstantReplay {
     pub fn new(capacity: usize) -> Self {
         Self {

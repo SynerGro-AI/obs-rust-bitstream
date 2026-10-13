@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::instant_replay::InstantReplay;
 use crate::frame_clock::FrameClock;
 use crate::virtual_camera::VirtualCamera;
 use crate::program_stream::ProgramStream;
@@ -90,6 +91,7 @@ pub struct Core {
     stream: ProgramStream,
     vcam: VirtualCamera,
     clock: FrameClock,
+    replay: InstantReplay,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -471,10 +473,16 @@ impl Core {
         &self.clock
     }
 
-    /// Tick the clock and send one frame. Returns the frame number.
+    /// Tick the clock, keep the frame, and send it. Returns the frame number.
     pub fn tick(&mut self) -> u64 {
         let _ = self.send_frame();
-        self.clock.tick()
+        let n = self.clock.tick();
+        self.replay.push(n);
+        n
+    }
+
+    pub fn replay(&self) -> &InstantReplay {
+        &self.replay
     }
 
     /// Start streaming the program to a target.

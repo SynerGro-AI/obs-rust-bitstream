@@ -68,6 +68,7 @@
 //! - live_camera: pure live camera
 //! - ai_operator: pure AI news crew
 //! - topic_background: pure topic background
+//! - performance: pure singer performance
 
 pub mod bitstream;
 pub mod dstr;
@@ -238,6 +239,7 @@ pub mod program;
 pub mod live_camera;
 pub mod ai_operator;
 pub mod topic_background;
+pub mod performance;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -407,3 +409,4 @@ pub use program::Program;
 pub use live_camera::{LiveCamera, CameraError};
 pub use ai_operator::{AiOperator, CrewState};
 pub use topic_background::TopicBackground;
+pub use performance::{Performance, PerformanceError};

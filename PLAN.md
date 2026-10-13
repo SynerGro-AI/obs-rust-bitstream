@@ -219,6 +219,7 @@ The pure foundation is solid and tested.
 - **redo** — pure redo. Differential wired.
 - **macro_seq** — pure macro. Differential wired.
 - **schedule** — pure schedule. Differential wired.
+- **nal_parser** — pure NAL parser. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

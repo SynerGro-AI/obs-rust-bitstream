@@ -341,6 +341,7 @@ pub mod invite;
 pub mod role;
 pub mod permission;
 pub mod sign_in;
+pub mod audit;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -586,3 +587,4 @@ pub use invite::{Invite, InviteError};
 pub use role::Role;
 pub use permission::Permission;
 pub use sign_in::{Session as SignIn, SessionError as SignInError};
+pub use audit::{Audit, AuditEntry};

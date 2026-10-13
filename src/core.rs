@@ -24,6 +24,8 @@ use crate::output_registry::OutputRegistry;
 use crate::scene_registry::SceneRegistry;
 use crate::service_registry::ServiceRegistry;
 use crate::source_registry::SourceRegistry;
+use crate::pixel_canvas::PixelCanvas;
+use crate::preview::{Preview, PreviewFrame};
 use crate::session::Session;
 
 #[derive(Clone, Debug, Default)]
@@ -120,6 +122,11 @@ impl Core {
 
     pub fn session_mut(&mut self) -> &mut Session {
         &mut self.session
+    }
+
+    /// Preview the core's session at a time.
+    pub fn preview(&self, time: f32, canvas: &mut PixelCanvas) -> PreviewFrame {
+        Preview::show(&self.session, time, canvas)
     }
 
     pub fn sources(&self) -> &SourceRegistry {

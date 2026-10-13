@@ -713,6 +713,12 @@ impl Core {
         &mut self.team
     }
 
+    /// Invite a member into the organization.
+    pub fn invite(&mut self, name: &str, role: &str) -> Result<(), crate::invite::InviteError> {
+        let invite = crate::invite::Invite::new(name, role)?;
+        invite.accept(&mut self.team).map_err(|_| crate::invite::InviteError::AlreadyMember)
+    }
+
     pub fn log(&self) -> &Log {
         &self.log
     }

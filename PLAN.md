@@ -233,6 +233,7 @@ The pure foundation is solid and tested.
 - **compressor_filter** — pure compressor. Differential wired.
 - **limiter_filter** — pure limiter. Differential wired.
 - **gate_filter** — pure gate. Differential wired.
+- **eq_filter** — pure EQ. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

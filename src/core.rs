@@ -34,6 +34,7 @@ use crate::performance::Performance;
 use crate::program::Program;
 use crate::session::Session;
 use crate::cue_sheet::CueSheet;
+use crate::storyboard::Storyboard;
 use crate::show_state::{ShowMode, ShowState};
 
 #[derive(Clone, Debug, Default)]
@@ -64,6 +65,7 @@ pub struct Core {
     show: ShowState,
     cues: CueSheet,
     keyer: Keyer,
+    board: Storyboard,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -161,6 +163,20 @@ impl Core {
 
     pub fn keyer_mut(&mut self) -> &mut Keyer {
         &mut self.keyer
+    }
+
+    pub fn board(&self) -> &Storyboard {
+        &self.board
+    }
+
+    pub fn board_mut(&mut self) -> &mut Storyboard {
+        &mut self.board
+    }
+
+    /// Advance the storyboard and return the scene the director picks.
+    pub fn advance_beat(&mut self, ai: &crate::ai::AiAssistant) -> crate::ai_director::SceneKind {
+        self.board.next();
+        crate::ai_director::AiDirector::from_board(ai, &self.board)
     }
 
     /// Advance the rundown and set the show topic.

@@ -290,6 +290,21 @@ impl Core {
         Program::live_directed(ai, performance, camera, &line, canvas)
     }
 
+    /// Hear a line and render the scene the director picks.
+    pub fn hear_and_show(
+        &mut self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        line: &str,
+        canvas: &mut PixelCanvas,
+    ) -> (crate::output::OutputFrame, crate::ai_director::SceneKind) {
+        self.speech.hear(line);
+        self.show.set_topic(line);
+        self.show.go_live();
+        Program::live_directed(ai, performance, camera, line, canvas)
+    }
+
     pub fn sources(&self) -> &SourceRegistry {
         &self.sources
     }

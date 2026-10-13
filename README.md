@@ -237,6 +237,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **eq_filter** | EQ | Pure three-band equalizer |
 | **reverb_filter** | Reverb | Pure delay reverb |
 | **fade_transition** | Fade transition | Pure crossfade |
+| **swipe_transition** | Swipe transition | Pure wipe |
 | **replay_buffer** | Replay buffer | Pure last-N frames |
 
 All have unit tests. C ABI shims keep original quirks where required.
@@ -249,7 +250,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Two hundred twenty-six foundation modules with tests
+- [x] Two hundred twenty-seven foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

@@ -236,6 +236,7 @@ The pure foundation is solid and tested.
 - **eq_filter** — pure EQ. Differential wired.
 - **reverb_filter** — pure reverb. Differential wired.
 - **fade_transition** — pure fade transition. Differential wired.
+- **swipe_transition** — pure swipe transition. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

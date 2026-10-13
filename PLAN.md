@@ -230,6 +230,7 @@ The pure foundation is solid and tested.
 - **scale_filter** — pure scale filter. Differential wired.
 - **noise_filter** — pure noise filter. Differential wired.
 - **gain_filter** — pure gain filter. Differential wired.
+- **compressor_filter** — pure compressor. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

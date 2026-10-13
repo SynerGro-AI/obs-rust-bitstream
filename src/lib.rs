@@ -37,6 +37,7 @@
 //! - gate: pure gate
 //! - delay: pure delay
 //! - reverb: pure reverb
+//! - meter: pure peak and RMS meter
 
 pub mod bitstream;
 pub mod dstr;
@@ -176,6 +177,7 @@ pub mod limiter;
 pub mod gate;
 pub mod delay;
 pub mod reverb;
+pub mod meter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -314,3 +316,4 @@ pub use limiter::Limiter;
 pub use gate::Gate;
 pub use delay::Delay;
 pub use reverb::Reverb;
+pub use meter::Meter;

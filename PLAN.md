@@ -148,6 +148,7 @@ The pure foundation is solid and tested.
 - **gate** — pure gate. Differential wired.
 - **delay** — pure delay. Differential wired.
 - **reverb** — pure reverb. Differential wired.
+- **meter** — pure peak and RMS meter. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

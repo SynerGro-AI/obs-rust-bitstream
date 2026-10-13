@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::virtual_camera::VirtualCamera;
 use crate::program_stream::ProgramStream;
 use crate::program_record::ProgramRecord;
 use crate::tally::Tally;
@@ -86,6 +87,7 @@ pub struct Core {
     tally: Tally,
     record: ProgramRecord,
     stream: ProgramStream,
+    vcam: VirtualCamera,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -438,6 +440,24 @@ impl Core {
 
     pub fn stream_mut(&mut self) -> &mut ProgramStream {
         &mut self.stream
+    }
+
+    pub fn vcam(&self) -> &VirtualCamera {
+        &self.vcam
+    }
+
+    pub fn vcam_mut(&mut self) -> &mut VirtualCamera {
+        &mut self.vcam
+    }
+
+    /// Start the virtual camera.
+    pub fn start_vcam(&mut self) {
+        self.vcam.start();
+    }
+
+    /// Stop the virtual camera.
+    pub fn stop_vcam(&mut self) {
+        self.vcam.stop();
     }
 
     /// Start streaming the program to a target.

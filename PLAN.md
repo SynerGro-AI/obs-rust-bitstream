@@ -221,6 +221,7 @@ The pure foundation is solid and tested.
 - **schedule** — pure schedule. Differential wired.
 - **nal_parser** — pure NAL parser. Differential wired.
 - **output_delay** — pure output delay. Differential wired.
+- **deinterlace** — pure deinterlace. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

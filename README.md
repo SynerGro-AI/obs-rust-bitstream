@@ -222,6 +222,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **schedule** | Schedule | Pure timed macro |
 | **nal_parser** | NAL parser | Pure AVC/HEVC NAL split |
 | **output_delay** | Output delay | Pure frame delay buffer |
+| **deinterlace** | Deinterlace | Pure field weave |
 | **replay_buffer** | Replay buffer | Pure last-N frames |
 
 All have unit tests. C ABI shims keep original quirks where required.
@@ -234,7 +235,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Two hundred eleven foundation modules with tests
+- [x] Two hundred twelve foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

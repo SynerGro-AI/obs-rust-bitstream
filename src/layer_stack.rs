@@ -13,6 +13,14 @@ pub enum BlendMode {
     Multiply,
     Screen,
     Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    SoftLight,
+    HardLight,
+    Difference,
+    Exclusion,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

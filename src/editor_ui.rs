@@ -106,6 +106,22 @@ impl EditorUi {
             BlendMode::Screen
         } else if reply.contains("overlay") {
             BlendMode::Overlay
+        } else if reply.contains("darken") {
+            BlendMode::Darken
+        } else if reply.contains("lighten") {
+            BlendMode::Lighten
+        } else if reply.contains("dodge") {
+            BlendMode::ColorDodge
+        } else if reply.contains("burn") {
+            BlendMode::ColorBurn
+        } else if reply.contains("soft") {
+            BlendMode::SoftLight
+        } else if reply.contains("hard") {
+            BlendMode::HardLight
+        } else if reply.contains("difference") {
+            BlendMode::Difference
+        } else if reply.contains("exclusion") {
+            BlendMode::Exclusion
         } else {
             BlendMode::Normal
         };

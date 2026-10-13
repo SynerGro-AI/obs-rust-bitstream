@@ -18,6 +18,8 @@ pub enum MaskError {
 pub struct Mask {
     name: String,
     inverted: bool,
+    feather: f32,
+    density: f32,
 }
 
 impl Mask {
@@ -28,6 +30,8 @@ impl Mask {
         Ok(Self {
             name: name.to_string(),
             inverted: false,
+            feather: 0.0,
+            density: 1.0,
         })
     }
 
@@ -41,6 +45,28 @@ impl Mask {
 
     pub fn inverted(&self) -> bool {
         self.inverted
+    }
+
+    pub fn set_feather(&mut self, f: f32) {
+        self.feather = f.max(0.0);
+    }
+
+    pub fn feather(&self) -> f32 {
+        self.feather
+    }
+
+    pub fn set_density(&mut self, d: f32) {
+        self.density = d.clamp(0.0, 1.0);
+    }
+
+    pub fn density(&self) -> f32 {
+        self.density
+    }
+
+    /// Effective opacity of the mask at a sample.
+    pub fn apply(&self, sample: f32) -> f32 {
+        let s = if self.inverted { 1.0 - sample } else { sample };
+        (s * self.density).clamp(0.0, 1.0)
     }
 }
 
@@ -115,5 +141,15 @@ mod tests {
         s.get_mut("hard").unwrap().set_inverted(true);
         s.attach("bg", "hard").unwrap();
         assert!(s.mask_of("bg").unwrap().inverted());
+    }
+
+    #[test]
+    fn feather_and_density() {
+        let mut s = MaskSet::new();
+        s.add("soft").unwrap();
+        s.get_mut("soft").unwrap().set_feather(4.0);
+        s.get_mut("soft").unwrap().set_density(0.5);
+        assert_eq!(s.get_mut("soft").unwrap().feather(), 4.0);
+        assert!((s.get_mut("soft").unwrap().apply(1.0) - 0.5).abs() < 0.001);
     }
 }

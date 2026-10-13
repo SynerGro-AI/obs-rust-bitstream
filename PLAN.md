@@ -241,6 +241,7 @@ The pure foundation is solid and tested.
 - **cut_transition** — pure cut transition. Differential wired.
 - **image_source** — pure image source. Differential wired.
 - **text_source** — pure text source. Differential wired.
+- **color_source** — pure color source. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

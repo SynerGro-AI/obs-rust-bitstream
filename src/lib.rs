@@ -331,6 +331,7 @@ pub mod browser_source;
 pub mod media_source;
 pub mod window_capture;
 pub mod display_capture;
+pub mod game_capture;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -567,3 +568,4 @@ pub use browser_source::{BrowserSource, BrowserError};
 pub use media_source::{MediaSource, MediaError};
 pub use window_capture::{WindowCapture, WindowError};
 pub use display_capture::DisplayCapture;
+pub use game_capture::{GameCapture, GameError};

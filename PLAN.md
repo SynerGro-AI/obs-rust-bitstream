@@ -250,6 +250,7 @@ The pure foundation is solid and tested.
 - **audio_input** — pure audio input. Differential wired.
 - **audio_output_source** — pure audio output. Differential wired.
 - **group_source** — pure group source. Differential wired.
+- **organization** — pure organization. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

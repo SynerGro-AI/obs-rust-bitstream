@@ -168,6 +168,7 @@ The pure foundation is solid and tested.
 - **pixel_canvas** — pure pixel canvas. Differential wired.
 - **object3d** — pure 3D object. Differential wired.
 - **smart_skin** — pure drag-and-drop skin. Differential wired.
+- **ai_editor** — pure AI editor access. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

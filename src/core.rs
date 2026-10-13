@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::tally::Tally;
 use crate::multiview::Multiview;
 use crate::studio::Studio;
 use crate::options_menu::OptionsMenu;
@@ -80,6 +81,7 @@ pub struct Core {
     menu: OptionsMenu,
     studio: Studio,
     multiview: Multiview,
+    tally: Tally,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -410,6 +412,14 @@ impl Core {
         &mut self.multiview
     }
 
+    pub fn tally(&self) -> &Tally {
+        &self.tally
+    }
+
+    pub fn tally_mut(&mut self) -> &mut Tally {
+        &mut self.tally
+    }
+
     /// Start a fade from preview to program.
     pub fn fade_to_program(&mut self) {
         self.studio.fade();
@@ -425,6 +435,7 @@ impl Core {
         let switched = self.feed.from_key(input, cameras);
         if let Some(ref cam) = switched {
             let _ = self.multiview.set_live(cam);
+            let _ = self.tally.set_live(cam);
         }
         switched
     }

@@ -161,6 +161,11 @@ impl EditorUi {
         };
         self.add_adjustment(name, kind)
     }
+
+    /// Reach the AI editor from the panel.
+    pub fn ai_editor(&self) -> AiEditor {
+        AiEditor
+    }
 }
 
 #[cfg(test)]
@@ -209,5 +214,13 @@ mod tests {
         ui.add_adjustment_ai(&ai, "auto", "suggest an adjustment")
             .unwrap();
         assert_eq!(ui.adjustment_count(), 1);
+    }
+
+    #[test]
+    fn ai_suite_access() {
+        let ui = EditorUi::new();
+        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
+        let _mode = AiEditor::suggest_blend(&ai, "multiply");
+        let _ = ui.ai_editor();
     }
 }

@@ -486,4 +486,4 @@ pub use virtual_camera::VirtualCamera;
 pub use output_bus::OutputBus;
 pub use frame_clock::FrameClock;
 pub use instant_replay::InstantReplay;
-pub use replay_save::{ReplaySave, SaveError};
+pub use replay_save::{ReplaySave, SaveError, SaveFormat};

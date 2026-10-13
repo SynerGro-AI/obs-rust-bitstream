@@ -6,6 +6,8 @@
 //! Differential: add layer + set blend + attach mask + onion
 //! view round-trips.
 
+use crate::adjustment::{Adjustment, AdjustKind};
+use crate::layer_group::GroupSet;
 use crate::layer_stack::{BlendMode, LayerStack};
 use crate::mask::MaskSet;
 use crate::onion_viewer::{OnionFrame, OnionViewer};
@@ -15,6 +17,8 @@ pub struct EditorUi {
     layers: LayerStack,
     masks: MaskSet,
     onion: OnionViewer,
+    groups: GroupSet,
+    adjustments: Vec<Adjustment>,
 }
 
 impl EditorUi {
@@ -23,6 +27,8 @@ impl EditorUi {
             layers: LayerStack::new(),
             masks: MaskSet::new(),
             onion: OnionViewer::new(),
+            groups: GroupSet::new(),
+            adjustments: Vec::new(),
         }
     }
 
@@ -64,6 +70,25 @@ impl EditorUi {
     pub fn onion_view(&self, current: i32, count: i32) -> Vec<OnionFrame> {
         self.onion.view(current, count)
     }
+
+    pub fn groups(&self) -> &GroupSet {
+        &self.groups
+    }
+
+    pub fn groups_mut(&mut self) -> &mut GroupSet {
+        &mut self.groups
+    }
+
+    /// Add an adjustment layer.
+    pub fn add_adjustment(&mut self, name: &str, kind: AdjustKind) -> Result<(), crate::adjustment::AdjustError> {
+        let a = Adjustment::new(name, kind)?;
+        self.adjustments.push(a);
+        Ok(())
+    }
+
+    pub fn adjustment_count(&self) -> usize {
+        self.adjustments.len()
+    }
 }
 
 #[cfg(test)]
@@ -90,5 +115,16 @@ mod tests {
         ui.layers_mut().add("fg").unwrap();
         ui.set_blend("fg", BlendMode::Screen).unwrap();
         assert_eq!(ui.layers().layers()[0].blend(), BlendMode::Screen);
+    }
+
+    #[test]
+    fn groups_and_adjustments() {
+        let mut ui = EditorUi::new();
+        ui.layers_mut().add("fg").unwrap();
+        ui.groups_mut().add("foreground").unwrap();
+        ui.groups_mut().add_member("foreground", "fg").unwrap();
+        ui.add_adjustment("bright", AdjustKind::Brightness).unwrap();
+        assert_eq!(ui.groups().get("foreground").unwrap().members().len(), 1);
+        assert_eq!(ui.adjustment_count(), 1);
     }
 }

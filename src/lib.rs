@@ -44,6 +44,8 @@
 //! - onion_viewer: pure onion-skin viewer
 //! - mask: pure mask
 //! - editor_ui: pure editor panel
+//! - adjustment: pure adjustment layer
+//! - layer_group: pure layer group
 
 pub mod bitstream;
 pub mod dstr;
@@ -190,6 +192,8 @@ pub mod layer_stack;
 pub mod onion_viewer;
 pub mod mask;
 pub mod editor_ui;
+pub mod adjustment;
+pub mod layer_group;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -335,3 +339,5 @@ pub use layer_stack::{LayerStack, Layer, BlendMode, LayerError};
 pub use onion_viewer::{OnionViewer, OnionFrame};
 pub use mask::{Mask, MaskSet, MaskError};
 pub use editor_ui::EditorUi;
+pub use adjustment::{Adjustment, AdjustKind, AdjustError};
+pub use layer_group::{GroupSet, LayerGroup, GroupError};

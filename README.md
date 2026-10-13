@@ -156,6 +156,8 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **onion_viewer** | Onion viewer | Pure onion-skin edit viewer |
 | **mask** | Mask | Pure layer mask |
 | **editor_ui** | Editor UI | Pure layer / mask / onion panel |
+| **adjustment** | Adjustment | Pure brightness / contrast / hue |
+| **layer_group** | Layer group | Pure layer grouping |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -167,7 +169,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred forty-five foundation modules with tests
+- [x] One hundred forty-seven foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)
@@ -189,7 +191,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [x] Profile pure layer: profile + registry complete
 - [x] Canvas pure layer: canvas + registry complete
 - [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector, ai_animator, physics_sim, learning_pipeline, environment, pilot, flight_session, flight_replay, wind, plane_renderer, camera_follow, view_frame, light, light_rig, camera_rig, camera_cut, material, lighting, material_assign, shaded_render, material_registry, material_factory, materials_lab, periodic_table, compound, reaction)
-- [ ] Video pure layer started (video_timeline, layer_stack, onion_viewer, mask, editor_ui)
+- [ ] Video pure layer started (video_timeline, layer_stack, onion_viewer, mask, editor_ui, adjustment, layer_group)
 - [x] Differential helper wired into modules
 - [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired

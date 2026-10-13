@@ -155,6 +155,8 @@ The pure foundation is solid and tested.
 - **onion_viewer** — pure onion-skin viewer. Differential wired.
 - **mask** — pure mask. Differential wired.
 - **editor_ui** — pure editor panel. Differential wired.
+- **adjustment** — pure adjustment layer. Differential wired.
+- **layer_group** — pure layer group. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

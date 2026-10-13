@@ -322,6 +322,7 @@ pub mod eq_filter;
 pub mod reverb_filter;
 pub mod fade_transition;
 pub mod swipe_transition;
+pub mod slide_transition;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -549,3 +550,4 @@ pub use eq_filter::Eq;
 pub use reverb_filter::Reverb as ReverbFilter;
 pub use fade_transition::FadeTransition;
 pub use swipe_transition::SwipeTransition;
+pub use slide_transition::SlideTransition;

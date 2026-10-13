@@ -159,6 +159,8 @@ The pure foundation is solid and tested.
 - **layer_group** — pure layer group. Differential wired.
 - **selection** — pure selection. Differential wired.
 - **brush** — pure brush. Differential wired.
+- **text_layer** — pure text layer. Differential wired.
+- **transform** — pure transform. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

@@ -48,6 +48,8 @@
 //! - layer_group: pure layer group
 //! - selection: pure selection
 //! - brush: pure brush
+//! - text_layer: pure text layer
+//! - transform: pure transform
 
 pub mod bitstream;
 pub mod dstr;
@@ -198,6 +200,8 @@ pub mod adjustment;
 pub mod layer_group;
 pub mod selection;
 pub mod brush;
+pub mod text_layer;
+pub mod transform;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -347,3 +351,5 @@ pub use adjustment::{Adjustment, AdjustKind, AdjustError};
 pub use layer_group::{GroupSet, LayerGroup, GroupError};
 pub use selection::{Selection, SelectionError};
 pub use brush::{Brush, BrushError};
+pub use text_layer::{TextLayer, TextError};
+pub use transform::Transform as LayerTransform;

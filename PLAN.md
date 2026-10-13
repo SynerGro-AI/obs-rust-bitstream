@@ -176,6 +176,9 @@ The pure foundation is solid and tested.
 - **session** — pure combined session. Differential wired.
 - **preview** — pure session preview. Differential wired.
 - **program** — pure live program. Differential wired.
+- **live_camera** — pure live camera. Differential wired.
+- **ai_operator** — pure AI news crew. Differential wired.
+- **topic_background** — pure topic background. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

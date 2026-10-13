@@ -65,6 +65,9 @@
 //! - session: pure combined session
 //! - preview: pure session preview
 //! - program: pure live program
+//! - live_camera: pure live camera
+//! - ai_operator: pure AI news crew
+//! - topic_background: pure topic background
 
 pub mod bitstream;
 pub mod dstr;
@@ -232,6 +235,9 @@ pub mod audio_output;
 pub mod session;
 pub mod preview;
 pub mod program;
+pub mod live_camera;
+pub mod ai_operator;
+pub mod topic_background;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -398,3 +404,6 @@ pub use audio_output::{AudioOutput, AudioFrame};
 pub use session::{Session, SessionFrame};
 pub use preview::{Preview, PreviewFrame};
 pub use program::Program;
+pub use live_camera::{LiveCamera, CameraError};
+pub use ai_operator::{AiOperator, CrewState};
+pub use topic_background::TopicBackground;

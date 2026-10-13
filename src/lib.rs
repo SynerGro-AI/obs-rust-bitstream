@@ -26,6 +26,7 @@
 //! - periodic_table: pure periodic table
 //! - compound: pure molecule
 //! - reaction: pure chemical reaction
+//! - audio_channel: pure audio channel
 
 pub mod bitstream;
 pub mod dstr;
@@ -154,6 +155,7 @@ pub mod materials_lab;
 pub mod periodic_table;
 pub mod compound;
 pub mod reaction;
+pub mod audio_channel;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -281,3 +283,4 @@ pub use materials_lab::{MaterialsLab, Atom, LabError};
 pub use periodic_table::{PeriodicTable, Element};
 pub use compound::{Compound, CompoundError};
 pub use reaction::{Reaction, ReactionError};
+pub use audio_channel::{AudioChannel, ChannelError};

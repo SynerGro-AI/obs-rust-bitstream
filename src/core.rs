@@ -534,6 +534,16 @@ impl Core {
         &mut self.binds
     }
 
+    /// Bind the standard keys: r record, s stream, v vcam.
+    pub fn bind_defaults(&mut self) {
+        let _ = self.binds.bind("r", "record");
+        let _ = self.binds.bind("s", "stream");
+        let _ = self.binds.bind("v", "vcam");
+        let _ = self.binds.bind("R", "stop_record");
+        let _ = self.binds.bind("S", "stop_stream");
+        let _ = self.binds.bind("V", "stop_vcam");
+    }
+
     /// Press a key and run the bound action. Returns the action name.
     pub fn press(&mut self, key: &str) -> Option<String> {
         let action = self.binds.action(key)?.to_string();

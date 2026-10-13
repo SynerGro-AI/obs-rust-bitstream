@@ -209,6 +209,7 @@ The pure foundation is solid and tested.
 - **export** — pure export. Differential wired.
 - **file_writer** — pure file writer. Differential wired.
 - **share** — pure share. Differential wired.
+- **notify** — pure notification. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

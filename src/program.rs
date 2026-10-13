@@ -12,6 +12,7 @@ use crate::output::OutputFrame;
 use crate::performance::Performance;
 use crate::pixel_canvas::PixelCanvas;
 use crate::session::Session;
+use crate::topic_background::TopicBackground;
 
 pub struct Program;
 
@@ -43,6 +44,18 @@ impl Program {
     ) -> OutputFrame {
         let _crew = AiOperator::run(ai, camera, topic);
         Self::live_performance(performance, camera, canvas)
+    }
+
+    /// Emit a news frame: topic background behind the live camera.
+    pub fn live_news(
+        camera: &LiveCamera,
+        topic: &str,
+        canvas: &mut PixelCanvas,
+    ) -> OutputFrame {
+        let bg = TopicBackground::render(topic);
+        let color = if camera.is_live() { camera.frame() } else { bg };
+        canvas.fill(color.0, color.1, color.2);
+        crate::output::Output::emit(canvas)
     }
 }
 
@@ -89,6 +102,15 @@ mod tests {
         let mut c = PixelCanvas::new(4, 4).unwrap();
         let f = Program::live_with_crew(&ai, &p, &mut cam, "concert", &mut c);
         assert!(cam.zoom() >= 1.0);
+        assert_eq!(f.first, (0.2, 0.4, 0.8));
+    }
+
+    #[test]
+    fn live_news() {
+        let mut cam = LiveCamera::new("desk").unwrap();
+        cam.go_live();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        let f = Program::live_news(&cam, "weather", &mut c);
         assert_eq!(f.first, (0.2, 0.4, 0.8));
     }
 }

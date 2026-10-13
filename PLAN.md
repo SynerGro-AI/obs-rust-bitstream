@@ -252,6 +252,7 @@ The pure foundation is solid and tested.
 - **group_source** — pure group source. Differential wired.
 - **organization** — pure organization. Differential wired.
 - **invite** — pure invite. Differential wired.
+- **role** — pure role. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

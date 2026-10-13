@@ -321,6 +321,21 @@ impl Core {
         Program::live_directed(ai, performance, camera, line, canvas)
     }
 
+    /// See an action and render the scene the director picks.
+    pub fn see_and_show(
+        &mut self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        action: &str,
+        canvas: &mut PixelCanvas,
+    ) -> (crate::output::OutputFrame, crate::ai_director::SceneKind) {
+        self.action.detect(action);
+        self.show.set_topic(action);
+        self.show.go_live();
+        Program::live_directed(ai, performance, camera, action, canvas)
+    }
+
     pub fn sources(&self) -> &SourceRegistry {
         &self.sources
     }

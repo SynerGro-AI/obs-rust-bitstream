@@ -32,6 +32,7 @@ use crate::live_camera::LiveCamera;
 use crate::performance::Performance;
 use crate::program::Program;
 use crate::session::Session;
+use crate::cue_sheet::CueSheet;
 use crate::show_state::{ShowMode, ShowState};
 
 #[derive(Clone, Debug, Default)]
@@ -60,6 +61,7 @@ pub struct Core {
     canvases: CanvasRegistry,
     session: Session,
     show: ShowState,
+    cues: CueSheet,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +143,23 @@ impl Core {
 
     pub fn show_mode(&self) -> ShowMode {
         self.show.mode()
+    }
+
+    pub fn cues(&self) -> &CueSheet {
+        &self.cues
+    }
+
+    pub fn cues_mut(&mut self) -> &mut CueSheet {
+        &mut self.cues
+    }
+
+    /// Advance the rundown and set the show topic.
+    pub fn advance_cue(&mut self) -> Option<String> {
+        let topic = self.cues.next().map(|s| s.to_string());
+        if let Some(ref t) = topic {
+            self.show.set_topic(t);
+        }
+        topic
     }
 
     /// Preview the core's session at a time.

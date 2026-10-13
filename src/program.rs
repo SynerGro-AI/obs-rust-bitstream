@@ -8,6 +8,7 @@
 use crate::ai::AiAssistant;
 use crate::ai_operator::{AiOperator, CrewState};
 use crate::audio_timeline::AudioTimeline;
+use crate::keyer::Keyer;
 use crate::live_camera::LiveCamera;
 use crate::output::OutputFrame;
 use crate::performance::Performance;
@@ -23,14 +24,19 @@ impl Program {
         session.emit(time, canvas).video
     }
 
-    /// Emit a live performance: music video behind the singer.
+    /// Emit a live performance: animation behind the keyed singer.
     pub fn live_performance(
         performance: &Performance,
         camera: &LiveCamera,
         canvas: &mut PixelCanvas,
     ) -> OutputFrame {
         let (bg, singer) = performance.frame(camera);
-        let color = if performance.is_live() { singer } else { bg };
+        let keyer = Keyer::new();
+        let color = if performance.is_live() {
+            keyer.composite(singer, bg)
+        } else {
+            bg
+        };
         canvas.fill(color.0, color.1, color.2);
         crate::output::Output::emit(canvas)
     }

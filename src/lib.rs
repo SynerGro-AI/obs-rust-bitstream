@@ -58,6 +58,7 @@
 //! - object3d: pure 3D object
 //! - smart_skin: pure drag-and-drop skin
 //! - ai_editor: pure AI editor access
+//! - compositor: pure video compositor
 
 pub mod bitstream;
 pub mod dstr;
@@ -218,6 +219,7 @@ pub mod pixel_canvas;
 pub mod object3d;
 pub mod smart_skin;
 pub mod ai_editor;
+pub mod compositor;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -377,3 +379,4 @@ pub use pixel_canvas::{PixelCanvas, PixelError};
 pub use object3d::{Object3D, ObjectError};
 pub use smart_skin::{SmartSkin, SkinError};
 pub use ai_editor::AiEditor;
+pub use compositor::Compositor;

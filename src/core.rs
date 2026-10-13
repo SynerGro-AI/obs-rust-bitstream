@@ -420,9 +420,13 @@ impl Core {
         self.studio.fade_step(dt)
     }
 
-    /// Switch the live camera from an arrow key.
+    /// Switch the live camera and mark it on the multiview.
     pub fn switch_camera(&mut self, input: &crate::input_device::InputDevice, cameras: &[&str]) -> Option<String> {
-        self.feed.from_key(input, cameras)
+        let switched = self.feed.from_key(input, cameras);
+        if let Some(ref cam) = switched {
+            let _ = self.multiview.set_live(cam);
+        }
+        switched
     }
 
     pub fn sources(&self) -> &SourceRegistry {

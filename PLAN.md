@@ -194,6 +194,7 @@ The pure foundation is solid and tested.
 - **scene_switch** — pure scene switch. Differential wired.
 - **multi_angle** — pure multi angle. Differential wired.
 - **multi_monitor** — pure multi monitor. Differential wired.
+- **options_menu** — pure options menu. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

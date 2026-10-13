@@ -193,6 +193,7 @@ The pure foundation is solid and tested.
 - **live_feed** — pure live feed. Differential wired.
 - **scene_switch** — pure scene switch. Differential wired.
 - **multi_angle** — pure multi angle. Differential wired.
+- **multi_monitor** — pure multi monitor. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

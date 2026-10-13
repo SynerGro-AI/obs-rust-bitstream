@@ -194,6 +194,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **live_feed** | Live feed | Pure camera jump |
 | **scene_switch** | Scene switch | Pure scene switching |
 | **multi_angle** | Multi angle | Pure angles per camera |
+| **multi_monitor** | Multi monitor | Pure screens with scenes |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -205,7 +206,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred eighty-three foundation modules with tests
+- [x] One hundred eighty-four foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

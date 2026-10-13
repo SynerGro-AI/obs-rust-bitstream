@@ -31,6 +31,8 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::file_cache::FileCache;
+use crate::fingerprint::FingerprintStore;
 use crate::schedule::Schedule;
 use crate::macro_seq::Macro;
 use crate::log::Log;
@@ -104,6 +106,8 @@ pub struct Core {
     log: Log,
     key_macros: Macro,
     timed: Schedule,
+    fingerprints: FingerprintStore,
+    cache: FileCache,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -678,6 +682,25 @@ impl Core {
             self.timed.cancel(&name);
         }
         n
+    }
+
+    pub fn fingerprints(&self) -> &FingerprintStore {
+        &self.fingerprints
+    }
+
+    pub fn cache(&self) -> &FileCache {
+        &self.cache
+    }
+
+    /// Store a file's bytes and fingerprint.
+    pub fn remember(&mut self, path: &str, bytes: &[u8]) -> Result<(), crate::fingerprint::FingerprintError> {
+        self.cache.store(path, bytes).map_err(|_| crate::fingerprint::FingerprintError::EmptyPath)?;
+        self.fingerprints.store(path, bytes)
+    }
+
+    /// Rebuild a missing file from the cache. Returns the bytes.
+    pub fn rebuild(&self, path: &str) -> Result<&[u8], crate::file_cache::CacheError> {
+        self.cache.rebuild(path)
     }
 
     pub fn log(&self) -> &Log {

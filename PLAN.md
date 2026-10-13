@@ -170,6 +170,7 @@ The pure foundation is solid and tested.
 - **smart_skin** — pure drag-and-drop skin. Differential wired.
 - **ai_editor** — pure AI editor access. Differential wired.
 - **compositor** — pure video compositor. Differential wired.
+- **input_device** — pure input device. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

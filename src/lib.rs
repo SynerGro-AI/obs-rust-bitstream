@@ -59,6 +59,7 @@
 //! - smart_skin: pure drag-and-drop skin
 //! - ai_editor: pure AI editor access
 //! - compositor: pure video compositor
+//! - input_device: pure input device
 
 pub mod bitstream;
 pub mod dstr;
@@ -220,6 +221,7 @@ pub mod object3d;
 pub mod smart_skin;
 pub mod ai_editor;
 pub mod compositor;
+pub mod input_device;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -380,3 +382,4 @@ pub use object3d::{Object3D, ObjectError};
 pub use smart_skin::{SmartSkin, SkinError};
 pub use ai_editor::AiEditor;
 pub use compositor::Compositor;
+pub use input_device::InputDevice;

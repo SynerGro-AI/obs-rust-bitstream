@@ -513,6 +513,12 @@ impl Core {
         crate::share::Share::post(target, &bytes)
     }
 
+    /// Share an export and return the confirmation message.
+    pub fn share_and_confirm(&self, name: &str, path: &str, target: &str) -> Result<String, crate::share::ShareError> {
+        let s = self.share(name, path, target)?;
+        crate::notify::Notify::confirm(&s).map_err(|_| crate::share::ShareError::EmptyTarget)
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

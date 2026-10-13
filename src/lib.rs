@@ -29,6 +29,7 @@
 //! - audio_channel: pure audio channel
 //! - audio_bus: pure audio bus
 //! - audio_effect: pure audio effect
+//! - effect_chain: pure effect chain
 
 pub mod bitstream;
 pub mod dstr;
@@ -160,6 +161,7 @@ pub mod reaction;
 pub mod audio_channel;
 pub mod audio_bus;
 pub mod audio_effect;
+pub mod effect_chain;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -290,3 +292,4 @@ pub use reaction::{Reaction, ReactionError};
 pub use audio_channel::{AudioChannel, ChannelError};
 pub use audio_bus::{AudioBus, BusError};
 pub use audio_effect::{AudioEffect, EffectError};
+pub use effect_chain::{EffectChain, ChainError};

@@ -140,6 +140,7 @@ The pure foundation is solid and tested.
 - **audio_channel** — pure audio channel. Differential wired.
 - **audio_bus** — pure audio bus. Differential wired.
 - **audio_effect** — pure audio effect. Differential wired.
+- **effect_chain** — pure effect chain. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

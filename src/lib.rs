@@ -291,6 +291,7 @@ pub mod output_bus;
 pub mod frame_clock;
 pub mod instant_replay;
 pub mod replay_save;
+pub mod export;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -487,3 +488,4 @@ pub use output_bus::OutputBus;
 pub use frame_clock::FrameClock;
 pub use instant_replay::InstantReplay;
 pub use replay_save::{ReplaySave, SaveError, SaveFormat};
+pub use export::{Export, ExportError};

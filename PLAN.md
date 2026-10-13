@@ -206,6 +206,7 @@ The pure foundation is solid and tested.
 - **frame_clock** — pure frame clock. Differential wired.
 - **instant_replay** — pure instant replay. Differential wired.
 - **replay_save** — pure replay save. Differential wired.
+- **export** — pure export. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

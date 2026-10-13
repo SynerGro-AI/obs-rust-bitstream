@@ -29,6 +29,7 @@ use crate::preview::{Preview, PreviewFrame};
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
+use crate::multiview::Multiview;
 use crate::studio::Studio;
 use crate::options_menu::OptionsMenu;
 use crate::live_feed::LiveFeed;
@@ -78,6 +79,7 @@ pub struct Core {
     feed: LiveFeed,
     menu: OptionsMenu,
     studio: Studio,
+    multiview: Multiview,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -398,6 +400,14 @@ impl Core {
 
     pub fn studio_mode_mut(&mut self) -> &mut Studio {
         &mut self.studio
+    }
+
+    pub fn multiview(&self) -> &Multiview {
+        &self.multiview
+    }
+
+    pub fn multiview_mut(&mut self) -> &mut Multiview {
+        &mut self.multiview
     }
 
     /// Start a fade from preview to program.

@@ -53,14 +53,19 @@ impl Program {
         Self::live_performance(performance, camera, canvas)
     }
 
-    /// Emit a news frame: topic background behind the live camera.
+    /// Emit a news frame: topic background behind the keyed camera.
     pub fn live_news(
         camera: &LiveCamera,
         topic: &str,
         canvas: &mut PixelCanvas,
     ) -> OutputFrame {
         let bg = TopicBackground::render(topic);
-        let color = if camera.is_live() { camera.frame() } else { bg };
+        let keyer = Keyer::new();
+        let color = if camera.is_live() {
+            keyer.composite(camera.frame(), bg)
+        } else {
+            bg
+        };
         canvas.fill(color.0, color.1, color.2);
         crate::output::Output::emit(canvas)
     }

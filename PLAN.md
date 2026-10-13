@@ -214,6 +214,7 @@ The pure foundation is solid and tested.
 - **keybind** — pure keybind. Differential wired.
 - **help** — pure help. Differential wired.
 - **bind_profile** — pure bind profile. Differential wired.
+- **log** — pure log. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

@@ -260,6 +260,20 @@ impl Core {
         (frame, level)
     }
 
+    /// Run a directed show from the current storyboard beat.
+    pub fn run_directed(
+        &mut self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        canvas: &mut PixelCanvas,
+    ) -> (crate::output::OutputFrame, crate::ai_director::SceneKind) {
+        let line = self.board.current().unwrap_or("show").to_string();
+        self.show.set_topic(&line);
+        self.show.go_live();
+        Program::live_directed(ai, performance, camera, &line, canvas)
+    }
+
     pub fn sources(&self) -> &SourceRegistry {
         &self.sources
     }

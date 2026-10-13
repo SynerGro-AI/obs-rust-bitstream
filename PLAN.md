@@ -226,6 +226,7 @@ The pure foundation is solid and tested.
 - **fingerprint** — pure fingerprint. Differential wired.
 - **file_cache** — pure file cache. Differential wired.
 - **color_filter** — pure color filter. Differential wired.
+- **crop_filter** — pure crop filter. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

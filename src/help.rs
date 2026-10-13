@@ -24,17 +24,17 @@ impl Help {
         Self::list(binds).join("\n")
     }
 
-    /// Hover description for a key, Photoshop style.
+    /// Hover description for a key, instructive style.
     pub fn hover(key: &str) -> &'static str {
         match key {
-            "r" => "Start recording the program output (R to stop)",
-            "s" => "Start streaming to the default target (S to stop)",
-            "v" => "Start the virtual camera (V to stop)",
-            "R" => "Stop recording",
-            "S" => "Stop streaming",
-            "V" => "Stop the virtual camera",
-            "?" => "Show this help",
-            _ => "No description",
+            "r" => "Press r to start recording. The program output is captured frame by frame. Press R to stop. The recording is saved as a clip.",
+            "s" => "Press s to start streaming. The program output is sent to the default target. Press S to stop. The stream is live while this is on.",
+            "v" => "Press v to start the virtual camera. Other apps see the program as a camera. Press V to stop.",
+            "?" => "Press ? to see every bound key and what it does.",
+            "R" => "Press R to stop recording. The clip is kept.",
+            "S" => "Press S to stop streaming. The live feed ends.",
+            "V" => "Press V to stop the virtual camera. Other apps no longer see it.",
+            _ => "No description for this key.",
         }
     }
 

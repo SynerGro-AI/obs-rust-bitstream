@@ -259,6 +259,7 @@ pub mod input_device;
 pub mod output;
 pub mod audio_output;
 pub mod session;
+
 pub mod preview;
 pub mod program;
 pub mod live_camera;
@@ -339,6 +340,7 @@ pub mod organization;
 pub mod invite;
 pub mod role;
 pub mod permission;
+pub mod sign_in;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -583,3 +585,4 @@ pub use organization::{Organization, MemberProfile, OrgError, OrgMode};
 pub use invite::{Invite, InviteError};
 pub use role::Role;
 pub use permission::Permission;
+pub use sign_in::{Session as SignIn, SessionError as SignInError};

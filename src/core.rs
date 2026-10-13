@@ -199,20 +199,20 @@ impl Core {
         Program::live_with_crew(ai, performance, camera, topic, canvas)
     }
 
-    /// Run a full show: picture and sound. Sets the show live.
+    /// Run a full show using the current cue as the topic.
     pub fn run_full_show(
         &mut self,
         ai: &AiAssistant,
         performance: &Performance,
         camera: &mut LiveCamera,
         audio: &AudioTimeline,
-        topic: &str,
         time: f32,
         canvas: &mut PixelCanvas,
     ) -> (crate::output::OutputFrame, f32) {
-        self.show.set_topic(topic);
+        let topic = self.cues.current().unwrap_or("show").to_string();
+        self.show.set_topic(&topic);
         self.show.go_live();
-        Program::live_show(ai, performance, camera, audio, topic, time, canvas)
+        Program::live_show(ai, performance, camera, audio, &topic, time, canvas)
     }
 
     pub fn sources(&self) -> &SourceRegistry {

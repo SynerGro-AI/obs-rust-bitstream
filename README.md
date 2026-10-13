@@ -200,6 +200,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **studio_transition** | Studio transition | Pure program/preview fade |
 | **multiview** | Multiview | Pure all cameras at once |
 | **tally** | Tally | Pure live indicator |
+| **program_record** | Program record | Pure program capture |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -211,7 +212,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred eighty-nine foundation modules with tests
+- [x] One hundred ninety foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

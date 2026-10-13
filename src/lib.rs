@@ -88,6 +88,7 @@
 //! - studio_transition: pure studio transition
 //! - multiview: pure multiview
 //! - tally: pure tally
+//! - program_record: pure program recording
 
 pub mod bitstream;
 pub mod dstr;
@@ -278,6 +279,7 @@ pub mod studio;
 pub mod studio_transition;
 pub mod multiview;
 pub mod tally;
+pub mod program_record;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -467,3 +469,4 @@ pub use studio::Studio;
 pub use studio_transition::StudioTransition;
 pub use multiview::{Multiview, ViewError};
 pub use tally::{Tally, TallyError};
+pub use program_record::ProgramRecord;

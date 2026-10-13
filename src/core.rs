@@ -323,6 +323,20 @@ impl Core {
         Program::live_directed(ai, performance, camera, line, canvas)
     }
 
+    /// Hear a line, trigger its effect, and render the scene.
+    pub fn hear_and_effect(
+        &mut self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        line: &str,
+        canvas: &mut PixelCanvas,
+    ) -> (crate::output::OutputFrame, crate::ai_director::SceneKind) {
+        let (frame, kind) = self.hear_and_show(ai, performance, camera, line, canvas);
+        crate::ai_director::AiDirector::trigger(kind, &mut self.effects);
+        (frame, kind)
+    }
+
     /// See an action and render the scene the director picks.
     pub fn see_and_show(
         &mut self,

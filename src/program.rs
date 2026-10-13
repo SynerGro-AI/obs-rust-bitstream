@@ -5,6 +5,8 @@
 //!
 //! Differential: a session with a clip programs red.
 
+use crate::ai::AiAssistant;
+use crate::ai_operator::AiOperator;
 use crate::live_camera::LiveCamera;
 use crate::output::OutputFrame;
 use crate::performance::Performance;
@@ -29,6 +31,18 @@ impl Program {
         let color = if performance.is_live() { singer } else { bg };
         canvas.fill(color.0, color.1, color.2);
         crate::output::Output::emit(canvas)
+    }
+
+    /// Run the AI crew then emit the live performance.
+    pub fn live_with_crew(
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        topic: &str,
+        canvas: &mut PixelCanvas,
+    ) -> OutputFrame {
+        let _crew = AiOperator::run(ai, camera, topic);
+        Self::live_performance(performance, camera, canvas)
     }
 }
 
@@ -62,6 +76,19 @@ mod tests {
         cam.go_live();
         let mut c = PixelCanvas::new(4, 4).unwrap();
         let f = Program::live_performance(&p, &cam, &mut c);
+        assert_eq!(f.first, (0.2, 0.4, 0.8));
+    }
+
+    #[test]
+    fn live_with_crew() {
+        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
+        let mut p = Performance::new("set").unwrap();
+        p.go_live();
+        let mut cam = LiveCamera::new("singer").unwrap();
+        cam.go_live();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        let f = Program::live_with_crew(&ai, &p, &mut cam, "concert", &mut c);
+        assert!(cam.zoom() >= 1.0);
         assert_eq!(f.first, (0.2, 0.4, 0.8));
     }
 }

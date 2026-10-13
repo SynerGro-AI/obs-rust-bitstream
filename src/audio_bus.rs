@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 
 use crate::audio_channel::{AudioChannel, ChannelError};
+use crate::effect_chain::EffectChain;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BusError {
@@ -60,6 +61,19 @@ impl AudioBus {
     pub fn mix_level(&self) -> f32 {
         self.channels.values().map(|c| c.effective_gain()).sum()
     }
+
+    /// Apply an effect chain to the mix level.
+    pub fn mix_through(&self, chain: &EffectChain) -> f32 {
+        let mut g = self.mix_level();
+        // EffectChain applies to a channel; we scale the mix by
+        // the chain's combined gain via a temporary channel.
+        if let Ok(tmp) = AudioChannel::new("mix") {
+            let mut tmp = tmp;
+            tmp.set_gain(g);
+            g = chain.apply(&tmp);
+        }
+        g
+    }
 }
 
 #[cfg(test)]
@@ -90,5 +104,15 @@ mod tests {
         b.get_mut("mic").unwrap().set_gain(0.5);
         b.get_mut("music").unwrap().set_gain(0.5);
         assert!((b.mix_level() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn mix_through_chain() {
+        let mut b = AudioBus::new();
+        b.add("mic").unwrap();
+        let mut chain = EffectChain::new();
+        chain.add("pad").unwrap();
+        chain.get_mut(0).unwrap().set_gain(0.5);
+        assert!((b.mix_through(&chain) - 0.5).abs() < 0.001);
     }
 }

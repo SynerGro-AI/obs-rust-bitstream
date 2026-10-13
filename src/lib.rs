@@ -76,6 +76,7 @@
 //! - ai_director: pure AI scene director
 //! - storyboard: pure storyboard
 //! - speech: pure live speech
+//! - action: pure detected action
 
 pub mod bitstream;
 pub mod dstr;
@@ -254,6 +255,7 @@ pub mod keyer;
 pub mod ai_director;
 pub mod storyboard;
 pub mod speech;
+pub mod action;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -431,3 +433,4 @@ pub use keyer::Keyer;
 pub use ai_director::{AiDirector, SceneKind};
 pub use storyboard::Storyboard;
 pub use speech::Speech;
+pub use action::Action;

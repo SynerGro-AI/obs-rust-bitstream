@@ -327,6 +327,7 @@ pub mod cut_transition;
 pub mod image_source;
 pub mod text_source;
 pub mod color_source;
+pub mod browser_source;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -559,3 +560,4 @@ pub use cut_transition::CutTransition;
 pub use image_source::{ImageSource, ImageError};
 pub use text_source::{TextSource, TextError as TextSourceError};
 pub use color_source::ColorSource;
+pub use browser_source::{BrowserSource, BrowserError};

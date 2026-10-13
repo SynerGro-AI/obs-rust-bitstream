@@ -243,6 +243,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **image_source** | Image source | Pure static image |
 | **text_source** | Text source | Pure text overlay |
 | **color_source** | Color source | Pure solid color |
+| **browser_source** | Browser source | Pure URL holder |
 | **replay_buffer** | Replay buffer | Pure last-N frames |
 
 All have unit tests. C ABI shims keep original quirks where required.
@@ -255,7 +256,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] Two hundred thirty-two foundation modules with tests
+- [x] Two hundred thirty-three foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

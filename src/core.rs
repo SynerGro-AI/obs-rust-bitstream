@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::presence::Presence;
 use crate::audit::Audit;
 use crate::sign_in::Session as SignIn;
 use crate::organization::Organization;
@@ -114,6 +115,7 @@ pub struct Core {
     team: Organization,
     signed_in: SignIn,
     who: Audit,
+    online: Presence,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -737,7 +739,21 @@ impl Core {
 
     /// Sign in as a member.
     pub fn sign_in(&mut self, name: &str, role: &str) -> Result<(), crate::sign_in::SessionError> {
-        self.signed_in.sign_in(name, role)
+        self.signed_in.sign_in(name, role)?;
+        let _ = self.online.join(name);
+        Ok(())
+    }
+
+    /// Sign out.
+    pub fn sign_out(&mut self) {
+        if let Some(name) = self.signed_in.name() {
+            self.online.leave(name);
+        }
+        self.signed_in.sign_out();
+    }
+
+    pub fn presence(&self) -> &Presence {
+        &self.online
     }
 
     /// Can the signed-in member do this action.

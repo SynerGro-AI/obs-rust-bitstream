@@ -32,6 +32,7 @@ use crate::live_camera::LiveCamera;
 use crate::performance::Performance;
 use crate::program::Program;
 use crate::session::Session;
+use crate::show_state::{ShowMode, ShowState};
 
 #[derive(Clone, Debug, Default)]
 pub struct Core {
@@ -58,6 +59,7 @@ pub struct Core {
     current_profile: Option<String>,
     canvases: CanvasRegistry,
     session: Session,
+    show: ShowState,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -127,6 +129,18 @@ impl Core {
 
     pub fn session_mut(&mut self) -> &mut Session {
         &mut self.session
+    }
+
+    pub fn show(&self) -> &ShowState {
+        &self.show
+    }
+
+    pub fn show_mut(&mut self) -> &mut ShowState {
+        &mut self.show
+    }
+
+    pub fn show_mode(&self) -> ShowMode {
+        self.show.mode()
     }
 
     /// Preview the core's session at a time.

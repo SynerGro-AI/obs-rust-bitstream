@@ -5,14 +5,15 @@
 //!
 //! Differential: off -> preview -> live round-trips.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ShowMode {
+    #[default]
     Off,
     Preview,
     Live,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ShowState {
     mode: ShowMode,
     topic: String,
@@ -20,10 +21,7 @@ pub struct ShowState {
 
 impl ShowState {
     pub fn new() -> Self {
-        Self {
-            mode: ShowMode::Off,
-            topic: String::new(),
-        }
+        Self::default()
     }
 
     pub fn mode(&self) -> ShowMode {

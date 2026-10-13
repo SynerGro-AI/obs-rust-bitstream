@@ -35,6 +35,8 @@
 //! - compressor: pure compressor
 //! - limiter: pure limiter
 //! - gate: pure gate
+//! - delay: pure delay
+//! - reverb: pure reverb
 
 pub mod bitstream;
 pub mod dstr;
@@ -172,6 +174,8 @@ pub mod eq;
 pub mod compressor;
 pub mod limiter;
 pub mod gate;
+pub mod delay;
+pub mod reverb;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -308,3 +312,5 @@ pub use eq::{EqBand, EqError};
 pub use compressor::Compressor;
 pub use limiter::Limiter;
 pub use gate::Gate;
+pub use delay::Delay;
+pub use reverb::Reverb;

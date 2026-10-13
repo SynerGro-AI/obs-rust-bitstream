@@ -146,6 +146,8 @@ The pure foundation is solid and tested.
 - **compressor** — pure compressor. Differential wired.
 - **limiter** — pure limiter. Differential wired.
 - **gate** — pure gate. Differential wired.
+- **delay** — pure delay. Differential wired.
+- **reverb** — pure reverb. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

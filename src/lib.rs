@@ -319,6 +319,7 @@ pub mod compressor_filter;
 pub mod limiter_filter;
 pub mod gate_filter;
 pub mod eq_filter;
+pub mod reverb_filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -543,3 +544,4 @@ pub use compressor_filter::Compressor as CompressorFilter;
 pub use limiter_filter::Limiter as LimiterFilter;
 pub use gate_filter::Gate as GateFilter;
 pub use eq_filter::Eq;
+pub use reverb_filter::Reverb as ReverbFilter;

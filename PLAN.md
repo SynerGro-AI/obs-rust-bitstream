@@ -234,6 +234,7 @@ The pure foundation is solid and tested.
 - **limiter_filter** — pure limiter. Differential wired.
 - **gate_filter** — pure gate. Differential wired.
 - **eq_filter** — pure EQ. Differential wired.
+- **reverb_filter** — pure reverb. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

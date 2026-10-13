@@ -312,6 +312,7 @@ pub mod fingerprint;
 pub mod file_cache;
 pub mod color_filter;
 pub mod crop_filter;
+pub mod scale_filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -529,3 +530,4 @@ pub use fingerprint::{FingerprintStore, Fingerprint, FingerprintError};
 pub use file_cache::{FileCache, CacheError};
 pub use color_filter::ColorFilter;
 pub use crop_filter::{CropFilter, CropError};
+pub use scale_filter::{ScaleFilter, ScaleError};

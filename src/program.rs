@@ -6,7 +6,8 @@
 //! Differential: a session with a clip programs red.
 
 use crate::ai::AiAssistant;
-use crate::ai_operator::AiOperator;
+use crate::ai_operator::{AiOperator, CrewState};
+use crate::audio_timeline::AudioTimeline;
 use crate::live_camera::LiveCamera;
 use crate::output::OutputFrame;
 use crate::performance::Performance;
@@ -56,6 +57,22 @@ impl Program {
         let color = if camera.is_live() { camera.frame() } else { bg };
         canvas.fill(color.0, color.1, color.2);
         crate::output::Output::emit(canvas)
+    }
+
+    /// Run the crew and emit picture plus the audio mix.
+    pub fn live_show(
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        audio: &AudioTimeline,
+        topic: &str,
+        time: f32,
+        canvas: &mut PixelCanvas,
+    ) -> (OutputFrame, f32) {
+        let _crew: CrewState = AiOperator::run(ai, camera, topic);
+        let frame = Self::live_performance(performance, camera, canvas);
+        let level = audio.render(time);
+        (frame, level)
     }
 }
 
@@ -112,5 +129,20 @@ mod tests {
         let mut c = PixelCanvas::new(4, 4).unwrap();
         let f = Program::live_news(&cam, "weather", &mut c);
         assert_eq!(f.first, (0.2, 0.4, 0.8));
+    }
+
+    #[test]
+    fn live_show() {
+        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
+        let mut p = Performance::new("set").unwrap();
+        p.go_live();
+        let mut cam = LiveCamera::new("singer").unwrap();
+        cam.go_live();
+        let mut audio = AudioTimeline::new();
+        audio.add("voice", 0.0).unwrap();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        let (frame, level) = Program::live_show(&ai, &p, &mut cam, &audio, "concert", 1.0, &mut c);
+        assert_eq!(frame.first, (0.2, 0.4, 0.8));
+        assert!(level > 0.0);
     }
 }

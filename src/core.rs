@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::keybind::Keybind;
 use crate::frame_clock::FrameClock;
 use crate::virtual_camera::VirtualCamera;
 use crate::program_stream::ProgramStream;
@@ -94,6 +95,7 @@ pub struct Core {
     clock: FrameClock,
     replay: InstantReplay,
     saves: ReplaySave,
+    binds: Keybind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -522,6 +524,29 @@ impl Core {
     /// Current output state.
     pub fn status(&self) -> crate::status::Status {
         crate::status::Status::from(&self.record, &self.stream, &self.vcam)
+    }
+
+    pub fn binds(&self) -> &Keybind {
+        &self.binds
+    }
+
+    pub fn binds_mut(&mut self) -> &mut Keybind {
+        &mut self.binds
+    }
+
+    /// Press a key and run the bound action. Returns the action name.
+    pub fn press(&mut self, key: &str) -> Option<String> {
+        let action = self.binds.action(key)?.to_string();
+        match action.as_str() {
+            "record" => self.start_recording(),
+            "stream" => { let _ = self.start_stream("rtmp://live"); }
+            "vcam" => self.start_vcam(),
+            "stop_record" => self.stop_recording(),
+            "stop_stream" => self.stop_stream(),
+            "stop_vcam" => self.stop_vcam(),
+            _ => {}
+        }
+        Some(action)
     }
 
     /// Start streaming the program to a target.

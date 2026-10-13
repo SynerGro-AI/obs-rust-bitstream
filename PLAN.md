@@ -188,6 +188,7 @@ The pure foundation is solid and tested.
 - **storyboard** — pure storyboard. Differential wired.
 - **speech** — pure live speech. Differential wired.
 - **action** — pure detected action. Differential wired.
+- **effect** — pure scene effect. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

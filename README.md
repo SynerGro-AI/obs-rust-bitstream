@@ -189,6 +189,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **storyboard** | Storyboard | Pure planned story |
 | **speech** | Speech | Pure live speech line |
 | **action** | Action | Pure detected action |
+| **effect** | Effect | Pure scene effect |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -200,7 +201,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred seventy-eight foundation modules with tests
+- [x] One hundred seventy-nine foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

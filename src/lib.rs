@@ -77,6 +77,7 @@
 //! - storyboard: pure storyboard
 //! - speech: pure live speech
 //! - action: pure detected action
+//! - effect: pure scene effect
 
 pub mod bitstream;
 pub mod dstr;
@@ -256,6 +257,7 @@ pub mod ai_director;
 pub mod storyboard;
 pub mod speech;
 pub mod action;
+pub mod effect;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -434,3 +436,4 @@ pub use ai_director::{AiDirector, SceneKind};
 pub use storyboard::Storyboard;
 pub use speech::Speech;
 pub use action::Action;
+pub use effect::{Effect, FxError};

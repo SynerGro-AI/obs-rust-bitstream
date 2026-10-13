@@ -62,6 +62,7 @@
 //! - input_device: pure input device
 //! - output: pure frame output
 //! - audio_output: pure audio output
+//! - session: pure combined session
 
 pub mod bitstream;
 pub mod dstr;
@@ -226,6 +227,7 @@ pub mod compositor;
 pub mod input_device;
 pub mod output;
 pub mod audio_output;
+pub mod session;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -389,3 +391,4 @@ pub use compositor::Compositor;
 pub use input_device::InputDevice;
 pub use output::{Output, OutputFrame};
 pub use audio_output::{AudioOutput, AudioFrame};
+pub use session::{Session, SessionFrame};

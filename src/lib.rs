@@ -325,6 +325,7 @@ pub mod swipe_transition;
 pub mod slide_transition;
 pub mod cut_transition;
 pub mod image_source;
+pub mod text_source;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -555,3 +556,4 @@ pub use swipe_transition::SwipeTransition;
 pub use slide_transition::SlideTransition;
 pub use cut_transition::CutTransition;
 pub use image_source::{ImageSource, ImageError};
+pub use text_source::{TextSource, TextError as TextSourceError};

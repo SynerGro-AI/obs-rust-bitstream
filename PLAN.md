@@ -240,6 +240,7 @@ The pure foundation is solid and tested.
 - **slide_transition** — pure slide transition. Differential wired.
 - **cut_transition** — pure cut transition. Differential wired.
 - **image_source** — pure image source. Differential wired.
+- **text_source** — pure text source. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

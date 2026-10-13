@@ -153,6 +153,18 @@ impl Core {
         Program::live_performance(performance, camera, canvas)
     }
 
+    /// Run the AI crew and go live with a performance.
+    pub fn run_show(
+        &self,
+        ai: &AiAssistant,
+        performance: &Performance,
+        camera: &mut LiveCamera,
+        topic: &str,
+        canvas: &mut PixelCanvas,
+    ) -> crate::output::OutputFrame {
+        Program::live_with_crew(ai, performance, camera, topic, canvas)
+    }
+
     pub fn sources(&self) -> &SourceRegistry {
         &self.sources
     }

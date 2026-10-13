@@ -61,6 +61,7 @@
 //! - compositor: pure video compositor
 //! - input_device: pure input device
 //! - output: pure frame output
+//! - audio_output: pure audio output
 
 pub mod bitstream;
 pub mod dstr;
@@ -224,6 +225,7 @@ pub mod ai_editor;
 pub mod compositor;
 pub mod input_device;
 pub mod output;
+pub mod audio_output;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -386,3 +388,4 @@ pub use ai_editor::AiEditor;
 pub use compositor::Compositor;
 pub use input_device::InputDevice;
 pub use output::{Output, OutputFrame};
+pub use audio_output::{AudioOutput, AudioFrame};

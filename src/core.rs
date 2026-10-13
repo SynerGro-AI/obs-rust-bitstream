@@ -519,6 +519,11 @@ impl Core {
         crate::notify::Notify::confirm(&s).map_err(|_| crate::share::ShareError::EmptyTarget)
     }
 
+    /// Current output state.
+    pub fn status(&self) -> crate::status::Status {
+        crate::status::Status::from(&self.record, &self.stream, &self.vcam)
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

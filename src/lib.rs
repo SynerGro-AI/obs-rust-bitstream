@@ -50,6 +50,8 @@
 //! - brush: pure brush
 //! - text_layer: pure text layer
 //! - transform: pure transform
+//! - curves: pure curves
+//! - filter: pure filter
 
 pub mod bitstream;
 pub mod dstr;
@@ -202,6 +204,8 @@ pub mod selection;
 pub mod brush;
 pub mod text_layer;
 pub mod transform;
+pub mod curves;
+pub mod filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -353,3 +357,5 @@ pub use selection::{Selection, SelectionError};
 pub use brush::{Brush, BrushError};
 pub use text_layer::{TextLayer, TextError};
 pub use transform::Transform as LayerTransform;
+pub use curves::Curves;
+pub use filter::{Filter, FilterKind, FilterError as ImageFilterError};

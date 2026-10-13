@@ -6,6 +6,7 @@
 //! Differential: "sunset" picks sunset, "shootout" picks western.
 
 use crate::ai::AiAssistant;
+use crate::effect_list::EffectList;
 use crate::storyboard::Storyboard;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +57,19 @@ impl AiDirector {
             None => SceneKind::Default,
         }
     }
+
+    /// Trigger the effect that matches a scene kind.
+    pub fn trigger(kind: SceneKind, list: &mut EffectList) {
+        let name = match kind {
+            SceneKind::WeatherMap => "weather",
+            SceneKind::Sunset => "sunset",
+            SceneKind::Western => "western",
+            SceneKind::LiveCamera => "live",
+            SceneKind::Default => return,
+        };
+        let _ = list.add(name);
+        let _ = list.trigger(name, 1.0);
+    }
 }
 
 #[cfg(test)]
@@ -86,5 +100,12 @@ mod tests {
         let mut board = Storyboard::new();
         board.add("sunset");
         assert_eq!(AiDirector::from_board(&ai, &board), SceneKind::Sunset);
+    }
+
+    #[test]
+    fn trigger() {
+        let mut list = EffectList::new();
+        AiDirector::trigger(SceneKind::Western, &mut list);
+        assert!(list.get("western").unwrap().active());
     }
 }

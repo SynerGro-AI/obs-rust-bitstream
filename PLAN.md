@@ -205,6 +205,7 @@ The pure foundation is solid and tested.
 - **output_bus** — pure output bus. Differential wired.
 - **frame_clock** — pure frame clock. Differential wired.
 - **instant_replay** — pure instant replay. Differential wired.
+- **replay_save** — pure replay save. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

@@ -186,6 +186,7 @@ The pure foundation is solid and tested.
 - **keyer** — pure background keyer. Differential wired.
 - **ai_director** — pure AI scene director. Differential wired.
 - **storyboard** — pure storyboard. Differential wired.
+- **speech** — pure live speech. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

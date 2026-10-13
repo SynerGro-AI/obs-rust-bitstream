@@ -224,6 +224,7 @@ The pure foundation is solid and tested.
 - **deinterlace** — pure deinterlace. Differential wired.
 - **missing_files** — pure missing files. Differential wired.
 - **fingerprint** — pure fingerprint. Differential wired.
+- **file_cache** — pure file cache. Differential wired.
 - **replay_buffer** — pure replay buffer. Differential wired.
 
 ## Data pure layer (started)

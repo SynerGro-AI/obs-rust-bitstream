@@ -6,6 +6,7 @@
 //! Differential: "sunset" picks sunset, "shootout" picks western.
 
 use crate::ai::AiAssistant;
+use crate::storyboard::Storyboard;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SceneKind {
@@ -47,6 +48,14 @@ impl AiDirector {
             SceneKind::Default => (0.1, 0.1, 0.15),
         }
     }
+
+    /// Pick a scene from the current storyboard beat.
+    pub fn from_board(ai: &AiAssistant, board: &Storyboard) -> SceneKind {
+        match board.current() {
+            Some(line) => Self::pick(ai, line),
+            None => SceneKind::Default,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -69,5 +78,13 @@ mod tests {
         assert_eq!(w, SceneKind::WeatherMap);
         assert_eq!(t, SceneKind::LiveCamera);
         assert_ne!(AiDirector::color(w), AiDirector::color(t));
+    }
+
+    #[test]
+    fn from_board() {
+        let ai = AiAssistant::new(AiConfig::seraphina());
+        let mut board = Storyboard::new();
+        board.add("sunset");
+        assert_eq!(AiDirector::from_board(&ai, &board), SceneKind::Sunset);
     }
 }

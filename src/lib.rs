@@ -64,6 +64,7 @@
 //! - audio_output: pure audio output
 //! - session: pure combined session
 //! - preview: pure session preview
+//! - program: pure live program
 
 pub mod bitstream;
 pub mod dstr;
@@ -230,6 +231,7 @@ pub mod output;
 pub mod audio_output;
 pub mod session;
 pub mod preview;
+pub mod program;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -395,3 +397,4 @@ pub use output::{Output, OutputFrame};
 pub use audio_output::{AudioOutput, AudioFrame};
 pub use session::{Session, SessionFrame};
 pub use preview::{Preview, PreviewFrame};
+pub use program::Program;

@@ -18,6 +18,7 @@ pub struct SessionFrame {
     pub audio: AudioFrame,
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct Session {
     video: VideoTimeline,
     audio: AudioTimeline,
@@ -25,10 +26,7 @@ pub struct Session {
 
 impl Session {
     pub fn new() -> Self {
-        Self {
-            video: VideoTimeline::new(),
-            audio: AudioTimeline::new(),
-        }
+        Self::default()
     }
 
     pub fn video_mut(&mut self) -> &mut VideoTimeline {

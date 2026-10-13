@@ -24,6 +24,7 @@ use crate::output_registry::OutputRegistry;
 use crate::scene_registry::SceneRegistry;
 use crate::service_registry::ServiceRegistry;
 use crate::source_registry::SourceRegistry;
+use crate::session::Session;
 
 #[derive(Clone, Debug, Default)]
 pub struct Core {
@@ -49,6 +50,7 @@ pub struct Core {
     profiles: ProfileRegistry,
     current_profile: Option<String>,
     canvases: CanvasRegistry,
+    session: Session,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,6 +112,14 @@ impl Core {
             crate::module::ModuleError::EmptyId => CoreError::EmptyName,
             crate::module::ModuleError::Duplicate => CoreError::Duplicate,
         })
+    }
+
+    pub fn session(&self) -> &Session {
+        &self.session
+    }
+
+    pub fn session_mut(&mut self) -> &mut Session {
+        &mut self.session
     }
 
     pub fn sources(&self) -> &SourceRegistry {

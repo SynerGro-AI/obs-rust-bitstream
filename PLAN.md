@@ -166,6 +166,7 @@ The pure foundation is solid and tested.
 - **smart_object** — pure smart object. Differential wired.
 - **history** — pure undo / redo. Differential wired.
 - **pixel_canvas** — pure pixel canvas. Differential wired.
+- **object3d** — pure 3D object. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

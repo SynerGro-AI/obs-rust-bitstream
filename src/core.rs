@@ -507,6 +507,12 @@ impl Core {
         Ok(crate::file_writer::FileWriter::encode(&e))
     }
 
+    /// Share an export to a target.
+    pub fn share(&self, name: &str, path: &str, target: &str) -> Result<crate::share::Share, crate::share::ShareError> {
+        let bytes = self.export_bytes(name, path).map_err(|_| crate::share::ShareError::EmptyPayload)?;
+        crate::share::Share::post(target, &bytes)
+    }
+
     /// Start streaming the program to a target.
     pub fn start_stream(&mut self, target: &str) -> Result<(), crate::program_stream::StreamError> {
         self.stream.start(target)

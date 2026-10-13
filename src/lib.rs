@@ -56,6 +56,7 @@
 //! - history: pure undo / redo
 //! - pixel_canvas: pure pixel canvas
 //! - object3d: pure 3D object
+//! - smart_skin: pure drag-and-drop skin
 
 pub mod bitstream;
 pub mod dstr;
@@ -214,6 +215,7 @@ pub mod smart_object;
 pub mod history;
 pub mod pixel_canvas;
 pub mod object3d;
+pub mod smart_skin;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -371,3 +373,4 @@ pub use smart_object::{SmartObject, SmartError};
 pub use history::History;
 pub use pixel_canvas::{PixelCanvas, PixelError};
 pub use object3d::{Object3D, ObjectError};
+pub use smart_skin::{SmartSkin, SkinError};

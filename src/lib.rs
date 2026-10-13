@@ -80,6 +80,8 @@
 //! - effect: pure scene effect
 //! - effect_list: pure effect list
 //! - live_feed: pure live feed
+//! - scene_switch: pure scene switch
+//! - multi_angle: pure multi angle
 
 pub mod bitstream;
 pub mod dstr;
@@ -262,6 +264,8 @@ pub mod action;
 pub mod effect;
 pub mod effect_list;
 pub mod live_feed;
+pub mod scene_switch;
+pub mod multi_angle;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -443,3 +447,5 @@ pub use action::Action;
 pub use effect::{Effect, FxError};
 pub use effect_list::{EffectList, ListError};
 pub use live_feed::{LiveFeed, FeedError};
+pub use scene_switch::{SceneSwitch, SwitchError};
+pub use multi_angle::{MultiAngle, AngleError};

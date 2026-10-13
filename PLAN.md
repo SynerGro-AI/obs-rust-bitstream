@@ -191,6 +191,8 @@ The pure foundation is solid and tested.
 - **effect** — pure scene effect. Differential wired.
 - **effect_list** — pure effect list. Differential wired.
 - **live_feed** — pure live feed. Differential wired.
+- **scene_switch** — pure scene switch. Differential wired.
+- **multi_angle** — pure multi angle. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

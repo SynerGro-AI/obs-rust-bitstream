@@ -198,6 +198,7 @@ The pure foundation is solid and tested.
 - **studio** — pure studio mode. Differential wired.
 - **studio_transition** — pure studio transition. Differential wired.
 - **multiview** — pure multiview. Differential wired.
+- **tally** — pure tally. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

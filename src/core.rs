@@ -549,6 +549,16 @@ impl Core {
         crate::help::Help::text(&self.binds)
     }
 
+    /// Rebind a key to a new action.
+    pub fn rebind(&mut self, key: &str, action: &str) -> Result<(), crate::keybind::KeybindError> {
+        self.binds.rebind(key, action)
+    }
+
+    /// Remove a key binding.
+    pub fn unbind(&mut self, key: &str) {
+        self.binds.unbind(key);
+    }
+
     /// Hover description for a key.
     pub fn hover(&self, key: &str) -> &'static str {
         crate::help::Help::hover(key)

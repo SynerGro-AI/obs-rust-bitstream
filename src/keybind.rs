@@ -35,6 +35,22 @@ impl Keybind {
         self.binds.get(key).map(|s| s.as_str())
     }
 
+    /// Rebind a key to a new action. Same as bind, but named
+    /// for the user who wants to customize.
+    pub fn rebind(&mut self, key: &str, action: &str) -> Result<(), KeybindError> {
+        self.bind(key, action)
+    }
+
+    /// Remove a key binding.
+    pub fn unbind(&mut self, key: &str) {
+        self.binds.remove(key);
+    }
+
+    /// All bound keys.
+    pub fn keys(&self) -> Vec<&str> {
+        self.binds.keys().map(|s| s.as_str()).collect()
+    }
+
     pub fn count(&self) -> usize {
         self.binds.len()
     }
@@ -64,5 +80,15 @@ mod tests {
         h.bind("v", "vcam").unwrap();
         assert_eq!(h.action("s"), Some("stream"));
         assert_eq!(h.count(), 3);
+    }
+
+    #[test]
+    fn customize() {
+        let mut h = Keybind::new();
+        h.bind("r", "record").unwrap();
+        h.rebind("r", "stream").unwrap();
+        assert_eq!(h.action("r"), Some("stream"));
+        h.unbind("r");
+        assert!(h.action("r").is_none());
     }
 }

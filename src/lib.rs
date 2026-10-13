@@ -84,6 +84,7 @@
 //! - multi_angle: pure multi angle
 //! - multi_monitor: pure multi monitor
 //! - options_menu: pure options menu
+//! - studio: pure studio mode
 
 pub mod bitstream;
 pub mod dstr;
@@ -270,6 +271,7 @@ pub mod scene_switch;
 pub mod multi_angle;
 pub mod multi_monitor;
 pub mod options_menu;
+pub mod studio;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -455,3 +457,4 @@ pub use scene_switch::{SceneSwitch, SwitchError};
 pub use multi_angle::{MultiAngle, AngleError};
 pub use multi_monitor::{MultiMonitor, ScreenError};
 pub use options_menu::{OptionsMenu, MenuError};
+pub use studio::Studio;

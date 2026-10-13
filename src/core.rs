@@ -31,6 +31,7 @@ use crate::audio_timeline::AudioTimeline;
 use crate::effect_list::EffectList;
 use crate::replay_save::{ReplaySave, SaveFormat};
 use crate::instant_replay::InstantReplay;
+use crate::schedule::Schedule;
 use crate::macro_seq::Macro;
 use crate::log::Log;
 use crate::bind_profile::BindProfile;
@@ -102,6 +103,7 @@ pub struct Core {
     bind_profile: BindProfile,
     log: Log,
     key_macros: Macro,
+    timed: Schedule,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -650,6 +652,32 @@ impl Core {
     /// All macro names.
     pub fn macro_names(&self) -> Vec<&str> {
         self.key_macros.names()
+    }
+
+    pub fn schedule(&self) -> &Schedule {
+        &self.timed
+    }
+
+    /// Schedule a macro at a frame.
+    pub fn schedule_at(&mut self, name: &str, frame: u64) -> Result<(), crate::schedule::ScheduleError> {
+        self.timed.at(name, frame)
+    }
+
+    /// Schedule a macro at a time and date.
+    pub fn schedule_datetime(&mut self, name: &str, datetime: &str) -> Result<(), crate::schedule::ScheduleError> {
+        self.timed.at_datetime(name, datetime)
+    }
+
+    /// Run macros due at this frame. Returns how many ran.
+    pub fn run_due(&mut self, frame: u64) -> usize {
+        let due = self.timed.due_at(frame);
+        let names: Vec<String> = due.iter().map(|s| s.to_string()).collect();
+        let mut n = 0;
+        for name in names {
+            n += self.play_macro(&name);
+            self.timed.cancel(&name);
+        }
+        n
     }
 
     pub fn log(&self) -> &Log {

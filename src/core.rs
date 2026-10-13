@@ -400,6 +400,16 @@ impl Core {
         &mut self.studio
     }
 
+    /// Start a fade from preview to program.
+    pub fn fade_to_program(&mut self) {
+        self.studio.fade();
+    }
+
+    /// Advance the fade. Returns true when complete.
+    pub fn fade_step(&mut self, dt: f32) -> bool {
+        self.studio.fade_step(dt)
+    }
+
     /// Switch the live camera from an arrow key.
     pub fn switch_camera(&mut self, input: &crate::input_device::InputDevice, cameras: &[&str]) -> Option<String> {
         self.feed.from_key(input, cameras)

@@ -5,7 +5,9 @@
 //!
 //! Differential: a red canvas emits a red checksum.
 
+use crate::compositor::Compositor;
 use crate::pixel_canvas::PixelCanvas;
+use crate::video_timeline::VideoTimeline;
 
 #[derive(Clone, Debug)]
 pub struct OutputFrame {
@@ -25,6 +27,16 @@ impl Output {
             height: canvas.height(),
             first,
         }
+    }
+
+    /// Compose a timeline at a time onto a canvas and emit.
+    pub fn emit_timeline(
+        timeline: &VideoTimeline,
+        time: f32,
+        canvas: &mut PixelCanvas,
+    ) -> OutputFrame {
+        Compositor::paint(timeline, time, canvas);
+        Self::emit(canvas)
     }
 }
 
@@ -46,5 +58,14 @@ mod tests {
         let c = PixelCanvas::new(2, 2).unwrap();
         let f = Output::emit(&c);
         assert_eq!(f.first, (0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn emit_timeline() {
+        let mut t = VideoTimeline::new();
+        t.add("intro", 0.0, 2.0, "cam1").unwrap();
+        let mut c = PixelCanvas::new(4, 4).unwrap();
+        let f = Output::emit_timeline(&t, 1.0, &mut c);
+        assert_eq!(f.first, (1.0, 0.0, 0.0));
     }
 }

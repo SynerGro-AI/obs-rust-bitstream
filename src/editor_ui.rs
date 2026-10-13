@@ -8,6 +8,7 @@
 
 use crate::adjustment::{Adjustment, AdjustKind};
 use crate::ai::AiAssistant;
+use crate::history::History;
 use crate::layer_group::GroupSet;
 use crate::layer_stack::{BlendMode, LayerStack};
 use crate::mask::MaskSet;
@@ -20,6 +21,7 @@ pub struct EditorUi {
     onion: OnionViewer,
     groups: GroupSet,
     adjustments: Vec<Adjustment>,
+    history: History,
 }
 
 impl EditorUi {
@@ -30,6 +32,7 @@ impl EditorUi {
             onion: OnionViewer::new(),
             groups: GroupSet::new(),
             adjustments: Vec::new(),
+            history: History::new(),
         }
     }
 
@@ -128,7 +131,19 @@ impl EditorUi {
         self.layers.set_blend(layer, mode)
     }
 
-    /// Ask the assistant for an adjustment kind and add it.
+    pub fn history(&self) -> &History {
+        &self.history
+    }
+
+    pub fn history_mut(&mut self) -> &mut History {
+        &mut self.history
+    }
+
+    /// Record an edit step.
+    pub fn record(&mut self, step: &str) {
+        self.history.push(step);
+    }
+
     pub fn add_adjustment_ai(
         &mut self,
         ai: &AiAssistant,

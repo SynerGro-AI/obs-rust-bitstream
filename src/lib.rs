@@ -53,6 +53,7 @@
 //! - curves: pure curves
 //! - filter: pure filter
 //! - smart_object: pure smart object
+//! - history: pure undo / redo
 
 pub mod bitstream;
 pub mod dstr;
@@ -208,6 +209,7 @@ pub mod transform;
 pub mod curves;
 pub mod filter;
 pub mod smart_object;
+pub mod history;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -362,3 +364,4 @@ pub use transform::Transform as LayerTransform;
 pub use curves::Curves;
 pub use filter::{Filter, FilterKind, FilterError as ImageFilterError};
 pub use smart_object::{SmartObject, SmartError};
+pub use history::History;

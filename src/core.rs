@@ -26,6 +26,9 @@ use crate::service_registry::ServiceRegistry;
 use crate::source_registry::SourceRegistry;
 use crate::pixel_canvas::PixelCanvas;
 use crate::preview::{Preview, PreviewFrame};
+use crate::live_camera::LiveCamera;
+use crate::performance::Performance;
+use crate::program::Program;
 use crate::session::Session;
 
 #[derive(Clone, Debug, Default)]
@@ -127,6 +130,26 @@ impl Core {
     /// Preview the core's session at a time.
     pub fn preview(&self, time: f32, canvas: &mut PixelCanvas) -> PreviewFrame {
         Preview::show(&self.session, time, canvas)
+    }
+
+    /// Go live with a news camera and topic.
+    pub fn go_live_news(
+        &self,
+        camera: &LiveCamera,
+        topic: &str,
+        canvas: &mut PixelCanvas,
+    ) -> crate::output::OutputFrame {
+        Program::live_news(camera, topic, canvas)
+    }
+
+    /// Go live with a performance.
+    pub fn go_live_performance(
+        &self,
+        performance: &Performance,
+        camera: &LiveCamera,
+        canvas: &mut PixelCanvas,
+    ) -> crate::output::OutputFrame {
+        Program::live_performance(performance, camera, canvas)
     }
 
     pub fn sources(&self) -> &SourceRegistry {

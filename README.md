@@ -203,6 +203,7 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 | **program_record** | Program record | Pure program capture |
 | **program_stream** | Program stream | Pure program stream |
 | **virtual_camera** | Virtual camera | Pure virtual cam output |
+| **output_bus** | Output bus | Pure fan-out to record, stream, vcam |
 
 All have unit tests. C ABI shims keep original quirks where required.
 
@@ -214,7 +215,7 @@ as you discover more quirks — the next parse gets smarter automatically.
 
 ## Status
 
-- [x] One hundred ninety-two foundation modules with tests
+- [x] One hundred ninety-three foundation modules with tests
 - [x] Util foundation complete (high-leverage pure surface covered)
 - [x] Media-io pure layer solid (frame-rate through audio-mixer)
 - [x] Graphics pure layer solid (vec2 through half)

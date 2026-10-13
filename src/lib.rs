@@ -91,6 +91,7 @@
 //! - program_record: pure program recording
 //! - program_stream: pure program stream
 //! - virtual_camera: pure virtual camera
+//! - output_bus: pure output bus
 
 pub mod bitstream;
 pub mod dstr;
@@ -284,6 +285,7 @@ pub mod tally;
 pub mod program_record;
 pub mod program_stream;
 pub mod virtual_camera;
+pub mod output_bus;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -476,3 +478,4 @@ pub use tally::{Tally, TallyError};
 pub use program_record::ProgramRecord;
 pub use program_stream::{ProgramStream, StreamError};
 pub use virtual_camera::VirtualCamera;
+pub use output_bus::OutputBus;

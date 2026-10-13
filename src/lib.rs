@@ -52,6 +52,7 @@
 //! - transform: pure transform
 //! - curves: pure curves
 //! - filter: pure filter
+//! - smart_object: pure smart object
 
 pub mod bitstream;
 pub mod dstr;
@@ -206,6 +207,7 @@ pub mod text_layer;
 pub mod transform;
 pub mod curves;
 pub mod filter;
+pub mod smart_object;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -359,3 +361,4 @@ pub use text_layer::{TextLayer, TextError};
 pub use transform::Transform as LayerTransform;
 pub use curves::Curves;
 pub use filter::{Filter, FilterKind, FilterError as ImageFilterError};
+pub use smart_object::{SmartObject, SmartError};

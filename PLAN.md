@@ -163,6 +163,7 @@ The pure foundation is solid and tested.
 - **transform** — pure transform. Differential wired.
 - **curves** — pure curves. Differential wired.
 - **filter** — pure filter. Differential wired.
+- **smart_object** — pure smart object. Differential wired.
 
 ## Data pure layer (started)
 - **obs_data** — pure settings bag with defaults. Differential wired.

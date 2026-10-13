@@ -7,6 +7,7 @@
 //! view round-trips.
 
 use crate::adjustment::{Adjustment, AdjustKind};
+use crate::ai::AiAssistant;
 use crate::layer_group::GroupSet;
 use crate::layer_stack::{BlendMode, LayerStack};
 use crate::mask::MaskSet;
@@ -89,6 +90,45 @@ impl EditorUi {
     pub fn adjustment_count(&self) -> usize {
         self.adjustments.len()
     }
+
+    /// Ask the assistant for a blend mode and apply it.
+    /// Falls back to Normal if the reply is not a known mode.
+    pub fn set_blend_ai(
+        &mut self,
+        ai: &AiAssistant,
+        layer: &str,
+        prompt: &str,
+    ) -> Result<(), crate::layer_stack::LayerError> {
+        let reply = ai.assist(prompt).to_lowercase();
+        let mode = if reply.contains("multiply") {
+            BlendMode::Multiply
+        } else if reply.contains("screen") {
+            BlendMode::Screen
+        } else if reply.contains("overlay") {
+            BlendMode::Overlay
+        } else {
+            BlendMode::Normal
+        };
+        self.layers.set_blend(layer, mode)
+    }
+
+    /// Ask the assistant for an adjustment kind and add it.
+    pub fn add_adjustment_ai(
+        &mut self,
+        ai: &AiAssistant,
+        name: &str,
+        prompt: &str,
+    ) -> Result<(), crate::adjustment::AdjustError> {
+        let reply = ai.assist(prompt).to_lowercase();
+        let kind = if reply.contains("contrast") {
+            AdjustKind::Contrast
+        } else if reply.contains("hue") {
+            AdjustKind::Hue
+        } else {
+            AdjustKind::Brightness
+        };
+        self.add_adjustment(name, kind)
+    }
 }
 
 #[cfg(test)]
@@ -125,6 +165,17 @@ mod tests {
         ui.groups_mut().add_member("foreground", "fg").unwrap();
         ui.add_adjustment("bright", AdjustKind::Brightness).unwrap();
         assert_eq!(ui.groups().get("foreground").unwrap().members().len(), 1);
+        assert_eq!(ui.adjustment_count(), 1);
+    }
+
+    #[test]
+    fn ai_blend_and_adjust() {
+        let mut ui = EditorUi::new();
+        ui.layers_mut().add("fg").unwrap();
+        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
+        ui.set_blend_ai(&ai, "fg", "suggest a blend").unwrap();
+        ui.add_adjustment_ai(&ai, "auto", "suggest an adjustment")
+            .unwrap();
         assert_eq!(ui.adjustment_count(), 1);
     }
 }

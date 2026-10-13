@@ -6,8 +6,9 @@
 //! Differential: add layer + set blend + attach mask + onion
 //! view round-trips.
 
-use crate::adjustment::{Adjustment, AdjustKind};
 use crate::ai::AiAssistant;
+use crate::ai_editor::AiEditor;
+use crate::adjustment::{Adjustment, AdjustKind};
 use crate::history::History;
 use crate::layer_group::GroupSet;
 use crate::layer_stack::{BlendMode, LayerStack};

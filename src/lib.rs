@@ -310,6 +310,7 @@ pub mod deinterlace;
 pub mod missing_files;
 pub mod fingerprint;
 pub mod file_cache;
+pub mod color_filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -525,3 +526,4 @@ pub use deinterlace::Deinterlace;
 pub use missing_files::{MissingFiles, MissingError};
 pub use fingerprint::{FingerprintStore, Fingerprint, FingerprintError};
 pub use file_cache::{FileCache, CacheError};
+pub use color_filter::ColorFilter;

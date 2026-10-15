@@ -368,6 +368,7 @@ pub mod blend;
 pub mod color_balance;
 pub mod pixel_selection;
 pub mod photo_layers;
+pub mod ai_tools;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -640,3 +641,4 @@ pub use blend::{Blend, BlendMode as PhotoBlend, BlendError};
 pub use color_balance::{ColorBalance, BalanceError};
 pub use pixel_selection::{Selection as PixelSelection, SelectError as PixelSelectError};
 pub use photo_layers::{LayerStack as PhotoLayers, Layer as PhotoLayer, LayerError as PhotoLayerError};
+pub use ai_tools::{AiTools, CurveSuggestion, BalanceSuggestion, EffectSuggestion};

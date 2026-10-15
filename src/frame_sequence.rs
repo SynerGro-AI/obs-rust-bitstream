@@ -42,6 +42,10 @@ impl FrameSequence {
     pub fn frames(&self) -> &[VideoFrame] {
         &self.frames
     }
+
+    pub fn frames_mut(&mut self) -> &mut [VideoFrame] {
+        &mut self.frames
+    }
 }
 
 #[cfg(test)]

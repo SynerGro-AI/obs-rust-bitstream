@@ -46,7 +46,7 @@ fn main() {
                 let _ = FrameFilter::brightness(&mut f, 5);
                 let _ = Draw::rect(&mut f, 100, 100, 200, 80, 255);
                 let _ = TextDraw::text(&mut f, 110, 120, "HD", 0);
-                let _ = TextOverlay::draw(&mut f, 20, 20, "LIVE", 255);
+                let _ = TextOverlay::bordered(&mut f, 20, 20, "LIVE", 255, 200, 2);
                 seq.push(f);
             }
         }

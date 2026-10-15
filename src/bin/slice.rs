@@ -19,7 +19,7 @@ fn main() {
         eprintln!("timeline failed");
         std::process::exit(1);
     }
-    let mut seq = match SceneRenderer::sequence(&timeline, 30, 1.0 / 15.0, 64, 48) {
+    let mut seq = match SceneRenderer::sequence(&timeline, 30, 1.0 / 15.0, 1920, 1080) {
         Ok(s) => s,
         Err(_) => {
             eprintln!("render failed");
@@ -39,7 +39,7 @@ fn main() {
     }
     // Append frames from a synthetic camera so the file
     // contains time-varying content.
-    if let Ok(cam) = SyntheticCamera::new(64, 48) {
+    if let Ok(cam) = SyntheticCamera::new(1920, 1080) {
         for i in 0..15 {
             let t = i as f32 / 15.0;
             if let Ok(mut f) = cam.frame(t) {

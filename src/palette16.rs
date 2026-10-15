@@ -4,7 +4,7 @@
 //!
 //! Differential: index 1 is blue, index 15 is white.
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb {
     pub r: u8,
     pub g: u8,

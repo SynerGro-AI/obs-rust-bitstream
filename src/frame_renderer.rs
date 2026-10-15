@@ -7,6 +7,7 @@
 //! luminance of red.
 
 use crate::color_source::ColorSource;
+use crate::pattern_source::PatternSource;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
 
@@ -18,6 +19,28 @@ pub enum RenderError {
 pub struct FrameRenderer;
 
 impl FrameRenderer {
+    /// Render a pattern into a Y800 frame.
+    pub fn pattern(source: &PatternSource) -> Result<VideoFrame, RenderError> {
+        let width = source.width();
+        let height = source.height();
+        if width == 0 || height == 0 {
+            return Err(RenderError::ZeroSize);
+        }
+        let mut frame = VideoFrame::new(VideoFormat::Y800, width, height)
+            .ok_or(RenderError::ZeroSize)?;
+        if let Some(plane) = frame.planes.get_mut(0) {
+            for y in 0..height {
+                for x in 0..width {
+                    let i = (y * width + x) as usize;
+                    if i < plane.len() {
+                        plane[i] = source.sample(x, y);
+                    }
+                }
+            }
+        }
+        Ok(frame)
+    }
+
     /// Render a solid color into a Y800 frame. Luminance is
     /// the BT.601 approximation of the RGB color.
     pub fn solid(color: &ColorSource, width: u32, height: u32) -> Result<VideoFrame, RenderError> {

@@ -1,27 +1,28 @@
 //! Vertical slice binary.
 //!
-//! Loads one pure ColorSource, renders frames, and writes
-//! them with RawWriter. No capture, no encoder, no UI.
-//! Uses only library modules.
+//! Builds a pure timeline, renders frames through the
+//! compositor, and writes them with RawWriter.
+//! No capture, no encoder, no UI. Uses only library modules.
 
-use obs_rust_bitstream::{
-    ColorSource, FrameRenderer, FrameSequence, RawWriter,
-};
+use obs_rust_bitstream::{RawWriter, SceneRenderer, VideoTimeline};
 use std::fs::File;
 use std::io::BufWriter;
 
 fn main() {
-    let color = ColorSource::new(255, 64, 0);
-    let mut seq = FrameSequence::new();
-    for _ in 0..30 {
-        match FrameRenderer::solid(&color, 64, 48) {
-            Ok(frame) => seq.push(frame),
-            Err(_) => {
-                eprintln!("render failed");
-                std::process::exit(1);
-            }
-        }
+    let mut timeline = VideoTimeline::new();
+    if timeline.add("intro", 0.0, 1.0, "cam1").is_err()
+        || timeline.add("main", 1.0, 1.0, "cam2").is_err()
+    {
+        eprintln!("timeline failed");
+        std::process::exit(1);
     }
+    let seq = match SceneRenderer::sequence(&timeline, 30, 1.0 / 15.0, 64, 48) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("render failed");
+            std::process::exit(1);
+        }
+    };
     let path = "slice.obsr";
     let file = match File::create(path) {
         Ok(f) => f,

@@ -347,6 +347,7 @@ pub mod assignment;
 pub mod frame_renderer;
 pub mod frame_sequence;
 pub mod raw_writer;
+pub mod scene_renderer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -598,3 +599,4 @@ pub use assignment::{Assignment, AssignmentError};
 pub use frame_renderer::{FrameRenderer, RenderError};
 pub use frame_sequence::{FrameSequence, SequenceError};
 pub use raw_writer::{RawWriter, WriteError};
+pub use scene_renderer::SceneRenderer;

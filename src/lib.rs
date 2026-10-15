@@ -355,6 +355,7 @@ pub mod draw;
 pub mod text_draw;
 pub mod palette16;
 pub mod index_frame;
+pub mod text_overlay;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -614,3 +615,4 @@ pub use draw::{Draw, DrawError};
 pub use text_draw::TextDraw;
 pub use palette16::{Palette16, Rgb};
 pub use index_frame::{IndexFrame, IndexError};
+pub use text_overlay::{TextOverlay, OverlayError};

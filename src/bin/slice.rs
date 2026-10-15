@@ -6,7 +6,7 @@
 
 use obs_rust_bitstream::{
     Draw, FrameFilter, PatternKind, PatternSource, RawWriter, SceneRenderer, SyntheticCamera,
-    TextDraw, VideoTimeline,
+    TextDraw, TextOverlay, VideoTimeline,
 };
 use std::fs::File;
 use std::io::BufWriter;
@@ -46,6 +46,7 @@ fn main() {
                 let _ = FrameFilter::brightness(&mut f, 5);
                 let _ = Draw::rect(&mut f, 100, 100, 200, 80, 255);
                 let _ = TextDraw::text(&mut f, 110, 120, "HD", 0);
+                let _ = TextOverlay::draw(&mut f, 20, 20, "LIVE", 255);
                 seq.push(f);
             }
         }

@@ -344,6 +344,9 @@ pub mod sign_in;
 pub mod audit;
 pub mod presence;
 pub mod assignment;
+pub mod frame_renderer;
+pub mod frame_sequence;
+pub mod raw_writer;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -592,3 +595,6 @@ pub use sign_in::{Session as SignIn, SessionError as SignInError};
 pub use audit::{Audit, AuditEntry};
 pub use presence::{Presence, PresenceError};
 pub use assignment::{Assignment, AssignmentError};
+pub use frame_renderer::{FrameRenderer, RenderError};
+pub use frame_sequence::{FrameSequence, SequenceError};
+pub use raw_writer::{RawWriter, WriteError};

@@ -70,6 +70,36 @@ impl TextOverlay {
         let _ = Draw::rect(frame, bx + w.saturating_sub(1), by, 1, h, border_lum);
         Self::draw(frame, x, y, text, text_lum)
     }
+
+    /// Draw text with opacity. opacity is 0..=255.
+    /// 0 is fully transparent, 255 is fully opaque.
+    /// Blends each glyph pixel with the existing value.
+    pub fn with_opacity(
+        frame: &mut VideoFrame,
+        x: u32,
+        y: u32,
+        text: &str,
+        text_lum: u8,
+        opacity: u8,
+    ) -> Result<usize, OverlayError> {
+        if text.is_empty() {
+            return Err(OverlayError::Empty);
+        }
+        // Draw into a temporary copy, then blend.
+        let mut tmp = frame.clone();
+        let drawn = Self::draw(&mut tmp, x, y, text, text_lum)?;
+        if let (Some(dst), Some(src)) = (frame.planes.get_mut(0), tmp.planes.get(0)) {
+            for (d, s) in dst.iter_mut().zip(src.iter()) {
+                if *s != *d {
+                    let blended = ((*s as u16 * opacity as u16)
+                        + (*d as u16 * (255 - opacity as u16)))
+                        / 255;
+                    *d = blended as u8;
+                }
+            }
+        }
+        Ok(drawn)
+    }
 }
 
 #[cfg(test)]
@@ -98,5 +128,14 @@ mod tests {
         TextOverlay::bordered(&mut f, 4, 4, "A", 255, 128, 1).unwrap();
         // Border pixel above the text
         assert_eq!(f.planes[0][3 * 32 + 4], 128);
+    }
+
+    #[test]
+    fn opacity() {
+        let mut f = VideoFrame::new(VideoFormat::Y800, 16, 16).unwrap();
+        f.planes[0].fill(0);
+        TextOverlay::with_opacity(&mut f, 0, 0, "A", 255, 128).unwrap();
+        let v = f.planes[0][1];
+        assert!(v > 0 && v < 255);
     }
 }

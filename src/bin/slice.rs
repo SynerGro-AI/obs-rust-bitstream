@@ -5,7 +5,8 @@
 //! No capture, no encoder, no UI. Uses only library modules.
 
 use obs_rust_bitstream::{
-    FrameFilter, PatternKind, PatternSource, RawWriter, SceneRenderer, VideoTimeline,
+    FrameFilter, PatternKind, PatternSource, RawWriter, SceneRenderer, SyntheticCamera,
+    VideoTimeline,
 };
 use std::fs::File;
 use std::io::BufWriter;
@@ -34,6 +35,17 @@ fn main() {
         if let Ok(mut pf) = obs_rust_bitstream::FrameRenderer::pattern(&pattern) {
             let _ = FrameFilter::brightness(&mut pf, 10);
             seq.push(pf);
+        }
+    }
+    // Append frames from a synthetic camera so the file
+    // contains time-varying content.
+    if let Ok(cam) = SyntheticCamera::new(64, 48) {
+        for i in 0..15 {
+            let t = i as f32 / 15.0;
+            if let Ok(mut f) = cam.frame(t) {
+                let _ = FrameFilter::brightness(&mut f, 5);
+                seq.push(f);
+            }
         }
     }
     let path = "slice.obsr";

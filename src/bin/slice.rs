@@ -5,7 +5,7 @@
 //! No capture, no encoder, no UI. Uses only library modules.
 
 use obs_rust_bitstream::{
-    FrameFilter, PatternKind, PatternSource, RawWriter, SceneRenderer, SyntheticCamera,
+    Draw, FrameFilter, PatternKind, PatternSource, RawWriter, SceneRenderer, SyntheticCamera,
     VideoTimeline,
 };
 use std::fs::File;
@@ -44,6 +44,7 @@ fn main() {
             let t = i as f32 / 15.0;
             if let Ok(mut f) = cam.frame(t) {
                 let _ = FrameFilter::brightness(&mut f, 5);
+                let _ = Draw::rect(&mut f, 100, 100, 200, 80, 255);
                 seq.push(f);
             }
         }

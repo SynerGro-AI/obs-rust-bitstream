@@ -351,6 +351,7 @@ pub mod frame_sequence;
 pub mod raw_writer;
 pub mod scene_renderer;
 pub mod synthetic_camera;
+pub mod draw;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -606,3 +607,4 @@ pub use frame_sequence::{FrameSequence, SequenceError};
 pub use raw_writer::{RawWriter, WriteError};
 pub use scene_renderer::SceneRenderer;
 pub use synthetic_camera::SyntheticCamera;
+pub use draw::{Draw, DrawError};

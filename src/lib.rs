@@ -600,7 +600,7 @@ pub use presence::{Presence, PresenceError};
 pub use assignment::{Assignment, AssignmentError};
 pub use pattern_source::{PatternSource, PatternKind, PatternError};
 pub use frame_renderer::{FrameRenderer, RenderError};
-pub use frame_filter::{FrameFilter, FilterError};
+pub use frame_filter::{FrameFilter, FilterError as FrameFilterError};
 pub use frame_sequence::{FrameSequence, SequenceError};
 pub use raw_writer::{RawWriter, WriteError};
 pub use scene_renderer::SceneRenderer;

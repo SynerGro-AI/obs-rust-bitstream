@@ -353,6 +353,8 @@ pub mod scene_renderer;
 pub mod synthetic_camera;
 pub mod draw;
 pub mod text_draw;
+pub mod palette16;
+pub mod index_frame;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -610,3 +612,5 @@ pub use scene_renderer::SceneRenderer;
 pub use synthetic_camera::SyntheticCamera;
 pub use draw::{Draw, DrawError};
 pub use text_draw::TextDraw;
+pub use palette16::{Palette16, Rgb};
+pub use index_frame::{IndexFrame, IndexError};

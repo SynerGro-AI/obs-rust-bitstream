@@ -8,7 +8,12 @@
 //! Differential: a dark frame gets a lift suggestion.
 
 use crate::ai::AiAssistant;
-use crate::blend::BlendMode;
+use crate::blend::{Blend, BlendMode};
+use crate::color_balance::ColorBalance;
+use crate::inner_glow::InnerGlow;
+use crate::drop_shadow::DropShadow;
+use crate::sharpen::Sharpen;
+use crate::tone_curves::Curves as ToneCurves;
 use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug)]
@@ -105,6 +110,51 @@ impl AiTools {
         (tol, reason)
     }
 
+    /// Apply the suggested curve to the frame.
+    pub fn apply_curve(ai: &AiAssistant, frame: &mut VideoFrame) -> CurveSuggestion {
+        let s = Self::suggest_curve(ai, frame);
+        let _ = ToneCurves::apply(frame, &s.points);
+        s
+    }
+
+    /// Apply the suggested color balance to the frame.
+    pub fn apply_balance(ai: &AiAssistant, frame: &mut VideoFrame) -> BalanceSuggestion {
+        let s = Self::suggest_balance(ai, frame);
+        let _ = ColorBalance::apply(frame, s.shadow, s.mid, s.highlight);
+        s
+    }
+
+    /// Apply the suggested effect to the frame.
+    pub fn apply_effect(ai: &AiAssistant, frame: &mut VideoFrame) -> EffectSuggestion {
+        let s = Self::suggest_effect(ai, frame);
+        match s.name.as_str() {
+            "inner_glow" => {
+                let _ = InnerGlow::apply(frame, s.strength);
+            }
+            "drop_shadow" => {
+                let _ = DropShadow::apply(frame, 2, 2, s.strength);
+            }
+            "sharpen" => {
+                let _ = Sharpen::apply(frame, s.strength);
+            }
+            _ => {}
+        }
+        s
+    }
+
+    /// Apply the suggested blend of over onto base.
+    pub fn apply_blend(
+        ai: &AiAssistant,
+        base: &mut VideoFrame,
+        over: &VideoFrame,
+    ) -> (BlendMode, String) {
+        let base_avg = Self::average(base);
+        let over_avg = Self::average(over);
+        let (mode, reason) = Self::suggest_blend(ai, base_avg, over_avg);
+        let _ = Blend::apply(base, over, mode);
+        (mode, reason)
+    }
+
     fn average(frame: &VideoFrame) -> u8 {
         if frame.planes.is_empty() || frame.planes[0].is_empty() {
             return 0;
@@ -129,5 +179,8 @@ mod tests {
         assert!(curve.points[1].1 > 128);
         let effect = AiTools::suggest_effect(&ai, &dark);
         assert_eq!(effect.name, "inner_glow");
+        let before = dark.planes[0][0];
+        AiTools::apply_curve(&ai, &mut dark);
+        assert!(dark.planes[0][0] > before);
     }
 }

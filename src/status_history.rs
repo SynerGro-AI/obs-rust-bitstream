@@ -147,6 +147,11 @@ impl StatusHistory {
         self.last() == other.last()
     }
 
+    /// True if the header matches this summary.
+    pub fn matches_header(&self, header: &str) -> bool {
+        self.summary() == header
+    }
+
     /// Append this history to an existing file.
     pub fn append_to(&self, path: &str) -> Result<(), std::io::Error> {
         use std::fs::OpenOptions;
@@ -184,6 +189,9 @@ mod tests {
         assert_eq!(loaded2.last(), Some("c"));
         let header = StatusHistory::read_header(std::io::Cursor::new(with_header)).unwrap();
         assert!(header.contains("summary"));
+        let mut h5 = StatusHistory::new(2);
+        h5.push("c");
+        assert!(!h5.matches_header("summary"));
         let path = "/tmp/hist_append.txt";
         let _ = std::fs::remove_file(path);
         h.append_to(path).unwrap();

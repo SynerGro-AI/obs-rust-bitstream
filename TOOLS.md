@@ -117,7 +117,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 ### Rigging
 - [x] Joint hierarchy
 - [x] IK / FK
-- [ ] Constraints
+- [x] Constraints
 - [ ] Skinning weights
 
 ### Animation

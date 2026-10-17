@@ -671,4 +671,4 @@ pub use emboss::{Emboss, EmbossError};
 pub use bevel::{Bevel, BevelError};
 pub use stroke::{Stroke, StrokeError};
 pub use gradient::{Gradient, GradientError};
-pub use pattern::{Pattern, PatternError};
+pub use pattern::{Pattern as Checker, PatternError as CheckerError};

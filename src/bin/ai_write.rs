@@ -1,11 +1,10 @@
-//! Bundle encoder demo.
+//! Combined write demo.
 
 use obs_rust_bitstream::audio_sync::AudioSync;
-use obs_rust_bitstream::system_status::SystemStatus;
-use obs_rust_bitstream::av_bundle::AvBundle;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::system_status::SystemStatus;
 use obs_rust_bitstream::timed_sequence::TimedSequence;
 use obs_rust_bitstream::video_fourcc::VideoFormat;
 use obs_rust_bitstream::video_frame::VideoFrame;
@@ -22,28 +21,21 @@ fn main() {
     let mut controls = EncoderControls::new().expect("controls");
     let mut weights = LiveWeights::new();
     controls.set_quality(30.0, &mut weights).expect("quality");
-    let mut bundle = AvBundle::new();
-    EffectedWrite::write_h264_bundle(
+    let bundle_file = File::create("out.avbn").expect("bundle");
+    let status_file = File::create("status.txt").expect("status");
+    let bundle = EffectedWrite::write_h264_bundle_status(
         &frames,
         &controls,
         &mut weights,
         &sync,
-        &mut bundle,
+        bundle_file,
+        status_file,
     )
-    .expect("encode");
-    let file = File::create("out.avbn").expect("file");
-    bundle.write(file).expect("write");
-    let back = AvBundle::read(File::open("out.avbn").expect("open")).expect("read");
+    .expect("write");
     println!(
-        "bundle: video={} encoder={}",
-        back.video_len(),
-        back.encoder().as_str()
+        "wrote out.avbn (video={}) and status.txt",
+        bundle.video_len()
     );
-    let status = SystemStatus::from_bundle(&back);
-    println!("status: {}", status.summary());
-    let status_file = File::create("status.txt").expect("status");
-    status.write(status_file).expect("write status");
-    println!("wrote status.txt");
-    let read_back = SystemStatus::read_encoder(File::open("status.txt").expect("open")).expect("read");
-    println!("read encoder: {}", read_back);
+    let enc = SystemStatus::read_encoder(File::open("status.txt").expect("open")).expect("read");
+    println!("status encoder: {}", enc);
 }

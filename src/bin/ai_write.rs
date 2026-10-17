@@ -266,6 +266,8 @@ fn main() {
     let trend = StatusHistory::json_field(&json, "trend").unwrap_or_default();
     println!("json trend: {}", trend);
     println!("json matches: {}", grown.matches_json(&json));
+    grown.write_both("history.txt", "history.json").expect("both");
+    println!("wrote both files");
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

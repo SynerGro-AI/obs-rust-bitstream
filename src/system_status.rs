@@ -22,6 +22,7 @@ pub struct SystemStatus {
     pub version: String,
     pub built: String,
     pub stamp_opacity: f32,
+    pub captured_frames: usize,
 }
 
 impl SystemStatus {
@@ -39,6 +40,7 @@ impl SystemStatus {
             version: env!("CARGO_PKG_VERSION").to_string(),
             built: option_env!("BUILD_TIME").unwrap_or("unknown").to_string(),
             stamp_opacity: 1.0,
+            captured_frames: 0,
         }
     }
 
@@ -60,10 +62,14 @@ impl SystemStatus {
         self.stamp_opacity = o.clamp(0.0, 1.0);
     }
 
+    pub fn set_captured_frames(&mut self, n: usize) {
+        self.captured_frames = n;
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -73,7 +79,8 @@ impl SystemStatus {
             self.stamped,
             self.version,
             self.built,
-            self.stamp_opacity
+            self.stamp_opacity,
+            self.captured_frames
         )
     }
 
@@ -124,6 +131,8 @@ mod tests {
         assert!(s2.summary().contains("built="));
         s2.set_stamp_opacity(0.5);
         assert!(s2.summary().contains("opacity=0.5"));
+        s2.set_captured_frames(4);
+        assert!(s2.summary().contains("captured=4"));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

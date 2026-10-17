@@ -628,7 +628,11 @@ impl EffectedWrite {
         for (i, f) in frames.iter().enumerate() {
             let mut p = f.clone();
             let secs = (i as f32 / fps) as u32;
-            let text = TimestampStamp::format_frame(secs, i);
+            let text = format!(
+                "{} {}",
+                TimestampStamp::format_frame(secs, i),
+                TimestampStamp::format_progress(i, frames.len())
+            );
             let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, 255);
             stamped.push(p);
         }

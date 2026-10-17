@@ -625,11 +625,10 @@ impl EffectedWrite {
             return Err(WriteError::Empty);
         }
         let mut stamped = Vec::new();
-        let base = TimestampStamp::now();
         for (i, f) in frames.iter().enumerate() {
             let mut p = f.clone();
             let secs = (i as f32 / fps) as u32;
-            let text = format!("{}+{}", base, secs);
+            let text = TimestampStamp::format_frame(secs, i);
             let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, 255);
             stamped.push(p);
         }

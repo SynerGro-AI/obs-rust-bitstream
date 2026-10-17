@@ -258,6 +258,7 @@ fn main() {
     println!("read dashboard: {}", dash);
     println!("timestamp: {}", StatusHistory::timestamp_of(&dash));
     println!("age: {}s", StatusHistory::age(&dash, SystemStatus::now()));
+    println!("fresh: {}", StatusHistory::fresh(&dash, SystemStatus::now(), 60));
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

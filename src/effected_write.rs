@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
 use crate::scene_effect::SceneEffect;
+use crate::encode_progress::EncodeProgress;
 use crate::encoder_controls::EncoderControls;
 use crate::h264_codec::H264Codec;
 use crate::fps_trailer::FpsTrailer;
@@ -269,6 +270,31 @@ impl EffectedWrite {
         for f in frames {
             let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
             out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(())
+    }
+
+    /// Encode and report progress.
+    pub fn write_h264_progress<W: Write>(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        progress: &mut EncodeProgress,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        for f in frames {
+            let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+            progress.tick();
         }
         let tail = enc.flush();
         out.write_all(&tail).map_err(|_| WriteError::Io)?;

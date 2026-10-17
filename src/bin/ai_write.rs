@@ -234,6 +234,8 @@ fn main() {
     let loaded = StatusHistory::read(3, File::open("history.txt").expect("open")).expect("load");
     println!("loaded: {} last={}", loaded.len(), loaded.last().unwrap_or(""));
     println!("history matches: {}", history.matches_last(&loaded));
+    let header = StatusHistory::read_header(File::open("history.txt").expect("open")).unwrap_or_default();
+    println!("header: {}", header);
     history.append_to("history.txt").expect("append");
     let grown = StatusHistory::read(10, File::open("history.txt").expect("open")).expect("grown");
     println!("history grown: {} lines", grown.len());

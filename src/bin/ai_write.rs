@@ -204,6 +204,9 @@ fn main() {
     println!("status with summary: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
+    println!("wrote status.txt with source summary");
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
     println!("wrote status.txt with capture count");
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

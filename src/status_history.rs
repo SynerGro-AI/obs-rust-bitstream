@@ -78,6 +78,26 @@ impl StatusHistory {
         if n == 0 { 0.0 } else { sum / n as f32 }
     }
 
+    /// Min and max fps. (0.0, 0.0) if none.
+    pub fn fps_range(&self) -> (f32, f32) {
+        let mut min = f32::MAX;
+        let mut max = 0.0;
+        let mut n = 0;
+        for line in &self.lines {
+            for part in line.split('|') {
+                let part = part.trim();
+                if let Some(num) = part.strip_suffix(" fps") {
+                    if let Ok(v) = num.parse::<f32>() {
+                        if v < min { min = v; }
+                        if v > max { max = v; }
+                        n += 1;
+                    }
+                }
+            }
+        }
+        if n == 0 { (0.0, 0.0) } else { (min, max) }
+    }
+
     /// "up" if latest is above average, "down" if below, "flat" otherwise.
     pub fn trend(&self) -> &'static str {
         let avg = self.avg_fps();
@@ -216,6 +236,9 @@ mod tests {
         h4.push("src | 100 fps | encode | healthy");
         h4.push("src | 200 fps | encode | healthy");
         assert!((h4.avg_fps() - 150.0).abs() < 0.1);
+        let (lo, hi) = h4.fps_range();
+        assert!((lo - 100.0).abs() < 0.1);
+        assert!((hi - 200.0).abs() < 0.1);
         assert_eq!(h4.trend(), "up");
         assert!(h4.summary().contains("up"));
     }

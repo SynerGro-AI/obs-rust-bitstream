@@ -20,7 +20,6 @@ use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
 use crate::pipe_suggest::PipeSuggest;
 use crate::raw_writer::{RawWriter, WriteError};
-use crate::scene_effect::SceneEffect;
 use crate::tool_pipeline::ToolPipeline;
 use crate::video_frame::VideoFrame;
 use crate::weight_interp::WeightInterp;
@@ -269,6 +268,32 @@ impl EffectedWrite {
             .map_err(|_| WriteError::Empty)?;
         for f in frames {
             let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(())
+    }
+
+    /// Apply a scene effect, then encode to H.264.
+    pub fn write_effected_h264<W: Write>(
+        frames: &[VideoFrame],
+        effect: &SceneEffect,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        for f in frames {
+            let mut processed = f.clone();
+            let _ = effect.apply(&mut processed, weights);
+            let bytes = enc.encode(&processed).map_err(|_| WriteError::Empty)?;
             out.write_all(&bytes).map_err(|_| WriteError::Io)?;
         }
         let tail = enc.flush();

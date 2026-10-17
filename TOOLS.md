@@ -111,7 +111,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 ### Modeling
 - [x] Polygon mesh (verts, edges, faces)
 - [x] Extrude, bevel, bridge
-- [ ] NURBS curve / surface
+- [x] NURBS curve / surface
 - [ ] Subdivision
 
 ### Rigging

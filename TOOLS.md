@@ -102,7 +102,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Audio (shared with existing filters)
 
 ### 3D
-- [ ] 3D layers
+- [x] 3D layers
 - [ ] Camera
 - [ ] Lights
 

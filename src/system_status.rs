@@ -31,6 +31,7 @@ pub struct SystemStatus {
     pub capture_faster: bool,
     pub bottleneck: String,
     pub recommendation: String,
+    pub healthy: bool,
 }
 
 impl SystemStatus {
@@ -57,6 +58,7 @@ impl SystemStatus {
             capture_faster: false,
             bottleneck: String::new(),
             recommendation: String::new(),
+            healthy: false,
         }
     }
 
@@ -116,6 +118,10 @@ impl SystemStatus {
         self.recommendation = rec.to_string();
     }
 
+    pub fn set_healthy(&mut self, healthy: bool) {
+        self.healthy = healthy;
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -127,7 +133,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -146,7 +152,8 @@ impl SystemStatus {
             self.capture_fps,
             self.capture_faster,
             self.bottleneck,
-            self.recommendation
+            self.recommendation,
+            self.healthy
         )
     }
 
@@ -213,6 +220,8 @@ mod tests {
         assert!(s2.summary().contains("bottleneck=encode"));
         s2.set_recommendation("lower quality");
         assert!(s2.summary().contains("recommend=lower"));
+        s2.set_healthy(true);
+        assert!(s2.summary().contains("healthy=true"));
         s2.set_timestamp(SystemStatus::now());
         assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();

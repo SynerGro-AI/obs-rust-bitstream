@@ -39,7 +39,7 @@ impl ToolPipeline {
     pub fn run(&self, frame: &mut VideoFrame, weights: &LiveWeights) -> Result<(), PipeError> {
         for name in &self.steps {
             let key = format!("pipe.{}", name);
-            let strength = weights.get(&key).unwrap_or(0.0) as i16;
+            let strength = weights.get(&key).unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
             match name.as_str() {
                 "bright" => {
                     let _ = BrightContrast::apply(frame, strength, 0);

@@ -11,13 +11,10 @@ fn main() {
     let file = File::open(&path).expect("open");
     let seq = RawReader::read(file).expect("read");
     println!("frames: {}", seq.len());
-    if let Ok(f) = seq.get(0) {
-        println!("size: {}x{}", f.width, f.height);
-        if let Some(p) = f.planes.get(0) {
-            println!("first pixel: {}", p.first().copied().unwrap_or(0));
-            let min = p.iter().copied().min().unwrap_or(0);
-            let max = p.iter().copied().max().unwrap_or(0);
-            println!("min/max: {}/{}", min, max);
+    for i in 0..seq.len() {
+        if let Ok(f) = seq.get(i) {
+            let first = f.planes.get(0).and_then(|p| p.first()).copied().unwrap_or(0);
+            println!("frame {}: {}x{} first={}", i, f.width, f.height, first);
         }
     }
 }

@@ -7,6 +7,7 @@
 
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
+use crate::timed_sequence::TimedSequence;
 use crate::ping_pong::PingPong;
 use crate::sequence_reverse::SequenceReverse;
 use crate::frame_hold::FrameHold;
@@ -213,6 +214,17 @@ impl EffectedWrite {
         let bounced = PingPong::bounce(&seq);
         RawWriter::write(&bounced, out)
     }
+
+    /// Write the frames from a timed sequence.
+    pub fn write_timed<W: Write>(
+        timed: &TimedSequence,
+        out: W,
+    ) -> Result<(), WriteError> {
+        if timed.len() == 0 {
+            return Err(WriteError::Empty);
+        }
+        RawWriter::write(timed.frames(), out)
+    }
 }
 
 #[cfg(test)]
@@ -268,5 +280,10 @@ mod tests {
         let mut buf10 = Vec::new();
         EffectedWrite::write_ping_pong(&[f.clone()], &mut buf10).unwrap();
         assert!(buf10.len() > 16);
+        let mut timed = TimedSequence::new(30.0).unwrap();
+        timed.push(f.clone());
+        let mut buf11 = Vec::new();
+        EffectedWrite::write_timed(&timed, &mut buf11).unwrap();
+        assert!(buf11.len() > 16);
     }
 }

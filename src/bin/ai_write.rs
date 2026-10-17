@@ -40,9 +40,10 @@ fn main() {
     bundle.write(file).expect("write");
     let back = AvBundle::read(File::open("out.avbn").expect("open")).expect("read");
     println!(
-        "bundle: video={} audio={} fps={}",
+        "bundle: video={} audio={} fps={} duration_ms={:.1}",
         back.video_len(),
         back.audio_len(),
-        back.fps()
+        back.fps(),
+        back.duration_ms()
     );
 }

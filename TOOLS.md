@@ -88,8 +88,8 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Expressions (pure math)
 
 ### Effects categories
-- [ ] Color correction (curves, color balance, levels — shared with Photoshop)
-- [ ] Blur & sharpen (shared)
+- [x] Color correction (curves, color balance, levels — shared with Photoshop)
+- [x] Blur & sharpen (shared)
 - [x] Distort (wave, bulge, twirl)
 - [x] Generate (gradient, grid, lens flare)
 - [x] Keying (chroma, luma)

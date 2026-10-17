@@ -209,6 +209,7 @@ fn main() {
         CaptureRate::faster_than(rate, encode_fps)
     );
     println!("bottleneck: {}", CaptureRate::bottleneck(rate, encode_fps));
+    println!("recommend: {}", CaptureRate::recommend(rate, encode_fps));
     status.set_bottleneck(CaptureRate::bottleneck(rate, encode_fps));
     println!("status with bottleneck: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");

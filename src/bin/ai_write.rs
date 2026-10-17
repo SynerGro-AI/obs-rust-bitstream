@@ -221,6 +221,10 @@ fn main() {
     println!("one line: {}", status.one_line());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
+    let read_back = SystemStatus::read_one_line(File::open("status.txt").expect("open")).unwrap_or_default();
+    println!("read back: {}", read_back);
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
     println!("wrote status.txt with health");
     status.set_recommendation(CaptureRate::recommend(rate, encode_fps));
     println!("status with recommend: {}", status.summary());

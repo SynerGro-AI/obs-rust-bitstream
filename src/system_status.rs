@@ -34,7 +34,7 @@ impl SystemStatus {
             fps: bundle.fps(),
             encode_ms: 0.0,
             stamped: false,
-            version: "0.1.0".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
         }
     }
 

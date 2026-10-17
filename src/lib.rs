@@ -411,6 +411,7 @@ pub mod clone_stamp;
 pub mod heal;
 pub mod dodge_burn_sponge;
 pub mod paint_bucket;
+pub mod shape;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -726,3 +727,4 @@ pub use clone_stamp::{CloneStamp, CloneError};
 pub use heal::{Heal, HealError};
 pub use dodge_burn_sponge::{DodgeBurnSponge, ToneTool, ToneError};
 pub use paint_bucket::{PaintBucket, BucketError};
+pub use shape::{Shape, ShapeError};

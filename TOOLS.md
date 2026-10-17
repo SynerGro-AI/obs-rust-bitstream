@@ -9,7 +9,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Curves
 - [x] Color balance
 - [x] Hue/saturation
-- [ ] Brightness/contrast
+- [x] Brightness/contrast
 - [x] Exposure
 - [ ] Vibrance
 - [ ] Black & white

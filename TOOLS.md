@@ -135,7 +135,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 ### Look / render
 - [x] Materials (partial)
 - [x] Lights (partial)
-- [ ] Shaders (Lambert, Phong, PBR)
+- [x] Shaders (Lambert, Phong, PBR)
 - [ ] UV mapping
 - [ ] Camera (perspective, orthographic)
 

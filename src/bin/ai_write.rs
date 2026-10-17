@@ -100,8 +100,13 @@ fn main() {
     weights.set("stamp.opacity", 0.5).expect("opacity");
     println!("stamp.opacity set to 0.5 (blend={})", TimestampStamp::blend(128, 0.5));
     let mut src = CaptureSource::synthetic(16, 16);
-    let captured = src.frame().expect("capture");
-    println!("captured frame {}x{}", captured.width, captured.height);
+    let mut captured_frames = Vec::new();
+    for _ in 0..4 {
+        if let Some(f) = src.frame() {
+            captured_frames.push(f);
+        }
+    }
+    println!("captured {} frames", captured_frames.len());
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

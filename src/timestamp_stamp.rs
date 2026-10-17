@@ -37,6 +37,18 @@ impl TimestampStamp {
         format!("{}/{}", frame, total)
     }
 
+    /// Named luminance levels.
+    pub fn lum(name: &str) -> u8 {
+        match name {
+            "black" => 0,
+            "dim" => 64,
+            "mid" => 128,
+            "bright" => 192,
+            "white" => 255,
+            _ => 255,
+        }
+    }
+
     /// Format seconds and a frame index.
     pub fn format_frame(secs: u32, frame: usize) -> String {
         format!("{} f{}", Self::format(secs), frame)
@@ -121,6 +133,8 @@ mod tests {
             "00:01:00 f3"
         );
         assert_eq!(TimestampStamp::format_progress(3, 10), "3/10");
+        assert_eq!(TimestampStamp::lum("white"), 255);
+        assert_eq!(TimestampStamp::lum("black"), 0);
     }
 
     #[test]

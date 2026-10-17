@@ -66,6 +66,21 @@ impl StatusHistory {
         self.lines.iter().rev().take_while(|l| l.contains("healthy")).count()
     }
 
+    /// Longest healthy streak in the history.
+    pub fn best_streak(&self) -> usize {
+        let mut best = 0;
+        let mut cur = 0;
+        for line in &self.lines {
+            if line.contains("healthy") {
+                cur += 1;
+                if cur > best { best = cur; }
+            } else {
+                cur = 0;
+            }
+        }
+        best
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -249,6 +264,7 @@ mod tests {
         h6.push("b | healthy");
         assert_eq!(h6.latest_healthy(), Some("b | healthy"));
         assert_eq!(h6.streak(), 1);
+        assert_eq!(h6.best_streak(), 1);
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

@@ -81,6 +81,11 @@ impl StatusHistory {
         best
     }
 
+    /// True if the current streak equals the best.
+    pub fn at_record(&self) -> bool {
+        self.streak() == self.best_streak() && self.streak() > 0
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();

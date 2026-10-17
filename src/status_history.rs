@@ -129,6 +129,11 @@ impl StatusHistory {
         Ok(buf.trim().to_string())
     }
 
+    /// True if the read-back matches this dashboard.
+    pub fn matches_dashboard(&self, read_back: &str) -> bool {
+        self.dashboard() == read_back
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -359,6 +364,7 @@ mod tests {
         assert_eq!(h6.color(), "yellow");
         assert!(h6.report().contains("warn"));
         assert!(h6.dashboard().contains("streak"));
+        assert!(h6.matches_dashboard(&h6.dashboard()));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

@@ -204,6 +204,11 @@ impl SystemStatus {
         }
     }
 
+    /// True if the read-back matches this one-line.
+    pub fn matches_one_line(&self, read_back: &str) -> bool {
+        self.one_line() == read_back
+    }
+
     /// True if the status encoder matches the bundle encoder.
     pub fn matches_bundle(&self, bundle: &AvBundle) -> bool {
         self.encoder == bundle.encoder()
@@ -254,6 +259,7 @@ mod tests {
         s2.write(&mut buf2).unwrap();
         let line = SystemStatus::read_one_line(std::io::Cursor::new(&buf2)).unwrap();
         assert!(line.contains("healthy"));
+        assert!(s2.matches_one_line(&line));
         s2.set_timestamp(SystemStatus::now());
         assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();

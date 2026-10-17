@@ -7,7 +7,10 @@
 //! Differential: a brightness step lifts a dark frame.
 
 use crate::bright_contrast::BrightContrast;
+use crate::exposure::Exposure;
+use crate::invert::Invert;
 use crate::live_weights::LiveWeights;
+use crate::threshold::Threshold;
 use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,12 +47,15 @@ impl ToolPipeline {
                 "bright" => {
                     let _ = BrightContrast::apply(frame, strength, 0);
                 }
+                "exposure" => {
+                    let _ = Exposure::apply(frame, strength);
+                }
+                "threshold" => {
+                    let t = weights.get("pipe.threshold.level").unwrap_or(128.0) as u8;
+                    let _ = Threshold::apply(frame, t);
+                }
                 "invert" => {
-                    if let Some(plane) = frame.planes.get_mut(0) {
-                        for p in plane.iter_mut() {
-                            *p = 255 - *p;
-                        }
-                    }
+                    let _ = Invert::apply(frame);
                 }
                 _ => {}
             }

@@ -82,7 +82,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 ### Core
 - [x] Timeline / clips
 - [x] Compositor
-- [ ] Keyframes
+- [x] Keyframes
 - [ ] Parenting
 - [ ] Nulls
 - [ ] Expressions (pure math)

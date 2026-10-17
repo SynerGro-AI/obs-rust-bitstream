@@ -66,6 +66,28 @@ impl TimestampStamp {
         let y = frame.height.saturating_sub(10);
         TextDraw::text(frame, x, y, &text, lum)
     }
+
+    /// True if any pixel in the stamp region is non-zero.
+    pub fn is_stamped(frame: &VideoFrame, x: u32, y: u32, width: u32) -> bool {
+        let plane = &frame.planes[0];
+        let stride = frame.width as usize;
+        for row in 0..8 {
+            let ry = (y + row) as usize;
+            if ry >= frame.height as usize {
+                break;
+            }
+            for col in 0..width as usize {
+                let rx = x as usize + col;
+                if rx >= stride {
+                    break;
+                }
+                if plane[ry * stride + rx] != 0 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 #[cfg(test)]

@@ -85,5 +85,18 @@ fn main() {
     let mut stamped = frames[0].clone();
     TimestampStamp::stamp(&mut stamped, 0, 0, 60, 255).expect("stamp");
     println!("stamped frame with 00:01:00");
+    let stamped_bundle = File::create("stamped.avbn").expect("stamped");
+    let stamped_status = File::create("stamped_status.txt").expect("status");
+    let _ = EffectedWrite::write_stamped_bundle(
+        &frames,
+        30.0,
+        &controls,
+        &mut weights,
+        &sync,
+        stamped_bundle,
+        stamped_status,
+    )
+    .expect("stamped write");
+    println!("wrote stamped.avbn");
     println!("matches: {}", status.matches_bundle(&bundle));
 }

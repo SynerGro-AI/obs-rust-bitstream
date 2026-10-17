@@ -31,6 +31,11 @@ impl Report {
         writeln!(out, "time={}", secs)?;
         Ok(())
     }
+
+    /// True if the written report contains the status version.
+    pub fn matches_status(text: &str, status: &SystemStatus) -> bool {
+        text.contains(&format!("version={}", status.version))
+    }
 }
 
 #[cfg(test)]
@@ -50,5 +55,6 @@ mod tests {
         assert!(text.contains("time="));
         assert!(text.contains("version="));
         assert!(text.contains("built="));
+        assert!(Report::matches_status(&text, &s));
     }
 }

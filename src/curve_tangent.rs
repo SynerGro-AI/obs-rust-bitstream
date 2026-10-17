@@ -105,9 +105,12 @@ mod tests {
         c.add(1.0, 10.0, Tangent::Linear);
         let mid = c.sample(0.5).unwrap();
         assert!((mid - 5.0).abs() < 0.01);
-        c.add(2.0, 20.0, Tangent::Stepped);
-        // stepped from key at 1.0 holds 10 until 2.0
-        assert_eq!(c.sample(1.5).unwrap(), 10.0);
+        // rebuild with stepped at 1.0
+        let mut c2 = CurveTangent::new();
+        c2.add(0.0, 0.0, Tangent::Linear);
+        c2.add(1.0, 10.0, Tangent::Stepped);
+        c2.add(2.0, 20.0, Tangent::Linear);
+        assert_eq!(c2.sample(1.5).unwrap(), 10.0);
         let mut w = LiveWeights::new();
         w.set("tangent.0", 1.0).unwrap();
         c.from_weights(0, &w).unwrap();

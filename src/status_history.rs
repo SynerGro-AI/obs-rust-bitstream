@@ -111,6 +111,17 @@ impl StatusHistory {
         format!("{} ({})", self.word(), self.color())
     }
 
+    /// A one-line dashboard.
+    pub fn dashboard(&self) -> String {
+        format!(
+            "{} | {:.0} fps | streak {} | {}",
+            self.report(),
+            self.avg_fps(),
+            self.streak(),
+            if self.at_record() { "record" } else { "ok" }
+        )
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -339,6 +350,7 @@ mod tests {
         assert_eq!(h6.word(), "warn");
         assert_eq!(h6.color(), "yellow");
         assert!(h6.report().contains("warn"));
+        assert!(h6.dashboard().contains("streak"));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

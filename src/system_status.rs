@@ -18,6 +18,7 @@ pub struct SystemStatus {
     pub audio_samples: usize,
     pub fps: f32,
     pub encode_ms: f32,
+    pub stamped: bool,
 }
 
 impl SystemStatus {
@@ -40,16 +41,21 @@ impl SystemStatus {
         }
     }
 
+    pub fn set_stamped(&mut self, stamped: bool) {
+        self.stamped = stamped;
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
             self.audio_samples,
             self.fps,
-            self.encode_ms
+            self.encode_ms,
+            self.stamped
         )
     }
 
@@ -93,6 +99,8 @@ mod tests {
         let mut s2 = s.clone();
         s2.set_encode_ms(7.5);
         assert!(s2.summary().contains("encode_ms=7.5"));
+        s2.set_stamped(true);
+        assert!(s2.summary().contains("stamped=true"));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

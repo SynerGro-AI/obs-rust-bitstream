@@ -86,6 +86,17 @@ impl StatusHistory {
         self.streak() == self.best_streak() && self.streak() > 0
     }
 
+    /// A single word: good, warn, or bad.
+    pub fn word(&self) -> &'static str {
+        if self.health_ratio() >= 0.9 && self.stable(0.1) {
+            "good"
+        } else if self.health_ratio() >= 0.5 {
+            "warn"
+        } else {
+            "bad"
+        }
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -307,6 +318,7 @@ mod tests {
         assert_eq!(h6.latest_healthy(), Some("b | healthy"));
         assert_eq!(h6.streak(), 1);
         assert_eq!(h6.best_streak(), 1);
+        assert_eq!(h6.word(), "warn");
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

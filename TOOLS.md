@@ -30,7 +30,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Add noise
 - [x] Median
 - [x] Emboss
-- [ ] Find edges
+- [x] Find edges
 - [ ] High pass
 
 ### Layer styles

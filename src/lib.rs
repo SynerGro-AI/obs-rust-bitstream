@@ -396,6 +396,7 @@ pub mod posterize;
 pub mod gradient_map;
 pub mod radial_blur;
 pub mod median;
+pub mod find_edges;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -696,3 +697,4 @@ pub use posterize::{Posterize, PosterizeError};
 pub use gradient_map::{GradientMap, GradientMapError};
 pub use radial_blur::{RadialBlur, RadialError};
 pub use median::{Median, MedianError};
+pub use find_edges::{FindEdges, EdgesError};

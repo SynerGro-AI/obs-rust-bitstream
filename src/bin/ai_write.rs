@@ -208,6 +208,8 @@ fn main() {
         "capture faster than encode: {}",
         CaptureRate::faster_than(rate, encode_fps)
     );
+    status.set_capture_faster(CaptureRate::faster_than(rate, encode_fps));
+    println!("status with compare: {}", status.summary());
     status.set_capture_fps(rate);
     println!("status with rate: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");

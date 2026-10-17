@@ -401,6 +401,7 @@ pub mod high_pass;
 pub mod satin;
 pub mod lasso;
 pub mod quick_select;
+pub mod feather;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -706,3 +707,4 @@ pub use high_pass::{HighPass, HighPassError};
 pub use satin::{Satin, SatinError};
 pub use lasso::{Lasso, LassoError};
 pub use quick_select::{QuickSelect, QuickError};
+pub use feather::{Feather, FeatherError};

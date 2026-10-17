@@ -50,7 +50,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Magic wand (tolerance)
 - [x] Quick select / smart select
 - [x] Invert selection
-- [ ] Feather
+- [x] Feather
 - [ ] Expand / contract
 - [ ] Save / load selection
 

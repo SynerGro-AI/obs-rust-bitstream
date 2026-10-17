@@ -117,6 +117,33 @@ impl EffectedWrite {
         }
         RawWriter::write(&seq, out)
     }
+
+    /// Fade several steps across frames. Each step fades from 0 to its end.
+    pub fn write_fade_steps<W: Write>(
+        frames: &[VideoFrame],
+        steps: &[(&str, f32)],
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut seq = FrameSequence::new();
+        let mut pipe = ToolPipeline::new();
+        for (name, _) in steps {
+            pipe.add(name);
+        }
+        for (i, f) in frames.iter().enumerate() {
+            let mut w = LiveWeights::new();
+            for (name, end) in steps {
+                let key = format!("pipe.{}", name);
+                WeightInterp::set(&mut w, &key, i, frames.len(), 0.0, *end);
+            }
+            let mut processed = f.clone();
+            let _ = pipe.run(&mut processed, &w);
+            seq.push(processed);
+        }
+        RawWriter::write(&seq, out)
+    }
 }
 
 #[cfg(test)]
@@ -153,5 +180,8 @@ mod tests {
         let mut buf5 = Vec::new();
         EffectedWrite::write_fade(&[f.clone(), f.clone()], "bright", 0.0, 20.0, &mut buf5).unwrap();
         assert!(buf5.len() > 16);
+        let mut buf6 = Vec::new();
+        EffectedWrite::write_fade_steps(&[f.clone()], &[("bright", 10.0), ("glow", 5.0)], &mut buf6).unwrap();
+        assert!(buf6.len() > 16);
     }
 }

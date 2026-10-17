@@ -265,6 +265,8 @@ fn main() {
     let rep_file = File::create("report.txt").expect("rep");
     report.write(rep_file).expect("write rep");
     println!("wrote report.txt");
+    let loaded = StatusReport::read(File::open("report.txt").expect("open")).unwrap_or_default();
+    println!("loaded report: {}", loaded);
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

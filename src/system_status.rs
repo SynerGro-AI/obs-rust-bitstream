@@ -37,6 +37,7 @@ impl SystemStatus {
             stamped: false,
             version: env!("CARGO_PKG_VERSION").to_string(),
             built: option_env!("BUILD_TIME").unwrap_or("unknown").to_string(),
+            stamp_opacity: 1.0,
         }
     }
 
@@ -54,10 +55,14 @@ impl SystemStatus {
         self.version = v.to_string();
     }
 
+    pub fn set_stamp_opacity(&mut self, o: f32) {
+        self.stamp_opacity = o.clamp(0.0, 1.0);
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -66,7 +71,8 @@ impl SystemStatus {
             self.encode_ms,
             self.stamped,
             self.version,
-            self.built
+            self.built,
+            self.stamp_opacity
         )
     }
 
@@ -115,6 +121,8 @@ mod tests {
         s2.set_version("0.2.0");
         assert!(s2.summary().contains("version=0.2.0"));
         assert!(s2.summary().contains("built="));
+        s2.set_stamp_opacity(0.5);
+        assert!(s2.summary().contains("opacity=0.5"));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

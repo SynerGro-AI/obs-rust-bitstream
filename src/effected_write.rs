@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
 use crate::scene_effect::SceneEffect;
+use crate::encode_status::EncodeStatus;
 use crate::encode_progress::EncodeProgress;
 use crate::encoder_controls::EncoderControls;
 use crate::h264_codec::H264Codec;
@@ -346,6 +347,31 @@ impl EffectedWrite {
         out.write_all(&tail).map_err(|_| WriteError::Io)?;
         Ok(())
     }
+
+    /// Encode and update an EncodeStatus.
+    pub fn write_h264_status<W: Write>(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        status: &mut EncodeStatus,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        for f in frames {
+            let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+            status.tick();
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -418,5 +444,9 @@ mod tests {
         let mut buf14 = Vec::new();
         EffectedWrite::write_h264(&[f.clone()], &controls, &mut w, &mut buf14).unwrap();
         assert!(!buf14.is_empty());
+        let mut status = EncodeStatus::new(1, 30.0).unwrap();
+        let mut buf16 = Vec::new();
+        EffectedWrite::write_h264_status(&[f.clone()], &controls, &mut w, &mut status, &mut buf16).unwrap();
+        assert!(status.is_done());
     }
 }

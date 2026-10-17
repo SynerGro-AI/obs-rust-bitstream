@@ -45,6 +45,11 @@ impl AudioSync {
         self.audio.render(t)
     }
 
+    /// Fill a slice of samples from the timeline.
+    pub fn fill(&self, start_frame: usize, count: usize) -> Vec<f32> {
+        (0..count).map(|i| self.sample(start_frame + i)).collect()
+    }
+
     /// Frame index for a time in seconds.
     pub fn frame_at(&self, time: f32) -> usize {
         if self.video.fps() <= 0.0 {

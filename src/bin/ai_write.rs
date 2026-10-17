@@ -1,7 +1,11 @@
-//! Load a CC0 sample onto the timeline and sample it.
+//! Load a CC0 sample and fill encode samples.
 
+use obs_rust_bitstream::audio_sync::AudioSync;
 use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::sound_cc0::SoundCc0;
+use obs_rust_bitstream::timed_sequence::TimedSequence;
+use obs_rust_bitstream::video_fourcc::VideoFormat;
+use obs_rust_bitstream::video_frame::VideoFrame;
 use std::fs;
 
 fn main() {
@@ -10,12 +14,16 @@ fn main() {
     let mut timeline = AudioTimeline::new();
     timeline.add("bell", 0.0).expect("add");
     timeline.load_wav("bell", &data).expect("load");
-    println!(
-        "bell1 on timeline: rate={} samples={}",
-        data.sample_rate,
-        data.samples.len()
-    );
-    for t in [0.0, 0.5, 1.0, 2.0] {
-        println!("  {:.1}s -> {:.3}", t, timeline.render(t));
+    let mut timed = TimedSequence::new(30.0).expect("fps");
+    for _ in 0..4 {
+        let f = VideoFrame::new(VideoFormat::Y800, 16, 16).expect("frame");
+        timed.push(f);
+    }
+    let mut sync = AudioSync::new(timed);
+    *sync.audio_mut() = timeline;
+    let samples = sync.fill(0, 4);
+    println!("filled {} samples from CC0", samples.len());
+    for (i, s) in samples.iter().enumerate() {
+        println!("  frame {} -> {:.4}", i, s);
     }
 }

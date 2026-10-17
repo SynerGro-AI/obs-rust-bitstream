@@ -102,14 +102,14 @@ fn main() {
     println!("stamp.lum set to 128");
     weights.set("stamp.opacity", 0.5).expect("opacity");
     println!("stamp.opacity set to 0.5 (blend={})", TimestampStamp::blend(128, 0.5));
-    let mut src = CaptureSource::synthetic(16, 16);
+    let mut src = CaptureSource::best();
     let mut captured_frames = Vec::new();
     for _ in 0..4 {
         if let Some(f) = src.frame() {
             captured_frames.push(f);
         }
     }
-    println!("captured {} frames", captured_frames.len());
+    println!("captured {} frames from best", captured_frames.len());
     let cap_bundle = File::create("captured.avbn").expect("cap");
     let cap_status = File::create("captured_status.txt").expect("status");
     let _ = EffectedWrite::write_stamped_bundle(

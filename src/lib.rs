@@ -389,6 +389,7 @@ pub mod eraser;
 pub mod bright_contrast;
 pub mod vibrance;
 pub mod black_white;
+pub mod photo_filter;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -682,3 +683,4 @@ pub use eraser::{Eraser, EraserError};
 pub use bright_contrast::{BrightContrast, BrightContrastError};
 pub use vibrance::{Vibrance, VibranceError};
 pub use black_white::{BlackWhite, BlackWhiteError};
+pub use photo_filter::{PhotoFilter, FilterTint, PhotoFilterError};

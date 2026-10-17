@@ -48,6 +48,11 @@ impl StatusReport {
             self.word
         )
     }
+
+    /// Write the summary to a writer.
+    pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
+        writeln!(out, "{}", self.summary())
+    }
 }
 
 #[cfg(test)]
@@ -61,5 +66,7 @@ mod tests {
         let r = StatusReport::from(&h);
         assert_eq!(r.lines, 1);
         assert!(r.summary().contains("healthy") || r.summary().contains("good") || r.summary().contains("warn") || r.summary().contains("bad"));
-    }
+        let mut buf = Vec::new();
+        r.write(&mut buf).unwrap();
+        assert!(String::from_utf8_lossy(&buf).contains("fps"));
 }

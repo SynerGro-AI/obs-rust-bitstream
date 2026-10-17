@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
 use crate::scene_effect::SceneEffect;
+use crate::system_status::SystemStatus;
 use crate::av_bundle::AvBundle;
 use crate::audio_writer::AudioWriter;
 use crate::audio_sync::AudioSync;
@@ -492,6 +493,23 @@ impl EffectedWrite {
         bundle.set_fps(sync.video().fps());
         bundle.set_encoder(crate::encoder_select::EncoderSelect::choose());
         Ok(())
+    }
+
+    /// Encode into a bundle and write both the bundle and the status.
+    pub fn write_h264_bundle_status<W: Write, S: Write>(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        bundle_out: W,
+        status_out: S,
+    ) -> Result<AvBundle, WriteError> {
+        let mut bundle = AvBundle::new();
+        Self::write_h264_bundle(frames, controls, weights, sync, &mut bundle)?;
+        bundle.write(bundle_out).map_err(|_| WriteError::Io)?;
+        let status = SystemStatus::from_bundle(&bundle);
+        status.write(status_out).map_err(|_| WriteError::Io)?;
+        Ok(bundle)
     }
 }
 

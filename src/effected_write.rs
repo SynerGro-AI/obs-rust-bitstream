@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
 use crate::scene_effect::SceneEffect;
+use crate::av_bundle::AvBundle;
 use crate::audio_writer::AudioWriter;
 use crate::audio_sync::AudioSync;
 use crate::encode_cancel::EncodeCancel;
@@ -474,6 +475,21 @@ impl EffectedWrite {
     ) -> Result<(), WriteError> {
         let samples = Self::write_h264_audio(frames, controls, weights, sync, video)?;
         AudioWriter::write(&samples, audio).map_err(|_| WriteError::Io)
+    }
+
+    /// Encode into an AvBundle.
+    pub fn write_h264_bundle(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        bundle: &mut AvBundle,
+    ) -> Result<(), WriteError> {
+        let mut video = Vec::new();
+        let samples = Self::write_h264_audio(frames, controls, weights, sync, &mut video)?;
+        bundle.push_video(&video);
+        bundle.push_audio(&samples);
+        Ok(())
     }
 }
 

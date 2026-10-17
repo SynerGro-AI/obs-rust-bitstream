@@ -205,6 +205,15 @@ impl StatusHistory {
         )
     }
 
+    /// Extract a field from a JSON string. Simple, no parser.
+    pub fn json_field(json: &str, key: &str) -> Option<String> {
+        let pattern = format!("\"{}\":", key);
+        let start = json.find(&pattern)? + pattern.len();
+        let rest = &json[start..];
+        let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+        Some(rest[..end].trim_matches('"').to_string())
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         writeln!(out, "# {}", self.summary())?;
@@ -330,5 +339,7 @@ mod tests {
         assert!(h4.summary().contains("variable"));
         assert!(h4.summary().contains("streak"));
         assert!(h4.to_json().contains("\"record\":true"));
+        let json = h4.to_json();
+        assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));
     }
 }

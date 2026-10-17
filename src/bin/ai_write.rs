@@ -4,6 +4,7 @@
 //! Reads it back and prints the lengths.
 
 use obs_rust_bitstream::audio_sync::AudioSync;
+use obs_rust_bitstream::bundle_player::BundlePlayer;
 use obs_rust_bitstream::av_bundle::AvBundle;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
@@ -46,4 +47,10 @@ fn main() {
         back.fps(),
         back.duration_ms()
     );
+    let player = BundlePlayer::new(back.fps()).expect("player");
+    for ms in [0.0, 33.0, 66.0, 100.0] {
+        if let Some(s) = player.sample_at(&back, ms) {
+            println!("  {} ms -> sample {}", ms, s);
+        }
+    }
 }

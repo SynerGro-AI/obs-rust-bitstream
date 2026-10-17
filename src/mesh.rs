@@ -63,6 +63,10 @@ impl Mesh {
         &self.verts
     }
 
+    pub fn faces(&self) -> &[Face] {
+        &self.faces
+    }
+
     /// Move a vertex from live weights.
     pub fn from_weights(&mut self, weights: &LiveWeights, index: usize) {
         if index >= self.verts.len() {

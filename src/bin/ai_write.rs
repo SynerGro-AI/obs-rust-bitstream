@@ -241,6 +241,7 @@ fn main() {
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());
     println!("healthy runs: {}", grown.healthy_count());
+    println!("health ratio: {:.0}%", grown.health_ratio() * 100.0);
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

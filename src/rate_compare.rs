@@ -14,6 +14,11 @@ use crate::write_timing::WriteTiming;
 pub struct RateCompare;
 
 impl RateCompare {
+    /// Encode one frame at three sizes. Returns (s, m, l).
+    pub fn three(small: u32, mid: u32, large: u32) -> Result<(f32, f32, f32), H264Error> {
+        Ok((Self::one(small)?, Self::one(mid)?, Self::one(large)?))
+    }
+
     /// Encode one frame at two sizes. Returns (small_fps, large_fps).
     pub fn fps(small: u32, large: u32) -> Result<(f32, f32), H264Error> {
         let small_fps = Self::one(small)?;
@@ -44,5 +49,7 @@ mod tests {
         let (small, large) = RateCompare::fps(16, 32).unwrap();
         assert!(small > 0.0);
         assert!(large > 0.0);
+        let (a, b, c) = RateCompare::three(8, 16, 32).unwrap();
+        assert!(a > 0.0 && b > 0.0 && c > 0.0);
     }
 }

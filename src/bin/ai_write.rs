@@ -259,6 +259,7 @@ fn main() {
     println!("stable: {}", grown.stable(0.1));
     println!("trend: {}", grown.trend());
     println!("history summary: {}", grown.summary());
+    println!("json: {}", grown.to_json());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

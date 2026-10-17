@@ -5,8 +5,10 @@
 //!
 //! Differential: write + read round-trips.
 
+use crate::fps_trailer::FpsTrailer;
 use crate::frame_sequence::FrameSequence;
 use crate::raw_writer::WriteError;
+use crate::timed_sequence::TimedSequence;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
 use std::io::Read;
@@ -44,6 +46,26 @@ impl RawReader {
         }
         Ok(seq)
     }
+
+    /// Read frames and an fps trailer into a TimedSequence.
+    pub fn read_timed<R: Read>(mut input: R) -> Result<TimedSequence, WriteError> {
+        let mut buf = Vec::new();
+        input.read_to_end(&mut buf).map_err(|_| WriteError::Io)?;
+        let fps = FpsTrailer::read(&buf).unwrap_or(30.0);
+        let frames_end = if buf.len() >= 8 && &buf[buf.len() - 8..buf.len() - 4] == b"FPS!" {
+            buf.len() - 8
+        } else {
+            buf.len()
+        };
+        let seq = Self::read(&buf[..frames_end])?;
+        let mut timed = TimedSequence::new(fps).map_err(|_| WriteError::Io)?;
+        for i in 0..seq.len() {
+            if let Ok(f) = seq.get(i) {
+                timed.push(f.clone());
+            }
+        }
+        Ok(timed)
+    }
 }
 
 #[cfg(test)]
@@ -63,5 +85,11 @@ mod tests {
         let back = RawReader::read(Cursor::new(buf)).unwrap();
         assert_eq!(back.len(), 1);
         assert_eq!(back.get(0).unwrap().planes[0][0], 42);
+        let mut buf2 = Vec::new();
+        RawWriter::write(&seq, &mut buf2).unwrap();
+        FpsTrailer::write(24.0, &mut buf2).unwrap();
+        let timed = RawReader::read_timed(std::io::Cursor::new(buf2)).unwrap();
+        assert_eq!(timed.fps(), 24.0);
+        assert_eq!(timed.len(), 1);
     }
 }

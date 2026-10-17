@@ -67,7 +67,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Brush / eraser
 - [x] Clone stamp
 - [x] Healing
-- [ ] Dodge / burn / sponge
+- [x] Dodge / burn / sponge
 - [ ] Gradient
 - [ ] Paint bucket
 - [x] Text

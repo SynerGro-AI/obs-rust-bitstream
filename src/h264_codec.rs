@@ -7,6 +7,7 @@
 //!
 //! Differential: encode produces non-empty Annex-B.
 
+use crate::encoder_select::{EncoderChoice, EncoderSelect};
 use crate::live_weights::LiveWeights;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;

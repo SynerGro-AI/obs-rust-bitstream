@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
 use crate::scene_effect::SceneEffect;
+use crate::encode_cancel::EncodeCancel;
 use crate::encode_status::EncodeStatus;
 use crate::encode_progress::EncodeProgress;
 use crate::encoder_controls::EncoderControls;
@@ -372,6 +373,35 @@ impl EffectedWrite {
         out.write_all(&tail).map_err(|_| WriteError::Io)?;
         Ok(())
     }
+
+    /// Encode and stop if cancel is set.
+    pub fn write_h264_cancellable<W: Write>(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        status: &mut EncodeStatus,
+        cancel: &EncodeCancel,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        for f in frames {
+            if cancel.is_cancelled() {
+                break;
+            }
+            let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+            status.tick();
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -448,5 +478,11 @@ mod tests {
         let mut buf16 = Vec::new();
         EffectedWrite::write_h264_status(&[f.clone()], &controls, &mut w, &mut status, &mut buf16).unwrap();
         assert!(status.is_done());
+        let mut cancel = EncodeCancel::new();
+        cancel.cancel();
+        let mut status2 = EncodeStatus::new(2, 30.0).unwrap();
+        let mut buf17 = Vec::new();
+        EffectedWrite::write_h264_cancellable(&[f.clone(), f.clone()], &controls, &mut w, &mut status2, &cancel, &mut buf17).unwrap();
+        assert_eq!(status2.done(), 0);
     }
 }

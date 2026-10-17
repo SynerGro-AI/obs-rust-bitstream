@@ -187,6 +187,9 @@ fn main() {
     println!("status with stamp: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
+    println!("wrote status.txt with available count");
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
     println!("wrote status.txt with source");
     println!("sources: {}", CaptureSource::kinds().join(", "));
     for k in CaptureSource::kinds() {

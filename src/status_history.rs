@@ -97,6 +97,15 @@ impl StatusHistory {
         }
     }
 
+    /// A color for the status word.
+    pub fn color(&self) -> &'static str {
+        match self.word() {
+            "good" => "green",
+            "warn" => "yellow",
+            _ => "red",
+        }
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -321,6 +330,7 @@ mod tests {
         assert_eq!(h6.streak(), 1);
         assert_eq!(h6.best_streak(), 1);
         assert_eq!(h6.word(), "warn");
+        assert_eq!(h6.color(), "yellow");
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

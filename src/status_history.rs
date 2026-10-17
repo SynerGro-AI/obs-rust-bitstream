@@ -141,6 +141,12 @@ impl StatusHistory {
         if ts == 0 { 0 } else { now.saturating_sub(ts) }
     }
 
+    /// True if the dashboard is younger than max_age seconds.
+    pub fn fresh(line: &str, now: u64, max_age: u64) -> bool {
+        let a = Self::age(line, now);
+        (a > 0 && a <= max_age) || Self::timestamp_of(line) == now
+    }
+
     /// Read a dashboard line from a reader.
     pub fn read_dashboard<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
         let mut buf = String::new();

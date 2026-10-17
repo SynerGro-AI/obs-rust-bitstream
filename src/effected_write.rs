@@ -9,6 +9,7 @@ use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
 use crate::raw_writer::{RawWriter, WriteError};
 use crate::scene_effect::SceneEffect;
+use crate::tool_pipeline::ToolPipeline;
 use crate::video_frame::VideoFrame;
 use std::io::Write;
 
@@ -50,5 +51,11 @@ mod tests {
         // header is 16 bytes, then pixels
         assert!(buf.len() > 16);
         assert_eq!(buf[16], 60);
+        let mut seq = FrameSequence::new();
+        seq.push(f);
+        let pipe = ToolPipeline::new();
+        let mut buf2 = Vec::new();
+        EffectedWrite::write_sequence(&mut seq, &pipe, &w, &mut buf2).unwrap();
+        assert!(buf2.len() > 16);
     }
 }

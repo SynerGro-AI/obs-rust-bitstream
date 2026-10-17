@@ -135,6 +135,12 @@ impl StatusHistory {
             .unwrap_or(0)
     }
 
+    /// Age in seconds. 0 if no timestamp.
+    pub fn age(line: &str, now: u64) -> u64 {
+        let ts = Self::timestamp_of(line);
+        if ts == 0 { 0 } else { now.saturating_sub(ts) }
+    }
+
     /// Read a dashboard line from a reader.
     pub fn read_dashboard<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
         let mut buf = String::new();
@@ -378,6 +384,7 @@ mod tests {
         assert!(h6.report().contains("warn"));
         assert!(h6.dashboard().contains("streak"));
         assert!(h6.dashboard_at(123).contains("@ 123"));
+        assert_eq!(StatusHistory::age("good @ 100", 150), 50);
         assert!(h6.matches_dashboard(&h6.dashboard()));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();

@@ -307,6 +307,25 @@ impl EffectedWrite {
         effect: &SceneEffect,
         controls: &EncoderControls,
         weights: &mut LiveWeights,
+        out: W,
+    ) -> Result<(), WriteError> {
+        Self::write_effected_h264_progress(
+            frames,
+            effect,
+            controls,
+            weights,
+            &mut EncodeProgress::new(frames.len()),
+            out,
+        )
+    }
+
+    /// Apply a scene effect, encode, and report progress.
+    pub fn write_effected_h264_progress<W: Write>(
+        frames: &[VideoFrame],
+        effect: &SceneEffect,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        progress: &mut EncodeProgress,
         mut out: W,
     ) -> Result<(), WriteError> {
         if frames.is_empty() {
@@ -321,6 +340,7 @@ impl EffectedWrite {
             let _ = effect.apply(&mut processed, weights);
             let bytes = enc.encode(&processed).map_err(|_| WriteError::Empty)?;
             out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+            progress.tick();
         }
         let tail = enc.flush();
         out.write_all(&tail).map_err(|_| WriteError::Io)?;

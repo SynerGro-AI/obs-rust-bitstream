@@ -9,6 +9,7 @@ use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
 use crate::scene_effect::SceneEffect;
+use crate::audio_sync::AudioSync;
 use crate::encode_cancel::EncodeCancel;
 use crate::encode_status::EncodeStatus;
 use crate::encode_progress::EncodeProgress;
@@ -433,6 +434,32 @@ impl EffectedWrite {
         let tail = enc.flush();
         out.write_all(&tail).map_err(|_| WriteError::Io)?;
         Ok(())
+    }
+
+    /// Encode and sample audio at each frame.
+    pub fn write_h264_audio<W: Write>(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        mut out: W,
+    ) -> Result<Vec<f32>, WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        let mut samples = Vec::new();
+        for (i, f) in frames.iter().enumerate() {
+            let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+            samples.push(sync.sample(i));
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(samples)
     }
 }
 

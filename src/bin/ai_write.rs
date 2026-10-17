@@ -38,4 +38,6 @@ fn main() {
     );
     let enc = SystemStatus::read_encoder(File::open("status.txt").expect("open")).expect("read");
     println!("status encoder: {}", enc);
+    let status = SystemStatus::from_bundle(&bundle);
+    println!("matches: {}", status.matches_bundle(&bundle));
 }

@@ -489,6 +489,7 @@ impl EffectedWrite {
         let samples = Self::write_h264_audio(frames, controls, weights, sync, &mut video)?;
         bundle.push_video(&video);
         bundle.push_audio(&samples);
+        bundle.set_fps(sync.video().fps());
         Ok(())
     }
 }

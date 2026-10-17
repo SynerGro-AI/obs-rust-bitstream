@@ -44,6 +44,19 @@ impl StatusHistory {
         }
         Ok(())
     }
+
+    /// Read lines from a reader. Caps at max.
+    pub fn read<R: std::io::Read>(max: usize, mut input: R) -> Result<Self, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        let mut h = Self::new(max);
+        for line in buf.lines() {
+            if !line.is_empty() {
+                h.push(line);
+            }
+        }
+        Ok(h)
+    }
 }
 
 #[cfg(test)]
@@ -61,5 +74,7 @@ mod tests {
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));
+        let loaded = StatusHistory::read(2, std::io::Cursor::new(&buf)).unwrap();
+        assert_eq!(loaded.last(), Some("c"));
     }
 }

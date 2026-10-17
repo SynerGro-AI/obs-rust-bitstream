@@ -5,6 +5,8 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::capture::Capture;
+use obs_rust_bitstream::file_capture::FileCapture;
 use obs_rust_bitstream::capture_select::CaptureSource;
 use obs_rust_bitstream::timestamp_stamp::TimestampStamp;
 use obs_rust_bitstream::report::Report;
@@ -19,6 +21,7 @@ use obs_rust_bitstream::timed_sequence::TimedSequence;
 use obs_rust_bitstream::video_fourcc::VideoFormat;
 use obs_rust_bitstream::video_frame::VideoFrame;
 use std::fs::File;
+use std::io::Write;
 
 fn main() {
     let bytes = std::fs::read("/tmp/bell1.wav").expect("read");
@@ -122,6 +125,14 @@ fn main() {
     println!("wrote captured.avbn");
     let cap_size = std::fs::metadata("captured.avbn").map(|m| m.len()).unwrap_or(0);
     println!("captured.avbn size: {} bytes", cap_size);
+    // Write a tiny raw file and read it back.
+    {
+        let mut raw = File::create("/tmp/demo.raw").expect("raw");
+        raw.write_all(&[42u8; 16]).expect("write");
+    }
+    let mut file_cap = FileCapture::open("/tmp/demo.raw", 4, 4).expect("file cap");
+    let from_file = file_cap.frame().expect("frame");
+    println!("file capture: {}x{} first={}", from_file.width, from_file.height, from_file.planes[0][0]);
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

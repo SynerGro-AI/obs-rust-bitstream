@@ -36,6 +36,14 @@ impl StatusHistory {
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }
+
+    /// Write all lines to a writer.
+    pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
+        for line in &self.lines {
+            writeln!(out, "{}", line)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -50,5 +58,8 @@ mod tests {
         h.push("c");
         assert_eq!(h.len(), 2);
         assert_eq!(h.last(), Some("c"));
+        let mut buf = Vec::new();
+        h.write(&mut buf).unwrap();
+        assert!(String::from_utf8_lossy(&buf).contains("c"));
     }
 }

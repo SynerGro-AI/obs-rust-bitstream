@@ -242,6 +242,7 @@ fn main() {
     println!("history grown: {} lines", grown.len());
     println!("oldest: {}", grown.first().unwrap_or(""));
     println!("lines: {}", grown.lines().len());
+    println!("healthy lines: {}", grown.filter("healthy").len());
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

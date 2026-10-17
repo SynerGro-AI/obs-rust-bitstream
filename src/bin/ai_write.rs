@@ -66,5 +66,8 @@ fn main() {
     let mut status = SystemStatus::from_bundle(&bundle);
     status.set_encode_ms(timing.elapsed_ms());
     println!("status: {}", status.summary());
+    let status_file = File::create("status.txt").expect("status");
+    status.write(status_file).expect("write status");
+    println!("wrote status.txt with time");
     println!("matches: {}", status.matches_bundle(&bundle));
 }

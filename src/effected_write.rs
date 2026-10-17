@@ -8,6 +8,7 @@
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
+use crate::encode_progress::EncodeProgress;
 use crate::scene_effect::SceneEffect;
 use crate::system_status::SystemStatus;
 use crate::av_bundle::AvBundle;
@@ -530,6 +531,37 @@ impl EffectedWrite {
             let mut p = f.clone();
             let _ = effect.apply(&mut p, weights);
             processed.push(p);
+        }
+        Self::write_h264_bundle_status(
+            &processed,
+            controls,
+            weights,
+            sync,
+            bundle_out,
+            status_out,
+        )
+    }
+
+    /// Apply an effect, encode with progress, and write both.
+    pub fn write_effected_bundle_progress<W: Write, S: Write>(
+        frames: &[VideoFrame],
+        effect: &SceneEffect,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        progress: &mut EncodeProgress,
+        bundle_out: W,
+        status_out: S,
+    ) -> Result<AvBundle, WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut processed = Vec::new();
+        for f in frames {
+            let mut p = f.clone();
+            let _ = effect.apply(&mut p, weights);
+            processed.push(p);
+            progress.tick();
         }
         Self::write_h264_bundle_status(
             &processed,

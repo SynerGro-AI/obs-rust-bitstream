@@ -1,9 +1,10 @@
-//! Video + audio write demo.
+//! Bundle demo.
 //!
-//! Encodes video and writes audio samples.
-//! Writes out.h264 and out.raw.
+//! Encodes into an AvBundle and writes out.avbn.
+//! Reads it back and prints the lengths.
 
 use obs_rust_bitstream::audio_sync::AudioSync;
+use obs_rust_bitstream::av_bundle::AvBundle;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
@@ -26,16 +27,21 @@ fn main() {
     let mut controls = EncoderControls::new().expect("controls");
     let mut weights = LiveWeights::new();
     controls.set_quality(28.0, &mut weights).expect("quality");
-    let video = File::create("out.h264").expect("video");
-    let audio = File::create("out.raw").expect("audio");
-    EffectedWrite::write_h264_av(
+    let mut bundle = AvBundle::new();
+    EffectedWrite::write_h264_bundle(
         &frames,
         &controls,
         &mut weights,
         &sync,
-        video,
-        audio,
+        &mut bundle,
     )
-    .expect("write");
-    println!("wrote out.h264 and out.raw ({} frames)", frames.len());
+    .expect("encode");
+    let file = File::create("out.avbn").expect("file");
+    bundle.write(file).expect("write");
+    let back = AvBundle::read(File::open("out.avbn").expect("open")).expect("read");
+    println!(
+        "bundle: video={} audio={}",
+        back.video_len(),
+        back.audio_len()
+    );
 }

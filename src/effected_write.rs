@@ -7,6 +7,7 @@
 
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
+use crate::ping_pong::PingPong;
 use crate::sequence_reverse::SequenceReverse;
 use crate::frame_hold::FrameHold;
 use crate::frame_sequence::FrameSequence;
@@ -196,6 +197,22 @@ impl EffectedWrite {
         let rev = SequenceReverse::reverse(&seq);
         RawWriter::write(&rev, out)
     }
+
+    /// Bounce a sequence forward then backward and write it.
+    pub fn write_ping_pong<W: Write>(
+        frames: &[VideoFrame],
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut seq = FrameSequence::new();
+        for f in frames {
+            seq.push(f.clone());
+        }
+        let bounced = PingPong::bounce(&seq);
+        RawWriter::write(&bounced, out)
+    }
 }
 
 #[cfg(test)]
@@ -248,5 +265,8 @@ mod tests {
         let mut buf9 = Vec::new();
         EffectedWrite::write_reverse(&[f.clone()], &mut buf9).unwrap();
         assert!(buf9.len() > 16);
+        let mut buf10 = Vec::new();
+        EffectedWrite::write_ping_pong(&[f.clone()], &mut buf10).unwrap();
+        assert!(buf10.len() > 16);
     }
 }

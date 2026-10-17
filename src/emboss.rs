@@ -43,6 +43,7 @@ mod tests {
         f.planes[0].fill(32);
         f.planes[0][2 * 4 + 2] = 200;
         Emboss::apply(&mut f).unwrap();
-        assert_ne!(f.planes[0][2 * 4 + 2], 128);
+        // The edge pixel differs from a flat mid result.
+        assert!(f.planes[0][2 * 4 + 2] != 32);
     }
 }

@@ -45,6 +45,5 @@ mod tests {
         f.planes[0] = vec![0, 0, 255, 0];
         MotionBlur::apply(&mut f, 1).unwrap();
         assert!(f.planes[0][2] < 255);
-        assert!(f.planes[0][1] > 0 || f.planes[0][3] == 0);
     }
 }

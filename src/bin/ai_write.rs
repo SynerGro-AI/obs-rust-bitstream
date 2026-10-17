@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::write_timing::WriteTiming;
 use obs_rust_bitstream::encode_cancel::EncodeCancel;
 use obs_rust_bitstream::encode_progress::EncodeProgress;
 use obs_rust_bitstream::scene_effect::SceneEffect;
@@ -39,6 +40,7 @@ fn main() {
     effect.add("bright");
     let bundle_file = File::create("out.avbn").expect("bundle");
     let status_file = File::create("status.txt").expect("status");
+    let timing = WriteTiming::start();
     let mut progress = EncodeProgress::new(frames.len());
     let cancel = EncodeCancel::new();
     let bundle = EffectedWrite::write_effected_bundle_cancellable(
@@ -54,10 +56,11 @@ fn main() {
     )
     .expect("write");
     println!(
-        "wrote out.avbn (video={} audio={}) progress={:.0}%",
+        "wrote out.avbn (video={} audio={}) progress={:.0}% time={:.1}ms",
         bundle.video_len(),
         bundle.audio_len(),
-        progress.fraction() * 100.0
+        progress.fraction() * 100.0,
+        timing.elapsed_ms()
     );
     let status = SystemStatus::from_bundle(&bundle);
     println!("status: {}", status.summary());

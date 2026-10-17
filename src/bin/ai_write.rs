@@ -262,6 +262,9 @@ fn main() {
     println!("fresh: {}", StatusHistory::fresh(&dash, SystemStatus::now(), 60));
     let report = StatusReport::from(&grown);
     println!("report: {}", report.summary());
+    let rep_file = File::create("report.txt").expect("rep");
+    report.write(rep_file).expect("write rep");
+    println!("wrote report.txt");
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

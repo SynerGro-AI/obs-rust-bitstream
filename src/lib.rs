@@ -789,4 +789,4 @@ pub use subdiv::Subdiv;
 pub use joint_hierarchy::{Joint, JointHierarchy, JointError};
 pub use ik_fk::{IkFk, SolveMode};
 pub use constraint::{Constraint, ConstraintKind};
-pub use skin_weights::{SkinWeights, SkinError};
+pub use skin_weights::{SkinWeights, SkinError as SkinWeightError};

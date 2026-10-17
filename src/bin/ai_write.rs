@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::report::Report;
 use obs_rust_bitstream::rate_compare::RateCompare;
 use obs_rust_bitstream::write_timing::WriteTiming;
 use obs_rust_bitstream::encode_cancel::EncodeCancel;
@@ -77,5 +78,8 @@ fn main() {
     let rate_file = File::create("rate.txt").expect("rate");
     RateCompare::write_three(8, 16, 32, rate_file).expect("write rate");
     println!("wrote rate.txt");
+    let report_file = File::create("report.txt").expect("report");
+    Report::write(&status, 8, 16, 32, report_file).expect("report");
+    println!("wrote report.txt");
     println!("matches: {}", status.matches_bundle(&bundle));
 }

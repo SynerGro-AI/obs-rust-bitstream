@@ -31,6 +31,17 @@ impl EffectedWrite {
         }
         RawWriter::write(&seq, out)
     }
+
+    /// Run a pipeline on a sequence and write it.
+    pub fn write_sequence<W: Write>(
+        seq: &mut FrameSequence,
+        pipe: &ToolPipeline,
+        weights: &LiveWeights,
+        out: W,
+    ) -> Result<(), WriteError> {
+        pipe.run_sequence(seq, weights).map_err(|_| WriteError::Empty)?;
+        RawWriter::write(seq, out)
+    }
 }
 
 #[cfg(test)]

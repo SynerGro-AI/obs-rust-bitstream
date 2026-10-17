@@ -5,6 +5,7 @@
 //!
 //! Differential: look at origin + eye at (0,0,5) puts -z forward.
 
+use crate::live_weights::LiveWeights;
 use crate::matrix4::Matrix4;
 use crate::vec3::Vec3;
 use crate::vec4::Vec4;
@@ -32,6 +33,19 @@ impl Camera {
             Vec4::new(s.z, u.z, -f.z, 0.0),
             Vec4::new(-s.dot(self.eye), -u.dot(self.eye), f.dot(self.eye), 1.0),
         )
+    }
+
+    /// Read eye position from live weights.
+    pub fn from_weights(&mut self, weights: &LiveWeights) {
+        if let Ok(x) = weights.get("camera.eye.x") {
+            self.eye.x = x;
+        }
+        if let Ok(y) = weights.get("camera.eye.y") {
+            self.eye.y = y;
+        }
+        if let Ok(z) = weights.get("camera.eye.z") {
+            self.eye.z = z;
+        }
     }
 }
 

@@ -31,7 +31,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Median
 - [x] Emboss
 - [x] Find edges
-- [ ] High pass
+- [x] High pass
 
 ### Layer styles
 - [x] Drop shadow (dark)

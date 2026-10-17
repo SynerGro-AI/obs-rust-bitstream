@@ -212,6 +212,9 @@ fn main() {
     println!("recommend: {}", CaptureRate::recommend(rate, encode_fps));
     status.set_recommendation(CaptureRate::recommend(rate, encode_fps));
     println!("status with recommend: {}", status.summary());
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with recommendation");
     status.set_bottleneck(CaptureRate::bottleneck(rate, encode_fps));
     println!("status with bottleneck: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");

@@ -127,6 +127,21 @@ impl StatusHistory {
         Ok(h)
     }
 
+    /// Read only the header line (starts with #).
+    pub fn read_header<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        for line in buf.lines() {
+            if let Some(rest) = line.strip_prefix("# ") {
+                return Ok(rest.to_string());
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "no header",
+        ))
+    }
+
     /// True if the last line matches.
     pub fn matches_last(&self, other: &Self) -> bool {
         self.last() == other.last()
@@ -167,6 +182,8 @@ mod tests {
         let with_header = "# summary\nc\n";
         let loaded2 = StatusHistory::read(2, std::io::Cursor::new(with_header)).unwrap();
         assert_eq!(loaded2.last(), Some("c"));
+        let header = StatusHistory::read_header(std::io::Cursor::new(with_header)).unwrap();
+        assert!(header.contains("summary"));
         let path = "/tmp/hist_append.txt";
         let _ = std::fs::remove_file(path);
         h.append_to(path).unwrap();

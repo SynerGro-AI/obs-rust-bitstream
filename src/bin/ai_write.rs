@@ -1,6 +1,6 @@
-//! Fade write path demo.
+//! Multi-step fade demo.
 //!
-//! Builds four frames and fades bright from 0 to 40.
+//! Builds four frames and fades bright and glow.
 //! Writes out.obsr.
 
 use obs_rust_bitstream::effected_write::EffectedWrite;
@@ -16,6 +16,11 @@ fn main() {
         frames.push(frame);
     }
     let file = File::create("out.obsr").expect("file");
-    EffectedWrite::write_fade(&frames, "bright", 0.0, 40.0, file).expect("write");
-    println!("wrote out.obsr ({} frames, fade 0..40)", frames.len());
+    EffectedWrite::write_fade_steps(
+        &frames,
+        &[("bright", 20.0), ("glow", 10.0)],
+        file,
+    )
+    .expect("write");
+    println!("wrote out.obsr ({} frames, bright+glow fade)", frames.len());
 }

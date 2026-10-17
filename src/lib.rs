@@ -370,6 +370,10 @@ pub mod pixel_selection;
 pub mod photo_layers;
 pub mod ai_tools;
 pub mod ai_approve;
+pub mod hue_sat;
+pub mod exposure;
+pub mod invert;
+pub mod threshold;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -644,3 +648,7 @@ pub use pixel_selection::{Selection as PixelSelection, SelectError as PixelSelec
 pub use photo_layers::{LayerStack as PhotoLayers, Layer as PhotoLayer, LayerError as PhotoLayerError};
 pub use ai_tools::{AiTools, CurveSuggestion, BalanceSuggestion, EffectSuggestion};
 pub use ai_approve::{AiApprove, ApproveMode, PendingChange};
+pub use hue_sat::{HueSat, HueSatError};
+pub use exposure::{Exposure, ExposureError};
+pub use invert::{Invert, InvertError};
+pub use threshold::{Threshold, ThresholdError};

@@ -85,5 +85,8 @@ mod tests {
         assert!(CaptureSource::kinds().contains(&"file"));
         assert!(CaptureSource::available("synthetic"));
         assert!(CaptureSource::available("file"));
+        let avail = CaptureSource::available_kinds();
+        assert!(avail.contains(&"synthetic"));
+        assert!(avail.contains(&"file"));
     }
 }

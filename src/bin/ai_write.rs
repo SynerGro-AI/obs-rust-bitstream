@@ -72,5 +72,7 @@ fn main() {
     println!("wrote status.txt with time");
     let (small, large) = RateCompare::fps(16, 32).expect("compare");
     println!("rate: 16x16={:.0} fps  32x32={:.0} fps", small, large);
+    let (a, b, c) = RateCompare::three(8, 16, 32).expect("three");
+    println!("three: 8={:.0} 16={:.0} 32={:.0}", a, b, c);
     println!("matches: {}", status.matches_bundle(&bundle));
 }

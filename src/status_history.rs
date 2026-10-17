@@ -37,6 +37,11 @@ impl StatusHistory {
         self.lines.is_empty()
     }
 
+    /// Remove all lines.
+    pub fn clear(&mut self) {
+        self.lines.clear();
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         for line in &self.lines {
@@ -99,5 +104,8 @@ mod tests {
         h.append_to(path).unwrap();
         let again = StatusHistory::read(10, std::fs::File::open(path).unwrap()).unwrap();
         assert!(again.len() >= 2);
+        let mut h2 = h.clone();
+        h2.clear();
+        assert!(h2.is_empty());
     }
 }

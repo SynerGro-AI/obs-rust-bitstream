@@ -1,56 +1,19 @@
-//! Bundle demo.
-//!
-//! Encodes into an AvBundle and writes out.avbn.
-//! Reads it back and prints the lengths.
+//! Load a CC0 sample and print its stats.
 
-use obs_rust_bitstream::audio_sync::AudioSync;
-use obs_rust_bitstream::bundle_player::BundlePlayer;
-use obs_rust_bitstream::av_bundle::AvBundle;
-use obs_rust_bitstream::effected_write::EffectedWrite;
-use obs_rust_bitstream::encoder_controls::EncoderControls;
-use obs_rust_bitstream::live_weights::LiveWeights;
-use obs_rust_bitstream::timed_sequence::TimedSequence;
-use obs_rust_bitstream::video_fourcc::VideoFormat;
-use obs_rust_bitstream::video_frame::VideoFrame;
-use std::fs::File;
+use obs_rust_bitstream::sound_cc0::SoundCc0;
+use std::fs;
 
 fn main() {
-    let mut timed = TimedSequence::new(30.0).expect("fps");
-    for i in 0..4 {
-        let mut frame = VideoFrame::new(VideoFormat::Y800, 32, 32).expect("frame");
-        frame.planes[0].fill(40 + i * 10);
-        timed.push(frame);
-    }
-    let sync = AudioSync::new(timed.clone());
-    let frames: Vec<_> = (0..timed.len())
-        .filter_map(|i| timed.frames().get(i).ok().cloned())
-        .collect();
-    let mut controls = EncoderControls::new().expect("controls");
-    let mut weights = LiveWeights::new();
-    controls.set_quality(28.0, &mut weights).expect("quality");
-    let mut bundle = AvBundle::new();
-    EffectedWrite::write_h264_bundle(
-        &frames,
-        &controls,
-        &mut weights,
-        &sync,
-        &mut bundle,
-    )
-    .expect("encode");
-    let file = File::create("out.avbn").expect("file");
-    bundle.write(file).expect("write");
-    let back = AvBundle::read(File::open("out.avbn").expect("open")).expect("read");
+    let bytes = fs::read("/tmp/bell1.wav").expect("read");
+    let data = SoundCc0::load(&bytes).expect("parse");
     println!(
-        "bundle: video={} audio={} fps={} duration_ms={:.1}",
-        back.video_len(),
-        back.audio_len(),
-        back.fps(),
-        back.duration_ms()
+        "bell1.wav: rate={} ch={} samples={} duration_s={:.2}",
+        data.sample_rate,
+        data.channels,
+        data.samples.len(),
+        data.samples.len() as f32 / data.sample_rate as f32
     );
-    let player = BundlePlayer::new(back.fps()).expect("player");
-    for ms in [0.0, 33.0, 66.0, 100.0] {
-        if let Some(s) = player.sample_at(&back, ms) {
-            println!("  {} ms -> sample {}", ms, s);
-        }
+    if let Some(peak) = data.samples.iter().map(|s| s.abs()).max_by(|a, b| a.partial_cmp(b).unwrap()) {
+        println!("peak: {:.3}", peak);
     }
 }

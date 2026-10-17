@@ -191,14 +191,15 @@ impl StatusHistory {
     /// One readable line for the history.
     pub fn summary(&self) -> String {
         format!(
-            "{} lines | {:.0}% healthy | {:.0} fps avg | {} | {} | streak {}{}",
+            "{} lines | {:.0}% healthy | {:.0} fps avg | {} | {} | streak {}{} | {}",
             self.len(),
             self.health_ratio() * 100.0,
             self.avg_fps(),
             self.trend(),
             if self.stable(0.1) { "stable" } else { "variable" },
             self.streak(),
-            if self.at_record() { " (record)" } else { "" }
+            if self.at_record() { " (record)" } else { "" },
+            self.word()
         )
     }
 
@@ -363,6 +364,7 @@ mod tests {
         assert!(h4.summary().contains("up"));
         assert!(h4.summary().contains("variable"));
         assert!(h4.summary().contains("streak"));
+        assert!(h4.summary().contains("good") || h4.summary().contains("warn") || h4.summary().contains("bad"));
         assert!(h4.to_json().contains("\"record\":true"));
         let json = h4.to_json();
         assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));

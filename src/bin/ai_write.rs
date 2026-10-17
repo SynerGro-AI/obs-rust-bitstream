@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::scene_effect::SceneEffect;
 use obs_rust_bitstream::sound_cc0::SoundCc0;
 use obs_rust_bitstream::system_status::SystemStatus;
 use obs_rust_bitstream::timed_sequence::TimedSequence;
@@ -31,10 +32,14 @@ fn main() {
     let mut controls = EncoderControls::new().expect("controls");
     let mut weights = LiveWeights::new();
     controls.set_quality(30.0, &mut weights).expect("quality");
+    weights.set("pipe.bright", 20.0).expect("bright");
+    let mut effect = SceneEffect::new();
+    effect.add("bright");
     let bundle_file = File::create("out.avbn").expect("bundle");
     let status_file = File::create("status.txt").expect("status");
-    let bundle = EffectedWrite::write_h264_bundle_status(
+    let bundle = EffectedWrite::write_effected_bundle_status(
         &frames,
+        &effect,
         &controls,
         &mut weights,
         &sync,

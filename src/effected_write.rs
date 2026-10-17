@@ -511,6 +511,35 @@ impl EffectedWrite {
         status.write(status_out).map_err(|_| WriteError::Io)?;
         Ok(bundle)
     }
+
+    /// Apply an effect, encode, and write bundle and status.
+    pub fn write_effected_bundle_status<W: Write, S: Write>(
+        frames: &[VideoFrame],
+        effect: &SceneEffect,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        bundle_out: W,
+        status_out: S,
+    ) -> Result<AvBundle, WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut processed = Vec::new();
+        for f in frames {
+            let mut p = f.clone();
+            let _ = effect.apply(&mut p, weights);
+            processed.push(p);
+        }
+        Self::write_h264_bundle_status(
+            &processed,
+            controls,
+            weights,
+            sync,
+            bundle_out,
+            status_out,
+        )
+    }
 }
 
 #[cfg(test)]

@@ -47,6 +47,14 @@ impl ToolPipeline {
         self.steps.len()
     }
 
+    /// The steps this pipeline knows how to run.
+    pub fn available() -> &'static [&'static str] {
+        &[
+            "bright", "exposure", "threshold", "invert", "posterize",
+            "noise", "blur", "sharpen", "glow", "levels", "hue", "balance",
+        ]
+    }
+
     /// Run each step. Strength comes from live weights.
     pub fn run(&self, frame: &mut VideoFrame, weights: &LiveWeights) -> Result<(), PipeError> {
         for name in &self.steps {

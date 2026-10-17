@@ -398,6 +398,7 @@ pub mod radial_blur;
 pub mod median;
 pub mod find_edges;
 pub mod high_pass;
+pub mod satin;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -700,3 +701,4 @@ pub use radial_blur::{RadialBlur, RadialError};
 pub use median::{Median, MedianError};
 pub use find_edges::{FindEdges, EdgesError};
 pub use high_pass::{HighPass, HighPassError};
+pub use satin::{Satin, SatinError};

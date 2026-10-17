@@ -42,7 +42,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Stroke
 - [x] Gradient overlay
 - [x] Pattern overlay
-- [ ] Satin
+- [x] Satin
 
 ### Selections
 - [x] Rectangular / elliptical marquee

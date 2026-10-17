@@ -265,6 +265,7 @@ fn main() {
     let json = std::fs::read_to_string("history.json").expect("read json");
     let trend = StatusHistory::json_field(&json, "trend").unwrap_or_default();
     println!("json trend: {}", trend);
+    println!("json matches: {}", grown.matches_json(&json));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

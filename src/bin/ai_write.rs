@@ -234,6 +234,9 @@ fn main() {
     let loaded = StatusHistory::read(3, File::open("history.txt").expect("open")).expect("load");
     println!("loaded: {} last={}", loaded.len(), loaded.last().unwrap_or(""));
     println!("history matches: {}", history.matches_last(&loaded));
+    history.append_to("history.txt").expect("append");
+    let grown = StatusHistory::read(10, File::open("history.txt").expect("open")).expect("grown");
+    println!("history grown: {} lines", grown.len());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

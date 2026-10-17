@@ -85,6 +85,8 @@ fn main() {
     let mut stamped = frames[0].clone();
     TimestampStamp::stamp(&mut stamped, 0, 0, 60, 255).expect("stamp");
     println!("stamped frame with 00:01:00");
+    TimestampStamp::stamp_corner(&mut stamped, 120, 200).expect("corner");
+    println!("stamped corner with 00:02:00");
     let stamped_bundle = File::create("stamped.avbn").expect("stamped");
     let stamped_status = File::create("stamped_status.txt").expect("status");
     let _ = EffectedWrite::write_stamped_bundle(

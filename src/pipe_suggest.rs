@@ -26,6 +26,19 @@ impl PipeSuggest {
         let s = AiTools::suggest_effect(ai, frame);
         let _ = weights.set("pipe.glow", s.strength as f32);
     }
+
+    /// Set a full pipeline from one AI pass.
+    /// Bright, glow, and a mild sharpen.
+    pub fn full(ai: &AiAssistant, frame: &VideoFrame, weights: &mut LiveWeights) {
+        Self::bright(ai, frame, weights);
+        Self::glow(ai, frame, weights);
+        let avg = frame.planes.get(0).map(|p| {
+            let sum: u32 = p.iter().map(|v| *v as u32).sum();
+            sum / p.len().max(1) as u32
+        }).unwrap_or(128);
+        let sharp = if avg < 100 { 20.0 } else { 0.0 };
+        let _ = weights.set("pipe.sharpen", sharp);
+    }
 }
 
 #[cfg(test)]

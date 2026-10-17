@@ -12,6 +12,7 @@ use crate::video_frame::VideoFrame;
 
 pub enum CaptureSource {
     Synthetic(SyntheticCapture),
+    File(FileCapture),
 }
 
 impl CaptureSource {

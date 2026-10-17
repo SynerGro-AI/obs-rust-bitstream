@@ -15,6 +15,7 @@ use crate::hue_sat::HueSat;
 use crate::inner_glow::InnerGlow;
 use crate::invert::Invert;
 use crate::levels::Levels;
+use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
 use crate::posterize::Posterize;
 use crate::sharpen::Sharpen;
@@ -106,6 +107,18 @@ impl ToolPipeline {
         }
         Ok(())
     }
+
+    /// Run the pipeline on every frame in a sequence.
+    pub fn run_sequence(
+        &self,
+        seq: &mut FrameSequence,
+        weights: &LiveWeights,
+    ) -> Result<(), PipeError> {
+        for frame in seq.frames_mut() {
+            self.run(frame, weights)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -123,5 +136,9 @@ mod tests {
         w.set("pipe.bright", 20.0).unwrap();
         pipe.run(&mut f, &w).unwrap();
         assert_eq!(f.planes[0][0], 60);
+        let mut seq = FrameSequence::new();
+        seq.push(f);
+        pipe.run_sequence(&mut seq, &w).unwrap();
+        assert_eq!(seq.get(0).unwrap().planes[0][0], 80);
     }
 }

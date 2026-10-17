@@ -157,6 +157,17 @@ impl SystemStatus {
         )
     }
 
+    /// One readable line.
+    pub fn one_line(&self) -> String {
+        format!(
+            "{} | {} fps | {} | {}",
+            self.source_summary,
+            self.capture_fps as u32,
+            self.bottleneck,
+            if self.healthy { "healthy" } else { "slow" }
+        )
+    }
+
     /// Write the summary to a writer.
     pub fn write<W: Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         writeln!(out, "{}", self.summary())
@@ -222,6 +233,7 @@ mod tests {
         assert!(s2.summary().contains("recommend=lower"));
         s2.set_healthy(true);
         assert!(s2.summary().contains("healthy=true"));
+        assert!(s2.one_line().contains("healthy"));
         s2.set_timestamp(SystemStatus::now());
         assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();

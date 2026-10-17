@@ -107,6 +107,19 @@ fn main() {
         }
     }
     println!("captured {} frames", captured_frames.len());
+    let cap_bundle = File::create("captured.avbn").expect("cap");
+    let cap_status = File::create("captured_status.txt").expect("status");
+    let _ = EffectedWrite::write_stamped_bundle(
+        &captured_frames,
+        30.0,
+        &controls,
+        &mut weights,
+        &sync,
+        cap_bundle,
+        cap_status,
+    )
+    .expect("encode captured");
+    println!("wrote captured.avbn");
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

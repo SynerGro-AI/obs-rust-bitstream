@@ -128,5 +128,6 @@ mod tests {
         c.apply(&mut w).unwrap();
         assert_eq!(w.get("h264.bitrate").unwrap(), 2_000_000.0);
         assert_eq!(w.get("h264.qp").unwrap(), 30.0);
+        assert!(c.summary().contains("qp=30"));
     }
 }

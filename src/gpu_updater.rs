@@ -45,9 +45,27 @@ impl GpuUpdater {
         if info.version.is_empty() {
             return UpdateStatus::Unknown;
         }
-        // A real check would compare against the latest known version.
-        // Here we report current if a version string exists.
-        UpdateStatus::Current
+        // Compare against a known minimum. A real check would query the vendor.
+        let current = Self::parse_version(&info.version);
+        let minimum = (535, 0);
+        if current.0 < minimum.0 {
+            UpdateStatus::UpdateAvailable
+        } else {
+            UpdateStatus::Current
+        }
+    }
+
+    fn parse_version(s: &str) -> (u32, u32) {
+        let mut major = 0u32;
+        let mut minor = 0u32;
+        let mut parts = s.split(|c: char| !c.is_ascii_digit());
+        if let Some(m) = parts.find(|p| !p.is_empty()) {
+            major = m.parse().unwrap_or(0);
+        }
+        if let Some(m) = parts.find(|p| !p.is_empty()) {
+            minor = m.parse().unwrap_or(0);
+        }
+        (major, minor)
     }
 
     /// Run the OS package updater. Only when explicitly called.
@@ -120,5 +138,7 @@ mod tests {
             status,
             UpdateStatus::NoGpu | UpdateStatus::Current | UpdateStatus::Unknown
         ));
+        assert_eq!(GpuUpdater::parse_version("535.129.03"), (535, 129));
+        assert_eq!(GpuUpdater::parse_version("no version"), (0, 0));
     }
 }

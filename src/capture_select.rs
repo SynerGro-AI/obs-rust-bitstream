@@ -102,7 +102,7 @@ mod tests {
         let avail = CaptureSource::available_kinds();
         assert!(avail.contains(&"synthetic"));
         assert!(avail.contains(&"file"));
-        let best = CaptureSource::best();
+        let mut best = CaptureSource::best();
         assert!(best.frame().is_some());
     }
 }

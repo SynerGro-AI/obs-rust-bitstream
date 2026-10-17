@@ -8,6 +8,7 @@
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
+use crate::scene_effect::SceneEffect;
 use crate::encoder_controls::EncoderControls;
 use crate::h264_codec::H264Codec;
 use crate::fps_trailer::FpsTrailer;

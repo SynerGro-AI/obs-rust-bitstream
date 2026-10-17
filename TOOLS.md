@@ -85,7 +85,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Keyframes
 - [x] Parenting
 - [x] Nulls
-- [ ] Expressions (pure math)
+- [x] Expressions (pure math)
 
 ### Effects categories
 - [ ] Color correction (curves, color balance, levels — shared with Photoshop)

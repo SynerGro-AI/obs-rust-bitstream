@@ -407,6 +407,7 @@ pub mod selection_store;
 pub mod layer_mask;
 pub mod clipping_mask;
 pub mod layer_group_pure;
+pub mod clone_stamp;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -718,3 +719,4 @@ pub use selection_store::{SelectionStore, StoreError};
 pub use layer_mask::{LayerMask, MaskError as LayerMaskError};
 pub use clipping_mask::{ClippingMask, ClipError};
 pub use layer_group_pure::{LayerGroup as PureLayerGroup, GroupError as PureGroupError};
+pub use clone_stamp::{CloneStamp, CloneError};

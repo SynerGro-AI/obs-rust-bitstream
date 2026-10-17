@@ -10,7 +10,7 @@
 use crate::live_weights::LiveWeights;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
-use rusty_h264::{Encoder, EncoderConfig, YuvFrame};
+use rusty_h264::{Encoder, EncoderConfig, Preset, YuvFrame};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum H264Error {
@@ -44,6 +44,12 @@ impl H264Codec {
         if gop >= 1.0 {
             cfg.gop_size = gop as u32;
         }
+        let preset = weights.get("h264.preset").unwrap_or(1.0);
+        cfg.preset = match preset as u8 {
+            0 => Preset::Fast,
+            2 => Preset::Quality,
+            _ => Preset::Balanced,
+        };
         let encoder = Encoder::new(cfg).map_err(|_| H264Error::Encode)?;
         Ok(Self { encoder })
     }

@@ -5,6 +5,7 @@
 //!
 //! Differential: apply sets both weights.
 
+use crate::preset_control::PresetControl;
 use crate::gop_slider::{GopError, GopSlider};
 use crate::bitrate_slider::{BitrateSlider, SliderError};
 use crate::live_weights::LiveWeights;
@@ -21,6 +22,7 @@ pub struct EncoderControls {
     bitrate: BitrateSlider,
     quality: QualitySlider,
     gop: GopSlider,
+    preset: PresetControl,
 }
 
 impl EncoderControls {
@@ -30,6 +32,7 @@ impl EncoderControls {
             bitrate,
             quality: QualitySlider::new(),
             gop: GopSlider::new(),
+            preset: PresetControl::new(),
         })
     }
 
@@ -55,7 +58,20 @@ impl EncoderControls {
         self.quality.set(value, weights).map_err(ControlError::Quality)
     }
 
-    /// Set GOP and write the weight.
+    pub fn preset(&self) -> crate::preset_control::PresetKind {
+        self.preset.kind()
+    }
+
+    /// Set preset and write the weight.
+    pub fn set_preset(
+        &mut self,
+        kind: crate::preset_control::PresetKind,
+        weights: &mut LiveWeights,
+    ) {
+        self.preset.set(kind, weights);
+    }
+
+    /// Write both current values.
     pub fn set_gop(&mut self, value: f32, weights: &mut LiveWeights) -> Result<(), ControlError> {
         self.gop.set(value, weights).map_err(ControlError::Gop)
     }
@@ -71,6 +87,12 @@ impl EncoderControls {
         weights
             .set("h264.gop", self.gop.value())
             .map_err(|_| ControlError::Gop(GopError::Zero))?;
+        let preset_val = match self.preset.kind() {
+            crate::preset_control::PresetKind::Fast => 0.0,
+            crate::preset_control::PresetKind::Balanced => 1.0,
+            crate::preset_control::PresetKind::Quality => 2.0,
+        };
+        let _ = weights.set("h264.preset", preset_val);
         Ok(())
     }
 }

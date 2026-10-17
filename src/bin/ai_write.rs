@@ -182,6 +182,7 @@ fn main() {
     status.set_stamp_opacity(0.5);
     status.set_captured_frames(captured_frames.len());
     status.set_source("synthetic");
+    status.set_sources_available(CaptureSource::available_kinds().len());
     status.set_timestamp(SystemStatus::now());
     println!("status with stamp: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");

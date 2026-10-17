@@ -104,6 +104,15 @@ impl StatusHistory {
         hi - lo
     }
 
+    /// True if the spread is within a fraction of the average.
+    pub fn stable(&self, fraction: f32) -> bool {
+        let avg = self.avg_fps();
+        if avg == 0.0 {
+            return true;
+        }
+        self.fps_spread() <= avg * fraction
+    }
+
     /// "up" if latest is above average, "down" if below, "flat" otherwise.
     pub fn trend(&self) -> &'static str {
         let avg = self.avg_fps();
@@ -246,6 +255,8 @@ mod tests {
         assert!((lo - 100.0).abs() < 0.1);
         assert!((hi - 200.0).abs() < 0.1);
         assert!((h4.fps_spread() - 100.0).abs() < 0.1);
+        assert!(!h4.stable(0.1)); // 100 spread on 150 avg is not stable
+        assert!(h4.stable(1.0));
         assert_eq!(h4.trend(), "up");
         assert!(h4.summary().contains("up"));
     }

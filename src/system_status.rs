@@ -29,6 +29,7 @@ pub struct SystemStatus {
     pub source_summary: String,
     pub capture_fps: f32,
     pub capture_faster: bool,
+    pub bottleneck: String,
 }
 
 impl SystemStatus {
@@ -53,6 +54,7 @@ impl SystemStatus {
             source_summary: String::new(),
             capture_fps: 0.0,
             capture_faster: false,
+            bottleneck: String::new(),
         }
     }
 
@@ -104,6 +106,10 @@ impl SystemStatus {
         self.capture_faster = faster;
     }
 
+    pub fn set_bottleneck(&mut self, side: &str) {
+        self.bottleneck = side.to_string();
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -115,7 +121,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -132,7 +138,8 @@ impl SystemStatus {
             self.sources_available,
             self.source_summary,
             self.capture_fps,
-            self.capture_faster
+            self.capture_faster,
+            self.bottleneck
         )
     }
 
@@ -195,6 +202,8 @@ mod tests {
         assert!(s2.summary().contains("capture_fps=30"));
         s2.set_capture_faster(true);
         assert!(s2.summary().contains("capture_faster=true"));
+        s2.set_bottleneck("encode");
+        assert!(s2.summary().contains("bottleneck=encode"));
         s2.set_timestamp(SystemStatus::now());
         assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();

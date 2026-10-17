@@ -48,5 +48,7 @@ mod tests {
         assert!(text.contains("encoder="));
         assert!(text.contains("32x32"));
         assert!(text.contains("time="));
+        assert!(text.contains("version="));
+        assert!(text.contains("built="));
     }
 }

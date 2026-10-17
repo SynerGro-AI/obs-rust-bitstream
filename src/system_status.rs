@@ -27,6 +27,7 @@ pub struct SystemStatus {
     pub timestamp: u64,
     pub sources_available: usize,
     pub source_summary: String,
+    pub capture_fps: f32,
 }
 
 impl SystemStatus {
@@ -49,6 +50,7 @@ impl SystemStatus {
             timestamp: 0,
             sources_available: 0,
             source_summary: String::new(),
+            capture_fps: 0.0,
         }
     }
 
@@ -90,6 +92,12 @@ impl SystemStatus {
         self.source_summary = s.to_string();
     }
 
+    pub fn set_capture_fps(&mut self, fps: f32) {
+        if fps >= 0.0 {
+            self.capture_fps = fps;
+        }
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -101,7 +109,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -116,7 +124,8 @@ impl SystemStatus {
             self.source,
             self.timestamp,
             self.sources_available,
-            self.source_summary
+            self.source_summary,
+            self.capture_fps
         )
     }
 
@@ -175,6 +184,8 @@ mod tests {
         assert!(s2.summary().contains("available=3"));
         s2.set_source_summary("synthetic 16x16");
         assert!(s2.summary().contains("summary=synthetic"));
+        s2.set_capture_fps(30.0);
+        assert!(s2.summary().contains("capture_fps=30"));
         s2.set_timestamp(SystemStatus::now());
         assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();

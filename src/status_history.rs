@@ -98,6 +98,12 @@ impl StatusHistory {
         if n == 0 { (0.0, 0.0) } else { (min, max) }
     }
 
+    /// Difference between max and min fps.
+    pub fn fps_spread(&self) -> f32 {
+        let (lo, hi) = self.fps_range();
+        hi - lo
+    }
+
     /// "up" if latest is above average, "down" if below, "flat" otherwise.
     pub fn trend(&self) -> &'static str {
         let avg = self.avg_fps();
@@ -239,6 +245,7 @@ mod tests {
         let (lo, hi) = h4.fps_range();
         assert!((lo - 100.0).abs() < 0.1);
         assert!((hi - 200.0).abs() < 0.1);
+        assert!((h4.fps_spread() - 100.0).abs() < 0.1);
         assert_eq!(h4.trend(), "up");
         assert!(h4.summary().contains("up"));
     }

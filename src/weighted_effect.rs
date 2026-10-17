@@ -40,6 +40,32 @@ impl WeightedEffect {
         let strength = v as u8;
         InnerGlow::apply(frame, strength).map_err(|_| WeightedError::BadWeight)
     }
+
+    /// Apply drop shadow using the weight named `name`.
+    pub fn shadow(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        let v = weights.get(name)?;
+        if !(0.0..=255.0).contains(&v) {
+            return Err(WeightedError::BadWeight);
+        }
+        DropShadow::apply(frame, 2, 2, v as u8).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply sharpen using the weight named `name`.
+    pub fn sharpen(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        let v = weights.get(name)?;
+        if !(0.0..=255.0).contains(&v) {
+            return Err(WeightedError::BadWeight);
+        }
+        Sharpen::apply(frame, v as u8).map_err(|_| WeightedError::BadWeight)
+    }
 }
 
 #[cfg(test)]

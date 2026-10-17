@@ -7,6 +7,7 @@
 
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
+use crate::sequence_reverse::SequenceReverse;
 use crate::frame_hold::FrameHold;
 use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
@@ -179,6 +180,22 @@ impl EffectedWrite {
         FrameHold::hold(&mut seq, frame, count);
         RawWriter::write(&seq, out)
     }
+
+    /// Reverse a sequence and write it.
+    pub fn write_reverse<W: Write>(
+        frames: &[VideoFrame],
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut seq = FrameSequence::new();
+        for f in frames {
+            seq.push(f.clone());
+        }
+        let rev = SequenceReverse::reverse(&seq);
+        RawWriter::write(&rev, out)
+    }
 }
 
 #[cfg(test)]
@@ -228,5 +245,8 @@ mod tests {
         let mut buf8 = Vec::new();
         EffectedWrite::write_hold(&f, 3, &mut buf8).unwrap();
         assert!(buf8.len() > 16);
+        let mut buf9 = Vec::new();
+        EffectedWrite::write_reverse(&[f.clone()], &mut buf9).unwrap();
+        assert!(buf9.len() > 16);
     }
 }

@@ -44,4 +44,6 @@ fn main() {
     let status_file = File::create("status.txt").expect("status");
     status.write(status_file).expect("write status");
     println!("wrote status.txt");
+    let read_back = SystemStatus::read_encoder(File::open("status.txt").expect("open")).expect("read");
+    println!("read encoder: {}", read_back);
 }

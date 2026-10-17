@@ -403,6 +403,7 @@ pub mod lasso;
 pub mod quick_select;
 pub mod feather;
 pub mod expand_contract;
+pub mod selection_store;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -710,3 +711,4 @@ pub use lasso::{Lasso, LassoError};
 pub use quick_select::{QuickSelect, QuickError};
 pub use feather::{Feather, FeatherError};
 pub use expand_contract::{ExpandContract, ExpandError};
+pub use selection_store::{SelectionStore, StoreError};

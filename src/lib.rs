@@ -391,6 +391,7 @@ pub mod vibrance;
 pub mod black_white;
 pub mod photo_filter;
 pub mod channel_mixer;
+pub mod selective_color;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -686,3 +687,4 @@ pub use vibrance::{Vibrance, VibranceError};
 pub use black_white::{BlackWhite, BlackWhiteError};
 pub use photo_filter::{PhotoFilter, FilterTint, PhotoFilterError};
 pub use channel_mixer::{ChannelMixer, MixerError};
+pub use selective_color::{SelectiveColor, SelectiveError};

@@ -79,4 +79,5 @@ mod tests {
         let loaded = StatusReport::read(std::io::Cursor::new(&buf)).unwrap();
         assert!(loaded.contains("fps"));
         assert!(r.matches(&loaded));
+    }
 }

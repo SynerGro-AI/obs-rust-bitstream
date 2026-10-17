@@ -82,6 +82,8 @@ fn main() {
     let report_file = File::create("report.txt").expect("report");
     Report::write(&status, 8, 16, 32, report_file).expect("report");
     println!("wrote report.txt");
+    let report_text = std::fs::read_to_string("report.txt").expect("read report");
+    println!("report matches: {}", Report::matches_status(&report_text, &status));
     let mut stamped = frames[0].clone();
     TimestampStamp::stamp(&mut stamped, 0, 0, 60, 255).expect("stamp");
     println!("stamped frame with 00:01:00");

@@ -8,6 +8,8 @@
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
+use crate::encoder_controls::EncoderControls;
+use crate::h264_codec::H264Codec;
 use crate::fps_trailer::FpsTrailer;
 use crate::timed_sequence::TimedSequence;
 use crate::ping_pong::PingPong;
@@ -249,6 +251,29 @@ impl EffectedWrite {
         let resampled = Resample::to_fps(timed, new_fps).map_err(|_| WriteError::Empty)?;
         Self::write_timed_fps(&resampled, out)
     }
+
+    /// Encode a sequence with the control panel and write Annex-B.
+    pub fn write_h264<W: Write>(
+        frames: &[VideoFrame],
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        for f in frames {
+            let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -317,5 +342,9 @@ mod tests {
         EffectedWrite::write_resampled(&timed, 15.0, &mut buf13).unwrap();
         let fps2 = FpsTrailer::read(&buf13).unwrap();
         assert_eq!(fps2, 15.0);
+        let controls = EncoderControls::new().unwrap();
+        let mut buf14 = Vec::new();
+        EffectedWrite::write_h264(&[f.clone()], &controls, &mut w, &mut buf14).unwrap();
+        assert!(!buf14.is_empty());
     }
 }

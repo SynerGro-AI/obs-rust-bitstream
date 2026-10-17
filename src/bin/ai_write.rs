@@ -74,5 +74,8 @@ fn main() {
     println!("rate: 16x16={:.0} fps  32x32={:.0} fps", small, large);
     let (a, b, c) = RateCompare::three(8, 16, 32).expect("three");
     println!("three: 8={:.0} 16={:.0} 32={:.0}", a, b, c);
+    let rate_file = File::create("rate.txt").expect("rate");
+    RateCompare::write_three(8, 16, 32, rate_file).expect("write rate");
+    println!("wrote rate.txt");
     println!("matches: {}", status.matches_bundle(&bundle));
 }

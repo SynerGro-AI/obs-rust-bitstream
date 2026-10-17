@@ -253,6 +253,8 @@ fn main() {
     println!("dashboard: {}", grown.dashboard());
     std::fs::write("dashboard.txt", grown.dashboard()).expect("dash");
     println!("wrote dashboard.txt");
+    let dash = StatusHistory::read_dashboard(File::open("dashboard.txt").expect("open")).unwrap_or_default();
+    println!("read dashboard: {}", dash);
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

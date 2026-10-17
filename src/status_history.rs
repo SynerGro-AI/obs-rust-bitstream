@@ -106,6 +106,11 @@ impl StatusHistory {
         }
     }
 
+    /// A short report for display.
+    pub fn report(&self) -> String {
+        format!("{} ({})", self.word(), self.color())
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -332,6 +337,7 @@ mod tests {
         assert_eq!(h6.best_streak(), 1);
         assert_eq!(h6.word(), "warn");
         assert_eq!(h6.color(), "yellow");
+        assert!(h6.report().contains("warn"));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

@@ -48,7 +48,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Rectangular / elliptical marquee
 - [x] Lasso
 - [x] Magic wand (tolerance)
-- [ ] Quick select / smart select
+- [x] Quick select / smart select
 - [x] Invert selection
 - [ ] Feather
 - [ ] Expand / contract

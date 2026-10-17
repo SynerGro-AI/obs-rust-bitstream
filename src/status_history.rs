@@ -191,6 +191,20 @@ impl StatusHistory {
         )
     }
 
+    /// Simple JSON object.
+    pub fn to_json(&self) -> String {
+        format!(
+            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{}}}",
+            self.len(),
+            self.health_ratio() * 100.0,
+            self.avg_fps(),
+            self.trend(),
+            self.stable(0.1),
+            self.streak(),
+            self.at_record()
+        )
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         writeln!(out, "# {}", self.summary())?;
@@ -315,5 +329,6 @@ mod tests {
         assert!(h4.summary().contains("up"));
         assert!(h4.summary().contains("variable"));
         assert!(h4.summary().contains("streak"));
+        assert!(h4.to_json().contains("\"record\":true"));
     }
 }

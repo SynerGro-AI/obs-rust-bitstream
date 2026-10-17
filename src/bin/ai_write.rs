@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::timestamp_stamp::TimestampStamp;
 use obs_rust_bitstream::report::Report;
 use obs_rust_bitstream::rate_compare::RateCompare;
 use obs_rust_bitstream::write_timing::WriteTiming;
@@ -81,5 +82,8 @@ fn main() {
     let report_file = File::create("report.txt").expect("report");
     Report::write(&status, 8, 16, 32, report_file).expect("report");
     println!("wrote report.txt");
+    let mut stamped = frames[0].clone();
+    TimestampStamp::stamp(&mut stamped, 0, 0, 60, 255).expect("stamp");
+    println!("stamped frame with 00:01:00");
     println!("matches: {}", status.matches_bundle(&bundle));
 }

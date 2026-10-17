@@ -139,7 +139,15 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [ ] UV mapping
 - [ ] Camera (perspective, orthographic)
 
-## Order of work
+## Live weights
+
+AI writes a suggestion into LiveWeights once via WeightBridge.
+Later frames read the weight. No new AI call is needed to re-apply
+the same curve, balance, or effect.
+
+Covered: glow, outer glow, shadow, bright, sharpen, hue/sat,
+exposure, threshold, gauss, motion, noise, emboss, bevel, stroke,
+gradient, pattern.
 
 1. Curves, blend modes, color balance (this step)
 2. Selection (rect, invert, magic wand) + layer stack with hide/mask

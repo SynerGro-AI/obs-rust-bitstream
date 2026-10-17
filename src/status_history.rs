@@ -42,6 +42,11 @@ impl StatusHistory {
         self.lines.clear();
     }
 
+    /// Count lines that contain "healthy".
+    pub fn healthy_count(&self) -> usize {
+        self.lines.iter().filter(|l| l.contains("healthy")).count()
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         for line in &self.lines {
@@ -107,5 +112,9 @@ mod tests {
         let mut h2 = h.clone();
         h2.clear();
         assert!(h2.is_empty());
+        let mut h3 = StatusHistory::new(5);
+        h3.push("a | healthy");
+        h3.push("b | slow");
+        assert_eq!(h3.healthy_count(), 1);
     }
 }

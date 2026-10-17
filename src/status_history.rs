@@ -122,6 +122,13 @@ impl StatusHistory {
         )
     }
 
+    /// Read a dashboard line from a reader.
+    pub fn read_dashboard<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        Ok(buf.trim().to_string())
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();

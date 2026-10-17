@@ -73,7 +73,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Text
 - [x] Shape
 - [x] Crop
-- [ ] Transform (scale, rotate, skew, warp)
+- [x] Transform (scale, rotate, skew, warp)
 - [ ] Zoom in / out
 - [ ] Hand / pan
 

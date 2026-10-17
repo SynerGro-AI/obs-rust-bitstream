@@ -42,6 +42,11 @@ impl StatusHistory {
         self.lines.is_empty()
     }
 
+    /// All lines.
+    pub fn lines(&self) -> &[String] {
+        &self.lines
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();

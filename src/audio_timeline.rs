@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 
 use crate::ai::AiAssistant;
+use crate::wav_reader::WavData;
 use crate::audio_bus::AudioBus;
 use crate::audio_channel::{AudioChannel, ChannelError};
 
@@ -131,7 +132,21 @@ impl AudioTimeline {
 
     /// Render the mix level of the active tracks at `time`.
     pub fn render(&self, time: f32) -> f32 {
-        self.build_bus(time).mix_level()
+        let mut sum = 0.0;
+        for name in self.active_at(time) {
+            if let Some(track) = self.tracks.get(name) {
+                let local = time - track.start_secs();
+                sum += track.channel().sample_at(local);
+            }
+        }
+        sum
+    }
+
+    /// Load WAV samples into a track.
+    pub fn load_wav(&mut self, name: &str, wav: &WavData) -> Result<(), TimelineError> {
+        let track = self.get_mut(name)?;
+        track.channel_mut().set_samples(wav.samples.clone(), wav.sample_rate);
+        Ok(())
     }
 }
 

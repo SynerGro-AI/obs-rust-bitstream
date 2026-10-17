@@ -55,6 +55,24 @@ impl StatusHistory {
         self.healthy_count() as f32 / self.lines.len() as f32
     }
 
+    /// Average fps from lines that contain "fps".
+    pub fn avg_fps(&self) -> f32 {
+        let mut sum = 0.0;
+        let mut n = 0;
+        for line in &self.lines {
+            for part in line.split('|') {
+                let part = part.trim();
+                if let Some(num) = part.strip_suffix(" fps") {
+                    if let Ok(v) = num.parse::<f32>() {
+                        sum += v;
+                        n += 1;
+                    }
+                }
+            }
+        }
+        if n == 0 { 0.0 } else { sum / n as f32 }
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         for line in &self.lines {
@@ -125,5 +143,9 @@ mod tests {
         h3.push("b | slow");
         assert_eq!(h3.healthy_count(), 1);
         assert!((h3.health_ratio() - 0.5).abs() < 0.01);
+        let mut h4 = StatusHistory::new(5);
+        h4.push("src | 100 fps | encode | healthy");
+        h4.push("src | 200 fps | encode | healthy");
+        assert!((h4.avg_fps() - 150.0).abs() < 0.1);
     }
 }

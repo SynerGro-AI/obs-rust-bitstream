@@ -6,6 +6,7 @@
 //! Differential: a bright step is in the written bytes.
 
 use crate::ai::AiAssistant;
+use crate::crossfade::Crossfade;
 use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
 use crate::pipe_suggest::PipeSuggest;
@@ -144,6 +145,25 @@ impl EffectedWrite {
         }
         RawWriter::write(&seq, out)
     }
+
+    /// Crossfade from the first frame to the last across the sequence.
+    pub fn write_crossfade<W: Write>(
+        frames: &[VideoFrame],
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.len() < 2 {
+            return Err(WriteError::Empty);
+        }
+        let first = &frames[0];
+        let last = &frames[frames.len() - 1];
+        let mut seq = FrameSequence::new();
+        for i in 0..frames.len() {
+            let t = i as f32 / (frames.len() - 1) as f32;
+            let blended = Crossfade::blend(first, last, t).map_err(|_| WriteError::Empty)?;
+            seq.push(blended);
+        }
+        RawWriter::write(&seq, out)
+    }
 }
 
 #[cfg(test)]
@@ -183,5 +203,12 @@ mod tests {
         let mut buf6 = Vec::new();
         EffectedWrite::write_fade_steps(&[f.clone()], &[("bright", 10.0), ("glow", 5.0)], &mut buf6).unwrap();
         assert!(buf6.len() > 16);
+        let mut dark = f.clone();
+        dark.planes[0].fill(0);
+        let mut bright = f.clone();
+        bright.planes[0].fill(100);
+        let mut buf7 = Vec::new();
+        EffectedWrite::write_crossfade(&[dark, bright], &mut buf7).unwrap();
+        assert!(buf7.len() > 16);
     }
 }

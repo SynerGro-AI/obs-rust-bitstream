@@ -5,6 +5,8 @@
 //!
 //! Differential: apply sets both weights.
 
+use crate::cancel_button::CancelButton;
+use crate::encode_cancel::EncodeCancel;
 use crate::preset_control::PresetControl;
 use crate::gop_slider::{GopError, GopSlider};
 use crate::bitrate_slider::{BitrateSlider, SliderError};
@@ -23,6 +25,7 @@ pub struct EncoderControls {
     quality: QualitySlider,
     gop: GopSlider,
     preset: PresetControl,
+    cancel: CancelButton,
 }
 
 impl EncoderControls {
@@ -33,6 +36,7 @@ impl EncoderControls {
             quality: QualitySlider::new(),
             gop: GopSlider::new(),
             preset: PresetControl::new(),
+            cancel: CancelButton::new(),
         })
     }
 
@@ -60,6 +64,20 @@ impl EncoderControls {
 
     pub fn preset(&self) -> crate::preset_control::PresetKind {
         self.preset.kind()
+    }
+
+    pub fn cancel_pressed(&self) -> bool {
+        self.cancel.is_pressed()
+    }
+
+    /// Press cancel and set the flag.
+    pub fn press_cancel(&mut self, cancel: &mut EncodeCancel) {
+        self.cancel.press(cancel);
+    }
+
+    /// Release cancel and clear the flag.
+    pub fn release_cancel(&mut self, cancel: &mut EncodeCancel) {
+        self.cancel.release(cancel);
     }
 
     /// Set preset and write the weight.

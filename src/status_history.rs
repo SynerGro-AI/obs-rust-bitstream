@@ -385,6 +385,8 @@ mod tests {
         assert!(h6.dashboard().contains("streak"));
         assert!(h6.dashboard_at(123).contains("@ 123"));
         assert_eq!(StatusHistory::age("good @ 100", 150), 50);
+        assert!(StatusHistory::fresh("good @ 100", 150, 60));
+        assert!(!StatusHistory::fresh("good @ 100", 150, 30));
         assert!(h6.matches_dashboard(&h6.dashboard()));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();

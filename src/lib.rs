@@ -412,6 +412,7 @@ pub mod heal;
 pub mod dodge_burn_sponge;
 pub mod paint_bucket;
 pub mod shape;
+pub mod crop;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -728,3 +729,4 @@ pub use heal::{Heal, HealError};
 pub use dodge_burn_sponge::{DodgeBurnSponge, ToneTool, ToneError};
 pub use paint_bucket::{PaintBucket, BucketError};
 pub use shape::{Shape, ShapeError};
+pub use crop::{Crop, CropError};

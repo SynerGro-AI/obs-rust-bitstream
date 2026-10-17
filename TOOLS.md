@@ -72,7 +72,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Paint bucket
 - [x] Text
 - [x] Shape
-- [ ] Crop
+- [x] Crop
 - [ ] Transform (scale, rotate, skew, warp)
 - [ ] Zoom in / out
 - [ ] Hand / pan

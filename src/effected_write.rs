@@ -402,6 +402,38 @@ impl EffectedWrite {
         out.write_all(&tail).map_err(|_| WriteError::Io)?;
         Ok(())
     }
+
+    /// Apply effect, encode, and stop if cancel is set.
+    pub fn write_effected_h264_cancellable<W: Write>(
+        frames: &[VideoFrame],
+        effect: &SceneEffect,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        status: &mut EncodeStatus,
+        cancel: &EncodeCancel,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        controls.apply(weights).map_err(|_| WriteError::Empty)?;
+        let first = &frames[0];
+        let mut enc = H264Codec::new(first.width, first.height, weights)
+            .map_err(|_| WriteError::Empty)?;
+        for f in frames {
+            if cancel.is_cancelled() {
+                break;
+            }
+            let mut processed = f.clone();
+            let _ = effect.apply(&mut processed, weights);
+            let bytes = enc.encode(&processed).map_err(|_| WriteError::Empty)?;
+            out.write_all(&bytes).map_err(|_| WriteError::Io)?;
+            status.tick();
+        }
+        let tail = enc.flush();
+        out.write_all(&tail).map_err(|_| WriteError::Io)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

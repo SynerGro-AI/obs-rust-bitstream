@@ -1,7 +1,7 @@
-//! Audio + encode demo.
+//! Video + audio write demo.
 //!
-//! Builds a timed sequence, encodes with audio
-//! sampling, and writes out.h264.
+//! Encodes video and writes audio samples.
+//! Writes out.h264 and out.raw.
 
 use obs_rust_bitstream::audio_sync::AudioSync;
 use obs_rust_bitstream::effected_write::EffectedWrite;
@@ -26,14 +26,16 @@ fn main() {
     let mut controls = EncoderControls::new().expect("controls");
     let mut weights = LiveWeights::new();
     controls.set_quality(28.0, &mut weights).expect("quality");
-    let file = File::create("out.h264").expect("file");
-    let samples = EffectedWrite::write_h264_audio(
+    let video = File::create("out.h264").expect("video");
+    let audio = File::create("out.raw").expect("audio");
+    EffectedWrite::write_h264_av(
         &frames,
         &controls,
         &mut weights,
         &sync,
-        file,
+        video,
+        audio,
     )
     .expect("write");
-    println!("wrote out.h264 ({} frames, {} audio samples)", frames.len(), samples.len());
+    println!("wrote out.h264 and out.raw ({} frames)", frames.len());
 }

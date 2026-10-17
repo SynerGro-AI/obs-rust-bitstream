@@ -273,6 +273,7 @@ fn main() {
     println!("trend: {}", grown.trend());
     println!("history summary: {}", grown.summary());
     println!("json: {}", grown.to_json());
+    println!("json at: {}", grown.to_json_at(SystemStatus::now()));
     std::fs::write("history.json", grown.to_json()).expect("json");
     println!("wrote history.json");
     let json = std::fs::read_to_string("history.json").expect("read json");

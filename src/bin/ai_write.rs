@@ -247,6 +247,8 @@ fn main() {
     println!("healthy runs: {}", grown.healthy_count());
     println!("health ratio: {:.0}%", grown.health_ratio() * 100.0);
     println!("avg fps: {:.0}", grown.avg_fps());
+    let (lo, hi) = grown.fps_range();
+    println!("fps range: {:.0} to {:.0}", lo, hi);
     println!("trend: {}", grown.trend());
     println!("history summary: {}", grown.summary());
     let final_status = File::create("status.txt").expect("final");

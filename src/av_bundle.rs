@@ -13,6 +13,7 @@ const MAGIC: &[u8; 4] = b"AVBN";
 pub struct AvBundle {
     video: Vec<u8>,
     audio: Vec<f32>,
+    fps: f32,
 }
 
 impl AvBundle {
@@ -44,11 +45,22 @@ impl AvBundle {
         self.audio.len()
     }
 
-    /// Write the bundle: magic + video_len + audio_len + video + audio.
+    pub fn fps(&self) -> f32 {
+        self.fps
+    }
+
+    pub fn set_fps(&mut self, fps: f32) {
+        if fps > 0.0 {
+            self.fps = fps;
+        }
+    }
+
+    /// Write the bundle: magic + video_len + audio_len + fps + video + audio.
     pub fn write<W: Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         out.write_all(MAGIC)?;
         out.write_all(&(self.video.len() as u32).to_le_bytes())?;
         out.write_all(&(self.audio.len() as u32).to_le_bytes())?;
+        out.write_all(&self.fps.to_le_bytes())?;
         out.write_all(&self.video)?;
         for s in &self.audio {
             out.write_all(&s.to_le_bytes())?;
@@ -71,6 +83,8 @@ impl AvBundle {
         let video_len = u32::from_le_bytes(buf) as usize;
         input.read_exact(&mut buf)?;
         let audio_len = u32::from_le_bytes(buf) as usize;
+        input.read_exact(&mut buf)?;
+        let fps = f32::from_le_bytes(buf);
         let mut video = vec![0u8; video_len];
         input.read_exact(&mut video)?;
         let mut audio = Vec::with_capacity(audio_len);
@@ -78,7 +92,7 @@ impl AvBundle {
             input.read_exact(&mut buf)?;
             audio.push(f32::from_le_bytes(buf));
         }
-        Ok(Self { video, audio })
+        Ok(Self { video, audio, fps })
     }
 }
 
@@ -93,11 +107,13 @@ mod tests {
         b.push_audio(&[0.5, 1.0]);
         assert_eq!(b.video_len(), 4);
         assert_eq!(b.audio_len(), 2);
+        b.set_fps(30.0);
         let mut buf = Vec::new();
         b.write(&mut buf).unwrap();
         let back = AvBundle::read(std::io::Cursor::new(buf)).unwrap();
         assert_eq!(back.video_len(), 4);
         assert_eq!(back.audio_len(), 2);
+        assert_eq!(back.fps(), 30.0);
         assert_eq!(back.audio()[0], 0.5);
     }
 }

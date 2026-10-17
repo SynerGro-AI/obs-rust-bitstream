@@ -47,6 +47,11 @@ impl CaptureSource {
             CaptureSource::File(c) => c.height(),
         }
     }
+
+    /// Available source kinds.
+    pub fn kinds() -> &'static [&'static str] {
+        &["synthetic", "file", "windows", "apple", "linux"]
+    }
 }
 
 #[cfg(test)]
@@ -65,5 +70,7 @@ mod tests {
         let mut file_src = CaptureSource::file(path, 4, 4).unwrap();
         let f = file_src.frame().unwrap();
         assert_eq!(f.planes[0][0], 7);
+        assert!(CaptureSource::kinds().contains(&"synthetic"));
+        assert!(CaptureSource::kinds().contains(&"file"));
     }
 }

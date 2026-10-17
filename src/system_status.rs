@@ -30,6 +30,7 @@ impl SystemStatus {
             video_bytes: bundle.video_len(),
             audio_samples: bundle.audio_len(),
             fps: bundle.fps(),
+            encode_ms: 0.0,
         }
     }
 

@@ -1,0 +1,1 @@
+gpu=false encoder=software video=126 audio=8 fps=30 encode_ms=7.6

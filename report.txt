@@ -1,0 +1,3 @@
+gpu=false encoder=software video=126 audio=8 fps=30 encode_ms=7.6
+8x8=4372 16x16=4928 32x32=1632
+time=1792273152

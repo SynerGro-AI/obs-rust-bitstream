@@ -53,6 +53,13 @@ impl StatusReport {
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         writeln!(out, "{}", self.summary())
     }
+
+    /// Read a report line. Returns the text.
+    pub fn read<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        Ok(buf.trim().to_string())
+    }
 }
 
 #[cfg(test)]
@@ -69,5 +76,6 @@ mod tests {
         let mut buf = Vec::new();
         r.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("fps"));
-    }
+        let loaded = StatusReport::read(std::io::Cursor::new(&buf)).unwrap();
+        assert!(loaded.contains("fps"));
 }

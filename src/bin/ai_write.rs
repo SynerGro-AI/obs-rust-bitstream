@@ -1,6 +1,7 @@
 //! Bundle encoder demo.
 
 use obs_rust_bitstream::audio_sync::AudioSync;
+use obs_rust_bitstream::system_status::SystemStatus;
 use obs_rust_bitstream::av_bundle::AvBundle;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
@@ -38,4 +39,6 @@ fn main() {
         back.video_len(),
         back.encoder().as_str()
     );
+    let status = SystemStatus::from_bundle(&back);
+    println!("status: {}", status.summary());
 }

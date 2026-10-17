@@ -122,7 +122,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 
 ### Animation
 - [x] Keyframes / timeline (partial)
-- [ ] Graph editor (curves)
+- [x] Graph editor (curves)
 - [ ] Motion paths
 - [ ] Blend shapes
 

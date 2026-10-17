@@ -63,6 +63,11 @@ impl SystemStatus {
             "no encoder",
         ))
     }
+
+    /// True if the status encoder matches the bundle encoder.
+    pub fn matches_bundle(&self, bundle: &AvBundle) -> bool {
+        self.encoder == bundle.encoder()
+    }
 }
 
 #[cfg(test)]
@@ -81,5 +86,6 @@ mod tests {
         assert!(String::from_utf8_lossy(&buf).contains("software"));
         let enc = SystemStatus::read_encoder(std::io::Cursor::new(buf)).unwrap();
         assert_eq!(enc, "software");
+        assert!(s.matches_bundle(&b));
     }
 }

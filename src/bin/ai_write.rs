@@ -133,6 +133,9 @@ fn main() {
     let mut file_cap = FileCapture::open("/tmp/demo.raw", 4, 4).expect("file cap");
     let from_file = file_cap.frame().expect("frame");
     println!("file capture: {}x{} first={}", from_file.width, from_file.height, from_file.planes[0][0]);
+    let mut sel = CaptureSource::file("/tmp/demo.raw", 4, 4).expect("sel");
+    let via_sel = sel.frame().expect("via sel");
+    println!("via selector: first={}", via_sel.planes[0][0]);
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

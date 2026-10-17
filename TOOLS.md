@@ -149,6 +149,9 @@ Covered: glow, outer glow, shadow, bright, sharpen, hue/sat,
 exposure, threshold, gauss, motion, noise, emboss, bevel, stroke,
 gradient, pattern.
 
+Also linked: light intensity, physics gravity/friction/mass,
+bone translation. AI writes once; the scene reads.
+
 1. Curves, blend modes, color balance (this step)
 2. Selection (rect, invert, magic wand) + layer stack with hide/mask
 3. Remaining adjustments (hue/sat, exposure, invert, threshold)

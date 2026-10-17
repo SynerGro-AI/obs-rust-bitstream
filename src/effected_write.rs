@@ -13,6 +13,7 @@ use crate::raw_writer::{RawWriter, WriteError};
 use crate::scene_effect::SceneEffect;
 use crate::tool_pipeline::ToolPipeline;
 use crate::video_frame::VideoFrame;
+use crate::weight_interp::WeightInterp;
 use std::io::Write;
 
 pub struct EffectedWrite;
@@ -91,6 +92,31 @@ impl EffectedWrite {
         pipe.run_sequence(&mut seq, weights).map_err(|_| WriteError::Empty)?;
         RawWriter::write(&seq, out)
     }
+
+    /// Write a sequence with a weight that fades across frames.
+    pub fn write_fade<W: Write>(
+        frames: &[VideoFrame],
+        step: &str,
+        start: f32,
+        end: f32,
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut seq = FrameSequence::new();
+        let mut pipe = ToolPipeline::new();
+        pipe.add(step);
+        let key = format!("pipe.{}", step);
+        for (i, f) in frames.iter().enumerate() {
+            let mut w = LiveWeights::new();
+            WeightInterp::set(&mut w, &key, i, frames.len(), start, end);
+            let mut processed = f.clone();
+            let _ = pipe.run(&mut processed, &w);
+            seq.push(processed);
+        }
+        RawWriter::write(&seq, out)
+    }
 }
 
 #[cfg(test)]
@@ -124,5 +150,8 @@ mod tests {
         let mut buf4 = Vec::new();
         EffectedWrite::write_ai_steps(&[f.clone()], &["bright", "invert"], &ai, &mut w, &mut buf4).unwrap();
         assert!(buf4.len() > 16);
+        let mut buf5 = Vec::new();
+        EffectedWrite::write_fade(&[f.clone(), f.clone()], "bright", 0.0, 20.0, &mut buf5).unwrap();
+        assert!(buf5.len() > 16);
     }
 }

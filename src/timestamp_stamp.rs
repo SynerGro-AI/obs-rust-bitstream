@@ -8,6 +8,7 @@
 use crate::draw::DrawError;
 use crate::text_draw::TextDraw;
 use crate::video_frame::VideoFrame;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct TimestampStamp;
 
@@ -29,6 +30,16 @@ impl TimestampStamp {
             day,
             Self::format(secs)
         )
+    }
+
+    /// Current Unix time as HH:MM:SS (UTC).
+    pub fn now() -> String {
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as u32)
+            .unwrap_or(0);
+        let day_secs = secs % 86400;
+        Self::format(day_secs)
     }
 
     /// Draw a timestamp at (x, y).
@@ -66,6 +77,13 @@ mod tests {
     fn format() {
         assert_eq!(TimestampStamp::format(0), "00:00:00");
         assert_eq!(TimestampStamp::format(3661), "01:01:01");
+        assert_eq!(
+            TimestampStamp::format_full(2026, 10, 17, 60),
+            "2026-10-17 00:01:00"
+        );
+        let n = TimestampStamp::now();
+        assert_eq!(n.len(), 8);
+        assert!(n.contains(':'));
     }
 
     #[test]

@@ -58,7 +58,7 @@ mod tests {
         let mut w = LiveWeights::new();
         w.set("pipe.bright", 20.0).unwrap();
         let mut buf = Vec::new();
-        EffectedWrite::write(&[f], &effect, &w, &mut buf).unwrap();
+        EffectedWrite::write(&[f.clone()], &effect, &w, &mut buf).unwrap();
         // header is 16 bytes, then pixels
         assert!(buf.len() > 16);
         assert_eq!(buf[16], 60);

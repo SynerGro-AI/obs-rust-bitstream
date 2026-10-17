@@ -366,6 +366,7 @@ mod tests {
         assert!(h4.summary().contains("streak"));
         assert!(h4.summary().contains("good") || h4.summary().contains("warn") || h4.summary().contains("bad"));
         assert!(h4.to_json().contains("\"record\":true"));
+        assert!(h4.to_json().contains("\"word\":"));
         let json = h4.to_json();
         assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));
         assert!(h4.matches_json(&json));

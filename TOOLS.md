@@ -98,7 +98,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Stylize (glow, find edges)
 - [x] Time (echo, posterize time)
 - [x] Transition (fade, wipe — partial)
-- [ ] 3D channel (depth, fog)
+- [x] 3D channel (depth, fog)
 - [ ] Audio (shared with existing filters)
 
 ### 3D

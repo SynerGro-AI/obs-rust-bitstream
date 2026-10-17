@@ -32,6 +32,11 @@ impl TimestampStamp {
         )
     }
 
+    /// Format a frame index and a total.
+    pub fn format_progress(frame: usize, total: usize) -> String {
+        format!("{}/{}", frame, total)
+    }
+
     /// Format seconds and a frame index.
     pub fn format_frame(secs: u32, frame: usize) -> String {
         format!("{} f{}", Self::format(secs), frame)
@@ -115,6 +120,7 @@ mod tests {
             TimestampStamp::format_frame(60, 3),
             "00:01:00 f3"
         );
+        assert_eq!(TimestampStamp::format_progress(3, 10), "3/10");
     }
 
     #[test]

@@ -206,14 +206,15 @@ impl StatusHistory {
     /// Simple JSON object.
     pub fn to_json(&self) -> String {
         format!(
-            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{}}}",
+            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\"}}",
             self.len(),
             self.health_ratio() * 100.0,
             self.avg_fps(),
             self.trend(),
             self.stable(0.1),
             self.streak(),
-            self.at_record()
+            self.at_record(),
+            self.word()
         )
     }
 

@@ -120,6 +120,7 @@ fn main() {
     println!("base time: {}", TimestampStamp::now());
     println!("stamped: {}", TimestampStamp::is_stamped(&stamped, 0, 0, 48));
     status.set_stamped(true);
+    status.set_stamp_opacity(0.5);
     println!("status with stamp: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

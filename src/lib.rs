@@ -388,6 +388,7 @@ pub mod stamp;
 pub mod eraser;
 pub mod bright_contrast;
 pub mod vibrance;
+pub mod black_white;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -680,3 +681,4 @@ pub use pattern::{Pattern as Checker, PatternError as CheckerError};
 pub use eraser::{Eraser, EraserError};
 pub use bright_contrast::{BrightContrast, BrightContrastError};
 pub use vibrance::{Vibrance, VibranceError};
+pub use black_white::{BlackWhite, BlackWhiteError};

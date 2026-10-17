@@ -12,7 +12,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Brightness/contrast
 - [x] Exposure
 - [x] Vibrance
-- [ ] Black & white
+- [x] Black & white
 - [ ] Photo filter
 - [ ] Channel mixer
 - [ ] Selective color

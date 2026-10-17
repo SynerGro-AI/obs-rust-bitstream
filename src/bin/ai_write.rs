@@ -244,6 +244,7 @@ fn main() {
     println!("lines: {}", grown.lines().len());
     println!("healthy lines: {}", grown.filter("healthy").len());
     println!("latest healthy: {}", grown.latest_healthy().unwrap_or("none"));
+    println!("streak: {}", grown.streak());
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

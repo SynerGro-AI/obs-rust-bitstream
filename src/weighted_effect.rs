@@ -5,10 +5,15 @@
 //!
 //! Differential: a weight of 50 lifts an edge pixel.
 
+use crate::bright_shadow::BrightShadow;
 use crate::drop_shadow::DropShadow;
+use crate::exposure::Exposure;
+use crate::hue_sat::HueSat;
 use crate::inner_glow::InnerGlow;
 use crate::live_weights::{LiveWeights, WeightError};
+use crate::outer_glow::OuterGlow;
 use crate::sharpen::Sharpen;
+use crate::threshold::Threshold;
 use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,19 +31,30 @@ impl From<WeightError> for WeightedError {
 pub struct WeightedEffect;
 
 impl WeightedEffect {
+    fn strength(weights: &LiveWeights, name: &str) -> Result<u8, WeightedError> {
+        let v = weights.get(name)?;
+        if !(0.0..=255.0).contains(&v) {
+            return Err(WeightedError::BadWeight);
+        }
+        Ok(v as u8)
+    }
+
     /// Apply inner glow using the weight named `name`.
-    /// The weight is treated as 0..=255 strength.
     pub fn glow(
         frame: &mut VideoFrame,
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        let v = weights.get(name)?;
-        if !(0.0..=255.0).contains(&v) {
-            return Err(WeightedError::BadWeight);
-        }
-        let strength = v as u8;
-        InnerGlow::apply(frame, strength).map_err(|_| WeightedError::BadWeight)
+        InnerGlow::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply outer glow using the weight named `name`.
+    pub fn outer_glow(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        OuterGlow::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply drop shadow using the weight named `name`.
@@ -47,11 +63,16 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        let v = weights.get(name)?;
-        if !(0.0..=255.0).contains(&v) {
-            return Err(WeightedError::BadWeight);
-        }
-        DropShadow::apply(frame, 2, 2, v as u8).map_err(|_| WeightedError::BadWeight)
+        DropShadow::apply(frame, 2, 2, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply bright shadow using the weight named `name`.
+    pub fn bright(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        BrightShadow::apply(frame, -1, -1, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply sharpen using the weight named `name`.
@@ -60,11 +81,42 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
+        Sharpen::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply hue/sat shift. Weight is treated as signed via i8.
+    pub fn hue_sat(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
         let v = weights.get(name)?;
-        if !(0.0..=255.0).contains(&v) {
+        if !(-100.0..=100.0).contains(&v) {
             return Err(WeightedError::BadWeight);
         }
-        Sharpen::apply(frame, v as u8).map_err(|_| WeightedError::BadWeight)
+        HueSat::apply(frame, v as i8).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply exposure. Weight is stops as i8.
+    pub fn exposure(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        let v = weights.get(name)?;
+        if !(-8.0..=8.0).contains(&v) {
+            return Err(WeightedError::BadWeight);
+        }
+        Exposure::apply(frame, v as i8).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply threshold using the weight as the level.
+    pub fn threshold(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        Threshold::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
     }
 }
 
@@ -106,5 +158,21 @@ mod tests {
         w.set("sharp", 128.0).unwrap();
         WeightedEffect::sharpen(&mut f2, &w, "sharp").unwrap();
         assert!(f2.planes[0][1 * 4 + 1] >= 200);
+    }
+
+    #[test]
+    fn suite() {
+        let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
+        f.planes[0].fill(64);
+        let mut w = LiveWeights::new();
+        w.set("hue", 10.0).unwrap();
+        WeightedEffect::hue_sat(&mut f, &w, "hue").unwrap();
+        assert_eq!(f.planes[0][0], 74);
+        w.set("exp", 1.0).unwrap();
+        WeightedEffect::exposure(&mut f, &w, "exp").unwrap();
+        assert_eq!(f.planes[0][0], 148);
+        w.set("thr", 100.0).unwrap();
+        WeightedEffect::threshold(&mut f, &w, "thr").unwrap();
+        assert_eq!(f.planes[0][0], 255);
     }
 }

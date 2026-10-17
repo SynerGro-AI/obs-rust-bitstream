@@ -80,6 +80,18 @@ impl EncoderControls {
         self.cancel.release(cancel);
     }
 
+    /// Current settings as a short string.
+    pub fn summary(&self) -> String {
+        format!(
+            "bitrate={} qp={} gop={} preset={:?} cancel={}",
+            self.bitrate.value(),
+            self.quality.value(),
+            self.gop.value(),
+            self.preset.kind(),
+            self.cancel.is_pressed()
+        )
+    }
+
     /// Set preset and write the weight.
     pub fn set_preset(
         &mut self,

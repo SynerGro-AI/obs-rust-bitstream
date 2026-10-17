@@ -43,7 +43,10 @@ fn inside(x: u32, y: u32, points: &[(u32, u32)]) -> bool {
         let (xi, yi) = points[i];
         let (xj, yj) = points[j];
         if ((yi > y) != (yj > y))
-            && (x < (xj as i32 - xi as i32) * (y as i32 - yi as i32) / (yj as i32 - yi as i32) as u32 + xi)
+            && (x as i32
+                < (xj as i32 - xi as i32) * (y as i32 - yi as i32)
+                    / (yj as i32 - yi as i32).max(1)
+                    + xi as i32)
         {
             c = !c;
         }

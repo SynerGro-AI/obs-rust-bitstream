@@ -122,6 +122,11 @@ impl StatusHistory {
         )
     }
 
+    /// Dashboard with a timestamp.
+    pub fn dashboard_at(&self, ts: u64) -> String {
+        format!("{} @ {}", self.dashboard(), ts)
+    }
+
     /// Read a dashboard line from a reader.
     pub fn read_dashboard<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
         let mut buf = String::new();
@@ -364,6 +369,7 @@ mod tests {
         assert_eq!(h6.color(), "yellow");
         assert!(h6.report().contains("warn"));
         assert!(h6.dashboard().contains("streak"));
+        assert!(h6.dashboard_at(123).contains("@ 123"));
         assert!(h6.matches_dashboard(&h6.dashboard()));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();

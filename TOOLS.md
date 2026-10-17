@@ -91,7 +91,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [ ] Color correction (curves, color balance, levels — shared with Photoshop)
 - [ ] Blur & sharpen (shared)
 - [x] Distort (wave, bulge, twirl)
-- [ ] Generate (gradient, grid, lens flare)
+- [x] Generate (gradient, grid, lens flare)
 - [ ] Keying (chroma, luma)
 - [ ] Matte (track matte, set matte)
 - [ ] Noise & grain

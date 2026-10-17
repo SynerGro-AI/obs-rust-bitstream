@@ -15,6 +15,8 @@ pub struct AudioChannel {
     name: String,
     gain: f32,
     mute: bool,
+    samples: Vec<f32>,
+    sample_rate: u32,
 }
 
 impl AudioChannel {
@@ -26,6 +28,8 @@ impl AudioChannel {
             name: name.to_string(),
             gain: 1.0,
             mute: false,
+            samples: Vec::new(),
+            sample_rate: 44100,
         })
     }
 
@@ -57,6 +61,23 @@ impl AudioChannel {
             self.gain
         }
     }
+
+    /// Set the sample data.
+    pub fn set_samples(&mut self, samples: Vec<f32>, rate: u32) {
+        self.samples = samples;
+        if rate > 0 {
+            self.sample_rate = rate;
+        }
+    }
+
+    /// Sample at a time in seconds. Missing is 0.
+    pub fn sample_at(&self, time: f32) -> f32 {
+        if self.samples.is_empty() || time < 0.0 {
+            return 0.0;
+        }
+        let idx = (time * self.sample_rate as f32) as usize;
+        self.samples.get(idx).copied().unwrap_or(0.0) * self.effective_gain()
+    }
 }
 
 #[cfg(test)]
@@ -83,5 +104,9 @@ mod tests {
         assert_eq!(c.effective_gain(), 0.5);
         c.set_mute(true);
         assert_eq!(c.effective_gain(), 0.0);
+        c.set_mute(false);
+        c.set_gain(1.0);
+        c.set_samples(vec![0.0, 0.5, 1.0], 1);
+        assert_eq!(c.sample_at(1.0), 0.5);
     }
 }

@@ -63,7 +63,8 @@ fn main() {
         timing.elapsed_ms(),
         timing.fps(frames.len())
     );
-    let status = SystemStatus::from_bundle(&bundle);
+    let mut status = SystemStatus::from_bundle(&bundle);
+    status.set_encode_ms(timing.elapsed_ms());
     println!("status: {}", status.summary());
     println!("matches: {}", status.matches_bundle(&bundle));
 }

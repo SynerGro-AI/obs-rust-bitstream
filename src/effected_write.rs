@@ -5,8 +5,10 @@
 //!
 //! Differential: a bright step is in the written bytes.
 
+use crate::ai::AiAssistant;
 use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
+use crate::pipe_suggest::PipeSuggest;
 use crate::raw_writer::{RawWriter, WriteError};
 use crate::scene_effect::SceneEffect;
 use crate::tool_pipeline::ToolPipeline;
@@ -42,6 +44,29 @@ impl EffectedWrite {
         pipe.run_sequence(seq, weights).map_err(|_| WriteError::Empty)?;
         RawWriter::write(seq, out)
     }
+
+    /// AI suggests weights, pipeline runs, sequence is written.
+    pub fn write_ai<W: Write>(
+        frames: &[VideoFrame],
+        ai: &AiAssistant,
+        weights: &mut LiveWeights,
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        PipeSuggest::full(ai, &frames[0], weights);
+        let mut pipe = ToolPipeline::new();
+        pipe.add("bright");
+        pipe.add("glow");
+        pipe.add("sharpen");
+        let mut seq = FrameSequence::new();
+        for f in frames {
+            seq.push(f.clone());
+        }
+        pipe.run_sequence(&mut seq, weights).map_err(|_| WriteError::Empty)?;
+        RawWriter::write(&seq, out)
+    }
 }
 
 #[cfg(test)]
@@ -68,5 +93,9 @@ mod tests {
         let mut buf2 = Vec::new();
         EffectedWrite::write_sequence(&mut seq, &pipe, &w, &mut buf2).unwrap();
         assert!(buf2.len() > 16);
+        let ai = crate::ai::AiAssistant::new(crate::ai::AiConfig::default());
+        let mut buf3 = Vec::new();
+        EffectedWrite::write_ai(&[f.clone()], &ai, &mut w, &mut buf3).unwrap();
+        assert!(buf3.len() > 16);
     }
 }

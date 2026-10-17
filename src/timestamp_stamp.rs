@@ -31,6 +31,19 @@ impl TimestampStamp {
         let text = Self::format(secs);
         TextDraw::text(frame, x, y, &text, lum)
     }
+
+    /// Stamp at the bottom-right corner.
+    pub fn stamp_corner(
+        frame: &mut VideoFrame,
+        secs: u32,
+        lum: u8,
+    ) -> Result<u32, DrawError> {
+        let text = Self::format(secs);
+        let width = text.len() as u32 * 6;
+        let x = frame.width.saturating_sub(width + 2);
+        let y = frame.height.saturating_sub(10);
+        TextDraw::text(frame, x, y, &text, lum)
+    }
 }
 
 #[cfg(test)]

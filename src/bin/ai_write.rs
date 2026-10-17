@@ -136,6 +136,25 @@ fn main() {
     let mut sel = CaptureSource::file("/tmp/demo.raw", 4, 4).expect("sel");
     let via_sel = sel.frame().expect("via sel");
     println!("via selector: first={}", via_sel.planes[0][0]);
+    // Encode the file frame.
+    let mut file_frames = Vec::new();
+    if let Some(f) = CaptureSource::file("/tmp/demo.raw", 4, 4).expect("open").frame() {
+        file_frames.push(f);
+    }
+    if !file_frames.is_empty() {
+        let fb = File::create("from_file.avbn").expect("fb");
+        let fs = File::create("from_file_status.txt").expect("fs");
+        let _ = EffectedWrite::write_stamped_bundle(
+            &file_frames,
+            30.0,
+            &controls,
+            &mut weights,
+            &sync,
+            fb,
+            fs,
+        );
+        println!("wrote from_file.avbn");
+    }
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

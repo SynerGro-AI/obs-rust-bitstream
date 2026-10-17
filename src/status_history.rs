@@ -355,5 +355,9 @@ mod tests {
         let json = h4.to_json();
         assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));
         assert!(h4.matches_json(&json));
+        let text_path = "/tmp/both.txt";
+        let json_path = "/tmp/both.json";
+        h4.write_both(text_path, json_path).unwrap();
+        assert!(std::fs::read_to_string(json_path).unwrap().contains("record"));
     }
 }

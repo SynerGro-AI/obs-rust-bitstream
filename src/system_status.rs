@@ -8,6 +8,7 @@
 use crate::av_bundle::AvBundle;
 use crate::encoder_select::{EncoderChoice, EncoderSelect};
 use crate::gpu_detect::GpuDetect;
+use std::io::Write;
 
 #[derive(Clone, Debug)]
 pub struct SystemStatus {
@@ -42,6 +43,11 @@ impl SystemStatus {
             self.fps
         )
     }
+
+    /// Write the summary to a writer.
+    pub fn write<W: Write>(&self, mut out: W) -> Result<(), std::io::Error> {
+        writeln!(out, "{}", self.summary())
+    }
 }
 
 #[cfg(test)]
@@ -55,5 +61,8 @@ mod tests {
         assert!(!s.gpu_present);
         assert_eq!(s.encoder, EncoderChoice::Software);
         assert!(s.summary().contains("software"));
+        let mut buf = Vec::new();
+        s.write(&mut buf).unwrap();
+        assert!(String::from_utf8_lossy(&buf).contains("software"));
     }
 }

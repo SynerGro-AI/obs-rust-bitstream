@@ -362,3 +362,21 @@ See also the upstream [obs-rust/obs-studio](https://github.com/obs-rust/obs-stud
 ## License
 
 GPL-2.0-or-later (matching OBS Studio).
+
+## Run locally
+
+```bash
+git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
+cd obs-rust-bitstream
+cargo test
+cargo run --bin ai_write
+```
+
+Optional CC0 audio:
+
+```bash
+curl -L -o /tmp/bell1.wav \
+  https://raw.githubusercontent.com/code4fukui/sound-cc0/main/bell1.wav
+```
+
+Outputs: `out.avbn`, `status.txt`, `report.txt`, `stamped.avbn`.

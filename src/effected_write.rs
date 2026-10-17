@@ -226,6 +226,18 @@ impl EffectedWrite {
         }
         RawWriter::write(timed.frames(), out)
     }
+
+    /// Write the frames and append the fps trailer.
+    pub fn write_timed_fps<W: Write>(
+        timed: &TimedSequence,
+        mut out: W,
+    ) -> Result<(), WriteError> {
+        if timed.len() == 0 {
+            return Err(WriteError::Empty);
+        }
+        RawWriter::write(timed.frames(), &mut out)?;
+        FpsTrailer::write(timed.fps(), &mut out)
+    }
 }
 
 #[cfg(test)]

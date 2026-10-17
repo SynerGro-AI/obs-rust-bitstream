@@ -104,5 +104,7 @@ fn main() {
     println!("wrote stamped.avbn");
     println!("base time: {}", TimestampStamp::now());
     println!("stamped: {}", TimestampStamp::is_stamped(&stamped, 0, 0, 48));
+    status.set_stamped(true);
+    println!("status with stamp: {}", status.summary());
     println!("matches: {}", status.matches_bundle(&bundle));
 }

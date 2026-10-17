@@ -257,6 +257,7 @@ fn main() {
     let dash = StatusHistory::read_dashboard(File::open("dashboard.txt").expect("open")).unwrap_or_default();
     println!("read dashboard: {}", dash);
     println!("timestamp: {}", StatusHistory::timestamp_of(&dash));
+    println!("age: {}s", StatusHistory::age(&dash, SystemStatus::now()));
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

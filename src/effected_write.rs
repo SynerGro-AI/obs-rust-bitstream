@@ -7,6 +7,7 @@
 
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
+use crate::fps_trailer::FpsTrailer;
 use crate::timed_sequence::TimedSequence;
 use crate::ping_pong::PingPong;
 use crate::sequence_reverse::SequenceReverse;
@@ -285,5 +286,9 @@ mod tests {
         let mut buf11 = Vec::new();
         EffectedWrite::write_timed(&timed, &mut buf11).unwrap();
         assert!(buf11.len() > 16);
+        let mut buf12 = Vec::new();
+        EffectedWrite::write_timed_fps(&timed, &mut buf12).unwrap();
+        let fps = FpsTrailer::read(&buf12).unwrap();
+        assert_eq!(fps, 30.0);
     }
 }

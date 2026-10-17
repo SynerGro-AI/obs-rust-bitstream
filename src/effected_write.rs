@@ -7,6 +7,7 @@
 
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
+use crate::frame_hold::FrameHold;
 use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
 use crate::pipe_suggest::PipeSuggest;
@@ -164,6 +165,20 @@ impl EffectedWrite {
         }
         RawWriter::write(&seq, out)
     }
+
+    /// Hold a frame for count frames and write.
+    pub fn write_hold<W: Write>(
+        frame: &VideoFrame,
+        count: usize,
+        out: W,
+    ) -> Result<(), WriteError> {
+        if count == 0 {
+            return Err(WriteError::Empty);
+        }
+        let mut seq = FrameSequence::new();
+        FrameHold::hold(&mut seq, frame, count);
+        RawWriter::write(&seq, out)
+    }
 }
 
 #[cfg(test)]
@@ -210,5 +225,8 @@ mod tests {
         let mut buf7 = Vec::new();
         EffectedWrite::write_crossfade(&[dark, bright], &mut buf7).unwrap();
         assert!(buf7.len() > 16);
+        let mut buf8 = Vec::new();
+        EffectedWrite::write_hold(&f, 3, &mut buf8).unwrap();
+        assert!(buf8.len() > 16);
     }
 }

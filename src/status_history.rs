@@ -119,9 +119,10 @@ impl StatusHistory {
         input.read_to_string(&mut buf)?;
         let mut h = Self::new(max);
         for line in buf.lines() {
-            if !line.is_empty() {
-                h.push(line);
+            if line.is_empty() || line.starts_with('#') {
+                continue;
             }
+            h.push(line);
         }
         Ok(h)
     }
@@ -162,6 +163,10 @@ mod tests {
         let loaded = StatusHistory::read(2, std::io::Cursor::new(&buf)).unwrap();
         assert_eq!(loaded.last(), Some("c"));
         assert!(h.matches_last(&loaded));
+        // header is skipped
+        let with_header = "# summary\nc\n";
+        let loaded2 = StatusHistory::read(2, std::io::Cursor::new(with_header)).unwrap();
+        assert_eq!(loaded2.last(), Some("c"));
         let path = "/tmp/hist_append.txt";
         let _ = std::fs::remove_file(path);
         h.append_to(path).unwrap();

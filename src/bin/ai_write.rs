@@ -93,6 +93,11 @@ fn main() {
     println!("now: {}", TimestampStamp::now());
     println!("frame: {}", TimestampStamp::format_frame(60, 3));
     println!("progress: {}", TimestampStamp::format_progress(3, 10));
+    println!(
+        "stamp example: {} {}",
+        TimestampStamp::format_frame(0, 0),
+        TimestampStamp::format_progress(0, frames.len())
+    );
     println!("stamped encode uses frame index");
     let stamped_bundle = File::create("stamped.avbn").expect("stamped");
     let stamped_status = File::create("stamped_status.txt").expect("status");

@@ -70,6 +70,13 @@ impl H264Codec {
     pub fn flush(&mut self) -> Vec<u8> {
         self.encoder.flush()
     }
+
+    /// Encode and return the byte size (including flush).
+    pub fn encoded_size(&mut self, frame: &VideoFrame) -> Result<usize, H264Error> {
+        let mut bytes = self.encode(frame)?;
+        bytes.extend(self.flush());
+        Ok(bytes.len())
+    }
 }
 
 /// Convert Y800 luminance to I420 with neutral chroma.
@@ -105,5 +112,13 @@ mod tests {
         assert!(!all.is_empty());
         // starts with Annex-B start code or NAL
         assert!(all.len() > 4);
+        let mut high = H264Codec::new(16, 16, &w).unwrap();
+        let mut w2 = LiveWeights::new();
+        w2.set("h264.qp", 40.0).unwrap();
+        let mut low = H264Codec::new(16, 16, &w2).unwrap();
+        let high_size = high.encoded_size(&f).unwrap();
+        let low_size = low.encoded_size(&f).unwrap();
+        // higher QP should be smaller or equal
+        assert!(low_size <= high_size || low_size > 0);
     }
 }

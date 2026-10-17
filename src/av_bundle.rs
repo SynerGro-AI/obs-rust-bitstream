@@ -7,18 +7,26 @@
 
 use std::io::{Read, Write};
 
+use crate::encoder_select::EncoderChoice;
+
 const MAGIC: &[u8; 4] = b"AVBN";
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct AvBundle {
     video: Vec<u8>,
     audio: Vec<f32>,
     fps: f32,
+    encoder: EncoderChoice,
 }
 
 impl AvBundle {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            video: Vec::new(),
+            audio: Vec::new(),
+            fps: 0.0,
+            encoder: EncoderChoice::Software,
+        }
     }
 
     pub fn push_video(&mut self, bytes: &[u8]) {
@@ -55,6 +63,14 @@ impl AvBundle {
         }
     }
 
+    pub fn encoder(&self) -> EncoderChoice {
+        self.encoder
+    }
+
+    pub fn set_encoder(&mut self, choice: EncoderChoice) {
+        self.encoder = choice;
+    }
+
     /// Duration in milliseconds from audio length and fps.
     pub fn duration_ms(&self) -> f32 {
         if self.fps <= 0.0 {
@@ -69,6 +85,7 @@ impl AvBundle {
         out.write_all(&(self.video.len() as u32).to_le_bytes())?;
         out.write_all(&(self.audio.len() as u32).to_le_bytes())?;
         out.write_all(&self.fps.to_le_bytes())?;
+        out.write_all(&[self.encoder as u8])?;
         out.write_all(&self.video)?;
         for s in &self.audio {
             out.write_all(&s.to_le_bytes())?;
@@ -93,6 +110,14 @@ impl AvBundle {
         let audio_len = u32::from_le_bytes(buf) as usize;
         input.read_exact(&mut buf)?;
         let fps = f32::from_le_bytes(buf);
+        let mut enc_byte = [0u8; 1];
+        input.read_exact(&mut enc_byte)?;
+        let encoder = match enc_byte[0] {
+            1 => EncoderChoice::Nvidia,
+            2 => EncoderChoice::Amd,
+            3 => EncoderChoice::Intel,
+            _ => EncoderChoice::Software,
+        };
         let mut video = vec![0u8; video_len];
         input.read_exact(&mut video)?;
         let mut audio = Vec::with_capacity(audio_len);
@@ -100,7 +125,7 @@ impl AvBundle {
             input.read_exact(&mut buf)?;
             audio.push(f32::from_le_bytes(buf));
         }
-        Ok(Self { video, audio, fps })
+        Ok(Self { video, audio, fps, encoder })
     }
 }
 
@@ -116,12 +141,14 @@ mod tests {
         assert_eq!(b.video_len(), 4);
         assert_eq!(b.audio_len(), 2);
         b.set_fps(30.0);
+        b.set_encoder(EncoderChoice::Software);
         let mut buf = Vec::new();
         b.write(&mut buf).unwrap();
         let back = AvBundle::read(std::io::Cursor::new(buf)).unwrap();
         assert_eq!(back.video_len(), 4);
         assert_eq!(back.audio_len(), 2);
         assert_eq!(back.fps(), 30.0);
+        assert_eq!(back.encoder(), EncoderChoice::Software);
         assert_eq!(back.audio()[0], 0.5);
     }
 }

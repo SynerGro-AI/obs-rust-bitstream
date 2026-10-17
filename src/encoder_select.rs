@@ -8,6 +8,7 @@
 use crate::gpu_detect::{GpuDetect, GpuKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum EncoderChoice {
     Software,
     Nvidia,

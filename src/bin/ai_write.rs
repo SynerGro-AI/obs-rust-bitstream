@@ -1,62 +1,17 @@
-//! Encode with CC0 audio into a bundle.
+//! GPU check demo.
 
-use obs_rust_bitstream::audio_sync::AudioSync;
-use obs_rust_bitstream::audio_timeline::AudioTimeline;
-use obs_rust_bitstream::bundle_player::BundlePlayer;
-use obs_rust_bitstream::av_bundle::AvBundle;
-use obs_rust_bitstream::effected_write::EffectedWrite;
-use obs_rust_bitstream::encoder_controls::EncoderControls;
-use obs_rust_bitstream::live_weights::LiveWeights;
-use obs_rust_bitstream::sound_cc0::SoundCc0;
-use obs_rust_bitstream::timed_sequence::TimedSequence;
-use obs_rust_bitstream::video_fourcc::VideoFormat;
-use obs_rust_bitstream::video_frame::VideoFrame;
-use std::fs::File;
+use obs_rust_bitstream::gpu_detect::GpuDetect;
+use obs_rust_bitstream::gpu_updater::GpuUpdater;
 
 fn main() {
-    let bytes = std::fs::read("/tmp/bell1.wav").expect("read");
-    let data = SoundCc0::load(&bytes).expect("parse");
-    let mut timeline = AudioTimeline::new();
-    timeline.add("bell", 0.0).expect("add");
-    timeline.load_wav("bell", &data).expect("load");
-    let mut timed = TimedSequence::new(30.0).expect("fps");
-    for _ in 0..8 {
-        let f = VideoFrame::new(VideoFormat::Y800, 16, 16).expect("frame");
-        timed.push(f);
-    }
-    let mut sync = AudioSync::new(timed.clone());
-    *sync.audio_mut() = timeline;
-    let frames: Vec<_> = (0..timed.len())
-        .filter_map(|i| timed.frames().get(i).ok().cloned())
-        .collect();
-    let mut controls = EncoderControls::new().expect("controls");
-    let mut weights = LiveWeights::new();
-    controls.set_quality(30.0, &mut weights).expect("quality");
-    let mut bundle = AvBundle::new();
-    EffectedWrite::write_h264_bundle(
-        &frames,
-        &controls,
-        &mut weights,
-        &sync,
-        &mut bundle,
-    )
-    .expect("encode");
-    let file = File::create("out.avbn").expect("file");
-    bundle.write(file).expect("write");
+    let info = GpuDetect::detect();
     println!(
-        "bundle: video={} audio={} fps={}",
-        bundle.video_len(),
-        bundle.audio_len(),
-        bundle.fps()
+        "gpu: present={} kind={:?} driver={} version={}",
+        info.is_present(),
+        info.kind,
+        info.driver,
+        info.version
     );
-    if let Some(s) = bundle.audio().get(2) {
-        println!("sample 2: {:.4}", s);
-    }
-    let player = BundlePlayer::new(bundle.fps()).expect("player");
-    println!("playback:");
-    for ms in [0.0, 33.0, 66.0] {
-        if let Some(s) = player.sample_at(&bundle, ms) {
-            println!("  {} ms -> {:.4}", ms, s);
-        }
-    }
+    let status = GpuUpdater::check();
+    println!("status: {:?}", status);
 }

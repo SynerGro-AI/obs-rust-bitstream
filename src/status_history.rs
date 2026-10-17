@@ -29,6 +29,11 @@ impl StatusHistory {
         self.lines.last().map(|s| s.as_str())
     }
 
+    /// Oldest line.
+    pub fn first(&self) -> Option<&str> {
+        self.lines.first().map(|s| s.as_str())
+    }
+
     pub fn len(&self) -> usize {
         self.lines.len()
     }
@@ -176,6 +181,7 @@ mod tests {
         h.push("c");
         assert_eq!(h.len(), 2);
         assert_eq!(h.last(), Some("c"));
+        assert_eq!(h.first(), Some("b"));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

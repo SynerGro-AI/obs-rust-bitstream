@@ -106,5 +106,8 @@ fn main() {
     println!("stamped: {}", TimestampStamp::is_stamped(&stamped, 0, 0, 48));
     status.set_stamped(true);
     println!("status with stamp: {}", status.summary());
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with stamp flag");
     println!("matches: {}", status.matches_bundle(&bundle));
 }

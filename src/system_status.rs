@@ -23,6 +23,7 @@ pub struct SystemStatus {
     pub built: String,
     pub stamp_opacity: f32,
     pub captured_frames: usize,
+    pub source: String,
 }
 
 impl SystemStatus {
@@ -41,6 +42,7 @@ impl SystemStatus {
             built: option_env!("BUILD_TIME").unwrap_or("unknown").to_string(),
             stamp_opacity: 1.0,
             captured_frames: 0,
+            source: "none".to_string(),
         }
     }
 
@@ -66,10 +68,14 @@ impl SystemStatus {
         self.captured_frames = n;
     }
 
+    pub fn set_source(&mut self, name: &str) {
+        self.source = name.to_string();
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -80,7 +86,8 @@ impl SystemStatus {
             self.version,
             self.built,
             self.stamp_opacity,
-            self.captured_frames
+            self.captured_frames,
+            self.source
         )
     }
 
@@ -133,6 +140,8 @@ mod tests {
         assert!(s2.summary().contains("opacity=0.5"));
         s2.set_captured_frames(4);
         assert!(s2.summary().contains("captured=4"));
+        s2.set_source("synthetic");
+        assert!(s2.summary().contains("source=synthetic"));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

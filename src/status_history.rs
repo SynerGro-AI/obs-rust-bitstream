@@ -277,6 +277,14 @@ impl StatusHistory {
         }
         Ok(())
     }
+
+    /// Write both the text file and the JSON file.
+    pub fn write_both(&self, text_path: &str, json_path: &str) -> Result<(), std::io::Error> {
+        let mut text = std::fs::File::create(text_path)?;
+        self.write(&mut text)?;
+        std::fs::write(json_path, self.to_json())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

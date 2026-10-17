@@ -15,6 +15,7 @@ use crate::audio_writer::AudioWriter;
 use crate::audio_sync::AudioSync;
 use crate::encode_cancel::EncodeCancel;
 use crate::encode_status::EncodeStatus;
+use crate::encode_cancel::EncodeCancel;
 use crate::encode_progress::EncodeProgress;
 use crate::encoder_controls::EncoderControls;
 use crate::h264_codec::H264Codec;
@@ -561,6 +562,44 @@ impl EffectedWrite {
             let _ = effect.apply(&mut p, weights);
             processed.push(p);
             progress.tick();
+        }
+        Self::write_h264_bundle_status(
+            &processed,
+            controls,
+            weights,
+            sync,
+            bundle_out,
+            status_out,
+        )
+    }
+
+    /// Apply an effect, encode with progress and cancel, and write both.
+    pub fn write_effected_bundle_cancellable<W: Write, S: Write>(
+        frames: &[VideoFrame],
+        effect: &SceneEffect,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        progress: &mut EncodeProgress,
+        cancel: &EncodeCancel,
+        bundle_out: W,
+        status_out: S,
+    ) -> Result<AvBundle, WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        let mut processed = Vec::new();
+        for f in frames {
+            if cancel.is_cancelled() {
+                break;
+            }
+            let mut p = f.clone();
+            let _ = effect.apply(&mut p, weights);
+            processed.push(p);
+            progress.tick();
+        }
+        if processed.is_empty() {
+            return Err(WriteError::Empty);
         }
         Self::write_h264_bundle_status(
             &processed,

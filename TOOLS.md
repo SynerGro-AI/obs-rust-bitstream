@@ -51,7 +51,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Quick select / smart select
 - [x] Invert selection
 - [x] Feather
-- [ ] Expand / contract
+- [x] Expand / contract
 - [ ] Save / load selection
 
 ### Layers

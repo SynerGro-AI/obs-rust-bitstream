@@ -136,11 +136,12 @@ impl StatusHistory {
     /// One readable line for the history.
     pub fn summary(&self) -> String {
         format!(
-            "{} lines | {:.0}% healthy | {:.0} fps avg | {}",
+            "{} lines | {:.0}% healthy | {:.0} fps avg | {} | {}",
             self.len(),
             self.health_ratio() * 100.0,
             self.avg_fps(),
-            self.trend()
+            self.trend(),
+            if self.stable(0.1) { "stable" } else { "variable" }
         )
     }
 
@@ -259,5 +260,6 @@ mod tests {
         assert!(h4.stable(1.0));
         assert_eq!(h4.trend(), "up");
         assert!(h4.summary().contains("up"));
+        assert!(h4.summary().contains("variable"));
     }
 }

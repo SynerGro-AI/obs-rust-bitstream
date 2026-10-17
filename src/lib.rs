@@ -375,6 +375,7 @@ pub mod exposure;
 pub mod invert;
 pub mod threshold;
 pub mod live_weights;
+pub mod weighted_effect;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -654,3 +655,4 @@ pub use exposure::{Exposure, ExposureError};
 pub use invert::{Invert, InvertError};
 pub use threshold::{Threshold, ThresholdError};
 pub use live_weights::{LiveWeights, WeightError};
+pub use weighted_effect::{WeightedEffect, WeightedError};

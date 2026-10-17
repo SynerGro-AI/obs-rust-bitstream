@@ -127,6 +127,14 @@ impl StatusHistory {
         format!("{} @ {}", self.dashboard(), ts)
     }
 
+    /// Extract the timestamp from a dashboard line. 0 if none.
+    pub fn timestamp_of(line: &str) -> u64 {
+        line.rsplit(" @ ")
+            .next()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(0)
+    }
+
     /// Read a dashboard line from a reader.
     pub fn read_dashboard<R: std::io::Read>(mut input: R) -> Result<String, std::io::Error> {
         let mut buf = String::new();

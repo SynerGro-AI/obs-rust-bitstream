@@ -83,8 +83,8 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Timeline / clips
 - [x] Compositor
 - [x] Keyframes
-- [ ] Parenting
-- [ ] Nulls
+- [x] Parenting
+- [x] Nulls
 - [ ] Expressions (pure math)
 
 ### Effects categories

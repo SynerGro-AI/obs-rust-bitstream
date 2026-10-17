@@ -62,6 +62,17 @@ impl StatusHistory {
     pub fn matches_last(&self, other: &Self) -> bool {
         self.last() == other.last()
     }
+
+    /// Append this history to an existing file.
+    pub fn append_to(&self, path: &str) -> Result<(), std::io::Error> {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        let mut f = OpenOptions::new().create(true).append(true).open(path)?;
+        for line in &self.lines {
+            writeln!(f, "{}", line)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -82,5 +93,11 @@ mod tests {
         let loaded = StatusHistory::read(2, std::io::Cursor::new(&buf)).unwrap();
         assert_eq!(loaded.last(), Some("c"));
         assert!(h.matches_last(&loaded));
+        let path = "/tmp/hist_append.txt";
+        let _ = std::fs::remove_file(path);
+        h.append_to(path).unwrap();
+        h.append_to(path).unwrap();
+        let again = StatusHistory::read(10, std::fs::File::open(path).unwrap()).unwrap();
+        assert!(again.len() >= 2);
     }
 }

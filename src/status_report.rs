@@ -69,4 +69,5 @@ mod tests {
         let mut buf = Vec::new();
         r.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("fps"));
+    }
 }

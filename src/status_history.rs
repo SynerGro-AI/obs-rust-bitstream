@@ -73,6 +73,26 @@ impl StatusHistory {
         if n == 0 { 0.0 } else { sum / n as f32 }
     }
 
+    /// "up" if latest is above average, "down" if below, "flat" otherwise.
+    pub fn trend(&self) -> &'static str {
+        let avg = self.avg_fps();
+        if avg == 0.0 {
+            return "flat";
+        }
+        // Parse the last line's fps.
+        let last_fps = self.last().and_then(|line| {
+            line.split('|').find_map(|part| {
+                let part = part.trim();
+                part.strip_suffix(" fps").and_then(|n| n.parse::<f32>().ok())
+            })
+        });
+        match last_fps {
+            Some(v) if v > avg * 1.05 => "up",
+            Some(v) if v < avg * 0.95 => "down",
+            _ => "flat",
+        }
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         for line in &self.lines {

@@ -5,6 +5,7 @@
 //!
 //! Differential: set intensity + get round-trips.
 
+use crate::live_weights::LiveWeights;
 use crate::vec3::Vec3;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,6 +60,14 @@ impl Light {
 
     pub fn intensity(&self) -> f32 {
         self.intensity
+    }
+
+    /// Read intensity from live weights.
+    pub fn from_weights(&mut self, weights: &LiveWeights) {
+        let key = format!("light.{}.intensity", self.name);
+        if let Ok(v) = weights.get(&key) {
+            self.intensity = v;
+        }
     }
 }
 

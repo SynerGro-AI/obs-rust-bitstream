@@ -104,7 +104,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 ### 3D
 - [x] 3D layers
 - [x] Camera
-- [ ] Lights
+- [x] Lights
 
 ## Maya
 

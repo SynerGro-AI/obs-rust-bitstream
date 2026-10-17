@@ -212,6 +212,11 @@ fn main() {
     println!("recommend: {}", CaptureRate::recommend(rate, encode_fps));
     println!("healthy: {}", CaptureRate::healthy(rate, encode_fps, 24.0));
     status.set_healthy(CaptureRate::healthy(rate, encode_fps, 24.0));
+    status.set_source_summary(&best.summary());
+    status.set_capture_fps(rate);
+    status.set_capture_faster(CaptureRate::faster_than(rate, encode_fps));
+    status.set_bottleneck(CaptureRate::bottleneck(rate, encode_fps));
+    status.set_recommendation(CaptureRate::recommend(rate, encode_fps));
     println!("status with health: {}", status.summary());
     println!("one line: {}", status.one_line());
     let final_status = File::create("status.txt").expect("final");

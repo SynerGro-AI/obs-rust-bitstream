@@ -251,6 +251,8 @@ fn main() {
     println!("color: {}", grown.color());
     println!("report: {}", grown.report());
     println!("dashboard: {}", grown.dashboard());
+    std::fs::write("dashboard.txt", grown.dashboard()).expect("dash");
+    println!("wrote dashboard.txt");
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

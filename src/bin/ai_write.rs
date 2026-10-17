@@ -203,6 +203,11 @@ fn main() {
     println!("source: {}", best.summary());
     let rate = CaptureRate::measure(&mut best, 8);
     println!("capture rate: {:.0} fps", rate);
+    let encode_fps = timing.fps(frames.len());
+    println!(
+        "capture faster than encode: {}",
+        CaptureRate::faster_than(rate, encode_fps)
+    );
     status.set_capture_fps(rate);
     println!("status with rate: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");

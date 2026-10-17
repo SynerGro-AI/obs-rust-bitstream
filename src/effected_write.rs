@@ -45,6 +45,30 @@ impl EffectedWrite {
         RawWriter::write(seq, out)
     }
 
+    /// AI suggests weights, chosen steps run, sequence is written.
+    pub fn write_ai_steps<W: Write>(
+        frames: &[VideoFrame],
+        steps: &[&str],
+        ai: &AiAssistant,
+        weights: &mut LiveWeights,
+        out: W,
+    ) -> Result<(), WriteError> {
+        if frames.is_empty() {
+            return Err(WriteError::Empty);
+        }
+        PipeSuggest::full(ai, &frames[0], weights);
+        let mut pipe = ToolPipeline::new();
+        for s in steps {
+            pipe.add(s);
+        }
+        let mut seq = FrameSequence::new();
+        for f in frames {
+            seq.push(f.clone());
+        }
+        pipe.run_sequence(&mut seq, weights).map_err(|_| WriteError::Empty)?;
+        RawWriter::write(&seq, out)
+    }
+
     /// AI suggests weights, pipeline runs, sequence is written.
     pub fn write_ai<W: Write>(
         frames: &[VideoFrame],
@@ -97,5 +121,8 @@ mod tests {
         let mut buf3 = Vec::new();
         EffectedWrite::write_ai(&[f.clone()], &ai, &mut w, &mut buf3).unwrap();
         assert!(buf3.len() > 16);
+        let mut buf4 = Vec::new();
+        EffectedWrite::write_ai_steps(&[f.clone()], &["bright", "invert"], &ai, &mut w, &mut buf4).unwrap();
+        assert!(buf4.len() > 16);
     }
 }

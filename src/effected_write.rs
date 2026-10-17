@@ -13,6 +13,7 @@ use crate::system_status::SystemStatus;
 use crate::av_bundle::AvBundle;
 use crate::audio_writer::AudioWriter;
 use crate::audio_sync::AudioSync;
+use crate::timestamp_stamp::TimestampStamp;
 use crate::encode_cancel::EncodeCancel;
 use crate::encode_status::EncodeStatus;
 use crate::encode_progress::EncodeProgress;
@@ -602,6 +603,36 @@ impl EffectedWrite {
         }
         Self::write_h264_bundle_status(
             &processed,
+            controls,
+            weights,
+            sync,
+            bundle_out,
+            status_out,
+        )
+    }
+
+    /// Stamp each frame with its time, then encode and write both.
+    pub fn write_stamped_bundle<W: Write, S: Write>(
+        frames: &[VideoFrame],
+        fps: f32,
+        controls: &EncoderControls,
+        weights: &mut LiveWeights,
+        sync: &AudioSync,
+        bundle_out: W,
+        status_out: S,
+    ) -> Result<AvBundle, WriteError> {
+        if frames.is_empty() || fps <= 0.0 {
+            return Err(WriteError::Empty);
+        }
+        let mut stamped = Vec::new();
+        for (i, f) in frames.iter().enumerate() {
+            let mut p = f.clone();
+            let secs = (i as f32 / fps) as u32;
+            let _ = TimestampStamp::stamp(&mut p, 0, 0, secs, 255);
+            stamped.push(p);
+        }
+        Self::write_h264_bundle_status(
+            &stamped,
             controls,
             weights,
             sync,

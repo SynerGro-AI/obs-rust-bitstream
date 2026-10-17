@@ -405,6 +405,7 @@ pub mod feather;
 pub mod expand_contract;
 pub mod selection_store;
 pub mod layer_mask;
+pub mod clipping_mask;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -714,3 +715,4 @@ pub use feather::{Feather, FeatherError};
 pub use expand_contract::{ExpandContract, ExpandError};
 pub use selection_store::{SelectionStore, StoreError};
 pub use layer_mask::{LayerMask, MaskError as LayerMaskError};
+pub use clipping_mask::{ClippingMask, ClipError};

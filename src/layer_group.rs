@@ -1,5 +1,8 @@
 //! Safe pure LayerGroup (Photoshop-style group core).
 //!
+//! SUPERSEDED by layer_group_pure, which adds remove_member
+//! and delete. Kept so existing callers still compile.
+//!
 //! A group owns a name and a list of member layer names.
 //! Empty names rejected. No unwraps.
 //!

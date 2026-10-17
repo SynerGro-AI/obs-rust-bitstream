@@ -228,6 +228,9 @@ fn main() {
     let mut history = StatusHistory::new(3);
     history.push(&status.one_line());
     println!("history: {} last={}", history.len(), history.last().unwrap_or(""));
+    let hist_file = File::create("history.txt").expect("hist");
+    history.write(hist_file).expect("write hist");
+    println!("wrote history.txt");
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

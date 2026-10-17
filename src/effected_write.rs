@@ -63,7 +63,7 @@ mod tests {
         assert!(buf.len() > 16);
         assert_eq!(buf[16], 60);
         let mut seq = FrameSequence::new();
-        seq.push(f);
+        seq.push(f.clone());
         let pipe = ToolPipeline::new();
         let mut buf2 = Vec::new();
         EffectedWrite::write_sequence(&mut seq, &pipe, &w, &mut buf2).unwrap();

@@ -40,6 +40,10 @@ impl H264Codec {
         if fps > 0.0 {
             cfg.framerate = fps as f32;
         }
+        let gop = weights.get("h264.gop").unwrap_or(30.0);
+        if gop >= 1.0 {
+            cfg.gop_size = gop as u32;
+        }
         let encoder = Encoder::new(cfg).map_err(|_| H264Error::Encode)?;
         Ok(Self { encoder })
     }

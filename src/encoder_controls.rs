@@ -5,6 +5,7 @@
 //!
 //! Differential: apply sets both weights.
 
+use crate::gop_slider::{GopError, GopSlider};
 use crate::bitrate_slider::{BitrateSlider, SliderError};
 use crate::live_weights::LiveWeights;
 use crate::quality_slider::{QualityError, QualitySlider};
@@ -13,11 +14,13 @@ use crate::quality_slider::{QualityError, QualitySlider};
 pub enum ControlError {
     Bitrate(SliderError),
     Quality(QualityError),
+    Gop(GopError),
 }
 
 pub struct EncoderControls {
     bitrate: BitrateSlider,
     quality: QualitySlider,
+    gop: GopSlider,
 }
 
 impl EncoderControls {
@@ -26,6 +29,7 @@ impl EncoderControls {
         Ok(Self {
             bitrate,
             quality: QualitySlider::new(),
+            gop: GopSlider::new(),
         })
     }
 
@@ -42,9 +46,18 @@ impl EncoderControls {
         self.bitrate.set(value, weights).map_err(ControlError::Bitrate)
     }
 
-    /// Set QP and write the weight.
+    pub fn gop(&self) -> f32 {
+        self.gop.value()
+    }
+
+    /// Set GOP size and write the weight.
     pub fn set_quality(&mut self, value: f32, weights: &mut LiveWeights) -> Result<(), ControlError> {
         self.quality.set(value, weights).map_err(ControlError::Quality)
+    }
+
+    /// Set GOP and write the weight.
+    pub fn set_gop(&mut self, value: f32, weights: &mut LiveWeights) -> Result<(), ControlError> {
+        self.gop.set(value, weights).map_err(ControlError::Gop)
     }
 
     /// Write both current values.
@@ -55,6 +68,9 @@ impl EncoderControls {
         weights
             .set("h264.qp", self.quality.value())
             .map_err(|_| ControlError::Quality(QualityError::OutOfRange))?;
+        weights
+            .set("h264.gop", self.gop.value())
+            .map_err(|_| ControlError::Gop(GopError::Zero))?;
         Ok(())
     }
 }

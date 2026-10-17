@@ -90,7 +90,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 ### Effects categories
 - [ ] Color correction (curves, color balance, levels — shared with Photoshop)
 - [ ] Blur & sharpen (shared)
-- [ ] Distort (wave, bulge, twirl)
+- [x] Distort (wave, bulge, twirl)
 - [ ] Generate (gradient, grid, lens flare)
 - [ ] Keying (chroma, luma)
 - [ ] Matte (track matte, set matte)

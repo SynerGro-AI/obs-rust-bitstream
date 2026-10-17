@@ -241,6 +241,7 @@ fn main() {
     let grown = StatusHistory::read(10, File::open("history.txt").expect("open")).expect("grown");
     println!("history grown: {} lines", grown.len());
     println!("oldest: {}", grown.first().unwrap_or(""));
+    println!("lines: {}", grown.lines().len());
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

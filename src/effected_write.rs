@@ -633,7 +633,8 @@ impl EffectedWrite {
                 TimestampStamp::format_frame(secs, i),
                 TimestampStamp::format_progress(i, frames.len())
             );
-            let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, 255);
+            let lum = TimestampStamp::lum("white");
+            let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, lum);
             stamped.push(p);
         }
         Self::write_h264_bundle_status(

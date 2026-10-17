@@ -5,8 +5,10 @@
 //!
 //! Differential: a weight of 50 lifts an edge pixel.
 
+use crate::drop_shadow::DropShadow;
 use crate::inner_glow::InnerGlow;
 use crate::live_weights::{LiveWeights, WeightError};
+use crate::sharpen::Sharpen;
 use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,5 +63,22 @@ mod tests {
         w.set("glow", 50.0).unwrap();
         WeightedEffect::glow(&mut f, &w, "glow").unwrap();
         assert!(f.planes[0][1 * 4 + 1] > 200);
+    }
+
+    #[test]
+    fn shadow_and_sharpen() {
+        let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
+        f.planes[0][0] = 255;
+        let mut w = LiveWeights::new();
+        w.set("shadow", 100.0).unwrap();
+        WeightedEffect::shadow(&mut f, &w, "shadow").unwrap();
+        assert!(f.planes[0][1 * 4 + 1] < 255);
+
+        let mut f2 = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
+        f2.planes[0].fill(32);
+        f2.planes[0][1 * 4 + 1] = 200;
+        w.set("sharp", 128.0).unwrap();
+        WeightedEffect::sharpen(&mut f2, &w, "sharp").unwrap();
+        assert!(f2.planes[0][1 * 4 + 1] >= 200);
     }
 }

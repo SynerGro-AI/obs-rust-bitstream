@@ -729,4 +729,4 @@ pub use heal::{Heal, HealError};
 pub use dodge_burn_sponge::{DodgeBurnSponge, ToneTool, ToneError};
 pub use paint_bucket::{PaintBucket, BucketError};
 pub use shape::{Shape, ShapeError};
-pub use crop::{Crop, CropError};
+pub use crop::{Crop, CropError as FrameCropError};

@@ -251,6 +251,7 @@ fn main() {
     println!("color: {}", grown.color());
     println!("report: {}", grown.report());
     println!("dashboard: {}", grown.dashboard());
+    println!("dashboard at: {}", grown.dashboard_at(SystemStatus::now()));
     std::fs::write("dashboard.txt", grown.dashboard()).expect("dash");
     println!("wrote dashboard.txt");
     let dash = StatusHistory::read_dashboard(File::open("dashboard.txt").expect("open")).unwrap_or_default();

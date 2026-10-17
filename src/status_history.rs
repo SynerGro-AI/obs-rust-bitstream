@@ -180,13 +180,14 @@ impl StatusHistory {
     /// One readable line for the history.
     pub fn summary(&self) -> String {
         format!(
-            "{} lines | {:.0}% healthy | {:.0} fps avg | {} | {} | streak {}",
+            "{} lines | {:.0}% healthy | {:.0} fps avg | {} | {} | streak {}{}",
             self.len(),
             self.health_ratio() * 100.0,
             self.avg_fps(),
             self.trend(),
             if self.stable(0.1) { "stable" } else { "variable" },
-            self.streak()
+            self.streak(),
+            if self.at_record() { " (record)" } else { "" }
         )
     }
 

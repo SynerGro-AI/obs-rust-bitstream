@@ -57,6 +57,11 @@ impl StatusHistory {
         }
         Ok(h)
     }
+
+    /// True if the last line matches.
+    pub fn matches_last(&self, other: &Self) -> bool {
+        self.last() == other.last()
+    }
 }
 
 #[cfg(test)]
@@ -76,5 +81,6 @@ mod tests {
         assert!(String::from_utf8_lossy(&buf).contains("c"));
         let loaded = StatusHistory::read(2, std::io::Cursor::new(&buf)).unwrap();
         assert_eq!(loaded.last(), Some("c"));
+        assert!(h.matches_last(&loaded));
     }
 }

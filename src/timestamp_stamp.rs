@@ -5,13 +5,9 @@
 //!
 //! Differential: a stamp changes pixels.
 
-use crate::text_draw::{DrawError, TextDraw};
+use crate::draw::DrawError;
+use crate::text_draw::TextDraw;
 use crate::video_frame::VideoFrame;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum StampError {
-    Draw(DrawError),
-}
 
 pub struct TimestampStamp;
 
@@ -31,9 +27,9 @@ impl TimestampStamp {
         y: u32,
         secs: u32,
         lum: u8,
-    ) -> Result<u32, StampError> {
+    ) -> Result<u32, DrawError> {
         let text = Self::format(secs);
-        TextDraw::text(frame, x, y, &text, lum).map_err(StampError::Draw)
+        TextDraw::text(frame, x, y, &text, lum)
     }
 }
 

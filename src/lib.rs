@@ -905,4 +905,4 @@ pub use system_status::SystemStatus;
 pub use write_timing::WriteTiming;
 pub use rate_compare::RateCompare;
 pub use report::Report;
-pub use timestamp_stamp::{TimestampStamp, StampError};
+pub use timestamp_stamp::TimestampStamp;

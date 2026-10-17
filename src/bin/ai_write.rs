@@ -200,6 +200,8 @@ fn main() {
     let f = best.frame().expect("best");
     println!("best: {}x{}", f.width, f.height);
     println!("source: {}", best.summary());
+    status.set_source_summary(&best.summary());
+    println!("status with summary: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with capture count");

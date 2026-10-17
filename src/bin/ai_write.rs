@@ -103,5 +103,6 @@ fn main() {
     .expect("stamped write");
     println!("wrote stamped.avbn");
     println!("base time: {}", TimestampStamp::now());
+    println!("stamped: {}", TimestampStamp::is_stamped(&stamped, 0, 0, 48));
     println!("matches: {}", status.matches_bundle(&bundle));
 }

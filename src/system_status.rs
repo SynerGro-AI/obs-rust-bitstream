@@ -170,7 +170,8 @@ impl SystemStatus {
 
     /// Write the summary to a writer.
     pub fn write<W: Write>(&self, mut out: W) -> Result<(), std::io::Error> {
-        writeln!(out, "{}", self.summary())
+        writeln!(out, "{}", self.summary())?;
+        writeln!(out, "{}", self.one_line())
     }
 
     /// Read a summary back. Returns the encoder string.

@@ -56,6 +56,11 @@ impl StatusHistory {
             .collect()
     }
 
+    /// Most recent line that contains "healthy".
+    pub fn latest_healthy(&self) -> Option<&str> {
+        self.lines.iter().rev().find(|l| l.contains("healthy")).map(|s| s.as_str())
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -233,6 +238,10 @@ mod tests {
         assert_eq!(h.last(), Some("c"));
         assert_eq!(h.first(), Some("b"));
         assert_eq!(h.filter("c").len(), 1);
+        let mut h6 = StatusHistory::new(5);
+        h6.push("a | slow");
+        h6.push("b | healthy");
+        assert_eq!(h6.latest_healthy(), Some("b | healthy"));
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

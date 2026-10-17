@@ -59,7 +59,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Hide / show
 - [x] Opacity
 - [x] Blend modes
-- [ ] Layer mask
+- [x] Layer mask
 - [ ] Clipping mask
 - [ ] Group
 

@@ -8,6 +8,7 @@
 use crate::rate_compare::RateCompare;
 use crate::system_status::SystemStatus;
 use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Report;
 

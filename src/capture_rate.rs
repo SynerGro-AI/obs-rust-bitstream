@@ -25,6 +25,11 @@ impl CaptureRate {
         }
         timing.fps(got)
     }
+
+    /// True if capture is faster than encode.
+    pub fn faster_than(capture_fps: f32, encode_fps: f32) -> bool {
+        capture_fps > encode_fps
+    }
 }
 
 #[cfg(test)]
@@ -36,5 +41,7 @@ mod tests {
         let mut src = CaptureSource::synthetic(8, 8);
         let rate = CaptureRate::measure(&mut src, 4);
         assert!(rate >= 0.0);
+        assert!(CaptureRate::faster_than(100.0, 30.0));
+        assert!(!CaptureRate::faster_than(10.0, 30.0));
     }
 }

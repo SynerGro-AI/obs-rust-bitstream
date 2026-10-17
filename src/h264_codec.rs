@@ -21,6 +21,7 @@ pub enum H264Error {
 
 pub struct H264Codec {
     encoder: Encoder,
+    choice: EncoderChoice,
 }
 
 impl H264Codec {
@@ -51,7 +52,13 @@ impl H264Codec {
             _ => Preset::Balanced,
         };
         let encoder = Encoder::new(cfg).map_err(|_| H264Error::Encode)?;
-        Ok(Self { encoder })
+        let choice = EncoderSelect::choose();
+        Ok(Self { encoder, choice })
+    }
+
+    /// The encoder path that was chosen.
+    pub fn choice(&self) -> EncoderChoice {
+        self.choice
     }
 
     /// Encode one Y800 frame to Annex-B bytes.
@@ -105,6 +112,7 @@ mod tests {
         f.planes[0].fill(40);
         let w = LiveWeights::new();
         let mut enc = H264Codec::new(16, 16, &w).unwrap();
+        assert_eq!(enc.choice(), EncoderChoice::Software);
         let bytes = enc.encode(&f).unwrap();
         // may be empty if lookahead buffers; flush
         let mut all = bytes;

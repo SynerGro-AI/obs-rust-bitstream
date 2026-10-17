@@ -23,7 +23,7 @@ impl Emboss {
         let w = frame.width as usize;
         let src = frame.planes[0].clone();
         if let Some(dst) = frame.planes.get_mut(0) {
-            for i in w..src.len() {
+            for i in (w + 1)..src.len() {
                 let diff = src[i] as i16 - src[i - w - 1] as i16;
                 let v = (128 + diff).clamp(0, 255);
                 dst[i] = v as u8;

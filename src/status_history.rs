@@ -106,6 +106,7 @@ impl StatusHistory {
 
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
+        writeln!(out, "# {}", self.summary())?;
         for line in &self.lines {
             writeln!(out, "{}", line)?;
         }
@@ -157,6 +158,7 @@ mod tests {
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));
+        assert!(String::from_utf8_lossy(&buf).starts_with("# "));
         let loaded = StatusHistory::read(2, std::io::Cursor::new(&buf)).unwrap();
         assert_eq!(loaded.last(), Some("c"));
         assert!(h.matches_last(&loaded));

@@ -154,6 +154,8 @@ fn main() {
             fs,
         );
         println!("wrote from_file.avbn");
+        let sz = std::fs::metadata("from_file.avbn").map(|m| m.len()).unwrap_or(0);
+        println!("from_file.avbn size: {} bytes", sz);
     }
     println!(
         "stamp example: {} {}",

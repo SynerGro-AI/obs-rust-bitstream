@@ -58,6 +58,45 @@ impl Brush {
         let soft = 1.0 - t;
         soft * (1.0 - self.hardness) + self.hardness
     }
+
+    /// Paint a stamp at (cx, cy) using radius and hardness.
+    pub fn paint(
+        &self,
+        frame: &mut crate::video_frame::VideoFrame,
+        cx: u32,
+        cy: u32,
+        color: u8,
+    ) -> Result<(), BrushError> {
+        if frame.format != crate::video_fourcc::VideoFormat::Y800 {
+            return Err(BrushError::EmptyName);
+        }
+        let r = self.radius as i32;
+        let w = frame.width as i32;
+        let h = frame.height as i32;
+        if let Some(plane) = frame.planes.get_mut(0) {
+            for dy in -r..=r {
+                for dx in -r..=r {
+                    let x = cx as i32 + dx;
+                    let y = cy as i32 + dy;
+                    if x < 0 || y < 0 || x >= w || y >= h {
+                        continue;
+                    }
+                    let dist = ((dx * dx + dy * dy) as f32).sqrt();
+                    let fall = self.falloff(dist);
+                    if fall <= 0.0 {
+                        continue;
+                    }
+                    let i = (y as u32 * frame.width + x as u32) as usize;
+                    if i < plane.len() {
+                        let blended =
+                            (plane[i] as f32 * (1.0 - fall) + color as f32 * fall) as u8;
+                        plane[i] = blended;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -83,5 +122,15 @@ mod tests {
         assert_eq!(b.falloff(0.0), 1.0);
         assert_eq!(b.falloff(20.0), 0.0);
         assert!(b.falloff(10.0) > 0.0);
+    }
+
+    #[test]
+    fn paint() {
+        use crate::video_fourcc::VideoFormat;
+        use crate::video_frame::VideoFrame;
+        let mut f = VideoFrame::new(VideoFormat::Y800, 8, 8).unwrap();
+        let b = Brush::new("soft").unwrap();
+        b.paint(&mut f, 4, 4, 200).unwrap();
+        assert!(f.planes[0][4 * 8 + 4] > 0);
     }
 }

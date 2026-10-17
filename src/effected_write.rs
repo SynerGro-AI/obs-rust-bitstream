@@ -637,7 +637,9 @@ impl EffectedWrite {
                 .get("stamp.lum")
                 .map(|v| v as u8)
                 .unwrap_or_else(|_| TimestampStamp::lum("white"));
-            let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, lum);
+            let opacity = weights.get("stamp.opacity").unwrap_or(1.0);
+            let blended = TimestampStamp::blend(lum, opacity);
+            let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, blended);
             stamped.push(p);
         }
         Self::write_h264_bundle_status(

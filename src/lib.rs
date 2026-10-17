@@ -384,6 +384,8 @@ pub mod bevel;
 pub mod stroke;
 pub mod gradient;
 pub mod pattern;
+pub mod brush;
+pub mod eraser;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -672,3 +674,5 @@ pub use bevel::{Bevel, BevelError};
 pub use stroke::{Stroke, StrokeError};
 pub use gradient::{Gradient, GradientError};
 pub use pattern::{Pattern as Checker, PatternError as CheckerError};
+pub use brush::{Brush, BrushError};
+pub use eraser::{Eraser, EraserError};

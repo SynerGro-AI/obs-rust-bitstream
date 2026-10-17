@@ -1,62 +1,47 @@
-//! Safe pure Brush (paint core).
+//! Safe pure Brush (stamp core).
 //!
-//! A brush owns a name, a radius, and a hardness. Empty names
-//! rejected. No unwraps.
+//! Paints a square of the given size and color at (x, y).
+//! Out-of-bounds rejected. Works on Y800. No unwraps.
 //!
-//! Differential: set radius + falloff at center is 1.0.
+//! Differential: a 2x2 stamp sets those pixels.
+
+use crate::video_fourcc::VideoFormat;
+use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BrushError {
-    EmptyName,
+    WrongFormat,
+    OutOfBounds,
 }
 
-#[derive(Clone, Debug)]
-pub struct Brush {
-    name: String,
-    radius: f32,
-    hardness: f32,
-}
+pub struct Brush;
 
 impl Brush {
-    pub fn new(name: &str) -> Result<Self, BrushError> {
-        if name.is_empty() {
-            return Err(BrushError::EmptyName);
+    pub fn stamp(
+        frame: &mut VideoFrame,
+        x: u32,
+        y: u32,
+        size: u8,
+        color: u8,
+    ) -> Result<(), BrushError> {
+        if frame.format != VideoFormat::Y800 {
+            return Err(BrushError::WrongFormat);
         }
-        Ok(Self {
-            name: name.to_string(),
-            radius: 10.0,
-            hardness: 0.5,
-        })
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn set_radius(&mut self, r: f32) {
-        self.radius = r.max(0.1);
-    }
-
-    pub fn radius(&self) -> f32 {
-        self.radius
-    }
-
-    pub fn set_hardness(&mut self, h: f32) {
-        self.hardness = h.clamp(0.0, 1.0);
-    }
-
-    pub fn hardness(&self) -> f32 {
-        self.hardness
-    }
-
-    /// Falloff at a distance from the brush center. 1.0 at center.
-    pub fn falloff(&self, distance: f32) -> f32 {
-        if distance >= self.radius {
-            return 0.0;
+        let s = size.max(1) as u32;
+        if x.saturating_add(s) > frame.width || y.saturating_add(s) > frame.height {
+            return Err(BrushError::OutOfBounds);
         }
-        let t = distance / self.radius;
-        let soft = 1.0 - t;
-        soft * (1.0 - self.hardness) + self.hardness
+        if let Some(plane) = frame.planes.get_mut(0) {
+            for row in y..y + s {
+                for col in x..x + s {
+                    let i = (row * frame.width + col) as usize;
+                    if i < plane.len() {
+                        plane[i] = color;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -65,23 +50,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn create() {
-        let b = Brush::new("round").unwrap();
-        assert_eq!(b.radius(), 10.0);
-    }
-
-    #[test]
-    fn empty_name() {
-        assert!(Brush::new("").is_err());
+    fn out_of_bounds() {
+        let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
+        assert!(Brush::stamp(&mut f, 3, 3, 2, 255).is_err());
     }
 
     #[test]
     fn differential() {
-        let mut b = Brush::new("round").unwrap();
-        b.set_radius(20.0);
-        b.set_hardness(0.0);
-        assert_eq!(b.falloff(0.0), 1.0);
-        assert_eq!(b.falloff(20.0), 0.0);
-        assert!(b.falloff(10.0) > 0.0);
+        let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
+        Brush::stamp(&mut f, 1, 1, 2, 200).unwrap();
+        assert_eq!(f.planes[0][1 * 4 + 1], 200);
+        assert_eq!(f.planes[0][0], 0);
     }
 }

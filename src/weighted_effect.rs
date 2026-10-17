@@ -5,12 +5,16 @@
 //!
 //! Differential: a weight of 50 lifts an edge pixel.
 
+use crate::add_noise::AddNoise;
 use crate::bright_shadow::BrightShadow;
 use crate::drop_shadow::DropShadow;
+use crate::emboss::Emboss;
 use crate::exposure::Exposure;
+use crate::gauss_blur::GaussBlur;
 use crate::hue_sat::HueSat;
 use crate::inner_glow::InnerGlow;
 use crate::live_weights::{LiveWeights, WeightError};
+use crate::motion_blur::MotionBlur;
 use crate::outer_glow::OuterGlow;
 use crate::sharpen::Sharpen;
 use crate::threshold::Threshold;
@@ -117,6 +121,42 @@ impl WeightedEffect {
         name: &str,
     ) -> Result<(), WeightedError> {
         Threshold::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply gaussian-style blur. Weight is pass count.
+    pub fn gauss(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        GaussBlur::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply motion blur. Weight is distance.
+    pub fn motion(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        MotionBlur::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply noise. Weight is amount.
+    pub fn noise(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        AddNoise::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply emboss. Weight is ignored (effect has no strength).
+    pub fn emboss(
+        frame: &mut VideoFrame,
+        _weights: &LiveWeights,
+        _name: &str,
+    ) -> Result<(), WeightedError> {
+        Emboss::apply(frame).map_err(|_| WeightedError::BadWeight)
     }
 }
 

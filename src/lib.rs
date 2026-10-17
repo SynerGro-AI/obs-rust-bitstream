@@ -376,6 +376,10 @@ pub mod invert;
 pub mod threshold;
 pub mod live_weights;
 pub mod weighted_effect;
+pub mod gauss_blur;
+pub mod motion_blur;
+pub mod add_noise;
+pub mod emboss;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -656,3 +660,7 @@ pub use invert::{Invert, InvertError};
 pub use threshold::{Threshold, ThresholdError};
 pub use live_weights::{LiveWeights, WeightError};
 pub use weighted_effect::{WeightedEffect, WeightedError};
+pub use gauss_blur::{GaussBlur, GaussError};
+pub use motion_blur::{MotionBlur, MotionError};
+pub use add_noise::{AddNoise, NoiseError};
+pub use emboss::{Emboss, EmbossError};

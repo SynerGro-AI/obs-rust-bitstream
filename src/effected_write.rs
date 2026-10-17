@@ -239,6 +239,16 @@ impl EffectedWrite {
         RawWriter::write(timed.frames(), &mut out)?;
         FpsTrailer::write(timed.fps(), &mut out)
     }
+
+    /// Resample to a new fps and write with trailer.
+    pub fn write_resampled<W: Write>(
+        timed: &TimedSequence,
+        new_fps: f32,
+        out: W,
+    ) -> Result<(), WriteError> {
+        let resampled = Resample::to_fps(timed, new_fps).map_err(|_| WriteError::Empty)?;
+        Self::write_timed_fps(&resampled, out)
+    }
 }
 
 #[cfg(test)]

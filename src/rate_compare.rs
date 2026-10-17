@@ -14,6 +14,26 @@ use crate::write_timing::WriteTiming;
 pub struct RateCompare;
 
 impl RateCompare {
+use std::io::Write;
+
+impl RateCompare {
+    /// Write a three-size comparison to a writer.
+    pub fn write_three<W: Write>(
+        small: u32,
+        mid: u32,
+        large: u32,
+        mut out: W,
+    ) -> Result<(), H264Error> {
+        let (a, b, c) = Self::three(small, mid, large)?;
+        writeln!(
+            out,
+            "{}x{}={:.0} {}x{}={:.0} {}x{}={:.0}",
+            small, small, a, mid, mid, b, large, large, c
+        )
+        .map_err(|_| H264Error::Encode)?;
+        Ok(())
+    }
+
     /// Encode one frame at three sizes. Returns (s, m, l).
     pub fn three(small: u32, mid: u32, large: u32) -> Result<(f32, f32, f32), H264Error> {
         Ok((Self::one(small)?, Self::one(mid)?, Self::one(large)?))
@@ -51,5 +71,8 @@ mod tests {
         assert!(large > 0.0);
         let (a, b, c) = RateCompare::three(8, 16, 32).unwrap();
         assert!(a > 0.0 && b > 0.0 && c > 0.0);
+        let mut buf = Vec::new();
+        RateCompare::write_three(8, 16, 32, &mut buf).unwrap();
+        assert!(String::from_utf8_lossy(&buf).contains("32x32"));
     }
 }

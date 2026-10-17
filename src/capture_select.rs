@@ -77,6 +77,14 @@ impl CaptureSource {
     pub fn best() -> Self {
         Self::synthetic(16, 16)
     }
+
+    /// Short summary of this source.
+    pub fn summary(&self) -> String {
+        match self {
+            CaptureSource::Synthetic(_) => format!("synthetic {}x{}", self.width(), self.height()),
+            CaptureSource::File(_) => format!("file {}x{}", self.width(), self.height()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -104,5 +112,6 @@ mod tests {
         assert!(avail.contains(&"file"));
         let mut best = CaptureSource::best();
         assert!(best.frame().is_some());
+        assert!(best.summary().contains("synthetic"));
     }
 }

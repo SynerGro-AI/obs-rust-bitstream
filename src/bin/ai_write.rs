@@ -269,6 +269,8 @@ fn main() {
     println!("loaded report: {}", loaded);
     println!("report matches: {}", report.matches(&loaded));
     println!("report json: {}", report.to_json());
+    std::fs::write("report.json", report.to_json()).expect("rep json");
+    println!("wrote report.json");
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

@@ -65,6 +65,22 @@ impl StatusReport {
     pub fn matches(&self, loaded: &str) -> bool {
         self.summary() == loaded
     }
+
+    /// Simple JSON object.
+    pub fn to_json(&self) -> String {
+        format!(
+            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\",\"color\":\"{}\"}}",
+            self.lines,
+            self.healthy * 100.0,
+            self.avg_fps,
+            self.trend,
+            self.stable,
+            self.streak,
+            self.record,
+            self.word,
+            self.color
+        )
+    }
 }
 
 #[cfg(test)]

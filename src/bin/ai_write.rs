@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::capture_select::CaptureSource;
 use obs_rust_bitstream::timestamp_stamp::TimestampStamp;
 use obs_rust_bitstream::report::Report;
 use obs_rust_bitstream::rate_compare::RateCompare;
@@ -98,6 +99,9 @@ fn main() {
     println!("stamp.lum set to 128");
     weights.set("stamp.opacity", 0.5).expect("opacity");
     println!("stamp.opacity set to 0.5 (blend={})", TimestampStamp::blend(128, 0.5));
+    let mut src = CaptureSource::synthetic(16, 16);
+    let captured = src.frame().expect("capture");
+    println!("captured frame {}x{}", captured.width, captured.height);
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

@@ -23,6 +23,11 @@ impl Report {
         writeln!(out, "{}", status.summary())?;
         RateCompare::write_three(small, mid, large, &mut out)
             .map_err(|_| std::io::Error::other("rate"))?;
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        writeln!(out, "time={}", secs)?;
         Ok(())
     }
 }
@@ -41,5 +46,6 @@ mod tests {
         let text = String::from_utf8_lossy(&buf);
         assert!(text.contains("encoder="));
         assert!(text.contains("32x32"));
+        assert!(text.contains("time="));
     }
 }

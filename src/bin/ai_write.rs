@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::status_report::StatusReport;
 use obs_rust_bitstream::status_history::StatusHistory;
 use obs_rust_bitstream::capture_rate::CaptureRate;
 use obs_rust_bitstream::capture::Capture;
@@ -259,6 +260,8 @@ fn main() {
     println!("timestamp: {}", StatusHistory::timestamp_of(&dash));
     println!("age: {}s", StatusHistory::age(&dash, SystemStatus::now()));
     println!("fresh: {}", StatusHistory::fresh(&dash, SystemStatus::now(), 60));
+    let report = StatusReport::from(&grown);
+    println!("report: {}", report.summary());
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

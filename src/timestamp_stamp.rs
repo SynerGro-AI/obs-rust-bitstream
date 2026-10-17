@@ -50,5 +50,8 @@ mod tests {
         let before = f.planes[0][0];
         TimestampStamp::stamp(&mut f, 0, 0, 60, 255).unwrap();
         assert_ne!(f.planes[0][1], before);
+        let mut f2 = VideoFrame::new(VideoFormat::Y800, 64, 16).unwrap();
+        TimestampStamp::stamp_corner(&mut f2, 60, 255).unwrap();
+        assert!(f2.planes[0].iter().any(|&p| p == 255));
     }
 }

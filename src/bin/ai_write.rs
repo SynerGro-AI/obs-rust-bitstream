@@ -237,6 +237,9 @@ fn main() {
     history.append_to("history.txt").expect("append");
     let grown = StatusHistory::read(10, File::open("history.txt").expect("open")).expect("grown");
     println!("history grown: {} lines", grown.len());
+    let mut cleared = history.clone();
+    cleared.clear();
+    println!("cleared: {}", cleared.is_empty());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

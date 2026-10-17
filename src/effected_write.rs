@@ -15,7 +15,6 @@ use crate::audio_writer::AudioWriter;
 use crate::audio_sync::AudioSync;
 use crate::encode_cancel::EncodeCancel;
 use crate::encode_status::EncodeStatus;
-use crate::encode_cancel::EncodeCancel;
 use crate::encode_progress::EncodeProgress;
 use crate::encoder_controls::EncoderControls;
 use crate::h264_codec::H264Codec;

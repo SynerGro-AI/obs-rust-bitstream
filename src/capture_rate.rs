@@ -47,6 +47,11 @@ impl CaptureRate {
             _ => "use a faster source",
         }
     }
+
+    /// True if both rates are above a floor.
+    pub fn healthy(capture_fps: f32, encode_fps: f32, floor: f32) -> bool {
+        capture_fps >= floor && encode_fps >= floor
+    }
 }
 
 #[cfg(test)]
@@ -63,5 +68,7 @@ mod tests {
         assert_eq!(CaptureRate::bottleneck(100.0, 30.0), "encode");
         assert_eq!(CaptureRate::bottleneck(10.0, 30.0), "capture");
         assert!(CaptureRate::recommend(100.0, 30.0).contains("quality"));
+        assert!(CaptureRate::healthy(60.0, 30.0, 24.0));
+        assert!(!CaptureRate::healthy(10.0, 30.0, 24.0));
     }
 }

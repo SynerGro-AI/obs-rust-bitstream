@@ -250,6 +250,7 @@ fn main() {
     println!("word: {}", grown.word());
     println!("color: {}", grown.color());
     println!("report: {}", grown.report());
+    println!("dashboard: {}", grown.dashboard());
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

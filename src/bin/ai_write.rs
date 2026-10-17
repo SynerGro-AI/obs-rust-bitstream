@@ -267,6 +267,7 @@ fn main() {
     println!("wrote report.txt");
     let loaded = StatusReport::read(File::open("report.txt").expect("open")).unwrap_or_default();
     println!("loaded report: {}", loaded);
+    println!("report matches: {}", report.matches(&loaded));
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

@@ -56,11 +56,12 @@ fn main() {
     )
     .expect("write");
     println!(
-        "wrote out.avbn (video={} audio={}) progress={:.0}% time={:.1}ms",
+        "wrote out.avbn (video={} audio={}) progress={:.0}% time={:.1}ms fps={:.0}",
         bundle.video_len(),
         bundle.audio_len(),
         progress.fraction() * 100.0,
-        timing.elapsed_ms()
+        timing.elapsed_ms(),
+        timing.fps(frames.len())
     );
     let status = SystemStatus::from_bundle(&bundle);
     println!("status: {}", status.summary());

@@ -41,4 +41,7 @@ fn main() {
     );
     let status = SystemStatus::from_bundle(&back);
     println!("status: {}", status.summary());
+    let status_file = File::create("status.txt").expect("status");
+    status.write(status_file).expect("write status");
+    println!("wrote status.txt");
 }

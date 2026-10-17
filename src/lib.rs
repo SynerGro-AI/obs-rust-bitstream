@@ -795,4 +795,4 @@ pub use constraint::{Constraint, ConstraintKind};
 pub use skin_weights::{SkinWeights, SkinError as SkinWeightError};
 pub use graph_editor::{GraphEditor, GraphError};
 pub use motion_path::{MotionPath, PathPoint, PathError};
-pub use blend_shape::{BlendShape, BlendError};
+pub use blend_shape::{BlendShape, BlendError as BlendShapeError};

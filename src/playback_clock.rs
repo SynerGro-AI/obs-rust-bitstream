@@ -6,6 +6,8 @@
 //! Differential: 1000 ms at 30 fps is frame 30.
 
 use crate::live_weights::LiveWeights;
+use crate::timed_sequence::TimedSequence;
+use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ClockError {
@@ -51,6 +53,19 @@ impl PlaybackClock {
             }
         }
     }
+
+    /// Frame at elapsed time from a timed sequence.
+    pub fn frame_from<'a>(
+        &self,
+        seq: &'a TimedSequence,
+        elapsed_ms: f32,
+    ) -> Option<&'a VideoFrame> {
+        let idx = self.frame_at(elapsed_ms);
+        if idx >= seq.len() {
+            return None;
+        }
+        seq.frames().get(idx).ok()
+    }
 }
 
 #[cfg(test)]
@@ -72,5 +87,14 @@ mod tests {
         w.set("fps", 60.0).unwrap();
         c.from_weights(&w);
         assert_eq!(c.fps(), 60.0);
+        let mut seq = TimedSequence::new(30.0).unwrap();
+        for i in 0..10 {
+            let mut f = VideoFrame::new(crate::video_fourcc::VideoFormat::Y800, 2, 2).unwrap();
+            f.planes[0].fill(i);
+            seq.push(f);
+        }
+        let c2 = PlaybackClock::new(30.0).unwrap();
+        let frame = c2.frame_from(&seq, 100.0).unwrap();
+        assert_eq!(frame.planes[0][0], 3);
     }
 }

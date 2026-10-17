@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::status_history::StatusHistory;
 use obs_rust_bitstream::capture_rate::CaptureRate;
 use obs_rust_bitstream::capture::Capture;
 use obs_rust_bitstream::file_capture::FileCapture;
@@ -224,6 +225,9 @@ fn main() {
     let read_back = SystemStatus::read_one_line(File::open("status.txt").expect("open")).unwrap_or_default();
     println!("read back: {}", read_back);
     println!("matches: {}", status.matches_one_line(&read_back));
+    let mut history = StatusHistory::new(3);
+    history.push(&status.one_line());
+    println!("history: {} last={}", history.len(), history.last().unwrap_or(""));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with health");

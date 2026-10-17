@@ -249,6 +249,7 @@ fn main() {
     println!("at record: {}", grown.at_record());
     println!("word: {}", grown.word());
     println!("color: {}", grown.color());
+    println!("report: {}", grown.report());
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

@@ -6,30 +6,30 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 
 ### Adjustments
 - [x] Levels
-- [ ] Curves
-- [ ] Color balance
-- [ ] Hue/saturation
+- [x] Curves
+- [x] Color balance
+- [x] Hue/saturation
 - [ ] Brightness/contrast
-- [ ] Exposure
+- [x] Exposure
 - [ ] Vibrance
 - [ ] Black & white
 - [ ] Photo filter
 - [ ] Channel mixer
 - [ ] Selective color
-- [ ] Invert
+- [x] Invert
 - [ ] Posterize
-- [ ] Threshold
+- [x] Threshold
 - [ ] Gradient map
 
 ### Filters
 - [x] Box blur
 - [x] Sharpen
-- [ ] Gaussian blur
-- [ ] Motion blur
+- [x] Gaussian blur
+- [x] Motion blur
 - [ ] Radial blur
-- [ ] Add noise
+- [x] Add noise
 - [ ] Median
-- [ ] Emboss
+- [x] Emboss
 - [ ] Find edges
 - [ ] High pass
 
@@ -38,27 +38,27 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Bright shadow
 - [x] Inner glow
 - [x] Outer glow
-- [ ] Bevel and emboss
-- [ ] Stroke
-- [ ] Gradient overlay
-- [ ] Pattern overlay
+- [x] Bevel and emboss
+- [x] Stroke
+- [x] Gradient overlay
+- [x] Pattern overlay
 - [ ] Satin
 
 ### Selections
-- [ ] Rectangular / elliptical marquee
+- [x] Rectangular / elliptical marquee
 - [ ] Lasso
-- [ ] Magic wand (tolerance)
+- [x] Magic wand (tolerance)
 - [ ] Quick select / smart select
-- [ ] Invert selection
+- [x] Invert selection
 - [ ] Feather
 - [ ] Expand / contract
 - [ ] Save / load selection
 
 ### Layers
-- [ ] Layer stack
-- [ ] Hide / show
-- [ ] Opacity
-- [ ] Blend modes
+- [x] Layer stack
+- [x] Hide / show
+- [x] Opacity
+- [x] Blend modes
 - [ ] Layer mask
 - [ ] Clipping mask
 - [ ] Group

@@ -21,6 +21,7 @@ pub struct SystemStatus {
     pub stamped: bool,
     pub version: String,
     pub built: String,
+    pub stamp_opacity: f32,
 }
 
 impl SystemStatus {

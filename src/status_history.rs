@@ -47,6 +47,15 @@ impl StatusHistory {
         &self.lines
     }
 
+    /// Lines that contain a keyword.
+    pub fn filter(&self, keyword: &str) -> Vec<&str> {
+        self.lines
+            .iter()
+            .filter(|l| l.contains(keyword))
+            .map(|s| s.as_str())
+            .collect()
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -223,6 +232,7 @@ mod tests {
         assert_eq!(h.len(), 2);
         assert_eq!(h.last(), Some("c"));
         assert_eq!(h.first(), Some("b"));
+        assert_eq!(h.filter("c").len(), 1);
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

@@ -128,7 +128,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 
 ### Dynamics
 - [x] Particles
-- [ ] Rigid body
+- [x] Rigid body
 - [ ] Soft body / cloth
 - [ ] Fluids (later)
 

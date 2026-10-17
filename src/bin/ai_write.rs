@@ -94,6 +94,8 @@ fn main() {
     println!("frame: {}", TimestampStamp::format_frame(60, 3));
     println!("progress: {}", TimestampStamp::format_progress(3, 10));
     println!("lum white: {}", TimestampStamp::lum("white"));
+    weights.set("stamp.lum", 128.0).expect("lum");
+    println!("stamp.lum set to 128");
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

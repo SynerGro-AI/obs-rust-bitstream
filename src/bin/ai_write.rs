@@ -191,6 +191,7 @@ fn main() {
     for k in CaptureSource::kinds() {
         println!("  {}: {}", k, CaptureSource::available(k));
     }
+    println!("available: {}", CaptureSource::available_kinds().join(", "));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with capture count");

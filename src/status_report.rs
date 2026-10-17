@@ -60,6 +60,11 @@ impl StatusReport {
         input.read_to_string(&mut buf)?;
         Ok(buf.trim().to_string())
     }
+
+    /// True if the loaded text matches this summary.
+    pub fn matches(&self, loaded: &str) -> bool {
+        self.summary() == loaded
+    }
 }
 
 #[cfg(test)]

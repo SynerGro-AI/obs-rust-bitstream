@@ -17,6 +17,7 @@ pub struct SystemStatus {
     pub video_bytes: usize,
     pub audio_samples: usize,
     pub fps: f32,
+    pub encode_ms: f32,
 }
 
 impl SystemStatus {
@@ -32,15 +33,22 @@ impl SystemStatus {
         }
     }
 
+    pub fn set_encode_ms(&mut self, ms: f32) {
+        if ms >= 0.0 {
+            self.encode_ms = ms;
+        }
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
             self.audio_samples,
-            self.fps
+            self.fps,
+            self.encode_ms
         )
     }
 
@@ -81,6 +89,9 @@ mod tests {
         assert!(!s.gpu_present);
         assert_eq!(s.encoder, EncoderChoice::Software);
         assert!(s.summary().contains("software"));
+        let mut s2 = s.clone();
+        s2.set_encode_ms(7.5);
+        assert!(s2.summary().contains("encode_ms=7.5"));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

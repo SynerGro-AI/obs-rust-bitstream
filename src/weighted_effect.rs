@@ -18,6 +18,8 @@ use crate::live_weights::{LiveWeights, WeightError};
 use crate::motion_blur::MotionBlur;
 use crate::outer_glow::OuterGlow;
 use crate::sharpen::Sharpen;
+use crate::gradient::Gradient;
+use crate::pattern::Pattern;
 use crate::stroke::Stroke;
 use crate::threshold::Threshold;
 use crate::video_frame::VideoFrame;
@@ -177,6 +179,24 @@ impl WeightedEffect {
         name: &str,
     ) -> Result<(), WeightedError> {
         Stroke::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply gradient. Weight is the end value; start is 0.
+    pub fn gradient(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        Gradient::apply(frame, 0, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply checker pattern. Weight is the light value.
+    pub fn pattern(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        Pattern::apply(frame, Self::strength(weights, name)?, 0, 2).map_err(|_| WeightedError::BadWeight)
     }
 }
 

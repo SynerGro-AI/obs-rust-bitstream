@@ -382,6 +382,8 @@ pub mod add_noise;
 pub mod emboss;
 pub mod bevel;
 pub mod stroke;
+pub mod gradient;
+pub mod pattern;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -668,3 +670,5 @@ pub use add_noise::{AddNoise, NoiseError};
 pub use emboss::{Emboss, EmbossError};
 pub use bevel::{Bevel, BevelError};
 pub use stroke::{Stroke, StrokeError};
+pub use gradient::{Gradient, GradientError};
+pub use pattern::{Pattern, PatternError};

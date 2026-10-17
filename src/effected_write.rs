@@ -636,7 +636,7 @@ impl EffectedWrite {
             let lum = weights
                 .get("stamp.lum")
                 .map(|v| v as u8)
-                .unwrap_or_else(|| TimestampStamp::lum("white"));
+                .unwrap_or_else(|_| TimestampStamp::lum("white"));
             let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, lum);
             stamped.push(p);
         }

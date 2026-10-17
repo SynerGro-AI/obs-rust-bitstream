@@ -6,6 +6,7 @@
 //! Differential: add layer + set blend + attach mask + onion
 //! view round-trips.
 
+use crate::ai_approve::{AiApprove, ApproveMode};
 use crate::ai::AiAssistant;
 use crate::ai_editor::AiEditor;
 use crate::adjustment::{Adjustment, AdjustKind};
@@ -28,6 +29,7 @@ pub struct EditorUi {
     history: History,
     effects: EffectList,
     save_format: SaveFormat,
+    ai_gate: AiApprove,
 }
 
 impl EditorUi {
@@ -41,6 +43,7 @@ impl EditorUi {
             history: History::new(),
             effects: EffectList::new(),
             save_format: SaveFormat::Clip,
+            ai_gate: AiApprove::new(ApproveMode::Manual),
         }
     }
 
@@ -210,6 +213,34 @@ impl EditorUi {
     pub fn ai_editor(&self) -> AiEditor {
         AiEditor
     }
+
+    /// Auto-approve toggle. True means autonomous.
+    pub fn auto_approve(&self) -> bool {
+        self.ai_gate.mode() == ApproveMode::Autonomous
+    }
+
+    /// Set the auto-approve toggle.
+    pub fn set_auto_approve(&mut self, on: bool) {
+        let mode = if on {
+            ApproveMode::Autonomous
+        } else {
+            ApproveMode::Manual
+        };
+        self.ai_gate.set_mode(mode);
+    }
+
+    /// Allow all pending AI changes.
+    pub fn allow_all_ai(&mut self) -> usize {
+        self.ai_gate.allow_all()
+    }
+
+    pub fn ai_gate(&self) -> &AiApprove {
+        &self.ai_gate
+    }
+
+    pub fn ai_gate_mut(&mut self) -> &mut AiApprove {
+        &mut self.ai_gate
+    }
 }
 
 #[cfg(test)]
@@ -288,5 +319,15 @@ mod tests {
         assert_eq!(ui.save_format(), SaveFormat::Video);
         ui.toggle_save_format();
         assert_eq!(ui.save_format(), SaveFormat::Clip);
+    }
+
+    #[test]
+    fn auto_approve_toggle() {
+        let mut ui = EditorUi::new();
+        assert!(!ui.auto_approve());
+        ui.set_auto_approve(true);
+        assert!(ui.auto_approve());
+        ui.set_auto_approve(false);
+        assert!(!ui.auto_approve());
     }
 }

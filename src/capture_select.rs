@@ -63,6 +63,15 @@ impl CaptureSource {
             _ => false,
         }
     }
+
+    /// Sources that work on this OS.
+    pub fn available_kinds() -> Vec<&'static str> {
+        Self::kinds()
+            .iter()
+            .copied()
+            .filter(|k| Self::available(k))
+            .collect()
+    }
 }
 
 #[cfg(test)]

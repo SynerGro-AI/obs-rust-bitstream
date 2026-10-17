@@ -78,5 +78,5 @@ mod tests {
         assert!(String::from_utf8_lossy(&buf).contains("fps"));
         let loaded = StatusReport::read(std::io::Cursor::new(&buf)).unwrap();
         assert!(loaded.contains("fps"));
-    }
+        assert!(r.matches(&loaded));
 }

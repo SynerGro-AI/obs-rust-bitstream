@@ -250,6 +250,7 @@ fn main() {
     let (lo, hi) = grown.fps_range();
     println!("fps range: {:.0} to {:.0}", lo, hi);
     println!("fps spread: {:.0}", grown.fps_spread());
+    println!("stable: {}", grown.stable(0.1));
     println!("trend: {}", grown.trend());
     println!("history summary: {}", grown.summary());
     let final_status = File::create("status.txt").expect("final");

@@ -490,6 +490,7 @@ impl EffectedWrite {
         bundle.push_video(&video);
         bundle.push_audio(&samples);
         bundle.set_fps(sync.video().fps());
+        bundle.set_encoder(crate::encoder_select::EncoderSelect::choose());
         Ok(())
     }
 }

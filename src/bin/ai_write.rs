@@ -1,9 +1,11 @@
-//! Combined write demo.
+//! Combined write with CC0 audio.
 
 use obs_rust_bitstream::audio_sync::AudioSync;
+use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::sound_cc0::SoundCc0;
 use obs_rust_bitstream::system_status::SystemStatus;
 use obs_rust_bitstream::timed_sequence::TimedSequence;
 use obs_rust_bitstream::video_fourcc::VideoFormat;
@@ -11,10 +13,18 @@ use obs_rust_bitstream::video_frame::VideoFrame;
 use std::fs::File;
 
 fn main() {
+    let bytes = std::fs::read("/tmp/bell1.wav").expect("read");
+    let data = SoundCc0::load(&bytes).expect("parse");
+    let mut timeline = AudioTimeline::new();
+    timeline.add("bell", 0.0).expect("add");
+    timeline.load_wav("bell", &data).expect("load");
     let mut timed = TimedSequence::new(30.0).expect("fps");
-    let f = VideoFrame::new(VideoFormat::Y800, 16, 16).expect("frame");
-    timed.push(f);
-    let sync = AudioSync::new(timed.clone());
+    for _ in 0..8 {
+        let f = VideoFrame::new(VideoFormat::Y800, 16, 16).expect("frame");
+        timed.push(f);
+    }
+    let mut sync = AudioSync::new(timed.clone());
+    *sync.audio_mut() = timeline;
     let frames: Vec<_> = (0..timed.len())
         .filter_map(|i| timed.frames().get(i).ok().cloned())
         .collect();
@@ -33,11 +43,11 @@ fn main() {
     )
     .expect("write");
     println!(
-        "wrote out.avbn (video={}) and status.txt",
-        bundle.video_len()
+        "wrote out.avbn (video={} audio={})",
+        bundle.video_len(),
+        bundle.audio_len()
     );
-    let enc = SystemStatus::read_encoder(File::open("status.txt").expect("open")).expect("read");
-    println!("status encoder: {}", enc);
     let status = SystemStatus::from_bundle(&bundle);
+    println!("status: {}", status.summary());
     println!("matches: {}", status.matches_bundle(&bundle));
 }

@@ -93,6 +93,7 @@ fn main() {
     println!("now: {}", TimestampStamp::now());
     println!("frame: {}", TimestampStamp::format_frame(60, 3));
     println!("progress: {}", TimestampStamp::format_progress(3, 10));
+    println!("lum white: {}", TimestampStamp::lum("white"));
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

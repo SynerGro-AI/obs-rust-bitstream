@@ -1,4 +1,4 @@
-//! Read a .obsr file and print its header and first pixel.
+//! Read a .obsr file and print frames, fps, and duration.
 //!
 //! Usage: cargo run --bin raw_read -- out.obsr
 
@@ -9,12 +9,11 @@ use std::fs::File;
 fn main() {
     let path = env::args().nth(1).unwrap_or_else(|| "out.obsr".to_string());
     let file = File::open(&path).expect("open");
-    let seq = RawReader::read(file).expect("read");
-    println!("frames: {}", seq.len());
-    for i in 0..seq.len() {
-        if let Ok(f) = seq.get(i) {
-            let first = f.planes.get(0).and_then(|p| p.first()).copied().unwrap_or(0);
-            println!("frame {}: {}x{} first={}", i, f.width, f.height, first);
-        }
+    let timed = RawReader::read_timed(file).expect("read");
+    println!("frames: {}", timed.len());
+    println!("fps: {}", timed.fps());
+    println!("duration_ms: {:.1}", timed.duration_ms());
+    if let Ok(f) = timed.frames().get(0) {
+        println!("size: {}x{}", f.width, f.height);
     }
 }

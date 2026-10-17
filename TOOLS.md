@@ -130,7 +130,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Particles
 - [x] Rigid body
 - [x] Soft body / cloth
-- [ ] Fluids (later)
+- [x] Fluids (later)
 
 ### Look / render
 - [x] Materials (partial)

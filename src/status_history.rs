@@ -61,6 +61,11 @@ impl StatusHistory {
         self.lines.iter().rev().find(|l| l.contains("healthy")).map(|s| s.as_str())
     }
 
+    /// Consecutive healthy lines at the end.
+    pub fn streak(&self) -> usize {
+        self.lines.iter().rev().take_while(|l| l.contains("healthy")).count()
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -242,6 +247,7 @@ mod tests {
         h6.push("a | slow");
         h6.push("b | healthy");
         assert_eq!(h6.latest_healthy(), Some("b | healthy"));
+        assert_eq!(h6.streak(), 1);
         let mut buf = Vec::new();
         h.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("c"));

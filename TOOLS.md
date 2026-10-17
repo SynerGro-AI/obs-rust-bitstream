@@ -14,7 +14,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Vibrance
 - [x] Black & white
 - [x] Photo filter
-- [ ] Channel mixer
+- [x] Channel mixer
 - [ ] Selective color
 - [x] Invert
 - [ ] Posterize

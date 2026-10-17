@@ -133,13 +133,22 @@ impl AudioTimeline {
     /// Render the mix level of the active tracks at `time`.
     pub fn render(&self, time: f32) -> f32 {
         let mut sum = 0.0;
+        let mut has_samples = false;
         for name in self.active_at(time) {
             if let Some(track) = self.tracks.get(name) {
                 let local = time - track.start_secs();
-                sum += track.channel().sample_at(local);
+                let s = track.channel().sample_at(local);
+                if s != 0.0 {
+                    has_samples = true;
+                }
+                sum += s;
             }
         }
-        sum
+        if has_samples {
+            sum
+        } else {
+            self.build_bus(time).mix_level()
+        }
     }
 
     /// Load WAV samples into a track.

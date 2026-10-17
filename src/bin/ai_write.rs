@@ -91,6 +91,7 @@ fn main() {
     println!("stamped corner with 00:02:00");
     println!("full: {}", TimestampStamp::format_full(2026, 10, 17, 60));
     println!("now: {}", TimestampStamp::now());
+    println!("frame: {}", TimestampStamp::format_frame(60, 3));
     let stamped_bundle = File::create("stamped.avbn").expect("stamped");
     let stamped_status = File::create("stamped_status.txt").expect("status");
     let _ = EffectedWrite::write_stamped_bundle(

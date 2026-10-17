@@ -19,6 +19,7 @@ pub struct SystemStatus {
     pub fps: f32,
     pub encode_ms: f32,
     pub stamped: bool,
+    pub version: String,
 }
 
 impl SystemStatus {
@@ -33,6 +34,7 @@ impl SystemStatus {
             fps: bundle.fps(),
             encode_ms: 0.0,
             stamped: false,
+            version: "0.1.0".to_string(),
         }
     }
 
@@ -46,17 +48,22 @@ impl SystemStatus {
         self.stamped = stamped;
     }
 
+    pub fn set_version(&mut self, v: &str) {
+        self.version = v.to_string();
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
             self.audio_samples,
             self.fps,
             self.encode_ms,
-            self.stamped
+            self.stamped,
+            self.version
         )
     }
 
@@ -102,6 +109,8 @@ mod tests {
         assert!(s2.summary().contains("encode_ms=7.5"));
         s2.set_stamped(true);
         assert!(s2.summary().contains("stamped=true"));
+        s2.set_version("0.2.0");
+        assert!(s2.summary().contains("version=0.2.0"));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

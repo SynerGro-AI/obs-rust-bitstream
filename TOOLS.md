@@ -136,7 +136,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Materials (partial)
 - [x] Lights (partial)
 - [x] Shaders (Lambert, Phong, PBR)
-- [ ] UV mapping
+- [x] UV mapping
 - [ ] Camera (perspective, orthographic)
 
 ## Live weights

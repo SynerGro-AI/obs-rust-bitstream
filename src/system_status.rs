@@ -189,6 +189,21 @@ impl SystemStatus {
         ))
     }
 
+    /// Read the one-line form. Returns the second line.
+    pub fn read_one_line<R: Read>(mut input: R) -> Result<String, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        let lines: Vec<&str> = buf.lines().collect();
+        if lines.len() >= 2 {
+            Ok(lines[1].to_string())
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "no one-line",
+            ))
+        }
+    }
+
     /// True if the status encoder matches the bundle encoder.
     pub fn matches_bundle(&self, bundle: &AvBundle) -> bool {
         self.encoder == bundle.encoder()
@@ -235,6 +250,10 @@ mod tests {
         s2.set_healthy(true);
         assert!(s2.summary().contains("healthy=true"));
         assert!(s2.one_line().contains("healthy"));
+        let mut buf2 = Vec::new();
+        s2.write(&mut buf2).unwrap();
+        let line = SystemStatus::read_one_line(std::io::Cursor::new(&buf2)).unwrap();
+        assert!(line.contains("healthy"));
         s2.set_timestamp(SystemStatus::now());
         assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();

@@ -267,8 +267,15 @@ impl StatusHistory {
 
     /// Simple JSON object.
     pub fn to_json(&self) -> String {
+        self.to_json_at(0)
+    }
+
+    /// JSON with a timestamp and freshness.
+    pub fn to_json_at(&self, now: u64) -> String {
+        let dash = if now == 0 { self.dashboard() } else { self.dashboard_at(now) };
+        let fresh = if now == 0 { true } else { Self::fresh(&dash, now, 60) };
         format!(
-            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\",\"color\":\"{}\",\"report\":\"{}\",\"dashboard\":\"{}\"}}",
+            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\",\"color\":\"{}\",\"report\":\"{}\",\"dashboard\":\"{}\",\"fresh\":{}}}",
             self.len(),
             self.health_ratio() * 100.0,
             self.avg_fps(),
@@ -279,7 +286,8 @@ impl StatusHistory {
             self.word(),
             self.color(),
             self.report(),
-            self.dashboard()
+            dash,
+            fresh
         )
     }
 
@@ -444,6 +452,7 @@ mod tests {
         assert!(h4.to_json().contains("\"color\":"));
         assert!(h4.to_json().contains("\"report\":"));
         assert!(h4.to_json().contains("\"dashboard\":"));
+        assert!(h4.to_json_at(100).contains("\"fresh\":"));
         let json = h4.to_json();
         assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));
         assert!(h4.matches_json(&json));

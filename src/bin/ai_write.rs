@@ -14,6 +14,7 @@ fn main() {
     let weights = LiveWeights::new();
     let mut enc = H264Codec::new(16, 16, &weights).expect("enc");
     println!("codec path: {}", enc.choice().as_str());
-    let bytes = enc.encode(&frame).expect("encode");
+    let mut bytes = enc.encode(&frame).expect("encode");
+    bytes.extend(enc.flush());
     println!("encoded {} bytes", bytes.len());
 }

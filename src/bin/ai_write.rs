@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::capture_rate::CaptureRate;
 use obs_rust_bitstream::capture::Capture;
 use obs_rust_bitstream::file_capture::FileCapture;
 use obs_rust_bitstream::capture_select::CaptureSource;
@@ -200,6 +201,8 @@ fn main() {
     let f = best.frame().expect("best");
     println!("best: {}x{}", f.width, f.height);
     println!("source: {}", best.summary());
+    let rate = CaptureRate::measure(&mut best, 8);
+    println!("capture rate: {:.0} fps", rate);
     status.set_source_summary(&best.summary());
     println!("status with summary: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");

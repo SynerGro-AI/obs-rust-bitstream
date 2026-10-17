@@ -2,6 +2,7 @@
 
 use obs_rust_bitstream::audio_sync::AudioSync;
 use obs_rust_bitstream::audio_timeline::AudioTimeline;
+use obs_rust_bitstream::bundle_player::BundlePlayer;
 use obs_rust_bitstream::av_bundle::AvBundle;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
@@ -50,5 +51,12 @@ fn main() {
     );
     if let Some(s) = bundle.audio().get(2) {
         println!("sample 2: {:.4}", s);
+    }
+    let player = BundlePlayer::new(bundle.fps()).expect("player");
+    println!("playback:");
+    for ms in [0.0, 33.0, 66.0] {
+        if let Some(s) = player.sample_at(&bundle, ms) {
+            println!("  {} ms -> {:.4}", ms, s);
+        }
     }
 }

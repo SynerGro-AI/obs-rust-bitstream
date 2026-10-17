@@ -9,9 +9,12 @@
 use crate::add_noise::AddNoise;
 use crate::box_blur::BoxBlur;
 use crate::bright_contrast::BrightContrast;
+use crate::color_balance::ColorBalance;
 use crate::exposure::Exposure;
+use crate::hue_sat::HueSat;
 use crate::inner_glow::InnerGlow;
 use crate::invert::Invert;
+use crate::levels::Levels;
 use crate::live_weights::LiveWeights;
 use crate::posterize::Posterize;
 use crate::sharpen::Sharpen;
@@ -80,6 +83,23 @@ impl ToolPipeline {
                 "glow" => {
                     let strength = weights.get("pipe.glow").unwrap_or(0.0) as u8;
                     let _ = InnerGlow::apply(frame, strength);
+                }
+                "levels" => {
+                    let in_min = weights.get("pipe.levels.in_min").unwrap_or(0.0) as u8;
+                    let in_max = weights.get("pipe.levels.in_max").unwrap_or(255.0) as u8;
+                    let out_min = weights.get("pipe.levels.out_min").unwrap_or(0.0) as u8;
+                    let out_max = weights.get("pipe.levels.out_max").unwrap_or(255.0) as u8;
+                    let _ = Levels::apply(frame, in_min, in_max, out_min, out_max);
+                }
+                "hue" => {
+                    let shift = weights.get("pipe.hue").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
+                    let _ = HueSat::apply(frame, shift);
+                }
+                "balance" => {
+                    let shadow = weights.get("pipe.balance.shadow").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
+                    let mid = weights.get("pipe.balance.mid").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
+                    let high = weights.get("pipe.balance.highlight").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
+                    let _ = ColorBalance::apply(frame, shadow, mid, high);
                 }
                 _ => {}
             }

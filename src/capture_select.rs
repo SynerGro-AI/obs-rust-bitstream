@@ -72,6 +72,11 @@ impl CaptureSource {
             .filter(|k| Self::available(k))
             .collect()
     }
+
+    /// Best available source for tests. Always synthetic.
+    pub fn best() -> Self {
+        Self::synthetic(16, 16)
+    }
 }
 
 #[cfg(test)]
@@ -97,5 +102,7 @@ mod tests {
         let avail = CaptureSource::available_kinds();
         assert!(avail.contains(&"synthetic"));
         assert!(avail.contains(&"file"));
+        let best = CaptureSource::best();
+        assert!(best.frame().is_some());
     }
 }

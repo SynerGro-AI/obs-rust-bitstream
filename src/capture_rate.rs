@@ -30,6 +30,15 @@ impl CaptureRate {
     pub fn faster_than(capture_fps: f32, encode_fps: f32) -> bool {
         capture_fps > encode_fps
     }
+
+    /// Which side is the bottleneck.
+    pub fn bottleneck(capture_fps: f32, encode_fps: f32) -> &'static str {
+        if capture_fps > encode_fps {
+            "encode"
+        } else {
+            "capture"
+        }
+    }
 }
 
 #[cfg(test)]
@@ -43,5 +52,7 @@ mod tests {
         assert!(rate >= 0.0);
         assert!(CaptureRate::faster_than(100.0, 30.0));
         assert!(!CaptureRate::faster_than(10.0, 30.0));
+        assert_eq!(CaptureRate::bottleneck(100.0, 30.0), "encode");
+        assert_eq!(CaptureRate::bottleneck(10.0, 30.0), "capture");
     }
 }

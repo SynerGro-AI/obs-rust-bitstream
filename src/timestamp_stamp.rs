@@ -49,6 +49,12 @@ impl TimestampStamp {
         }
     }
 
+    /// Blend a luminance by opacity (0.0 to 1.0).
+    pub fn blend(lum: u8, opacity: f32) -> u8 {
+        let o = opacity.clamp(0.0, 1.0);
+        (lum as f32 * o) as u8
+    }
+
     /// Format seconds and a frame index.
     pub fn format_frame(secs: u32, frame: usize) -> String {
         format!("{} f{}", Self::format(secs), frame)

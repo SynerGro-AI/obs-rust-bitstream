@@ -24,6 +24,7 @@ pub struct SystemStatus {
     pub stamp_opacity: f32,
     pub captured_frames: usize,
     pub source: String,
+    pub timestamp: u64,
 }
 
 impl SystemStatus {
@@ -43,6 +44,7 @@ impl SystemStatus {
             stamp_opacity: 1.0,
             captured_frames: 0,
             source: "none".to_string(),
+            timestamp: 0,
         }
     }
 
@@ -72,10 +74,22 @@ impl SystemStatus {
         self.source = name.to_string();
     }
 
+    pub fn set_timestamp(&mut self, ts: u64) {
+        self.timestamp = ts;
+    }
+
+    /// Current Unix time.
+    pub fn now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    }
+
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -87,7 +101,8 @@ impl SystemStatus {
             self.built,
             self.stamp_opacity,
             self.captured_frames,
-            self.source
+            self.source,
+            self.timestamp
         )
     }
 
@@ -142,6 +157,8 @@ mod tests {
         assert!(s2.summary().contains("captured=4"));
         s2.set_source("synthetic");
         assert!(s2.summary().contains("source=synthetic"));
+        s2.set_timestamp(SystemStatus::now());
+        assert!(s2.summary().contains("time="));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

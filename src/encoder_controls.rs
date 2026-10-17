@@ -92,6 +92,15 @@ impl EncoderControls {
         )
     }
 
+    /// Restore defaults and write them.
+    pub fn reset(&mut self, weights: &mut LiveWeights) -> Result<(), ControlError> {
+        self.set_bitrate(0.0, weights)?;
+        self.set_quality(28.0, weights)?;
+        self.set_gop(30.0, weights)?;
+        self.set_preset(crate::preset_control::PresetKind::Balanced, weights);
+        Ok(())
+    }
+
     /// Set preset and write the weight.
     pub fn set_preset(
         &mut self,

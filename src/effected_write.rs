@@ -628,7 +628,7 @@ impl EffectedWrite {
         for (i, f) in frames.iter().enumerate() {
             let mut p = f.clone();
             let secs = (i as f32 / fps) as u32;
-            let _ = TimestampStamp::stamp(&mut p, 0, 0, secs, 255);
+            let _ = TimestampStamp::stamp_corner(&mut p, secs, 255);
             stamped.push(p);
         }
         Self::write_h264_bundle_status(

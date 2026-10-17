@@ -93,6 +93,17 @@ impl StatusHistory {
         }
     }
 
+    /// One readable line for the history.
+    pub fn summary(&self) -> String {
+        format!(
+            "{} lines | {:.0}% healthy | {:.0} fps avg | {}",
+            self.len(),
+            self.health_ratio() * 100.0,
+            self.avg_fps(),
+            self.trend()
+        )
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         for line in &self.lines {
@@ -167,5 +178,7 @@ mod tests {
         h4.push("src | 100 fps | encode | healthy");
         h4.push("src | 200 fps | encode | healthy");
         assert!((h4.avg_fps() - 150.0).abs() < 0.1);
+        assert_eq!(h4.trend(), "up");
+        assert!(h4.summary().contains("up"));
     }
 }

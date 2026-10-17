@@ -32,6 +32,11 @@ impl TimestampStamp {
         )
     }
 
+    /// Format seconds and a frame index.
+    pub fn format_frame(secs: u32, frame: usize) -> String {
+        format!("{} f{}", Self::format(secs), frame)
+    }
+
     /// Current Unix time as HH:MM:SS (UTC).
     pub fn now() -> String {
         let secs = SystemTime::now()
@@ -106,6 +111,10 @@ mod tests {
         let n = TimestampStamp::now();
         assert_eq!(n.len(), 8);
         assert!(n.contains(':'));
+        assert_eq!(
+            TimestampStamp::format_frame(60, 3),
+            "00:01:00 f3"
+        );
     }
 
     #[test]

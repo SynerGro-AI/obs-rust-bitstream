@@ -19,7 +19,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Invert
 - [x] Posterize
 - [x] Threshold
-- [ ] Gradient map
+- [x] Gradient map
 
 ### Filters
 - [x] Box blur

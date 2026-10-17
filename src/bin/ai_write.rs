@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::encode_cancel::EncodeCancel;
 use obs_rust_bitstream::encode_progress::EncodeProgress;
 use obs_rust_bitstream::scene_effect::SceneEffect;
 use obs_rust_bitstream::sound_cc0::SoundCc0;
@@ -39,13 +40,15 @@ fn main() {
     let bundle_file = File::create("out.avbn").expect("bundle");
     let status_file = File::create("status.txt").expect("status");
     let mut progress = EncodeProgress::new(frames.len());
-    let bundle = EffectedWrite::write_effected_bundle_progress(
+    let cancel = EncodeCancel::new();
+    let bundle = EffectedWrite::write_effected_bundle_cancellable(
         &frames,
         &effect,
         &controls,
         &mut weights,
         &sync,
         &mut progress,
+        &cancel,
         bundle_file,
         status_file,
     )

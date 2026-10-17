@@ -47,6 +47,14 @@ impl StatusHistory {
         self.lines.iter().filter(|l| l.contains("healthy")).count()
     }
 
+    /// Fraction of healthy lines. 0.0 if empty.
+    pub fn health_ratio(&self) -> f32 {
+        if self.lines.is_empty() {
+            return 0.0;
+        }
+        self.healthy_count() as f32 / self.lines.len() as f32
+    }
+
     /// Write all lines to a writer.
     pub fn write<W: std::io::Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         for line in &self.lines {
@@ -116,5 +124,6 @@ mod tests {
         h3.push("a | healthy");
         h3.push("b | slow");
         assert_eq!(h3.healthy_count(), 1);
+        assert!((h3.health_ratio() - 0.5).abs() < 0.01);
     }
 }

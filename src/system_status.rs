@@ -56,6 +56,7 @@ impl SystemStatus {
             capture_fps: 0.0,
             capture_faster: false,
             bottleneck: String::new(),
+            recommendation: String::new(),
         }
     }
 

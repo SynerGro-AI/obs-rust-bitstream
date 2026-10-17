@@ -268,6 +268,7 @@ fn main() {
     let loaded = StatusReport::read(File::open("report.txt").expect("open")).unwrap_or_default();
     println!("loaded report: {}", loaded);
     println!("report matches: {}", report.matches(&loaded));
+    println!("report json: {}", report.to_json());
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

@@ -52,6 +52,17 @@ impl CaptureSource {
     pub fn kinds() -> &'static [&'static str] {
         &["synthetic", "file", "windows", "apple", "linux"]
     }
+
+    /// True if the kind works on this OS.
+    pub fn available(kind: &str) -> bool {
+        match kind {
+            "synthetic" | "file" => true,
+            "windows" => cfg!(windows),
+            "apple" => cfg!(any(target_os = "macos", target_os = "ios")),
+            "linux" => cfg!(target_os = "linux"),
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -72,5 +83,7 @@ mod tests {
         assert_eq!(f.planes[0][0], 7);
         assert!(CaptureSource::kinds().contains(&"synthetic"));
         assert!(CaptureSource::kinds().contains(&"file"));
+        assert!(CaptureSource::available("synthetic"));
+        assert!(CaptureSource::available("file"));
     }
 }

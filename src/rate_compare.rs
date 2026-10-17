@@ -10,11 +10,9 @@ use crate::live_weights::LiveWeights;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
 use crate::write_timing::WriteTiming;
+use std::io::Write;
 
 pub struct RateCompare;
-
-impl RateCompare {
-use std::io::Write;
 
 impl RateCompare {
     /// Write a three-size comparison to a writer.

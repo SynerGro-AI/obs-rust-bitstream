@@ -8,7 +8,6 @@
 use crate::ai::AiAssistant;
 use crate::crossfade::Crossfade;
 use crate::resample::Resample;
-use crate::encode_progress::EncodeProgress;
 use crate::scene_effect::SceneEffect;
 use crate::system_status::SystemStatus;
 use crate::av_bundle::AvBundle;

@@ -291,5 +291,6 @@ mod tests {
         assert_eq!(h4.trend(), "up");
         assert!(h4.summary().contains("up"));
         assert!(h4.summary().contains("variable"));
+        assert!(h4.summary().contains("streak"));
     }
 }

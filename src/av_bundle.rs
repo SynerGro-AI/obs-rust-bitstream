@@ -55,6 +55,14 @@ impl AvBundle {
         }
     }
 
+    /// Duration in milliseconds from audio length and fps.
+    pub fn duration_ms(&self) -> f32 {
+        if self.fps <= 0.0 {
+            return 0.0;
+        }
+        self.audio.len() as f32 / self.fps * 1000.0
+    }
+
     /// Write the bundle: magic + video_len + audio_len + fps + video + audio.
     pub fn write<W: Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         out.write_all(MAGIC)?;

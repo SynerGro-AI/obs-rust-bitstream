@@ -387,6 +387,7 @@ pub mod pattern;
 pub mod stamp;
 pub mod eraser;
 pub mod bright_contrast;
+pub mod vibrance;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -678,3 +679,4 @@ pub use gradient::{Gradient, GradientError};
 pub use pattern::{Pattern as Checker, PatternError as CheckerError};
 pub use eraser::{Eraser, EraserError};
 pub use bright_contrast::{BrightContrast, BrightContrastError};
+pub use vibrance::{Vibrance, VibranceError};

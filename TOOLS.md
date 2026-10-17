@@ -26,7 +26,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Sharpen
 - [x] Gaussian blur
 - [x] Motion blur
-- [ ] Radial blur
+- [x] Radial blur
 - [x] Add noise
 - [ ] Median
 - [x] Emboss

@@ -394,6 +394,7 @@ pub mod channel_mixer;
 pub mod selective_color;
 pub mod posterize;
 pub mod gradient_map;
+pub mod radial_blur;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -692,3 +693,4 @@ pub use channel_mixer::{ChannelMixer, MixerError};
 pub use selective_color::{SelectiveColor, SelectiveError};
 pub use posterize::{Posterize, PosterizeError};
 pub use gradient_map::{GradientMap, GradientMapError};
+pub use radial_blur::{RadialBlur, RadialError};

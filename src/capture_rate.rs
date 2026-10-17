@@ -39,6 +39,14 @@ impl CaptureRate {
             "capture"
         }
     }
+
+    /// A short recommendation.
+    pub fn recommend(capture_fps: f32, encode_fps: f32) -> &'static str {
+        match Self::bottleneck(capture_fps, encode_fps) {
+            "encode" => "lower quality or resolution",
+            _ => "use a faster source",
+        }
+    }
 }
 
 #[cfg(test)]
@@ -54,5 +62,6 @@ mod tests {
         assert!(!CaptureRate::faster_than(10.0, 30.0));
         assert_eq!(CaptureRate::bottleneck(100.0, 30.0), "encode");
         assert_eq!(CaptureRate::bottleneck(10.0, 30.0), "capture");
+        assert!(CaptureRate::recommend(100.0, 30.0).contains("quality"));
     }
 }

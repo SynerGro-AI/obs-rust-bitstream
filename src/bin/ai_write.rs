@@ -247,6 +247,7 @@ fn main() {
     println!("streak: {}", grown.streak());
     println!("best streak: {}", grown.best_streak());
     println!("at record: {}", grown.at_record());
+    println!("word: {}", grown.word());
     let mut cleared = history.clone();
     cleared.clear();
     println!("cleared: {}", cleared.is_empty());

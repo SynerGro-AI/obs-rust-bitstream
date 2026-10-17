@@ -120,6 +120,8 @@ fn main() {
     )
     .expect("encode captured");
     println!("wrote captured.avbn");
+    let cap_size = std::fs::metadata("captured.avbn").map(|m| m.len()).unwrap_or(0);
+    println!("captured.avbn size: {} bytes", cap_size);
     println!(
         "stamp example: {} {}",
         TimestampStamp::format_frame(0, 0),

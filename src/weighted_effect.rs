@@ -6,6 +6,7 @@
 //! Differential: a weight of 50 lifts an edge pixel.
 
 use crate::add_noise::AddNoise;
+use crate::bevel::Bevel;
 use crate::bright_shadow::BrightShadow;
 use crate::drop_shadow::DropShadow;
 use crate::emboss::Emboss;
@@ -17,6 +18,7 @@ use crate::live_weights::{LiveWeights, WeightError};
 use crate::motion_blur::MotionBlur;
 use crate::outer_glow::OuterGlow;
 use crate::sharpen::Sharpen;
+use crate::stroke::Stroke;
 use crate::threshold::Threshold;
 use crate::video_frame::VideoFrame;
 
@@ -157,6 +159,24 @@ impl WeightedEffect {
         _name: &str,
     ) -> Result<(), WeightedError> {
         Emboss::apply(frame).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply bevel. Weight is depth.
+    pub fn bevel(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        Bevel::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+    }
+
+    /// Apply stroke. Weight is outline color.
+    pub fn stroke(
+        frame: &mut VideoFrame,
+        weights: &LiveWeights,
+        name: &str,
+    ) -> Result<(), WeightedError> {
+        Stroke::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
     }
 }
 

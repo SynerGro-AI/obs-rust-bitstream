@@ -380,6 +380,8 @@ pub mod gauss_blur;
 pub mod motion_blur;
 pub mod add_noise;
 pub mod emboss;
+pub mod bevel;
+pub mod stroke;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -664,3 +666,5 @@ pub use gauss_blur::{GaussBlur, GaussError};
 pub use motion_blur::{MotionBlur, MotionError};
 pub use add_noise::{AddNoise, NoiseError};
 pub use emboss::{Emboss, EmbossError};
+pub use bevel::{Bevel, BevelError};
+pub use stroke::{Stroke, StrokeError};

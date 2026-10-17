@@ -7,11 +7,14 @@
 //! Differential: a brightness step lifts a dark frame.
 
 use crate::add_noise::AddNoise;
+use crate::box_blur::BoxBlur;
 use crate::bright_contrast::BrightContrast;
 use crate::exposure::Exposure;
+use crate::inner_glow::InnerGlow;
 use crate::invert::Invert;
 use crate::live_weights::LiveWeights;
 use crate::posterize::Posterize;
+use crate::sharpen::Sharpen;
 use crate::threshold::Threshold;
 use crate::video_frame::VideoFrame;
 
@@ -66,6 +69,17 @@ impl ToolPipeline {
                 "noise" => {
                     let amount = weights.get("pipe.noise").unwrap_or(0.0) as u8;
                     let _ = AddNoise::apply(frame, amount);
+                }
+                "blur" => {
+                    let _ = BoxBlur::apply(frame);
+                }
+                "sharpen" => {
+                    let amount = weights.get("pipe.sharpen").unwrap_or(0.0) as u8;
+                    let _ = Sharpen::apply(frame, amount);
+                }
+                "glow" => {
+                    let strength = weights.get("pipe.glow").unwrap_or(0.0) as u8;
+                    let _ = InnerGlow::apply(frame, strength);
                 }
                 _ => {}
             }

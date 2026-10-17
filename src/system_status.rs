@@ -8,7 +8,7 @@
 use crate::av_bundle::AvBundle;
 use crate::encoder_select::{EncoderChoice, EncoderSelect};
 use crate::gpu_detect::GpuDetect;
-use std::io::Write;
+use std::io::{Read, Write};
 
 #[derive(Clone, Debug)]
 pub struct SystemStatus {
@@ -48,6 +48,21 @@ impl SystemStatus {
     pub fn write<W: Write>(&self, mut out: W) -> Result<(), std::io::Error> {
         writeln!(out, "{}", self.summary())
     }
+
+    /// Read a summary back. Returns the encoder string.
+    pub fn read_encoder<R: Read>(mut input: R) -> Result<String, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        for part in buf.split_whitespace() {
+            if let Some(val) = part.strip_prefix("encoder=") {
+                return Ok(val.to_string());
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "no encoder",
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -64,5 +79,7 @@ mod tests {
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));
+        let enc = SystemStatus::read_encoder(std::io::Cursor::new(buf)).unwrap();
+        assert_eq!(enc, "software");
     }
 }

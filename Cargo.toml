@@ -14,3 +14,4 @@ name = "obs_rust_bitstream"
 path = "src/lib.rs"
 
 [dependencies]
+rusty_h264 = "0.14"

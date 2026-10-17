@@ -135,6 +135,7 @@ mod tests {
         assert_eq!(TimestampStamp::format_progress(3, 10), "3/10");
         assert_eq!(TimestampStamp::lum("white"), 255);
         assert_eq!(TimestampStamp::lum("black"), 0);
+        assert_eq!(TimestampStamp::blend(255, 0.5), 127);
     }
 
     #[test]

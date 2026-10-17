@@ -20,6 +20,7 @@ pub struct SystemStatus {
     pub encode_ms: f32,
     pub stamped: bool,
     pub version: String,
+    pub built: String,
 }
 
 impl SystemStatus {
@@ -35,6 +36,7 @@ impl SystemStatus {
             encode_ms: 0.0,
             stamped: false,
             version: env!("CARGO_PKG_VERSION").to_string(),
+            built: option_env!("BUILD_TIME").unwrap_or("unknown").to_string(),
         }
     }
 
@@ -55,7 +57,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -63,7 +65,8 @@ impl SystemStatus {
             self.fps,
             self.encode_ms,
             self.stamped,
-            self.version
+            self.version,
+            self.built
         )
     }
 
@@ -111,6 +114,7 @@ mod tests {
         assert!(s2.summary().contains("stamped=true"));
         s2.set_version("0.2.0");
         assert!(s2.summary().contains("version=0.2.0"));
+        assert!(s2.summary().contains("built="));
         let mut buf = Vec::new();
         s.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("software"));

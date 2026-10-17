@@ -17,7 +17,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Channel mixer
 - [x] Selective color
 - [x] Invert
-- [ ] Posterize
+- [x] Posterize
 - [x] Threshold
 - [ ] Gradient map
 

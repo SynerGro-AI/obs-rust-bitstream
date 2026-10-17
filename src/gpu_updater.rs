@@ -7,6 +7,7 @@
 //! Differential: check returns a status.
 
 use crate::gpu_detect::{GpuDetect, GpuInfo, GpuKind};
+use std::io::{self, Write};
 use std::process::Command;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -71,6 +72,38 @@ impl GpuUpdater {
             Ok(())
         } else {
             Err(UpdateError::Failed)
+        }
+    }
+
+    /// Check and prompt for approval before upgrading.
+    /// Returns Ok(true) if the user approved and the update ran.
+    /// Returns Ok(false) if the user declined or no update is needed.
+    pub fn prompt_and_upgrade() -> Result<bool, UpdateError> {
+        let status = Self::check();
+        match status {
+            UpdateStatus::NoGpu => return Err(UpdateError::NoGpu),
+            UpdateStatus::Current => {
+                println!("GPU driver is current.");
+                return Ok(false);
+            }
+            UpdateStatus::Unknown => {
+                println!("GPU driver status unknown.");
+                return Ok(false);
+            }
+            UpdateStatus::UpdateAvailable => {}
+        }
+        print!("Update available. Approve? [y/N] ");
+        let _ = io::stdout().flush();
+        let mut answer = String::new();
+        io::stdin()
+            .read_line(&mut answer)
+            .map_err(|_| UpdateError::Failed)?;
+        if answer.trim().eq_ignore_ascii_case("y") {
+            Self::upgrade()?;
+            Ok(true)
+        } else {
+            println!("Update declined.");
+            Ok(false)
         }
     }
 }

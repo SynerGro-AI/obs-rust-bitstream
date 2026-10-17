@@ -220,7 +220,7 @@ impl StatusHistory {
     /// Simple JSON object.
     pub fn to_json(&self) -> String {
         format!(
-            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\",\"color\":\"{}\"}}",
+            "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\",\"color\":\"{}\",\"report\":\"{}\"}}",
             self.len(),
             self.health_ratio() * 100.0,
             self.avg_fps(),
@@ -229,7 +229,8 @@ impl StatusHistory {
             self.streak(),
             self.at_record(),
             self.word(),
-            self.color()
+            self.color(),
+            self.report()
         )
     }
 
@@ -386,6 +387,7 @@ mod tests {
         assert!(h4.to_json().contains("\"record\":true"));
         assert!(h4.to_json().contains("\"word\":"));
         assert!(h4.to_json().contains("\"color\":"));
+        assert!(h4.to_json().contains("\"report\":"));
         let json = h4.to_json();
         assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));
         assert!(h4.matches_json(&json));

@@ -94,7 +94,7 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 - [x] Generate (gradient, grid, lens flare)
 - [x] Keying (chroma, luma)
 - [x] Matte (track matte, set matte)
-- [ ] Noise & grain
+- [x] Noise & grain
 - [ ] Stylize (glow, find edges)
 - [ ] Time (echo, posterize time)
 - [ ] Transition (fade, wipe — partial)

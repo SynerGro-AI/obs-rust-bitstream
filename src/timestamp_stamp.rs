@@ -20,6 +20,17 @@ impl TimestampStamp {
         format!("{:02}:{:02}:{:02}", h, m, s)
     }
 
+    /// Format a date and time as YYYY-MM-DD HH:MM:SS.
+    pub fn format_full(year: u32, month: u32, day: u32, secs: u32) -> String {
+        format!(
+            "{:04}-{:02}-{:02} {}",
+            year,
+            month,
+            day,
+            Self::format(secs)
+        )
+    }
+
     /// Draw a timestamp at (x, y).
     pub fn stamp(
         frame: &mut VideoFrame,

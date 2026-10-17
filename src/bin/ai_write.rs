@@ -192,6 +192,9 @@ fn main() {
         println!("  {}: {}", k, CaptureSource::available(k));
     }
     println!("available: {}", CaptureSource::available_kinds().join(", "));
+    let mut best = CaptureSource::best();
+    let f = best.frame().expect("best");
+    println!("best: {}x{}", f.width, f.height);
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with capture count");

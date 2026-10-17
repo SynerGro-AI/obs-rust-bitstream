@@ -399,6 +399,7 @@ pub mod median;
 pub mod find_edges;
 pub mod high_pass;
 pub mod satin;
+pub mod lasso;
 
 pub use bitstream::{BitstreamReader, Reader, Position, bitstream_reader};
 pub use dstr::Dstr;
@@ -702,3 +703,4 @@ pub use median::{Median, MedianError};
 pub use find_edges::{FindEdges, EdgesError};
 pub use high_pass::{HighPass, HighPassError};
 pub use satin::{Satin, SatinError};
+pub use lasso::{Lasso, LassoError};

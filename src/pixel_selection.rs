@@ -30,6 +30,14 @@ impl Selection {
         }
     }
 
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
     pub fn rect(&mut self, x: u32, y: u32, w: u32, h: u32) -> Result<(), SelectError> {
         if x.saturating_add(w) > self.width || y.saturating_add(h) > self.height {
             return Err(SelectError::OutOfBounds);

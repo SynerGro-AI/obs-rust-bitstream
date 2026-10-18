@@ -69,7 +69,13 @@ impl RtmpSocket {
             reconnect.start();
             SocketError::Write
         })?;
-        let mut total = (handshake.len() + connect_chunk.len()) as u64;
+        let create = crate::rtmp_create_stream::RtmpCreateStream::body(2.0);
+        let create_chunk = crate::rtmp_chunk::RtmpChunk::wrap(3, 20, 0, &create);
+        stream.write_all(&create_chunk).map_err(|_| {
+            reconnect.start();
+            SocketError::Write
+        })?;
+        let mut total = (handshake.len() + connect_chunk.len() + create_chunk.len()) as u64;
         let mut count = 0usize;
         for (i, data) in packets.iter().enumerate() {
             let chunk = crate::rtmp_chunk::RtmpChunk::wrap(

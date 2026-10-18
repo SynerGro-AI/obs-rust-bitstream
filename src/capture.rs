@@ -18,6 +18,7 @@ pub trait Capture {
 /// Open the default camera for this platform.
 /// On Linux this opens /dev/video0 via V4L2.
 /// On Windows this opens the default Media Foundation device.
+/// On macOS/iOS this opens the default AVFoundation device.
 /// Other platforms return a clear error until their backends are filled.
 pub fn open_default() -> Result<Box<dyn Capture>, String> {
     #[cfg(target_os = "linux")]
@@ -30,7 +31,12 @@ pub fn open_default() -> Result<Box<dyn Capture>, String> {
         crate::windows_capture::WindowsCapture::open()
             .map(|c| Box::new(c) as Box<dyn Capture>)
     }
-    #[cfg(not(any(target_os = "linux", windows)))]
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        crate::apple_capture::AppleCapture::open()
+            .map(|c| Box::new(c) as Box<dyn Capture>)
+    }
+    #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
     {
         Err("default camera not yet wired on this platform".to_string())
     }

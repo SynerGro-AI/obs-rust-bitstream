@@ -337,6 +337,8 @@ fn main() {
     println!("switch to break: {}", scenes.switch("break"));
     println!("active scene: {}", scenes.active_index());
     println!("scene name: {}", scenes.active_name().unwrap_or("none"));
+    println!("remove break: {}", scenes.remove("break"));
+    println!("scenes left: {}", scenes.len());
     status.set_active_scene(scenes.active_name().unwrap_or("none"));
     println!("status scene: {}", status.summary().contains("scene=break"));
     let final_status = File::create("status.txt").expect("final");

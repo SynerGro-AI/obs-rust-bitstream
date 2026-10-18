@@ -305,6 +305,9 @@ fn main() {
     println!("sources: {} names={:?}", sources.len(), sources.names());
     status.set_source_count(sources.len());
     println!("status sources: {}", status.summary().contains("sources=2"));
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with sources");
     sources.set_active(0);
     let got = sources.active().and_then(|s| s.frame()).is_some();
     println!("active frame: {}", got);

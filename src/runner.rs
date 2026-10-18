@@ -71,6 +71,35 @@ impl Runner {
         Ok(total)
     }
 
+    /// Run until `duration` elapses or the output stops.
+    /// Returns the number of successful ticks.
+    pub fn run_for(&mut self, duration: std::time::Duration) -> Result<usize, RunnerError> {
+        if !self.output.is_running() {
+            return Err(RunnerError::Stopped);
+        }
+        let start = std::time::Instant::now();
+        let mut ticks = 0usize;
+        while start.elapsed() < duration {
+            if !self.output.is_running() {
+                break;
+            }
+            match self.pipeline.tick(
+                &mut *self.capture,
+                &mut self.audio,
+                &mut self.output,
+                self.pts,
+            ) {
+                Ok(_) => {
+                    ticks = ticks.saturating_add(1);
+                    self.pts = self.pts.saturating_add(1);
+                }
+                Err(e) => return Err(RunnerError::Pipeline(e)),
+            }
+        }
+        let _ = self.pipeline.codec_mut().flush();
+        Ok(ticks)
+    }
+
     pub fn output(&self) -> &OutputInfo {
         &self.output
     }
@@ -114,6 +143,13 @@ mod tests {
         let n = r.run(4).expect("run");
         assert!(n >= 1);
         assert!(r.output().bytes() > 0);
+    }
+
+    #[test]
+    fn run_for_ticks() {
+        let mut r = setup(true);
+        let ticks = r.run_for(std::time::Duration::from_millis(5)).unwrap();
+        assert!(ticks >= 1);
     }
 
     #[test]

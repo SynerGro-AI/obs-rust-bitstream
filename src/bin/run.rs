@@ -31,6 +31,10 @@ fn main() {
     let out_for_stream = out.clone();
 
     let mut runner = Runner::new(pipe, cap, audio, out);
+    let timed = runner
+        .run_for(std::time::Duration::from_millis(10))
+        .expect("timed");
+    println!("timed_ticks={}", timed);
     let buf = RunnerDump::run_and_write(&mut runner, 8).expect("dump");
     let header = RunnerDump::read(&buf).expect("header");
 

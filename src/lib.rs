@@ -427,6 +427,7 @@ pub mod output_info;
 pub mod output_service;
 pub mod service_status;
 pub mod service_file;
+pub mod service_round;
 pub mod output_encoder;
 pub mod output_pause;
 pub mod pause_delay;
@@ -796,6 +797,7 @@ pub use output_info::{OutputInfo, OUTPUT_AUDIO, OUTPUT_AV, OUTPUT_ENCODED, OUTPU
 pub use output_service::OutputService;
 pub use service_status::ServiceStatus;
 pub use service_file::ServiceFile;
+pub use service_round::ServiceRound;
 pub use output_encoder::{OutputEncoder, OutputEncoderError, MAX_OUTPUT_AUDIO_ENCODERS};
 pub use output_pause::{OutputPause, PauseError, OUTPUT_CAN_PAUSE};
 pub use pause_delay::PauseDelay;

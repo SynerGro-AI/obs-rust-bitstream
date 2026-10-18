@@ -292,6 +292,7 @@ fn main() {
     println!("achieved: {:.0} fps", achieved);
     status.set_achieved_fps(achieved);
     println!("status achieved: {}", status.summary().contains("achieved=30"));
+    println!("pacing: {}", FramePacer::summary(30.0, rate));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with achieved");

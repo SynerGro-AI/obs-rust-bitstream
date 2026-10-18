@@ -79,6 +79,15 @@ impl FramePacer {
         measured - target
     }
 
+    /// Rate that was actually achieved for n frames over elapsed.
+    /// Zero if elapsed is zero.
+    pub fn achieved(n: usize, elapsed: Duration) -> f32 {
+        if elapsed.is_zero() || n == 0 {
+            return 0.0;
+        }
+        n as f32 / elapsed.as_secs_f32()
+    }
+
     /// Collect up to n frames, waiting for the pacer between each.
     /// Stops early if the source returns None.
     pub fn collect(
@@ -129,5 +138,7 @@ mod tests {
         assert!(FramePacer::hit(30.0, 31.0, 0.1));
         assert!(!FramePacer::hit(30.0, 10.0, 0.1));
         assert!((FramePacer::delta(30.0, 40.0) - 10.0).abs() < 0.1);
+        let rate = FramePacer::achieved(30, Duration::from_secs(1));
+        assert!((rate - 30.0).abs() < 0.1);
     }
 }

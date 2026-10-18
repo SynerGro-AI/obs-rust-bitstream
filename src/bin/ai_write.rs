@@ -290,6 +290,8 @@ fn main() {
     println!("wait: {} ms", pacer.wait().as_millis());
     let achieved = FramePacer::achieved(30, std::time::Duration::from_secs(1));
     println!("achieved: {:.0} fps", achieved);
+    status.set_achieved_fps(achieved);
+    println!("status achieved: {}", status.summary().contains("achieved=30"));
     let mut src = CaptureSource::best();
     let mut unlimited = FramePacer::new(0.0);
     let paced = unlimited.collect(&mut src, 4);

@@ -88,6 +88,17 @@ impl FramePacer {
         n as f32 / elapsed.as_secs_f32()
     }
 
+    /// One line for target, achieved, and delta.
+    pub fn summary(target: f32, measured: f32) -> String {
+        format!(
+            "target {:.0} | achieved {:.0} | delta {:+.0} | {}",
+            target,
+            measured,
+            Self::delta(target, measured),
+            if Self::hit(target, measured, 0.1) { "hit" } else { "miss" }
+        )
+    }
+
     /// Collect up to n frames, waiting for the pacer between each.
     /// Stops early if the source returns None.
     pub fn collect(

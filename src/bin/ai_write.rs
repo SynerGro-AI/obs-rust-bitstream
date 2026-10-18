@@ -357,6 +357,9 @@ fn main() {
     println!("loaded scenes: {}", loaded.len());
     println!("scenes match: {}", scenes.matches_summaries(&loaded));
     println!("switch to break: {}", scenes.switch("break"));
+    if let Some(applied) = scenes.apply("main") {
+        println!("applied: {}", applied.summary());
+    }
     println!("active scene: {}", scenes.active_index());
     println!("scene name: {}", scenes.active_name().unwrap_or("none"));
     println!("remove break: {}", scenes.remove("break"));

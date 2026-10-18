@@ -7,7 +7,7 @@
 //!
 //! Differential: a paused interval increases the offset.
 
-use crate::output_info::{OutputInfo, OUTPUT_CAN_PAUSE};
+use crate::output_info::OutputInfo;
 
 /// Flag from OBS. Not previously defined in output_info.
 pub const OUTPUT_CAN_PAUSE: u32 = 1 << 5;

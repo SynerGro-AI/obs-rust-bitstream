@@ -33,6 +33,7 @@ mod tests {
     use crate::output_pause::OutputPause;
     use crate::path_status::PathStatus;
     use crate::reconnect::Reconnect;
+use crate::roi_status::RoiStatus;
     use crate::service_status::ServiceStatus;
 
     fn status(held: usize) -> FullStatus {

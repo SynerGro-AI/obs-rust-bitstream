@@ -40,6 +40,7 @@ pub struct SystemStatus {
     pub active_source: String,
     pub scene_count: usize,
     pub active_scene: String,
+    pub scene_summary: String,
 }
 
 impl SystemStatus {
@@ -174,6 +175,10 @@ impl SystemStatus {
         self.active_scene = name.to_string();
     }
 
+    pub fn set_scene_summary(&mut self, s: &str) {
+        self.scene_summary = s.to_string();
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -185,7 +190,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={} sources={} active={} scenes={} scene={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={} sources={} active={} scenes={} scene={} scene_sum={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -213,7 +218,8 @@ impl SystemStatus {
             self.source_count,
             self.active_source,
             self.scene_count,
-            self.active_scene
+            self.active_scene,
+            self.scene_summary
         )
     }
 
@@ -330,6 +336,8 @@ mod tests {
         assert!(s2.summary().contains("scenes=2"));
         s2.set_active_scene("main");
         assert!(s2.summary().contains("scene=main"));
+        s2.set_scene_summary("2 scenes | active main");
+        assert!(s2.summary().contains("scene_sum=2"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

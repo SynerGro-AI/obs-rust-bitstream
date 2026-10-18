@@ -83,8 +83,8 @@ impl FramePacer {
                 } else {
                     break;
                 }
-            } else {
-                // spin briefly so we don't burn a core
+            } else if !self.interval().is_zero() {
+                // only sleep when there is a real interval
                 std::thread::sleep(Duration::from_millis(1));
             }
         }

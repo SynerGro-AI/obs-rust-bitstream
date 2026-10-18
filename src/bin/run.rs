@@ -129,10 +129,12 @@ fn main() {
                             let listener = std::net::TcpListener::bind("127.0.0.1:0").ok();
                             if let Some(listener) = listener {
                                 if let Ok(addr) = listener.local_addr() {
+                                    let (tx, rx) = std::sync::mpsc::channel();
                                     std::thread::spawn(move || {
+                                        let _ = tx.send(());
                                         let _ = listener.accept();
                                     });
-                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                    let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
                                         Ok(sent) => println!(

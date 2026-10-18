@@ -49,6 +49,32 @@ impl FramePacer {
     pub fn target(&self) -> f32 {
         self.target
     }
+
+    /// Collect up to n frames, waiting for the pacer between each.
+    /// Stops early if the source returns None.
+    pub fn collect(
+        &mut self,
+        src: &mut crate::capture_select::CaptureSource,
+        n: usize,
+    ) -> Vec<crate::video_frame::VideoFrame> {
+        let mut out = Vec::new();
+        let mut attempts = 0;
+        let max_attempts = n.saturating_mul(10).max(1);
+        while out.len() < n && attempts < max_attempts {
+            attempts += 1;
+            if self.ready() {
+                if let Some(f) = src.frame() {
+                    out.push(f);
+                } else {
+                    break;
+                }
+            } else {
+                // spin briefly so we don't burn a core
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        out
+    }
 }
 
 #[cfg(test)]
@@ -64,5 +90,9 @@ mod tests {
         // but elapsed is tiny, so may be false. Just check target.
         assert_eq!(limited.target(), 1000.0);
         assert!(limited.interval() > Duration::ZERO);
+        let mut src = crate::capture_select::CaptureSource::synthetic(4, 4);
+        let mut paced = FramePacer::new(0.0); // no limit
+        let frames = paced.collect(&mut src, 3);
+        assert_eq!(frames.len(), 3);
     }
 }

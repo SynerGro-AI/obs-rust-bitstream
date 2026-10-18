@@ -49,6 +49,11 @@ impl SceneList {
         self.active
     }
 
+    /// Name of the active scene, if any.
+    pub fn active_name(&self) -> Option<&str> {
+        self.items.get(self.active).map(|s| s.name())
+    }
+
     /// Switch to the scene named. Returns true if found.
     pub fn switch(&mut self, name: &str) -> bool {
         if let Some(i) = self.items.iter().position(|s| s.name() == name) {

@@ -306,6 +306,23 @@ fn main() {
     sources.set_active(0);
     let got = sources.active().and_then(|s| s.frame()).is_some();
     println!("active frame: {}", got);
+    if let Some(src) = sources.active() {
+        if let Some(f) = src.frame() {
+            let lb = File::create("list.avbn").expect("lb");
+            let ls = File::create("list_status.txt").expect("ls");
+            let _ = EffectedWrite::write_stamped_bundle(
+                &[f],
+                30.0,
+                &controls,
+                &mut weights,
+                &sync,
+                lb,
+                ls,
+            );
+            let sz = std::fs::metadata("list.avbn").map(|m| m.len()).unwrap_or(0);
+            println!("wrote list.avbn ({} bytes)", sz);
+        }
+    }
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with achieved");

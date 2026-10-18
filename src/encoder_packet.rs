@@ -115,6 +115,63 @@ mod tests {
     }
 
     #[test]
+    fn equal_dts_keeps_order() {
+        let mut q = InterleaveQueue::new();
+        q.push(EncoderPacket::new(EncoderType::Video, 0, 100, vec![1]));
+        q.push(EncoderPacket::new(EncoderType::Audio, 0, 100, vec![2]));
+        assert!(q.is_monotonic());
+        let first = q.pop().unwrap();
+        assert_eq!(first.kind, EncoderType::Video);
+        let second = q.pop().unwrap();
+        assert_eq!(second.kind, EncoderType::Audio);
+    }
+
+    #[test]
+    fn mixed_types_sort_by_dts() {
+        let mut q = InterleaveQueue::new();
+        q.push(EncoderPacket::new(EncoderType::Audio, 0, 300, vec![3]));
+        q.push(EncoderPacket::new(EncoderType::Video, 0, 100, vec![1]));
+        q.push(EncoderPacket::new(EncoderType::Audio, 0, 200, vec![2]));
+        let mut dts = Vec::new();
+        while let Some(p) = q.pop() {
+            dts.push(p.dts);
+        }
+        assert_eq!(dts, vec![100, 200, 300]);
+    }
+
+    #[test]
+    fn multi_track_orders() {
+        let mut q = InterleaveQueue::new();
+        q.push(EncoderPacket::new(EncoderType::Audio, 0, 50, vec![1]).track(1));
+        q.push(EncoderPacket::new(EncoderType::Video, 0, 10, vec![2]).track(0));
+        q.push(EncoderPacket::new(EncoderType::Audio, 0, 30, vec![3]).track(0));
+        let first = q.pop().unwrap();
+        assert_eq!(first.dts, 10);
+        assert_eq!(first.kind, EncoderType::Video);
+        assert!(q.is_monotonic());
+    }
+
+    #[test]
+    fn keyframe_preserved() {
+        let mut q = InterleaveQueue::new();
+        q.push(EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]).keyframe());
+        let p = q.pop().unwrap();
+        assert!(p.keyframe);
+    }
+
+    #[test]
+    fn pop_until_empty() {
+        let mut q = InterleaveQueue::new();
+        q.push(EncoderPacket::new(EncoderType::Video, 0, 1, vec![1]));
+        q.push(EncoderPacket::new(EncoderType::Audio, 0, 2, vec![2]));
+        assert_eq!(q.len(), 2);
+        q.pop();
+        q.pop();
+        assert!(q.is_empty());
+        assert!(q.pop().is_none());
+    }
+
+    #[test]
     fn differential() {
         let mut q = InterleaveQueue::new();
         q.push(EncoderPacket::new(EncoderType::Video, 0, 10, vec![1]));

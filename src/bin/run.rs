@@ -7,7 +7,7 @@ use obs_rust_bitstream::{
     AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, H264Codec,
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
-    StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, OUTPUT_AV,
+    StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect, OUTPUT_AV,
 };
 
 fn main() {
@@ -106,6 +106,21 @@ fn main() {
                     }
                 }
             }
+        }
+        // Optional canvas effect. Default path above is unchanged.
+        let mut we = LiveWeights::new();
+        let _ = we.set("fps", 30.0);
+        let _ = we.set("h264.qp", 28.0);
+        let _ = we.set("effect.brightness", 0.2);
+        if let Ok(mut pipe) = Pipeline::new(16, 16, we) {
+            let mut cap = SyntheticCapture::new(16, 16);
+            let mut audio = AudioSourceList::new();
+            let _ = audio.add("tone", AudioSource::synthetic(48000, 1));
+            let mut out = OutputInfo::new("fx", "Effects", OUTPUT_AV).expect("out");
+            out.start();
+            let _ = pipe.tick(&mut cap, &mut audio, &mut out, 0);
+            let mean = CanvasEffect::mean(pipe.canvas());
+            println!("canvas_mean={:.3}", mean);
         }
     }
 }

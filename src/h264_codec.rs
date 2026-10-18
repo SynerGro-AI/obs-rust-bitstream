@@ -74,9 +74,30 @@ impl H264Codec {
         Ok(self.encoder.encode(&yuv))
     }
 
-    /// Flush any buffered access units.
-    pub fn flush(&mut self) -> Vec<u8> {
-        self.encoder.flush()
+    /// Encode one Y800 frame to an EncoderPacket.
+    /// pts and dts are set to the supplied timestamp.
+    /// Returns None if the encoder yields no bytes.
+    pub fn encode_packet(
+        &mut self,
+        frame: &VideoFrame,
+        pts: i64,
+    ) -> Result<Option<crate::encoder_packet::EncoderPacket>, H264Error> {
+        let bytes = self.encode(frame)?;
+        if bytes.is_empty() {
+            return Ok(None);
+        }
+        let key = bytes.windows(4).any(|w| w == [0, 0, 0, 1])
+            && bytes.windows(5).any(|w| w[0..4] == [0, 0, 0, 1] && (w[4] & 0x1f) == 5);
+        let mut pkt = crate::encoder_packet::EncoderPacket::new(
+            crate::encoder_context::EncoderType::Video,
+            pts,
+            pts,
+            bytes,
+        );
+        if key {
+            pkt = pkt.keyframe();
+        }
+        Ok(Some(pkt))
     }
 
     /// Encode and return the byte size (including flush).

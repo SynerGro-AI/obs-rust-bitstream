@@ -303,6 +303,8 @@ fn main() {
     sources.add("synthetic", CaptureSource::synthetic(16, 16));
     sources.add("file", CaptureSource::synthetic(8, 8));
     println!("sources: {} names={:?}", sources.len(), sources.names());
+    status.set_source_count(sources.len());
+    println!("status sources: {}", status.summary().contains("sources=2"));
     sources.set_active(0);
     let got = sources.active().and_then(|s| s.frame()).is_some();
     println!("active frame: {}", got);

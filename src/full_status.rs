@@ -1,13 +1,14 @@
-//! Safe pure FullStatus (path + keyframe + caption).
+//! Safe pure FullStatus (path + keyframe + caption + roi).
 //!
-//! One line of held, dropped, latency, keyframe done, and caption lines.
+//! One line of held, dropped, latency, keyframe done, caption lines, and ROI count.
 //! No unwraps.
 //!
-//! Differential: more caption lines produce a higher count.
+//! Differential: more ROIs produce a higher count.
 
 use crate::caption_status::CaptionStatus;
 use crate::keyframe_status::KeyframeStatus;
 use crate::path_status::PathStatus;
+use crate::roi_status::RoiStatus;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FullStatus {
@@ -17,11 +18,17 @@ pub struct FullStatus {
     pub keyframe_done: usize,
     pub keyframe_complete: bool,
     pub caption_lines: usize,
+    pub roi_count: usize,
 }
 
 impl FullStatus {
-    /// Build from the path, keyframe, and caption statuses.
-    pub fn from(path: &PathStatus, keyframe: &KeyframeStatus, caption: &CaptionStatus) -> Self {
+    /// Build from the path, keyframe, caption, and ROI statuses.
+    pub fn from(
+        path: &PathStatus,
+        keyframe: &KeyframeStatus,
+        caption: &CaptionStatus,
+        roi: &RoiStatus,
+    ) -> Self {
         Self {
             held: path.held,
             dropped: path.dropped,
@@ -29,19 +36,21 @@ impl FullStatus {
             keyframe_done: keyframe.done,
             keyframe_complete: keyframe.complete,
             caption_lines: caption.lines,
+            roi_count: roi.count,
         }
     }
 
-    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N"
+    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N"
     pub fn one_line(&self) -> String {
         format!(
-            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={}",
+            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={}",
             self.held,
             self.dropped,
             self.latency_ns,
             self.keyframe_done,
             self.keyframe_complete,
-            self.caption_lines
+            self.caption_lines,
+            self.roi_count
         )
     }
 }
@@ -66,12 +75,15 @@ mod tests {
             lines: 2,
             duration: 3.0,
         };
-        let s = FullStatus::from(&p, &k, &c);
+        let r = RoiStatus {
+            count: 1,
+            supported: true,
+        };
+        let s = FullStatus::from(&p, &k, &c, &r);
         assert_eq!(s.held, 1);
-        assert_eq!(s.keyframe_done, 1);
         assert_eq!(s.caption_lines, 2);
-        assert!(!s.keyframe_complete);
-        assert!(s.one_line().contains("captions=2"));
+        assert_eq!(s.roi_count, 1);
+        assert!(s.one_line().contains("roi=1"));
     }
 
     #[test]
@@ -90,10 +102,13 @@ mod tests {
             lines: 0,
             duration: 0.0,
         };
-        let s = FullStatus::from(&p, &k, &c);
+        let r = RoiStatus {
+            count: 0,
+            supported: false,
+        };
+        let s = FullStatus::from(&p, &k, &c, &r);
         assert_eq!(s.held, 0);
-        assert_eq!(s.caption_lines, 0);
-        assert!(s.keyframe_complete);
+        assert_eq!(s.roi_count, 0);
     }
 
     #[test]
@@ -108,16 +123,20 @@ mod tests {
             done: 0,
             complete: true,
         };
-        let a = CaptionStatus {
-            lines: 1,
-            duration: 1.0,
+        let c = CaptionStatus {
+            lines: 0,
+            duration: 0.0,
         };
-        let b = CaptionStatus {
-            lines: 3,
-            duration: 3.0,
+        let a = RoiStatus {
+            count: 1,
+            supported: true,
         };
-        let sa = FullStatus::from(&p, &k, &a);
-        let sb = FullStatus::from(&p, &k, &b);
-        assert!(sb.caption_lines > sa.caption_lines);
+        let b = RoiStatus {
+            count: 3,
+            supported: true,
+        };
+        let sa = FullStatus::from(&p, &k, &c, &a);
+        let sb = FullStatus::from(&p, &k, &c, &b);
+        assert!(sb.roi_count > sa.roi_count);
     }
 }

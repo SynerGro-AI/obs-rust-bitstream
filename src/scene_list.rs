@@ -43,6 +43,13 @@ impl SceneList {
         self.items.iter().map(|s| s.summary()).collect()
     }
 
+    /// Read summary lines from a reader.
+    pub fn read_summaries<R: std::io::Read>(mut input: R) -> Result<Vec<String>, std::io::Error> {
+        let mut buf = String::new();
+        input.read_to_string(&mut buf)?;
+        Ok(buf.lines().filter(|l| !l.is_empty()).map(|s| s.to_string()).collect())
+    }
+
     /// Set the active index. Clamped.
     pub fn set_active(&mut self, i: usize) {
         if !self.items.is_empty() {
@@ -119,6 +126,8 @@ mod tests {
         list.add(Scene::new("b"));
         assert_eq!(list.len(), 2);
         assert_eq!(list.names(), vec!["a", "b"]);
+        let loaded = SceneList::read_summaries(std::io::Cursor::new("a | 0 sources | active none\n")).unwrap();
+        assert_eq!(loaded.len(), 1);
         assert!(list.find("b").is_some());
         list.set_active(1);
         assert_eq!(list.active_index(), 1);

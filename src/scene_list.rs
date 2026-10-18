@@ -43,6 +43,15 @@ impl SceneList {
         self.items.iter().map(|s| s.summary()).collect()
     }
 
+    /// One line for the list.
+    pub fn summary(&self) -> String {
+        format!(
+            "{} scenes | active {}",
+            self.len(),
+            self.active_name().unwrap_or("none")
+        )
+    }
+
     /// Read summary lines from a reader.
     pub fn read_summaries<R: std::io::Read>(mut input: R) -> Result<Vec<String>, std::io::Error> {
         let mut buf = String::new();
@@ -131,6 +140,7 @@ mod tests {
         list.add(Scene::new("b"));
         assert_eq!(list.len(), 2);
         assert_eq!(list.names(), vec!["a", "b"]);
+        assert!(list.summary().contains("2 scenes"));
         let loaded = SceneList::read_summaries(std::io::Cursor::new("a | 0 sources | active none\n")).unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(list.find("b").is_some());

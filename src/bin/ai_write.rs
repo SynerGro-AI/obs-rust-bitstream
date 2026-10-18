@@ -279,6 +279,21 @@ fn main() {
     let mut unlimited = FramePacer::new(0.0);
     let paced = unlimited.collect(&mut src, 4);
     println!("paced frames: {}", paced.len());
+    if !paced.is_empty() {
+        let pb = File::create("paced.avbn").expect("pb");
+        let ps = File::create("paced_status.txt").expect("ps");
+        let _ = EffectedWrite::write_stamped_bundle(
+            &paced,
+            30.0,
+            &controls,
+            &mut weights,
+            &sync,
+            pb,
+            ps,
+        );
+        let sz = std::fs::metadata("paced.avbn").map(|m| m.len()).unwrap_or(0);
+        println!("wrote paced.avbn ({} bytes)", sz);
+    }
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

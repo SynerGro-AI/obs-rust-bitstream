@@ -330,6 +330,7 @@ fn main() {
     let mut scene = Scene::new("main");
     scene.add("cam", CaptureSource::synthetic(16, 16));
     println!("scene: {} sources={}", scene.name(), scene.len());
+    println!("scene summary: {}", scene.summary());
     let mut scenes = SceneList::new();
     scenes.add(scene);
     scenes.add(Scene::new("break"));

@@ -55,12 +55,18 @@ impl RtmpSocket {
         })?;
         let mut total = 0u64;
         let mut count = 0usize;
-        for data in &packets {
-            stream.write_all(data).map_err(|_| {
+        for (i, data) in packets.iter().enumerate() {
+            let chunk = crate::rtmp_chunk::RtmpChunk::wrap(
+                4,
+                crate::rtmp_chunk::RTMP_TYPE_VIDEO,
+                (i as u32).saturating_mul(33),
+                data,
+            );
+            stream.write_all(&chunk).map_err(|_| {
                 reconnect.start();
                 SocketError::Write
             })?;
-            total = total.saturating_add(data.len() as u64);
+            total = total.saturating_add(chunk.len() as u64);
             count = count.saturating_add(1);
         }
         let _ = stream.flush();

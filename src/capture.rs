@@ -15,6 +15,21 @@ pub trait Capture {
     fn height(&self) -> u32;
 }
 
+/// Open the default camera for this platform.
+/// On Linux this opens /dev/video0 via V4L2.
+/// Other platforms return a clear error until their backends are filled.
+pub fn open_default() -> Result<Box<dyn Capture>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_capture::LinuxCapture::open()
+            .map(|c| Box::new(c) as Box<dyn Capture>)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("default camera not yet wired on this platform".to_string())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SyntheticCapture {
     width: u32,
@@ -67,5 +82,11 @@ mod tests {
         assert_ne!(a.planes[0][0], b.planes[0][0]);
         assert_eq!(c.width(), 8);
         assert_eq!(c.height(), 8);
+    }
+
+    #[test]
+    fn open_default_exists() {
+        // Returns a clear error or a working camera.
+        let _ = open_default();
     }
 }

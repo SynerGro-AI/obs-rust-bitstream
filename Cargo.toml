@@ -14,4 +14,9 @@ name = "obs_rust_bitstream"
 path = "src/lib.rs"
 
 [dependencies]
+libc = "0.2.191"
 rusty_h264 = "0.14"
+v4l = { version = "0.14.0", optional = true }
+
+[features]
+v4l = ["dep:v4l"]

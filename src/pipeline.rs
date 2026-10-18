@@ -59,6 +59,8 @@ impl Pipeline {
         // Optional tool-suite pass: paint the real Y800 frame onto the canvas.
         // Later layers / effects / LiveWeights can mutate the canvas here.
         let _ = Compositor::paint_frame(&frame, &mut self.canvas);
+        // Optional LiveWeights effect. Missing key leaves the canvas unchanged.
+        let _ = crate::canvas_effect::CanvasEffect::apply(&mut self.canvas, &self.weights);
         // Encode the original OBS-shaped frame (canvas is the tool-suite side channel).
         let n = AvTick::tick(&mut self.codec, &frame, audio, output, pts);
         Ok(n)

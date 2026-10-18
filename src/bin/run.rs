@@ -136,7 +136,7 @@ fn main() {
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
                                         Ok(sent) => println!(
-                                            "socket active={} packets={} bytes={} handshake={}",
+                                            "socket active={} packets={} bytes={} handshake={} connect=1",
                                             sent.active,
                                             sent.packets,
                                             sent.bytes,

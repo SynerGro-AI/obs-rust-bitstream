@@ -35,6 +35,30 @@ impl PacketFile {
         let count = u32::from_le_bytes(buf[4..8].try_into().ok()?);
         Some(count as usize)
     }
+
+    /// Read payloads from a buffer written by write.
+    /// Returns None if the header is missing or a length is truncated.
+    pub fn read(buf: &[u8]) -> Option<Vec<Vec<u8>>> {
+        if buf.len() < 8 || &buf[0..4] != b"PKTF" {
+            return None;
+        }
+        let count = u32::from_le_bytes(buf[4..8].try_into().ok()?) as usize;
+        let mut out = Vec::with_capacity(count);
+        let mut pos = 8;
+        for _ in 0..count {
+            if pos + 4 > buf.len() {
+                return None;
+            }
+            let len = u32::from_le_bytes(buf[pos..pos + 4].try_into().ok()?) as usize;
+            pos += 4;
+            if pos + len > buf.len() {
+                return None;
+            }
+            out.push(buf[pos..pos + len].to_vec());
+            pos += len;
+        }
+        Some(out)
+    }
 }
 
 #[cfg(test)]
@@ -61,6 +85,17 @@ mod tests {
     fn bad_header() {
         assert!(PacketFile::count(b"BAD").is_none());
         assert!(PacketFile::count(&[]).is_none());
+    }
+
+    #[test]
+    fn round_trip() {
+        let a = EncoderPacket::new(EncoderType::Video, 0, 0, vec![1, 2]);
+        let b = EncoderPacket::new(EncoderType::Audio, 1, 1, vec![3]);
+        let buf = PacketFile::write(&[a, b]);
+        let payloads = PacketFile::read(&buf).unwrap();
+        assert_eq!(payloads.len(), 2);
+        assert_eq!(payloads[0], vec![1, 2]);
+        assert_eq!(payloads[1], vec![3]);
     }
 
     #[test]

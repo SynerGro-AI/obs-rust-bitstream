@@ -62,6 +62,7 @@ impl SystemStatus {
             recommendation: String::new(),
             healthy: false,
             target_fps: 0.0,
+            hit_target: false,
         }
     }
 

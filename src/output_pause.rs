@@ -25,6 +25,7 @@ pub struct OutputPause {
     ts_end: u64,
     ts_offset: u64,
     last_video_ts: u64,
+    paused: bool,
 }
 
 impl OutputPause {
@@ -33,7 +34,7 @@ impl OutputPause {
     }
 
     pub fn is_paused(&self) -> bool {
-        self.ts_start != 0 && self.ts_end == 0
+        self.paused
     }
 
     pub fn offset(&self) -> u64 {
@@ -54,25 +55,25 @@ impl OutputPause {
         if output.flags() & OUTPUT_CAN_PAUSE == 0 {
             return Err(PauseError::CannotPause);
         }
-        if self.is_paused() {
+        if self.paused {
             return Err(PauseError::AlreadyPaused);
         }
         self.ts_start = now;
         self.ts_end = 0;
+        self.paused = true;
         Ok(())
     }
 
     /// End a pause. Accumulates the duration into the offset.
     /// Returns error if not paused.
     pub fn end(&mut self, now: u64) -> Result<u64, PauseError> {
-        if !self.is_paused() {
+        if !self.paused {
             return Err(PauseError::NotPaused);
         }
         self.ts_end = now;
         let duration = now.saturating_sub(self.ts_start);
         self.ts_offset = self.ts_offset.saturating_add(duration);
-        self.ts_start = 0;
-        self.ts_end = 0;
+        self.paused = false;
         Ok(duration)
     }
 }

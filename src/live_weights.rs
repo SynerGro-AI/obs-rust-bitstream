@@ -43,6 +43,10 @@ impl LiveWeights {
         Ok(next)
     }
 
+    pub fn remove(&mut self, name: &str) -> bool {
+        self.values.remove(name).is_some()
+    }
+
     /// Merge lessons into the existing weights.
     /// Only inserts keys that are not already present.
     /// Existing values are never overwritten.

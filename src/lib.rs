@@ -940,7 +940,7 @@ pub use audio_mix::AudioMix;
 pub use audio_monitor_feed::AudioMonitorFeed;
 pub use audio_output_bus::AudioOutputBus;
 pub use audio_platform::{open_best_audio, open_default_audio};
-pub use linux_audio::{s16le_to_f32, LinuxAudio};
+pub use linux_audio::{s16le_to_f32, AlsaFormat, LinuxAudio, ALSA_DEFAULT_DEVICE, ALSA_DEFAULT_RATE, ALSA_RATES};
 pub use combined_status::CombinedStatus;
 pub use file_capture::{FileCapture, FileCaptureError};
 pub use capture_rate::CaptureRate;

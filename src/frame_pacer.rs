@@ -98,8 +98,11 @@ impl FramePacer {
                     break;
                 }
             } else if !self.interval().is_zero() {
-                // only sleep when there is a real interval
-                std::thread::sleep(Duration::from_millis(1));
+                // sleep the exact remaining time
+                let w = self.wait();
+                if !w.is_zero() {
+                    std::thread::sleep(w);
+                }
             }
         }
         out

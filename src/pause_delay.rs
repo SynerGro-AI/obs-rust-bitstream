@@ -65,7 +65,9 @@ mod tests {
         let mut cbs = PacketCallbackList::new();
         cbs.add("mux").unwrap();
         let pkt = EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]);
-        let n = PauseDelay::push(&pause, &mut q, &cbs, pkt, 1);
+        PauseDelay::push(&pause, &mut q, &cbs, pkt, 0);
+        let pkt2 = EncoderPacket::new(EncoderType::Video, 1, 1, vec![2]);
+        let n = PauseDelay::push(&pause, &mut q, &cbs, pkt2, 1);
         assert!(n >= 1);
     }
 
@@ -86,11 +88,18 @@ mod tests {
             EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]),
             1,
         );
-        let b = PauseDelay::push(
+        PauseDelay::push(
             &unpaused,
             &mut q2,
             &cbs,
             EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]),
+            0,
+        );
+        let b = PauseDelay::push(
+            &unpaused,
+            &mut q2,
+            &cbs,
+            EncoderPacket::new(EncoderType::Video, 1, 1, vec![2]),
             1,
         );
         assert!(b > a);

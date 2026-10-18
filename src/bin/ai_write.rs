@@ -281,6 +281,9 @@ fn main() {
     println!("status hit: {}", status.summary().contains("hit="));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
+    println!("wrote status.txt with hit");
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
     println!("wrote status.txt with target");
     println!("pacer ready: {}", pacer.ready());
     let mut src = CaptureSource::best();

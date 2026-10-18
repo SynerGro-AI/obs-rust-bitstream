@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::frame_pacer::FramePacer;
 use obs_rust_bitstream::status_report::StatusReport;
 use obs_rust_bitstream::status_history::StatusHistory;
 use obs_rust_bitstream::capture_rate::CaptureRate;
@@ -271,6 +272,9 @@ fn main() {
     println!("report json: {}", report.to_json());
     std::fs::write("report.json", report.to_json()).expect("rep json");
     println!("wrote report.json");
+    let mut pacer = FramePacer::new(30.0);
+    println!("pacer target: {} fps", pacer.target());
+    println!("pacer ready: {}", pacer.ready());
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();
     cleared.clear();

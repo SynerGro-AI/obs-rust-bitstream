@@ -36,14 +36,14 @@ impl EncoderFrame {
     }
 
     /// Build from a VideoFrame. Uses plane 0.
-    /// Returns None if the frame has no data.
+    /// Returns None if the frame has no planes.
     pub fn from_video(frame: &VideoFrame, pts: i64) -> Option<Self> {
-        if frame.data.is_empty() {
+        if frame.planes.is_empty() || frame.planes[0].is_empty() {
             return None;
         }
         let mut ef = Self::new(pts);
-        ef.data[0] = frame.data.clone();
-        ef.linesize[0] = frame.width;
+        ef.data[0] = frame.planes[0].clone();
+        ef.linesize[0] = frame.linesizes.first().copied().unwrap_or(frame.width);
         Some(ef)
     }
 
@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn from_video() {
         let mut vf = VideoFrame::new(VideoFormat::Y800, 16, 16).unwrap();
-        vf.data[0] = 128;
+        vf.planes[0][0] = 128;
         let ef = EncoderFrame::from_video(&vf, 42).unwrap();
         assert_eq!(ef.pts, 42);
         assert_eq!(ef.linesize[0], 16);
@@ -99,15 +99,14 @@ mod tests {
 
     #[test]
     fn empty_is_none() {
-        let vf = VideoFrame::new(VideoFormat::Y800, 0, 0);
-        assert!(vf.is_err());
+        assert!(VideoFrame::new(VideoFormat::Y800, 0, 0).is_none());
         assert!(EncoderFrame::from_audio(&[], 0).is_none());
     }
 
     #[test]
     fn differential() {
         let mut vf = VideoFrame::new(VideoFormat::Y800, 8, 8).unwrap();
-        vf.data[0] = 1;
+        vf.planes[0][0] = 1;
         let a = EncoderFrame::from_video(&vf, 0).unwrap();
         let b = EncoderFrame::from_video(&vf, 1).unwrap();
         assert_ne!(a.pts, b.pts);

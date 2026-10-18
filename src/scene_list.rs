@@ -38,6 +38,11 @@ impl SceneList {
         self.items.iter().map(|s| s.name()).collect()
     }
 
+    /// Summaries in order.
+    pub fn summaries(&self) -> Vec<String> {
+        self.items.iter().map(|s| s.summary()).collect()
+    }
+
     /// Set the active index. Clamped.
     pub fn set_active(&mut self, i: usize) {
         if !self.items.is_empty() {

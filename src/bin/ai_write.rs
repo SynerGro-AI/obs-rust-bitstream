@@ -334,6 +334,8 @@ fn main() {
     scenes.add(scene);
     scenes.add(Scene::new("break"));
     println!("scenes: {} names={:?}", scenes.len(), scenes.names());
+    println!("switch to break: {}", scenes.switch("break"));
+    println!("active scene: {}", scenes.active_index());
     status.set_scene_count(scenes.len());
     println!("status scenes: {}", status.summary().contains("scenes=2"));
     let final_status = File::create("status.txt").expect("final");

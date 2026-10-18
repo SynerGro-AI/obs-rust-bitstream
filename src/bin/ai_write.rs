@@ -315,6 +315,8 @@ fn main() {
     println!("active now: {}", sources.active_index());
     println!("remove file: {}", sources.remove("file"));
     println!("sources left: {}", sources.len());
+    sources.clear();
+    println!("cleared: {}", sources.is_empty());
     let name = sources.names().get(sources.active_index()).copied().unwrap_or("");
     status.set_active_source(name);
     println!("status active: {}", status.summary().contains(&format!("active={}", name)));

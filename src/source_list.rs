@@ -49,6 +49,11 @@ impl SourceList {
         self.active
     }
 
+    /// Name of the active source, if any.
+    pub fn active_name(&self) -> Option<&str> {
+        self.items.get(self.active).map(|(n, _)| n.as_str())
+    }
+
     /// Switch to the source named. Returns true if found.
     pub fn switch(&mut self, name: &str) -> bool {
         if let Some(i) = self.items.iter().position(|(n, _)| n == name) {
@@ -112,6 +117,7 @@ mod tests {
         assert!(list.find("b").is_some());
         list.set_active(1);
         assert_eq!(list.active_index(), 1);
+        assert_eq!(list.active_name(), Some("b"));
         assert!(list.switch("a"));
         assert_eq!(list.active_index(), 0);
         assert!(!list.switch("missing"));

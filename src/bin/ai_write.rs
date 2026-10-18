@@ -337,9 +337,8 @@ fn main() {
     println!("switch to break: {}", scenes.switch("break"));
     println!("active scene: {}", scenes.active_index());
     println!("scene name: {}", scenes.active_name().unwrap_or("none"));
-    let scene_name = scenes.names().get(scenes.active_index()).copied().unwrap_or("");
-    status.set_active_scene(scene_name);
-    println!("status scene: {}", status.summary().contains(&format!("scene={}", scene_name)));
+    status.set_active_scene(scenes.active_name().unwrap_or("none"));
+    println!("status scene: {}", status.summary().contains("scene=break"));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with scene");

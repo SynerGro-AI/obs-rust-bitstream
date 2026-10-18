@@ -7,7 +7,8 @@ use obs_rust_bitstream::{
     AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, H264Codec,
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
-    StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect, OUTPUT_AV,
+    StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
+    CaptureSource, OUTPUT_AV,
 };
 
 fn main() {
@@ -16,7 +17,13 @@ fn main() {
     let _ = weights.set("h264.qp", 28.0);
 
     let pipe = Pipeline::new(64, 64, weights).expect("pipeline");
-    let cap = Box::new(SyntheticCapture::new(64, 64));
+    let (src, live) = CaptureSource::best(64, 64);
+    println!("capture={} live={}", src.kind(), live);
+    let cap: Box<dyn obs_rust_bitstream::Capture> = match src {
+        CaptureSource::Synthetic(c) => Box::new(c),
+        CaptureSource::File(c) => Box::new(c),
+        CaptureSource::Platform(c) => c,
+    };
     let mut audio = AudioSourceList::new();
     let _ = audio.add("tone", AudioSource::synthetic(48000, 1));
     let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV).expect("output");

@@ -25,7 +25,11 @@ fn main() {
         CaptureSource::Platform(c) => c,
     };
     let (audio, audio_live) = RunnerAudio::open(48000, 1);
-    println!("audio_live={}", audio_live);
+    println!(
+        "audio_live={} audio_backend={}",
+        audio_live,
+        obs_rust_bitstream::backend_name()
+    );
     let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV).expect("output");
     out.start();
     let out_for_stream = out.clone();

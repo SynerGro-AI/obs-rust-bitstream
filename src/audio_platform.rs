@@ -12,26 +12,60 @@ use crate::audio_capture::{AudioCapture, AudioSamples, SyntheticAudio};
 /// Open the default microphone for this platform.
 /// On Linux this attempts ALSA. On Windows this attempts WASAPI.
 /// On macOS/iOS this attempts CoreAudio.
-/// Returns a clear error if the backend is not present.
+/// Open the default microphone for this platform.
+/// Tries the cpal backend first when the audio feature is on,
+/// then the platform path (ALSA / WASAPI / CoreAudio).
+/// Returns a clear error if no backend is present.
 pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
+    if let Ok(src) = crate::audio_cpal::open_cpal(48000, 1) {
+        return Ok(src);
+    }
     #[cfg(target_os = "linux")]
     {
-        crate::linux_audio::LinuxAudio::open(48000, 1)
-            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
+        return crate::linux_audio::LinuxAudio::open(48000, 1)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>);
     }
     #[cfg(windows)]
     {
-        crate::windows_audio::WindowsAudio::open(48000, 2)
-            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
+        return crate::windows_audio::WindowsAudio::open(48000, 2)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>);
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
-        crate::apple_audio::AppleAudio::open(48000, 2)
-            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
+        return crate::apple_audio::AppleAudio::open(48000, 2)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>);
     }
     #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
     {
         Err("default microphone not yet wired on this platform".to_string())
+    }
+}
+
+/// Name of the backend that would be used.
+/// "cpal" when the feature is on, otherwise the platform name.
+pub fn backend_name() -> &'static str {
+    #[cfg(feature = "audio")]
+    {
+        return "cpal";
+    }
+    #[cfg(not(feature = "audio"))]
+    {
+        #[cfg(target_os = "linux")]
+        {
+            return "alsa";
+        }
+        #[cfg(windows)]
+        {
+            return "wasapi";
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            return "coreaudio";
+        }
+        #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
+        {
+            return "none";
+        }
     }
 }
 

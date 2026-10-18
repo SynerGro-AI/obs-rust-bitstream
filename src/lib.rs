@@ -1123,7 +1123,7 @@ pub use audio_source_list::{AudioSource, AudioSourceList};
 pub use audio_mix::AudioMix;
 pub use audio_monitor_feed::AudioMonitorFeed;
 pub use audio_output_bus::AudioOutputBus;
-pub use audio_platform::{open_best_audio, open_default_audio};
+pub use audio_platform::{open_best_audio, open_default_audio, backend_name};
 pub use audio_packet::AudioPacket;
 pub use audio_convert_info::{AudioConvertInfo, ConvertError};
 pub use audio_match::AudioMatch;

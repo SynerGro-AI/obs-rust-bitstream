@@ -50,6 +50,16 @@ impl FramePacer {
         self.target
     }
 
+    /// True if the measured rate is within a fraction of the target.
+    /// A target of 0 always hits.
+    pub fn hit(target: f32, measured: f32, fraction: f32) -> bool {
+        if target <= 0.0 {
+            return true;
+        }
+        let delta = (measured - target).abs();
+        delta <= target * fraction
+    }
+
     /// Collect up to n frames, waiting for the pacer between each.
     /// Stops early if the source returns None.
     pub fn collect(
@@ -94,5 +104,7 @@ mod tests {
         let mut paced = FramePacer::new(0.0); // no limit
         let frames = paced.collect(&mut src, 3);
         assert_eq!(frames.len(), 3);
+        assert!(FramePacer::hit(30.0, 31.0, 0.1));
+        assert!(!FramePacer::hit(30.0, 10.0, 0.1));
     }
 }

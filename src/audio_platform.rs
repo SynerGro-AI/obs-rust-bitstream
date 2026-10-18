@@ -1,0 +1,78 @@
+//! Safe pure platform audio open (microphone surface).
+//!
+//! Mirrors the video open_default pattern. On this environment
+//! the real backends are not wired (no ALSA/WASAPI/AVAudio
+//! bindings compiled). open_default returns a clear error.
+//! Synthetic remains always available.
+//!
+//! Differential: synthetic produces samples; platform errors.
+
+use crate::audio_capture::{AudioCapture, AudioSamples, SyntheticAudio};
+
+/// Open the default microphone for this platform.
+/// On Linux this would open ALSA/Pulse.
+/// On Windows this would open WASAPI.
+/// On macOS/iOS this would open AVAudio.
+/// Until those backends are filled, every platform returns a clear error.
+pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        Err("Linux ALSA/Pulse audio capture not yet wired".to_string())
+    }
+    #[cfg(windows)]
+    {
+        Err("Windows WASAPI audio capture not yet wired".to_string())
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        Err("Apple AVAudio capture not yet wired".to_string())
+    }
+    #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
+    {
+        Err("default microphone not yet wired on this platform".to_string())
+    }
+}
+
+/// Best available audio source: platform if it opens, otherwise synthetic.
+pub fn open_best_audio(rate: u32, channels: u16) -> Box<dyn AudioCapture> {
+    match open_default_audio() {
+        Ok(src) => src,
+        Err(_) => Box::new(SyntheticAudio::new(rate, channels)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_errors_clearly() {
+        match open_default_audio() {
+            Ok(_) => {}
+            Err(e) => {
+                assert!(
+                    e.contains("not yet wired")
+                        || e.contains("ALSA")
+                        || e.contains("WASAPI")
+                        || e.contains("AVAudio")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn best_is_synthetic_here() {
+        let mut src = open_best_audio(48000, 1);
+        let s = src.samples(8).unwrap();
+        assert_eq!(s.data.len(), 8);
+        assert_eq!(s.rate, 48000);
+    }
+
+    #[test]
+    fn differential() {
+        let mut a = open_best_audio(48000, 1);
+        let s1 = a.samples(4).unwrap();
+        let s2 = a.samples(4).unwrap();
+        assert_ne!(s1.data, s2.data);
+    }
+}

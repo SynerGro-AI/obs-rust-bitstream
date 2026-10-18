@@ -386,6 +386,7 @@ pub mod compositor;
 pub mod input_device;
 pub mod output;
 pub mod audio_output;
+pub mod audio_output_info;
 pub mod session;
 
 pub mod preview;
@@ -747,6 +748,7 @@ pub use compositor::Compositor;
 pub use input_device::InputDevice;
 pub use output::{Output, OutputFrame};
 pub use audio_output::{AudioOutput, AudioFrame};
+pub use audio_output_info::{AudioOutputInfo, AudioOutputError};
 pub use session::{Session, SessionFrame};
 pub use preview::{Preview, PreviewFrame};
 pub use program::Program;

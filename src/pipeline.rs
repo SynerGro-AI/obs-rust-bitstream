@@ -38,7 +38,7 @@ impl Pipeline {
             return Err(PipelineError::Size);
         }
         let codec = H264Codec::new(width, height, &weights).map_err(|_| PipelineError::Encode)?;
-        let canvas = PixelCanvas::new(width, height).ok_or(PipelineError::Size)?;
+        let canvas = PixelCanvas::new(width, height).map_err(|_| PipelineError::Size)?;
         Ok(Self {
             weights,
             codec,

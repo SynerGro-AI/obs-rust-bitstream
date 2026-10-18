@@ -339,6 +339,9 @@ fn main() {
     let scene_name = scenes.names().get(scenes.active_index()).copied().unwrap_or("");
     status.set_active_scene(scene_name);
     println!("status scene: {}", status.summary().contains(&format!("scene={}", scene_name)));
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with scene");
     status.set_scene_count(scenes.len());
     println!("status scenes: {}", status.summary().contains("scenes=2"));
     let final_status = File::create("status.txt").expect("final");

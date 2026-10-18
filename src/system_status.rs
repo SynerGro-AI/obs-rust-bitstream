@@ -38,6 +38,7 @@ pub struct SystemStatus {
     pub pacing: String,
     pub source_count: usize,
     pub active_source: String,
+    pub scene_count: usize,
 }
 
 impl SystemStatus {

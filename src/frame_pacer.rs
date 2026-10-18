@@ -30,6 +30,20 @@ impl FramePacer {
         }
     }
 
+    /// Time remaining until the next frame. Zero if ready or no limit.
+    pub fn wait(&self) -> Duration {
+        let interval = self.interval();
+        if interval.is_zero() {
+            return Duration::ZERO;
+        }
+        let elapsed = self.last.elapsed();
+        if elapsed >= interval {
+            Duration::ZERO
+        } else {
+            interval - elapsed
+        }
+    }
+
     /// True if it is time for the next frame.
     pub fn ready(&mut self) -> bool {
         let interval = self.interval();

@@ -335,6 +335,7 @@ fn main() {
     scenes.add(scene);
     scenes.add(Scene::new("break"));
     println!("scenes: {} names={:?}", scenes.len(), scenes.names());
+    println!("scene list: {}", scenes.summary());
     println!("scene summaries: {:?}", scenes.summaries());
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");

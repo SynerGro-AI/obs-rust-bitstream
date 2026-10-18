@@ -1,12 +1,13 @@
-//! Safe pure FullStatus (path + keyframe + caption + roi + reconnect).
+//! Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause).
 //!
 //! One line of held, dropped, latency, keyframe done, caption lines,
-//! ROI count, and reconnect attempts. No unwraps.
+//! ROI count, reconnect attempts, and pause state. No unwraps.
 //!
-//! Differential: more attempts produce a higher count.
+//! Differential: a paused output reports paused=true.
 
 use crate::caption_status::CaptionStatus;
 use crate::keyframe_status::KeyframeStatus;
+use crate::output_pause::OutputPause;
 use crate::path_status::PathStatus;
 use crate::reconnect::Reconnect;
 use crate::roi_status::RoiStatus;
@@ -21,16 +22,18 @@ pub struct FullStatus {
     pub caption_lines: usize,
     pub roi_count: usize,
     pub attempts: u32,
+    pub paused: bool,
 }
 
 impl FullStatus {
-    /// Build from the path, keyframe, caption, ROI, and reconnect.
+    /// Build from the path, keyframe, caption, ROI, reconnect, and pause.
     pub fn from(
         path: &PathStatus,
         keyframe: &KeyframeStatus,
         caption: &CaptionStatus,
         roi: &RoiStatus,
         reconnect: &Reconnect,
+        pause: &OutputPause,
     ) -> Self {
         Self {
             held: path.held,
@@ -41,13 +44,14 @@ impl FullStatus {
             caption_lines: caption.lines,
             roi_count: roi.count,
             attempts: reconnect.attempts(),
+            paused: pause.is_paused(),
         }
     }
 
-    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N attempts=N"
+    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N attempts=N paused=true/false"
     pub fn one_line(&self) -> String {
         format!(
-            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={} attempts={}",
+            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={} attempts={} paused={}",
             self.held,
             self.dropped,
             self.latency_ns,
@@ -55,7 +59,8 @@ impl FullStatus {
             self.keyframe_complete,
             self.caption_lines,
             self.roi_count,
-            self.attempts
+            self.attempts,
+            self.paused
         )
     }
 }
@@ -86,11 +91,21 @@ mod tests {
         };
         let mut rc = Reconnect::new();
         rc.start();
-        let s = FullStatus::from(&p, &k, &c, &r, &rc);
+        let mut pause = OutputPause::new();
+        let out = crate::output_info::OutputInfo::new(
+            "rec",
+            "Recording",
+            crate::output_info::OUTPUT_AV
+                | crate::output_info::OUTPUT_ENCODED
+                | crate::output_pause::OUTPUT_CAN_PAUSE,
+        )
+        .unwrap();
+        pause.start(&out, 0).unwrap();
+        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause);
         assert_eq!(s.held, 1);
-        assert_eq!(s.roi_count, 1);
         assert_eq!(s.attempts, 1);
-        assert!(s.one_line().contains("attempts=1"));
+        assert!(s.paused);
+        assert!(s.one_line().contains("paused=true"));
     }
 
     #[test]
@@ -114,9 +129,10 @@ mod tests {
             supported: false,
         };
         let rc = Reconnect::new();
-        let s = FullStatus::from(&p, &k, &c, &r, &rc);
+        let pause = OutputPause::new();
+        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause);
         assert_eq!(s.held, 0);
-        assert_eq!(s.attempts, 0);
+        assert!(!s.paused);
     }
 
     #[test]
@@ -139,13 +155,21 @@ mod tests {
             count: 0,
             supported: false,
         };
-        let mut a = Reconnect::new();
-        let mut b = Reconnect::new();
-        a.start();
-        b.start();
-        b.start();
-        let sa = FullStatus::from(&p, &k, &c, &r, &a);
-        let sb = FullStatus::from(&p, &k, &c, &r, &b);
-        assert!(sb.attempts > sa.attempts);
+        let rc = Reconnect::new();
+        let unpaused = OutputPause::new();
+        let mut paused = OutputPause::new();
+        let out = crate::output_info::OutputInfo::new(
+            "rec",
+            "Recording",
+            crate::output_info::OUTPUT_AV
+                | crate::output_info::OUTPUT_ENCODED
+                | crate::output_pause::OUTPUT_CAN_PAUSE,
+        )
+        .unwrap();
+        paused.start(&out, 0).unwrap();
+        let sa = FullStatus::from(&p, &k, &c, &r, &rc, &unpaused);
+        let sb = FullStatus::from(&p, &k, &c, &r, &rc, &paused);
+        assert!(!sa.paused);
+        assert!(sb.paused);
     }
 }

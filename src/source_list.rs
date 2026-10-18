@@ -33,6 +33,11 @@ impl SourceList {
         self.items.is_empty()
     }
 
+    /// True if a name exists.
+    pub fn contains(&self, name: &str) -> bool {
+        self.items.iter().any(|(n, _)| n == name)
+    }
+
     /// Names in order.
     pub fn names(&self) -> Vec<&str> {
         self.items.iter().map(|(n, _)| n.as_str()).collect()
@@ -138,5 +143,6 @@ mod tests {
         list2.add("old", CaptureSource::synthetic(4, 4));
         assert!(list2.rename("old", "new"));
         assert_eq!(list2.names(), vec!["new"]);
-    }
+        assert!(list2.contains("new"));
+        assert!(!list2.contains("old"));
 }

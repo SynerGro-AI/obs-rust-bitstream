@@ -65,6 +65,7 @@ impl SystemStatus {
             target_fps: 0.0,
             hit_target: false,
             achieved_fps: 0.0,
+            pacing: String::new(),
         }
     }
 
@@ -144,6 +145,10 @@ impl SystemStatus {
         }
     }
 
+    pub fn set_pacing(&mut self, s: &str) {
+        self.pacing = s.to_string();
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -155,7 +160,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -178,7 +183,8 @@ impl SystemStatus {
             self.healthy,
             self.target_fps,
             self.hit_target,
-            self.achieved_fps
+            self.achieved_fps,
+            self.pacing
         )
     }
 
@@ -285,6 +291,8 @@ mod tests {
         assert!(s2.summary().contains("hit=true"));
         s2.set_achieved_fps(29.5);
         assert!(s2.summary().contains("achieved=30"));
+        s2.set_pacing("target 30 | hit");
+        assert!(s2.summary().contains("pacing=target"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

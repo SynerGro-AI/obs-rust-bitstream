@@ -287,6 +287,7 @@ fn main() {
     status.write(final_status).expect("write final");
     println!("wrote status.txt with target");
     println!("pacer ready: {}", pacer.ready());
+    println!("wait: {} ms", pacer.wait().as_millis());
     let mut src = CaptureSource::best();
     let mut unlimited = FramePacer::new(0.0);
     let paced = unlimited.collect(&mut src, 4);

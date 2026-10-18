@@ -335,6 +335,7 @@ fn main() {
     scenes.add(scene);
     scenes.add(Scene::new("break"));
     println!("scenes: {} names={:?}", scenes.len(), scenes.names());
+    println!("scene summaries: {:?}", scenes.summaries());
     println!("switch to break: {}", scenes.switch("break"));
     println!("active scene: {}", scenes.active_index());
     println!("scene name: {}", scenes.active_name().unwrap_or("none"));

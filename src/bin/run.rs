@@ -8,7 +8,7 @@ use obs_rust_bitstream::{
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
-    CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, OUTPUT_AV,
+    CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket, OUTPUT_AV,
 };
 
 fn main() {
@@ -124,6 +124,23 @@ fn main() {
                             let rp = std::path::Path::new("rtmp_retry.txt");
                             if std::fs::write(rp, rs.one_line()).is_ok() {
                                 println!("saved={}", rp.display());
+                            }
+                            // Real socket send. Local listener so the path is proven.
+                            let listener = std::net::TcpListener::bind("127.0.0.1:0").ok();
+                            if let Some(listener) = listener {
+                                if let Ok(addr) = listener.local_addr() {
+                                    std::thread::spawn(move || {
+                                        let _ = listener.accept();
+                                    });
+                                    let mut rc = Reconnect::new();
+                                    match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
+                                        Ok(sent) => println!(
+                                            "socket active={} packets={} bytes={}",
+                                            sent.active, sent.packets, sent.bytes
+                                        ),
+                                        Err(_) => println!("socket attempts={}", rc.attempts()),
+                                    }
+                                }
                             }
                         }
                     }

@@ -10,6 +10,7 @@ use crate::source_list::SourceList;
 pub struct Scene {
     name: String,
     sources: SourceList,
+    audio: Option<String>,
 }
 
 impl Scene {
@@ -17,6 +18,7 @@ impl Scene {
         Self {
             name: name.to_string(),
             sources: SourceList::new(),
+            audio: None,
         }
     }
 
@@ -30,6 +32,16 @@ impl Scene {
 
     pub fn sources_mut(&mut self) -> &mut SourceList {
         &mut self.sources
+    }
+
+    /// Remember which audio source this scene uses.
+    pub fn set_audio(&mut self, name: &str) {
+        self.audio = if name.is_empty() { None } else { Some(name.to_string()) };
+    }
+
+    /// Audio source name this scene prefers, if any.
+    pub fn audio(&self) -> Option<&str> {
+        self.audio.as_deref()
     }
 
     /// Add a source to this scene.
@@ -48,10 +60,11 @@ impl Scene {
     /// One line for the scene.
     pub fn summary(&self) -> String {
         format!(
-            "{} | {} sources | active {}",
+            "{} | {} sources | active {} | audio {}",
             self.name,
             self.len(),
-            self.sources.active_name().unwrap_or("none")
+            self.sources.active_name().unwrap_or("none"),
+            self.audio.as_deref().unwrap_or("-")
         )
     }
 }
@@ -69,5 +82,7 @@ mod tests {
         assert!(s.sources().contains("cam"));
         assert!(s.summary().contains("main"));
         assert!(s.summary().contains("1 sources"));
+        s.set_audio("mic");
+        assert!(s.summary().contains("audio mic"));
     }
 }

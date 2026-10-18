@@ -316,6 +316,9 @@ fn main() {
     let name = sources.names().get(sources.active_index()).copied().unwrap_or("");
     status.set_active_source(name);
     println!("status active: {}", status.summary().contains(&format!("active={}", name)));
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with active");
     if let Some(src) = sources.active() {
         if let Some(f) = src.frame() {
             let lb = File::create("list.avbn").expect("lb");

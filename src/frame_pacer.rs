@@ -60,6 +60,11 @@ impl FramePacer {
         delta <= target * fraction
     }
 
+    /// Measured minus target. Positive means faster.
+    pub fn delta(target: f32, measured: f32) -> f32 {
+        measured - target
+    }
+
     /// Collect up to n frames, waiting for the pacer between each.
     /// Stops early if the source returns None.
     pub fn collect(
@@ -106,5 +111,6 @@ mod tests {
         assert_eq!(frames.len(), 3);
         assert!(FramePacer::hit(30.0, 31.0, 0.1));
         assert!(!FramePacer::hit(30.0, 10.0, 0.1));
+        assert!((FramePacer::delta(30.0, 40.0) - 10.0).abs() < 0.1);
     }
 }

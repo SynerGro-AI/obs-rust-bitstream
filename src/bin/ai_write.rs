@@ -313,6 +313,7 @@ fn main() {
     println!("active frame: {}", got);
     println!("switch to file: {}", sources.switch("file"));
     println!("active now: {}", sources.active_index());
+    println!("active name: {}", sources.active_name().unwrap_or("none"));
     println!("remove file: {}", sources.remove("file"));
     println!("sources left: {}", sources.len());
     sources.clear();

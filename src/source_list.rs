@@ -38,6 +38,11 @@ impl SourceList {
         self.items.iter().any(|(n, _)| n == name)
     }
 
+    /// Count names that start with a prefix.
+    pub fn count_prefix(&self, prefix: &str) -> usize {
+        self.items.iter().filter(|(n, _)| n.starts_with(prefix)).count()
+    }
+
     /// Names in order.
     pub fn names(&self) -> Vec<&str> {
         self.items.iter().map(|(n, _)| n.as_str()).collect()
@@ -145,5 +150,5 @@ mod tests {
         assert_eq!(list2.names(), vec!["new"]);
         assert!(list2.contains("new"));
         assert!(!list2.contains("old"));
-    }
+        assert_eq!(list2.count_prefix("n"), 1);
 }

@@ -303,6 +303,9 @@ fn main() {
     sources.add("synthetic", CaptureSource::synthetic(16, 16));
     sources.add("file", CaptureSource::synthetic(8, 8));
     println!("sources: {} names={:?}", sources.len(), sources.names());
+    sources.set_active(0);
+    let got = sources.active().and_then(|s| s.frame()).is_some();
+    println!("active frame: {}", got);
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with achieved");

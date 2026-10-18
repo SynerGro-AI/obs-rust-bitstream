@@ -90,6 +90,16 @@ impl SceneList {
         }
     }
 
+    /// Apply a transition. Returns the transition if the target exists.
+    pub fn apply(&mut self, to: &str) -> Option<crate::scene_transition::SceneTransition> {
+        let from = self.active_name().unwrap_or("none").to_string();
+        if self.switch(to) {
+            Some(crate::scene_transition::SceneTransition::new(&from, to))
+        } else {
+            None
+        }
+    }
+
     /// Remove by name. Returns true if found.
     pub fn remove(&mut self, name: &str) -> bool {
         if let Some(i) = self.items.iter().position(|s| s.name() == name) {

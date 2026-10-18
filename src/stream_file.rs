@@ -18,14 +18,13 @@ impl StreamFile {
     /// Read the streaming flag. Returns None if malformed.
     pub fn streaming(buf: &[u8]) -> Option<bool> {
         let text = std::str::from_utf8(buf).ok()?;
-        if !text.starts_with("streaming=") {
-            return None;
+        if text.starts_with("streaming=true") {
+            return Some(true);
         }
-        match text.as_bytes().get(10) {
-            Some(b'1') => Some(true),
-            Some(b'0') => Some(false),
-            _ => None,
+        if text.starts_with("streaming=false") {
+            return Some(false);
         }
+        None
     }
 }
 

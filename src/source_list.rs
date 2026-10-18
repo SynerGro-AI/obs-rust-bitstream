@@ -161,4 +161,5 @@ mod tests {
         assert!(!list2.contains("old"));
         assert_eq!(list2.count_prefix("n"), 1);
         assert_eq!(list2.names_prefix("n"), vec!["new"]);
+    }
 }

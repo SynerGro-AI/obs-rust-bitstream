@@ -27,6 +27,10 @@ fn main() {
     let (audio, audio_live) = RunnerAudio::open(48000, 1);
     let abs = AudioBackendStatus::from(audio_live);
     println!("{}", abs.one_line());
+    let ap = std::path::Path::new("audio_backend.txt");
+    if std::fs::write(ap, abs.one_line()).is_ok() {
+        println!("saved={}", ap.display());
+    }
     let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV).expect("output");
     out.start();
     let out_for_stream = out.clone();

@@ -96,6 +96,11 @@ fn main() {
             if std::fs::write(pp, &pk).is_ok() {
                 if let Some(h) = PayloadDump::header(&pk) {
                     println!("packets={} packet_bytes={} saved={}", h.count, h.bytes, pp.display());
+                    if let Ok(loaded) = std::fs::read(pp) {
+                        if let Some(h2) = PayloadDump::header(&loaded) {
+                            println!("loaded_packets={} loaded_bytes={}", h2.count, h2.bytes);
+                        }
+                    }
                 }
             }
         }

@@ -32,20 +32,18 @@ impl H264Codec {
             return Err(H264Error::Size);
         }
         let mut cfg = EncoderConfig::new(width as usize, height as usize);
-        let qp = weights.get("h264.qp").unwrap_or(28.0).clamp(0.0, 51.0) as u8;
+        let defaults = crate::obs_encoder_defaults::ObsEncoderDefaults::from_weights(weights);
+        let qp = weights
+            .get("h264.qp")
+            .unwrap_or(defaults.crf as f32)
+            .clamp(0.0, 51.0) as u8;
         cfg.qp = qp;
-        let br = weights.get("h264.bitrate").unwrap_or(0.0);
-        if br > 0.0 {
-            cfg.bitrate = br as u32;
-        }
+        cfg.bitrate = defaults.bitrate_kbps * 1000;
         let fps = weights.get("fps").unwrap_or(30.0);
         if fps > 0.0 {
             cfg.framerate = fps as f32;
         }
-        let gop = weights.get("h264.gop").unwrap_or(30.0);
-        if gop >= 1.0 {
-            cfg.gop_size = gop as u32;
-        }
+        cfg.gop_size = defaults.gop(fps as f32).max(1);
         let preset = weights.get("h264.preset").unwrap_or(1.0);
         cfg.preset = match preset as u8 {
             0 => Preset::Fast,

@@ -71,6 +71,7 @@ impl SystemStatus {
             pacing: String::new(),
             source_count: 0,
             active_source: String::new(),
+            scene_count: 0,
         }
     }
 
@@ -162,6 +163,10 @@ impl SystemStatus {
         self.active_source = name.to_string();
     }
 
+    pub fn set_scene_count(&mut self, n: usize) {
+        self.scene_count = n;
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -173,7 +178,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={} sources={} active={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={} sources={} active={} scenes={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -199,7 +204,8 @@ impl SystemStatus {
             self.achieved_fps,
             self.pacing,
             self.source_count,
-            self.active_source
+            self.active_source,
+            self.scene_count
         )
     }
 
@@ -312,6 +318,8 @@ mod tests {
         assert!(s2.summary().contains("sources=2"));
         s2.set_active_source("synthetic");
         assert!(s2.summary().contains("active=synthetic"));
+        s2.set_scene_count(2);
+        assert!(s2.summary().contains("scenes=2"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

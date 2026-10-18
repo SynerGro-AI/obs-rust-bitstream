@@ -75,6 +75,12 @@ impl SourceList {
         }
     }
 
+    /// Remove all sources.
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.active = 0;
+    }
+
     /// Active source, if any.
     pub fn active(&mut self) -> Option<&mut CaptureSource> {
         self.items.get_mut(self.active).map(|(_, s)| s)

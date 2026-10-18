@@ -276,6 +276,9 @@ fn main() {
     println!("pacer target: {} fps", pacer.target());
     status.set_target_fps(pacer.target());
     println!("status target: {}", status.summary().contains("target=30"));
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with target");
     println!("pacer ready: {}", pacer.ready());
     let mut src = CaptureSource::best();
     let mut unlimited = FramePacer::new(0.0);

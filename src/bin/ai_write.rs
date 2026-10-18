@@ -311,6 +311,8 @@ fn main() {
     sources.set_active(0);
     let got = sources.active().and_then(|s| s.frame()).is_some();
     println!("active frame: {}", got);
+    println!("switch to file: {}", sources.switch("file"));
+    println!("active now: {}", sources.active_index());
     if let Some(src) = sources.active() {
         if let Some(f) = src.frame() {
             let lb = File::create("list.avbn").expect("lb");

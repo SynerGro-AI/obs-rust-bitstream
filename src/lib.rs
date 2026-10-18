@@ -408,6 +408,7 @@ pub mod output_info;
 pub mod output_feed;
 pub mod av_tick;
 pub mod capture_tick;
+pub mod tick_status;
 pub mod encoder_packet;
 pub mod frame_clock;
 pub mod instant_replay;
@@ -731,6 +732,7 @@ pub use output_info::{OutputInfo, OUTPUT_AUDIO, OUTPUT_AV, OUTPUT_ENCODED, OUTPU
 pub use output_feed::OutputFeed;
 pub use av_tick::AvTick;
 pub use capture_tick::CaptureTick;
+pub use tick_status::TickStatus;
 pub use encoder_packet::{EncoderPacket, InterleaveQueue};
 pub use frame_clock::FrameClock;
 pub use instant_replay::InstantReplay;

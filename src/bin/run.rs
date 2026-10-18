@@ -116,6 +116,10 @@ fn main() {
                             let rc = Reconnect::new();
                             let rs = RtmpReconnectStatus::from(&st, &rc);
                             println!("rtmp_retry {}", rs.one_line());
+                            let rp = std::path::Path::new("rtmp_retry.txt");
+                            if std::fs::write(rp, rs.one_line()).is_ok() {
+                                println!("saved={}", rp.display());
+                            }
                         }
                     }
                 }

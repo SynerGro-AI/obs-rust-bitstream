@@ -26,6 +26,7 @@ mod tests {
     use crate::keyframe_status::KeyframeStatus;
     use crate::output_pause::OutputPause;
 use crate::av_status::AvStatus;
+use crate::service_status::ServiceStatus;
     use crate::path_status::PathStatus;
     use crate::reconnect::Reconnect;
     use crate::roi_status::RoiStatus;
@@ -53,6 +54,7 @@ use crate::av_status::AvStatus;
             &Reconnect::new(),
             &OutputPause::new(),
             &AvStatus { pixels: 0, rate: 0, channels: 0, matches: true },
+            &ServiceStatus { name: String::new(), id: String::new() },
         )
     }
 

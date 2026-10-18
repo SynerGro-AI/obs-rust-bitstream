@@ -1,10 +1,10 @@
-//! Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause + av).
+//! Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause + av + service).
 //!
 //! One line of held, dropped, latency, keyframe done, caption lines,
-//! ROI count, reconnect attempts, pause state, and AV match.
+//! ROI count, reconnect attempts, pause state, AV match, and service name.
 //! No unwraps.
 //!
-//! Differential: a mismatch reports matches=false.
+//! Differential: a different service name produces a different line.
 
 use crate::av_status::AvStatus;
 use crate::caption_status::CaptionStatus;
@@ -13,6 +13,7 @@ use crate::output_pause::OutputPause;
 use crate::path_status::PathStatus;
 use crate::reconnect::Reconnect;
 use crate::roi_status::RoiStatus;
+use crate::service_status::ServiceStatus;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FullStatus {
@@ -26,10 +27,11 @@ pub struct FullStatus {
     pub attempts: u32,
     pub paused: bool,
     pub av_matches: bool,
+    pub service_name: String,
 }
 
 impl FullStatus {
-    /// Build from the path, keyframe, caption, ROI, reconnect, pause, and AV.
+    /// Build from the path, keyframe, caption, ROI, reconnect, pause, AV, and service.
     pub fn from(
         path: &PathStatus,
         keyframe: &KeyframeStatus,
@@ -38,6 +40,7 @@ impl FullStatus {
         reconnect: &Reconnect,
         pause: &OutputPause,
         av: &AvStatus,
+        service: &ServiceStatus,
     ) -> Self {
         Self {
             held: path.held,
@@ -50,13 +53,14 @@ impl FullStatus {
             attempts: reconnect.attempts(),
             paused: pause.is_paused(),
             av_matches: av.matches,
+            service_name: service.name.clone(),
         }
     }
 
-    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N attempts=N paused=true/false av_matches=true/false"
+    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N attempts=N paused=true/false av_matches=true/false service=N"
     pub fn one_line(&self) -> String {
         format!(
-            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={} attempts={} paused={} av_matches={}",
+            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={} attempts={} paused={} av_matches={} service={}",
             self.held,
             self.dropped,
             self.latency_ns,
@@ -66,7 +70,8 @@ impl FullStatus {
             self.roi_count,
             self.attempts,
             self.paused,
-            self.av_matches
+            self.av_matches,
+            self.service_name
         )
     }
 }
@@ -113,12 +118,17 @@ mod tests {
             channels: 0,
             matches: true,
         };
-        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av);
+        let svc = ServiceStatus {
+            name: "twitch".to_string(),
+            id: "rtmp_common".to_string(),
+        };
+        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av, &svc);
         assert_eq!(s.held, 1);
         assert_eq!(s.attempts, 1);
         assert!(s.paused);
         assert!(s.av_matches);
-        assert!(s.one_line().contains("av_matches=true"));
+        assert_eq!(s.service_name, "twitch");
+        assert!(s.one_line().contains("service=twitch"));
     }
 
     #[test]
@@ -149,10 +159,15 @@ mod tests {
             channels: 0,
             matches: false,
         };
-        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av);
+        let svc = ServiceStatus {
+            name: String::new(),
+            id: String::new(),
+        };
+        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av, &svc);
         assert_eq!(s.held, 0);
         assert!(!s.paused);
         assert!(!s.av_matches);
+        assert_eq!(s.service_name, "");
     }
 
     #[test]
@@ -199,8 +214,12 @@ mod tests {
             channels: 0,
             matches: true,
         };
-        let sa = FullStatus::from(&p, &k, &c, &r, &rc, &unpaused, &av_a);
-        let sb = FullStatus::from(&p, &k, &c, &r, &rc, &paused, &av_b);
+        let svc = ServiceStatus {
+            name: String::new(),
+            id: String::new(),
+        };
+        let sa = FullStatus::from(&p, &k, &c, &r, &rc, &unpaused, &av_a, &svc);
+        let sb = FullStatus::from(&p, &k, &c, &r, &rc, &paused, &av_b, &svc);
         assert!(!sa.paused);
         assert!(sb.paused);
         assert!(!sa.av_matches);

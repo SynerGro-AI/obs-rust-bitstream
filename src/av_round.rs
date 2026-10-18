@@ -7,6 +7,7 @@
 
 use crate::av_file::AvFile;
 use crate::av_status::AvStatus;
+use crate::service_status::ServiceStatus;
 use crate::full_status::FullStatus;
 use crate::status_file::StatusFile;
 use crate::status_read::StatusRead;
@@ -32,7 +33,7 @@ mod tests {
     use crate::output_pause::OutputPause;
     use crate::path_status::PathStatus;
     use crate::reconnect::Reconnect;
-    use crate::roi_status::RoiStatus;
+    use crate::service_status::ServiceStatus;
 
     fn status(held: usize) -> FullStatus {
         FullStatus::from(
@@ -61,6 +62,10 @@ mod tests {
                 rate: 0,
                 channels: 0,
                 matches: true,
+            },
+            &ServiceStatus {
+                name: String::new(),
+                id: String::new(),
             },
         )
     }

@@ -19,6 +19,10 @@ pub struct EncoderPacket {
     pub kind: EncoderType,
     pub keyframe: bool,
     pub track_idx: usize,
+    /// Packet priority. Higher means more important.
+    pub priority: i32,
+    /// If this packet is dropped, the next must be this priority or higher.
+    pub drop_priority: i32,
 }
 
 impl EncoderPacket {
@@ -32,6 +36,8 @@ impl EncoderPacket {
             kind,
             keyframe: false,
             track_idx: 0,
+            priority: 0,
+            drop_priority: 0,
         }
     }
 
@@ -42,6 +48,16 @@ impl EncoderPacket {
 
     pub fn track(mut self, idx: usize) -> Self {
         self.track_idx = idx;
+        self
+    }
+
+    pub fn priority(mut self, p: i32) -> Self {
+        self.priority = p;
+        self
+    }
+
+    pub fn drop_priority(mut self, p: i32) -> Self {
+        self.drop_priority = p;
         self
     }
 }
@@ -88,6 +104,15 @@ impl InterleaveQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn priority_set() {
+        let p = EncoderPacket::new(EncoderType::Video, 0, 0, vec![1])
+            .priority(5)
+            .drop_priority(2);
+        assert_eq!(p.priority, 5);
+        assert_eq!(p.drop_priority, 2);
+    }
 
     #[test]
     fn packet_fields() {

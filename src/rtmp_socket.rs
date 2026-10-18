@@ -58,7 +58,18 @@ impl RtmpSocket {
             reconnect.start();
             SocketError::Write
         })?;
-        let mut total = handshake.len() as u64;
+        let connect = crate::rtmp_connect::RtmpConnect::body("live");
+        let connect_chunk = crate::rtmp_chunk::RtmpChunk::wrap(
+            3,
+            20, // AMF0 command
+            0,
+            &connect,
+        );
+        stream.write_all(&connect_chunk).map_err(|_| {
+            reconnect.start();
+            SocketError::Write
+        })?;
+        let mut total = (handshake.len() + connect_chunk.len()) as u64;
         let mut count = 0usize;
         for (i, data) in packets.iter().enumerate() {
             let chunk = crate::rtmp_chunk::RtmpChunk::wrap(

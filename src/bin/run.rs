@@ -132,11 +132,15 @@ fn main() {
                                     std::thread::spawn(move || {
                                         let _ = listener.accept();
                                     });
+                                    std::thread::sleep(std::time::Duration::from_millis(20));
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
                                         Ok(sent) => println!(
-                                            "socket active={} packets={} bytes={}",
-                                            sent.active, sent.packets, sent.bytes
+                                            "socket active={} packets={} bytes={} handshake={}",
+                                            sent.active,
+                                            sent.packets,
+                                            sent.bytes,
+                                            obs_rust_bitstream::RTMP_C1_SIZE + 1
                                         ),
                                         Err(_) => println!("socket attempts={}", rc.attempts()),
                                     }

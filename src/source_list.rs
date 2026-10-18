@@ -145,4 +145,5 @@ mod tests {
         assert_eq!(list2.names(), vec!["new"]);
         assert!(list2.contains("new"));
         assert!(!list2.contains("old"));
+    }
 }

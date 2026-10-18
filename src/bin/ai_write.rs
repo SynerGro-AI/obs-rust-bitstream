@@ -346,6 +346,9 @@ fn main() {
     println!("transition: {}", t.summary());
     status.set_transition(&t.summary());
     println!("status transition: {}", status.summary().contains("transition="));
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with transition");
     println!("scene summaries: {:?}", scenes.summaries());
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");

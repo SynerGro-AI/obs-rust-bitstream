@@ -7,7 +7,7 @@ use obs_rust_bitstream::{
     AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, H264Codec,
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
-    StreamStatus, SyntheticCapture, PayloadDump, OUTPUT_AV,
+    StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, OUTPUT_AV,
 };
 
 fn main() {
@@ -99,6 +99,9 @@ fn main() {
                     if let Ok(loaded) = std::fs::read(pp) {
                         if let Some(h2) = PayloadDump::header(&loaded) {
                             println!("loaded_packets={} loaded_bytes={}", h2.count, h2.bytes);
+                        }
+                        if let Ok(st) = RtmpOutput::send("live.twitch.tv", "demo", &loaded) {
+                            println!("rtmp {}", st.one_line());
                         }
                     }
                 }

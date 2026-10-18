@@ -4,10 +4,10 @@
 //! Prints the run header and a one-line FullStatus.
 
 use obs_rust_bitstream::{
-    AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, KeyframeStatus,
-    LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
+    AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, H264Codec,
+    KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
-    StreamStatus, SyntheticCapture, OUTPUT_AV,
+    StreamStatus, SyntheticCapture, PayloadDump, OUTPUT_AV,
 };
 
 fn main() {
@@ -88,6 +88,16 @@ fn main() {
         let path = std::path::Path::new("stream_status.txt");
         if std::fs::write(path, ss.one_line()).is_ok() {
             println!("saved={}", path.display());
+        }
+        let mut codec = H264Codec::new(64, 64, &w2).expect("codec");
+        let mut cap2 = SyntheticCapture::new(64, 64);
+        if let Ok(pk) = PayloadDump::write(&mut codec, &mut cap2, 8) {
+            let pp = std::path::Path::new("stream_packets.bin");
+            if std::fs::write(pp, &pk).is_ok() {
+                if let Some(h) = PayloadDump::header(&pk) {
+                    println!("packets={} packet_bytes={} saved={}", h.count, h.bytes, pp.display());
+                }
+            }
         }
     }
 }

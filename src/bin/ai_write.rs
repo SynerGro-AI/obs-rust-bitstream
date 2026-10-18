@@ -341,6 +341,25 @@ fn main() {
     println!("scenes left: {}", scenes.len());
     scenes.clear();
     println!("scenes cleared: {}", scenes.is_empty());
+    let mut live = Scene::new("live");
+    live.add("cam", CaptureSource::synthetic(16, 16));
+    if let Some(src) = live.sources_mut().active() {
+        if let Some(f) = src.frame() {
+            let sb = File::create("scene.avbn").expect("sb");
+            let ss = File::create("scene_status.txt").expect("ss");
+            let _ = EffectedWrite::write_stamped_bundle(
+                &[f],
+                30.0,
+                &controls,
+                &mut weights,
+                &sync,
+                sb,
+                ss,
+            );
+            let sz = std::fs::metadata("scene.avbn").map(|m| m.len()).unwrap_or(0);
+            println!("wrote scene.avbn ({} bytes)", sz);
+        }
+    }
     status.set_active_scene(scenes.active_name().unwrap_or("none"));
     println!("status scene: {}", status.summary().contains("scene=break"));
     let final_status = File::create("status.txt").expect("final");

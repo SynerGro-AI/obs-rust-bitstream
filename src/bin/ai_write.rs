@@ -313,6 +313,8 @@ fn main() {
     println!("active frame: {}", got);
     println!("switch to file: {}", sources.switch("file"));
     println!("active now: {}", sources.active_index());
+    println!("remove file: {}", sources.remove("file"));
+    println!("sources left: {}", sources.len());
     let name = sources.names().get(sources.active_index()).copied().unwrap_or("");
     status.set_active_source(name);
     println!("status active: {}", status.summary().contains(&format!("active={}", name)));

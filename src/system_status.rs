@@ -34,6 +34,7 @@ pub struct SystemStatus {
     pub healthy: bool,
     pub target_fps: f32,
     pub hit_target: bool,
+    pub achieved_fps: f32,
 }
 
 impl SystemStatus {
@@ -63,6 +64,7 @@ impl SystemStatus {
             healthy: false,
             target_fps: 0.0,
             hit_target: false,
+            achieved_fps: 0.0,
         }
     }
 
@@ -136,6 +138,12 @@ impl SystemStatus {
         self.hit_target = hit;
     }
 
+    pub fn set_achieved_fps(&mut self, fps: f32) {
+        if fps >= 0.0 {
+            self.achieved_fps = fps;
+        }
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -147,7 +155,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -169,7 +177,8 @@ impl SystemStatus {
             self.recommendation,
             self.healthy,
             self.target_fps,
-            self.hit_target
+            self.hit_target,
+            self.achieved_fps
         )
     }
 
@@ -274,6 +283,8 @@ mod tests {
         assert!(s2.summary().contains("target=30"));
         s2.set_hit_target(true);
         assert!(s2.summary().contains("hit=true"));
+        s2.set_achieved_fps(29.5);
+        assert!(s2.summary().contains("achieved=30"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

@@ -8,7 +8,8 @@ use obs_rust_bitstream::{
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
-    CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket, OUTPUT_AV,
+    CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
+    RtmpOpenStatus, OUTPUT_AV,
 };
 
 fn main() {
@@ -135,15 +136,17 @@ fn main() {
                                         let _ = listener.accept();
                                     });
                                     let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
+                                    std::thread::sleep(std::time::Duration::from_millis(30));
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
-                                        Ok(sent) => println!(
-                                            "socket active={} packets={} bytes={} handshake={} connect=1 create=1 publish=1",
-                                            sent.active,
-                                            sent.packets,
-                                            sent.bytes,
-                                            obs_rust_bitstream::RTMP_C1_SIZE + 1
-                                        ),
+                                        Ok(sent) => {
+                                            let open = RtmpOpenStatus::from(sent.bytes);
+                                            println!("{}", open.one_line());
+                                            let op = std::path::Path::new("rtmp_open.txt");
+                                            if std::fs::write(op, open.one_line()).is_ok() {
+                                                println!("saved={}", op.display());
+                                            }
+                                        }
                                         Err(_) => println!("socket attempts={}", rc.attempts()),
                                     }
                                 }

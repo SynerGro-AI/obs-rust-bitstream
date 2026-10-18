@@ -49,6 +49,16 @@ impl SceneList {
         self.active
     }
 
+    /// Switch to the scene named. Returns true if found.
+    pub fn switch(&mut self, name: &str) -> bool {
+        if let Some(i) = self.items.iter().position(|s| s.name() == name) {
+            self.active = i;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Active scene, if any.
     pub fn active(&mut self) -> Option<&mut Scene> {
         self.items.get_mut(self.active)
@@ -80,5 +90,8 @@ mod tests {
         assert!(list.find("b").is_some());
         list.set_active(1);
         assert_eq!(list.active_index(), 1);
+        assert!(list.switch("a"));
+        assert_eq!(list.active_index(), 0);
+        assert!(!list.switch("missing"));
     }
 }

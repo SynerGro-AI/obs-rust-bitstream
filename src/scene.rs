@@ -44,6 +44,16 @@ impl Scene {
     pub fn is_empty(&self) -> bool {
         self.sources.is_empty()
     }
+
+    /// One line for the scene.
+    pub fn summary(&self) -> String {
+        format!(
+            "{} | {} sources | active {}",
+            self.name,
+            self.len(),
+            self.sources.active_name().unwrap_or("none")
+        )
+    }
 }
 
 #[cfg(test)]
@@ -57,5 +67,7 @@ mod tests {
         s.add("cam", CaptureSource::synthetic(16, 16));
         assert_eq!(s.len(), 1);
         assert!(s.sources().contains("cam"));
+        assert!(s.summary().contains("main"));
+        assert!(s.summary().contains("1 sources"));
     }
 }

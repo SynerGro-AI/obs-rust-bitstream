@@ -86,6 +86,16 @@ impl SourceList {
         self.active = 0;
     }
 
+    /// Rename a source. Returns true if found.
+    pub fn rename(&mut self, from: &str, to: &str) -> bool {
+        if let Some(i) = self.items.iter().position(|(n, _)| n == from) {
+            self.items[i].0 = to.to_string();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Active source, if any.
     pub fn active(&mut self) -> Option<&mut CaptureSource> {
         self.items.get_mut(self.active).map(|(_, s)| s)
@@ -124,5 +134,9 @@ mod tests {
         assert!(list.remove("b"));
         assert_eq!(list.len(), 1);
         assert!(!list.remove("missing"));
+        let mut list2 = SourceList::new();
+        list2.add("old", CaptureSource::synthetic(4, 4));
+        assert!(list2.rename("old", "new"));
+        assert_eq!(list2.names(), vec!["new"]);
     }
 }

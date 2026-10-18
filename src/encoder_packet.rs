@@ -7,11 +7,7 @@
 //!
 //! Differential: two packets with different dts sort.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EncoderType {
-    Video,
-    Audio,
-}
+use crate::encoder_context::EncoderType;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EncoderPacket {

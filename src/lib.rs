@@ -724,7 +724,7 @@ pub use program_stream::{ProgramStream, StreamError};
 pub use virtual_camera::VirtualCamera;
 pub use output_bus::OutputBus;
 pub use output_info::{OutputInfo, OUTPUT_AUDIO, OUTPUT_AV, OUTPUT_ENCODED, OUTPUT_MULTI_TRACK, OUTPUT_SERVICE, OUTPUT_VIDEO};
-pub use encoder_packet::{EncoderPacket, EncoderType, InterleaveQueue};
+pub use encoder_packet::{EncoderPacket, InterleaveQueue};
 pub use frame_clock::FrameClock;
 pub use instant_replay::InstantReplay;
 pub use replay_save::{ReplaySave, SaveError, SaveFormat};

@@ -43,8 +43,27 @@ impl LiveWeights {
         Ok(next)
     }
 
-    pub fn remove(&mut self, name: &str) -> bool {
-        self.values.remove(name).is_some()
+    /// Merge lessons into the existing weights.
+    /// Only inserts keys that are not already present.
+    /// Existing values are never overwritten.
+    /// Empty names are skipped. Returns the number of new keys added.
+    pub fn merge_lessons(&mut self, lessons: &[(&str, f32)]) -> usize {
+        let mut added = 0;
+        for (name, value) in lessons {
+            if name.is_empty() {
+                continue;
+            }
+            if !self.values.contains_key(*name) {
+                self.values.insert((*name).to_string(), *value);
+                added += 1;
+            }
+        }
+        added
+    }
+
+    /// True if the name already exists.
+    pub fn contains(&self, name: &str) -> bool {
+        self.values.contains_key(name)
     }
 
     pub fn names(&self) -> Vec<&str> {
@@ -69,6 +88,21 @@ mod tests {
         let mut w = LiveWeights::new();
         assert!(w.set("", 1.0).is_err());
         assert!(w.get("missing").is_err());
+    }
+
+    #[test]
+    fn merge_adds_only_new() {
+        let mut w = LiveWeights::new();
+        w.set("glow", 0.5).unwrap();
+        let added = w.merge_lessons(&[
+            ("glow", 0.9),
+            ("blur", 0.3),
+            ("", 1.0),
+        ]);
+        assert_eq!(added, 1);
+        assert_eq!(w.get("glow").unwrap(), 0.5);
+        assert_eq!(w.get("blur").unwrap(), 0.3);
+        assert!(!w.contains(""));
     }
 
     #[test]

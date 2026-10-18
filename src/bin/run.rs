@@ -8,7 +8,7 @@ use obs_rust_bitstream::{
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
-    CaptureSource, OUTPUT_AV,
+    CaptureSource, RtmpReconnectStatus, OUTPUT_AV,
 };
 
 fn main() {
@@ -113,6 +113,9 @@ fn main() {
                         }
                         if let Ok(st) = RtmpOutput::send("live.twitch.tv", "demo", &loaded) {
                             println!("rtmp {}", st.one_line());
+                            let rc = Reconnect::new();
+                            let rs = RtmpReconnectStatus::from(&st, &rc);
+                            println!("rtmp_retry {}", rs.one_line());
                         }
                     }
                 }

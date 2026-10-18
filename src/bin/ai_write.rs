@@ -314,13 +314,12 @@ fn main() {
     println!("switch to file: {}", sources.switch("file"));
     println!("active now: {}", sources.active_index());
     println!("active name: {}", sources.active_name().unwrap_or("none"));
+    status.set_active_source(sources.active_name().unwrap_or("none"));
     println!("remove file: {}", sources.remove("file"));
     println!("sources left: {}", sources.len());
     sources.clear();
     println!("cleared: {}", sources.is_empty());
-    let name = sources.names().get(sources.active_index()).copied().unwrap_or("");
-    status.set_active_source(name);
-    println!("status active: {}", status.summary().contains(&format!("active={}", name)));
+    println!("status active: {}", status.summary().contains("active=file"));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with active");

@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::source_list::SourceList;
 use obs_rust_bitstream::frame_pacer::FramePacer;
 use obs_rust_bitstream::status_report::StatusReport;
 use obs_rust_bitstream::status_history::StatusHistory;
@@ -298,6 +299,10 @@ fn main() {
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with pacing");
+    let mut sources = SourceList::new();
+    sources.add("synthetic", CaptureSource::synthetic(16, 16));
+    sources.add("file", CaptureSource::synthetic(8, 8));
+    println!("sources: {} names={:?}", sources.len(), sources.names());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with achieved");

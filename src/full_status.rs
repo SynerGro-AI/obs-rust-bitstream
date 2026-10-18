@@ -1,10 +1,12 @@
-//! Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause).
+//! Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause + av).
 //!
 //! One line of held, dropped, latency, keyframe done, caption lines,
-//! ROI count, reconnect attempts, and pause state. No unwraps.
+//! ROI count, reconnect attempts, pause state, and AV match.
+//! No unwraps.
 //!
-//! Differential: a paused output reports paused=true.
+//! Differential: a mismatch reports matches=false.
 
+use crate::av_status::AvStatus;
 use crate::caption_status::CaptionStatus;
 use crate::keyframe_status::KeyframeStatus;
 use crate::output_pause::OutputPause;
@@ -23,10 +25,11 @@ pub struct FullStatus {
     pub roi_count: usize,
     pub attempts: u32,
     pub paused: bool,
+    pub av_matches: bool,
 }
 
 impl FullStatus {
-    /// Build from the path, keyframe, caption, ROI, reconnect, and pause.
+    /// Build from the path, keyframe, caption, ROI, reconnect, pause, and AV.
     pub fn from(
         path: &PathStatus,
         keyframe: &KeyframeStatus,
@@ -34,6 +37,7 @@ impl FullStatus {
         roi: &RoiStatus,
         reconnect: &Reconnect,
         pause: &OutputPause,
+        av: &AvStatus,
     ) -> Self {
         Self {
             held: path.held,
@@ -45,13 +49,14 @@ impl FullStatus {
             roi_count: roi.count,
             attempts: reconnect.attempts(),
             paused: pause.is_paused(),
+            av_matches: av.matches,
         }
     }
 
-    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N attempts=N paused=true/false"
+    /// One line: "held=N dropped=N latency=N kf_done=N kf_complete=true/false captions=N roi=N attempts=N paused=true/false av_matches=true/false"
     pub fn one_line(&self) -> String {
         format!(
-            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={} attempts={} paused={}",
+            "held={} dropped={} latency={} kf_done={} kf_complete={} captions={} roi={} attempts={} paused={} av_matches={}",
             self.held,
             self.dropped,
             self.latency_ns,
@@ -60,7 +65,8 @@ impl FullStatus {
             self.caption_lines,
             self.roi_count,
             self.attempts,
-            self.paused
+            self.paused,
+            self.av_matches
         )
     }
 }
@@ -101,11 +107,18 @@ mod tests {
         )
         .unwrap();
         pause.start(&out, 0).unwrap();
-        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause);
+        let av = AvStatus {
+            pixels: 0,
+            rate: 0,
+            channels: 0,
+            matches: true,
+        };
+        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av);
         assert_eq!(s.held, 1);
         assert_eq!(s.attempts, 1);
         assert!(s.paused);
-        assert!(s.one_line().contains("paused=true"));
+        assert!(s.av_matches);
+        assert!(s.one_line().contains("av_matches=true"));
     }
 
     #[test]
@@ -130,9 +143,16 @@ mod tests {
         };
         let rc = Reconnect::new();
         let pause = OutputPause::new();
-        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause);
+        let av = AvStatus {
+            pixels: 0,
+            rate: 0,
+            channels: 0,
+            matches: false,
+        };
+        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av);
         assert_eq!(s.held, 0);
         assert!(!s.paused);
+        assert!(!s.av_matches);
     }
 
     #[test]
@@ -167,9 +187,23 @@ mod tests {
         )
         .unwrap();
         paused.start(&out, 0).unwrap();
-        let sa = FullStatus::from(&p, &k, &c, &r, &rc, &unpaused);
-        let sb = FullStatus::from(&p, &k, &c, &r, &rc, &paused);
+        let av_a = AvStatus {
+            pixels: 0,
+            rate: 0,
+            channels: 0,
+            matches: false,
+        };
+        let av_b = AvStatus {
+            pixels: 0,
+            rate: 0,
+            channels: 0,
+            matches: true,
+        };
+        let sa = FullStatus::from(&p, &k, &c, &r, &rc, &unpaused, &av_a);
+        let sb = FullStatus::from(&p, &k, &c, &r, &rc, &paused, &av_b);
         assert!(!sa.paused);
         assert!(sb.paused);
+        assert!(!sa.av_matches);
+        assert!(sb.av_matches);
     }
 }

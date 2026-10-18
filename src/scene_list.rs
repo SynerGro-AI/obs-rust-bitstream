@@ -149,6 +149,9 @@ mod tests {
         assert!(list.switch("a"));
         assert_eq!(list.active_index(), 0);
         assert!(!list.switch("missing"));
+        let t = list.apply("b");
+        assert!(t.is_some());
+        assert!(t.unwrap().summary().contains("a -> b"));
         assert!(list.remove("b"));
         assert_eq!(list.len(), 1);
         list.clear();

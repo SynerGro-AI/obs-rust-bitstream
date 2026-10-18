@@ -132,7 +132,7 @@ fn main() {
                                     std::thread::spawn(move || {
                                         let _ = listener.accept();
                                     });
-                                    std::thread::sleep(std::time::Duration::from_millis(20));
+                                    std::thread::sleep(std::time::Duration::from_millis(50));
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
                                         Ok(sent) => println!(

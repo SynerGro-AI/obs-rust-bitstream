@@ -344,6 +344,8 @@ fn main() {
     println!("wrote status.txt with scene sum");
     let t = SceneTransition::new("main", "break");
     println!("transition: {}", t.summary());
+    status.set_transition(&t.summary());
+    println!("status transition: {}", status.summary().contains("transition="));
     println!("scene summaries: {:?}", scenes.summaries());
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");

@@ -8,7 +8,7 @@ use obs_rust_bitstream::{
     KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
-    CaptureSource, RtmpReconnectStatus, RunnerAudio, OUTPUT_AV,
+    CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, OUTPUT_AV,
 };
 
 fn main() {
@@ -25,11 +25,8 @@ fn main() {
         CaptureSource::Platform(c) => c,
     };
     let (audio, audio_live) = RunnerAudio::open(48000, 1);
-    println!(
-        "audio_live={} audio_backend={}",
-        audio_live,
-        obs_rust_bitstream::backend_name()
-    );
+    let abs = AudioBackendStatus::from(audio_live);
+    println!("{}", abs.one_line());
     let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV).expect("output");
     out.start();
     let out_for_stream = out.clone();

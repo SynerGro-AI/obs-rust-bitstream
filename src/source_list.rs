@@ -6,7 +6,6 @@
 
 use crate::capture_select::CaptureSource;
 
-#[derive(Clone, Debug)]
 pub struct SourceList {
     items: Vec<(String, CaptureSource)>,
     active: usize,

@@ -132,11 +132,11 @@ fn main() {
                                     std::thread::spawn(move || {
                                         let _ = listener.accept();
                                     });
-                                    std::thread::sleep(std::time::Duration::from_millis(50));
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
                                         Ok(sent) => println!(
-                                            "socket active={} packets={} bytes={} handshake={} connect=1",
+                                            "socket active={} packets={} bytes={} handshake={} connect=1 create=1 publish=1",
                                             sent.active,
                                             sent.packets,
                                             sent.bytes,

@@ -80,5 +80,8 @@ mod tests {
         assert!(list.find("b").is_some());
         list.set_active(1);
         assert_eq!(list.active_index(), 1);
+        assert!(list.switch("a"));
+        assert_eq!(list.active_index(), 0);
+        assert!(!list.switch("missing"));
     }
 }

@@ -50,6 +50,11 @@ impl SceneList {
         Ok(buf.lines().filter(|l| !l.is_empty()).map(|s| s.to_string()).collect())
     }
 
+    /// True if the loaded summaries match.
+    pub fn matches_summaries(&self, loaded: &[String]) -> bool {
+        self.summaries() == loaded
+    }
+
     /// Set the active index. Clamped.
     pub fn set_active(&mut self, i: usize) {
         if !self.items.is_empty() {

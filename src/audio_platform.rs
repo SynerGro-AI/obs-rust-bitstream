@@ -10,8 +10,8 @@
 use crate::audio_capture::{AudioCapture, AudioSamples, SyntheticAudio};
 
 /// Open the default microphone for this platform.
-/// On Linux this attempts ALSA. On Windows this would open WASAPI.
-/// On macOS/iOS this would open AVAudio.
+/// On Linux this attempts ALSA. On Windows this attempts WASAPI.
+/// On macOS/iOS this attempts CoreAudio.
 /// Returns a clear error if the backend is not present.
 pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
     #[cfg(target_os = "linux")]
@@ -21,11 +21,13 @@ pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
     }
     #[cfg(windows)]
     {
-        Err("Windows WASAPI audio capture not yet wired".to_string())
+        crate::windows_audio::WindowsAudio::open(48000, 2)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
-        Err("Apple AVAudio capture not yet wired".to_string())
+        crate::apple_audio::AppleAudio::open(48000, 2)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
     }
     #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
     {

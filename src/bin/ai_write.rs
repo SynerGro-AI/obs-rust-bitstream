@@ -274,6 +274,8 @@ fn main() {
     println!("wrote report.json");
     let mut pacer = FramePacer::new(30.0);
     println!("pacer target: {} fps", pacer.target());
+    status.set_target_fps(pacer.target());
+    println!("status target: {}", status.summary().contains("target=30"));
     println!("pacer ready: {}", pacer.ready());
     let mut src = CaptureSource::best();
     let mut unlimited = FramePacer::new(0.0);

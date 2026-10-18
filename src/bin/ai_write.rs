@@ -277,6 +277,8 @@ fn main() {
     status.set_target_fps(pacer.target());
     println!("status target: {}", status.summary().contains("target=30"));
     println!("hit target: {}", FramePacer::hit(30.0, rate, 0.5));
+    status.set_hit_target(FramePacer::hit(30.0, rate, 0.5));
+    println!("status hit: {}", status.summary().contains("hit="));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with target");

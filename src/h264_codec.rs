@@ -74,6 +74,11 @@ impl H264Codec {
         Ok(self.encoder.encode(&yuv))
     }
 
+    /// Flush any buffered access units.
+    pub fn flush(&mut self) -> Vec<u8> {
+        self.encoder.flush()
+    }
+
     /// Encode one Y800 frame to an EncoderPacket.
     /// pts and dts are set to the supplied timestamp.
     /// Returns None if the encoder yields no bytes.

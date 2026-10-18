@@ -33,6 +33,7 @@ pub struct SystemStatus {
     pub recommendation: String,
     pub healthy: bool,
     pub target_fps: f32,
+    pub hit_target: bool,
 }
 
 impl SystemStatus {
@@ -130,6 +131,10 @@ impl SystemStatus {
         }
     }
 
+    pub fn set_hit_target(&mut self, hit: bool) {
+        self.hit_target = hit;
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -141,7 +146,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -162,7 +167,8 @@ impl SystemStatus {
             self.bottleneck,
             self.recommendation,
             self.healthy,
-            self.target_fps
+            self.target_fps,
+            self.hit_target
         )
     }
 
@@ -265,6 +271,8 @@ mod tests {
         assert!(s2.summary().contains("healthy=true"));
         s2.set_target_fps(30.0);
         assert!(s2.summary().contains("target=30"));
+        s2.set_hit_target(true);
+        assert!(s2.summary().contains("hit=true"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

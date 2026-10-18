@@ -339,6 +339,8 @@ fn main() {
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");
     println!("wrote scenes.txt");
+    let loaded = SceneList::read_summaries(File::open("scenes.txt").expect("open")).unwrap_or_default();
+    println!("loaded scenes: {}", loaded.len());
     println!("switch to break: {}", scenes.switch("break"));
     println!("active scene: {}", scenes.active_index());
     println!("scene name: {}", scenes.active_name().unwrap_or("none"));

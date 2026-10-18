@@ -319,6 +319,9 @@ fn main() {
     println!("sources left: {}", sources.len());
     sources.clear();
     println!("cleared: {}", sources.is_empty());
+    sources.add("temp", CaptureSource::synthetic(4, 4));
+    println!("rename: {}", sources.rename("temp", "renamed"));
+    println!("names now: {:?}", sources.names());
     println!("status active: {}", status.summary().contains("active=file"));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

@@ -49,6 +49,16 @@ impl SourceList {
         self.active
     }
 
+    /// Switch to the source named. Returns true if found.
+    pub fn switch(&mut self, name: &str) -> bool {
+        if let Some(i) = self.items.iter().position(|(n, _)| n == name) {
+            self.active = i;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Active source, if any.
     pub fn active(&mut self) -> Option<&mut CaptureSource> {
         self.items.get_mut(self.active).map(|(_, s)| s)

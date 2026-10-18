@@ -5,8 +5,9 @@
 
 use obs_rust_bitstream::{
     AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, KeyframeStatus,
-    LiveWeights, OutputInfo, OutputPause, Pipeline, Reconnect, RoiStatus, Runner, RunnerDump,
-    ServiceStatus, SyntheticCapture, OUTPUT_AV,
+    LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
+    ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
+    StreamStatus, SyntheticCapture, OUTPUT_AV,
 };
 
 fn main() {
@@ -20,6 +21,7 @@ fn main() {
     let _ = audio.add("tone", AudioSource::synthetic(48000, 1));
     let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV).expect("output");
     out.start();
+    let out_for_stream = out.clone();
 
     let mut runner = Runner::new(pipe, cap, audio, out);
     let buf = RunnerDump::run_and_write(&mut runner, 8).expect("dump");
@@ -63,4 +65,25 @@ fn main() {
         header.frames, header.bytes
     );
     println!("{}", status.one_line());
+
+    let mut stream = ProgramStream::new();
+    let mut svc = OutputService::new();
+    let mut w2 = LiveWeights::new();
+    if let Ok(defaults) = StreamStart::start(
+        &mut stream,
+        &mut svc,
+        &out_for_stream,
+        &mut w2,
+        "file",
+        "dump",
+    ) {
+        let ss = StreamStatus::from(&stream, &ServiceStatus::from(&svc), &defaults);
+        println!("{}", ss.one_line());
+        println!(
+            "obs_bitrate={} obs_crf={} obs_preset={}",
+            ObsEncoderDefaults::default().bitrate_kbps,
+            ObsEncoderDefaults::default().crf,
+            ObsEncoderDefaults::default().preset
+        );
+    }
 }

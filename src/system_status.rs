@@ -39,6 +39,7 @@ pub struct SystemStatus {
     pub source_count: usize,
     pub active_source: String,
     pub scene_count: usize,
+    pub active_scene: String,
 }
 
 impl SystemStatus {

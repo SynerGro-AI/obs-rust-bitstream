@@ -32,6 +32,7 @@ pub struct SystemStatus {
     pub bottleneck: String,
     pub recommendation: String,
     pub healthy: bool,
+    pub target_fps: f32,
 }
 
 impl SystemStatus {
@@ -59,6 +60,7 @@ impl SystemStatus {
             bottleneck: String::new(),
             recommendation: String::new(),
             healthy: false,
+            target_fps: 0.0,
         }
     }
 
@@ -122,6 +124,12 @@ impl SystemStatus {
         self.healthy = healthy;
     }
 
+    pub fn set_target_fps(&mut self, fps: f32) {
+        if fps >= 0.0 {
+            self.target_fps = fps;
+        }
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -133,7 +141,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -153,7 +161,8 @@ impl SystemStatus {
             self.capture_faster,
             self.bottleneck,
             self.recommendation,
-            self.healthy
+            self.healthy,
+            self.target_fps
         )
     }
 
@@ -254,6 +263,8 @@ mod tests {
         assert!(s2.summary().contains("recommend=lower"));
         s2.set_healthy(true);
         assert!(s2.summary().contains("healthy=true"));
+        s2.set_target_fps(30.0);
+        assert!(s2.summary().contains("target=30"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

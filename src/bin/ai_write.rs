@@ -338,6 +338,9 @@ fn main() {
     println!("scene list: {}", scenes.summary());
     status.set_scene_summary(&scenes.summary());
     println!("status scene sum: {}", status.summary().contains("scene_sum="));
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
+    println!("wrote status.txt with scene sum");
     println!("scene summaries: {:?}", scenes.summaries());
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");

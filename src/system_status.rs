@@ -35,6 +35,7 @@ pub struct SystemStatus {
     pub target_fps: f32,
     pub hit_target: bool,
     pub achieved_fps: f32,
+    pub pacing: String,
 }
 
 impl SystemStatus {

@@ -76,6 +76,7 @@ impl SystemStatus {
             active_source: String::new(),
             scene_count: 0,
             active_scene: String::new(),
+            scene_summary: String::new(),
         }
     }
 

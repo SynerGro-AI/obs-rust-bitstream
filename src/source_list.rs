@@ -93,5 +93,8 @@ mod tests {
         assert!(list.switch("a"));
         assert_eq!(list.active_index(), 0);
         assert!(!list.switch("missing"));
+        assert!(list.remove("b"));
+        assert_eq!(list.len(), 1);
+        assert!(!list.remove("missing"));
     }
 }

@@ -85,5 +85,9 @@ fn main() {
             ObsEncoderDefaults::default().crf,
             ObsEncoderDefaults::default().preset
         );
+        let path = std::path::Path::new("stream_status.txt");
+        if std::fs::write(path, ss.one_line()).is_ok() {
+            println!("saved={}", path.display());
+        }
     }
 }

@@ -324,6 +324,7 @@ fn main() {
     println!("names now: {:?}", sources.names());
     println!("contains renamed: {}", sources.contains("renamed"));
     println!("prefix re: {}", sources.count_prefix("re"));
+    println!("names re: {:?}", sources.names_prefix("re"));
     println!("status active: {}", status.summary().contains("active=file"));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

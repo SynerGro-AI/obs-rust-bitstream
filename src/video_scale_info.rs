@@ -36,7 +36,7 @@ pub enum VideoScaleType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ScaleError {
+pub enum ScaleInfoError {
     ZeroSize,
 }
 
@@ -52,9 +52,9 @@ pub struct VideoScaleInfo {
 
 impl VideoScaleInfo {
     /// Create a scale request. Zero width or height is rejected.
-    pub fn new(format: VideoFormat, width: u32, height: u32) -> Result<Self, ScaleError> {
+    pub fn new(format: VideoFormat, width: u32, height: u32) -> Result<Self, ScaleInfoError> {
         if width == 0 || height == 0 {
-            return Err(ScaleError::ZeroSize);
+            return Err(ScaleInfoError::ZeroSize);
         }
         Ok(Self {
             format,

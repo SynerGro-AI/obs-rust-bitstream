@@ -577,7 +577,7 @@ pub use video_matrices::{ColorSpace, identity_matrix, limited_to_full_scale};
 pub use video_frame::VideoFrame;
 pub use audio_format::{AudioFormat, SpeakerLayout, audio_size};
 pub use video_scaler::{ScaleInfo, lerp_weight};
-pub use video_scale_info::{VideoScaleInfo, VideoRange, VideoColorspace, VideoScaleType, ScaleError};
+pub use video_scale_info::{VideoScaleInfo, VideoRange, VideoColorspace, VideoScaleType, ScaleInfoError};
 pub use audio_buffer::AudioBuffer;
 pub use media_timing::{sample_duration_ns, frame_duration_ns, frames_to_samples};
 pub use audio_mixer::{apply_gain, sum_buffers, peak};

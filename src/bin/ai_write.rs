@@ -297,6 +297,9 @@ fn main() {
     println!("status pacing: {}", status.summary().contains("pacing="));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
+    println!("wrote status.txt with pacing");
+    let final_status = File::create("status.txt").expect("final");
+    status.write(final_status).expect("write final");
     println!("wrote status.txt with achieved");
     let mut src = CaptureSource::best();
     let mut unlimited = FramePacer::new(0.0);

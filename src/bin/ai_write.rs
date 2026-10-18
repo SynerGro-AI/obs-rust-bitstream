@@ -276,7 +276,8 @@ fn main() {
     println!("pacer target: {} fps", pacer.target());
     println!("pacer ready: {}", pacer.ready());
     let mut src = CaptureSource::best();
-    let paced = pacer.collect(&mut src, 2);
+    let mut unlimited = FramePacer::new(0.0);
+    let paced = unlimited.collect(&mut src, 4);
     println!("paced frames: {}", paced.len());
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
     let mut cleared = history.clone();

@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::scene::Scene;
 use obs_rust_bitstream::source_list::SourceList;
 use obs_rust_bitstream::frame_pacer::FramePacer;
 use obs_rust_bitstream::status_report::StatusReport;
@@ -325,6 +326,9 @@ fn main() {
     println!("contains renamed: {}", sources.contains("renamed"));
     println!("prefix re: {}", sources.count_prefix("re"));
     println!("names re: {:?}", sources.names_prefix("re"));
+    let mut scene = Scene::new("main");
+    scene.add("cam", CaptureSource::synthetic(16, 16));
+    println!("scene: {} sources={}", scene.name(), scene.len());
     println!("status active: {}", status.summary().contains("active=file"));
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

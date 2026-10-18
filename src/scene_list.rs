@@ -80,6 +80,12 @@ impl SceneList {
         }
     }
 
+    /// Remove all scenes.
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.active = 0;
+    }
+
     /// Active scene, if any.
     pub fn active(&mut self) -> Option<&mut Scene> {
         self.items.get_mut(self.active)
@@ -114,5 +120,9 @@ mod tests {
         assert!(list.switch("a"));
         assert_eq!(list.active_index(), 0);
         assert!(!list.switch("missing"));
+        assert!(list.remove("b"));
+        assert_eq!(list.len(), 1);
+        list.clear();
+        assert!(list.is_empty());
     }
 }

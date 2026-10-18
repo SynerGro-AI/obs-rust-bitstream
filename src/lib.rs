@@ -388,6 +388,7 @@ pub mod output;
 pub mod audio_output;
 pub mod audio_output_info;
 pub mod av_pair;
+pub mod av_match;
 pub mod session;
 
 pub mod preview;
@@ -751,6 +752,7 @@ pub use output::{Output, OutputFrame};
 pub use audio_output::{AudioOutput, AudioFrame};
 pub use audio_output_info::{AudioOutputInfo, AudioInfoError};
 pub use av_pair::AvPair;
+pub use av_match::AvMatch;
 pub use session::{Session, SessionFrame};
 pub use preview::{Preview, PreviewFrame};
 pub use program::Program;

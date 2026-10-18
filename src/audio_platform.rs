@@ -10,14 +10,14 @@
 use crate::audio_capture::{AudioCapture, AudioSamples, SyntheticAudio};
 
 /// Open the default microphone for this platform.
-/// On Linux this would open ALSA/Pulse.
-/// On Windows this would open WASAPI.
+/// On Linux this attempts ALSA. On Windows this would open WASAPI.
 /// On macOS/iOS this would open AVAudio.
-/// Until those backends are filled, every platform returns a clear error.
+/// Returns a clear error if the backend is not present.
 pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
     #[cfg(target_os = "linux")]
     {
-        Err("Linux ALSA/Pulse audio capture not yet wired".to_string())
+        crate::linux_audio::LinuxAudio::open(48000, 1)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
     }
     #[cfg(windows)]
     {

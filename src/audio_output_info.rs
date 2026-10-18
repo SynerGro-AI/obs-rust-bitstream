@@ -10,7 +10,7 @@
 use crate::audio_format::{AudioFormat, SpeakerLayout};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AudioOutputError {
+pub enum AudioInfoError {
     EmptyName,
     ZeroRate,
 }
@@ -30,12 +30,12 @@ impl AudioOutputInfo {
         rate: u32,
         format: AudioFormat,
         speakers: SpeakerLayout,
-    ) -> Result<Self, AudioOutputError> {
+    ) -> Result<Self, AudioInfoError> {
         if name.is_empty() {
-            return Err(AudioOutputError::EmptyName);
+            return Err(AudioInfoError::EmptyName);
         }
         if rate == 0 {
-            return Err(AudioOutputError::ZeroRate);
+            return Err(AudioInfoError::ZeroRate);
         }
         Ok(Self {
             name: name.to_string(),

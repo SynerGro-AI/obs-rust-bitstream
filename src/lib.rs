@@ -748,7 +748,7 @@ pub use compositor::Compositor;
 pub use input_device::InputDevice;
 pub use output::{Output, OutputFrame};
 pub use audio_output::{AudioOutput, AudioFrame};
-pub use audio_output_info::{AudioOutputInfo, AudioOutputError};
+pub use audio_output_info::{AudioOutputInfo, AudioInfoError};
 pub use session::{Session, SessionFrame};
 pub use preview::{Preview, PreviewFrame};
 pub use program::Program;

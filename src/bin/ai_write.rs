@@ -5,6 +5,7 @@ use obs_rust_bitstream::audio_timeline::AudioTimeline;
 use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encoder_controls::EncoderControls;
 use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::scene_transition::SceneTransition;
 use obs_rust_bitstream::scene_list::SceneList;
 use obs_rust_bitstream::scene::Scene;
 use obs_rust_bitstream::source_list::SourceList;
@@ -341,6 +342,8 @@ fn main() {
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with scene sum");
+    let t = SceneTransition::new("main", "break");
+    println!("transition: {}", t.summary());
     println!("scene summaries: {:?}", scenes.summaries());
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");

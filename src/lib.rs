@@ -978,7 +978,7 @@ pub use audio_monitor_feed::AudioMonitorFeed;
 pub use audio_output_bus::AudioOutputBus;
 pub use audio_platform::{open_best_audio, open_default_audio};
 pub use audio_packet::AudioPacket;
-pub use audio_convert_info::{AudioConvertInfo, AudioFormat, SpeakerLayout, ConvertError};
+pub use audio_convert_info::{AudioConvertInfo, ConvertError};
 pub use linux_audio::{s16le_to_f32, AlsaFormat, LinuxAudio, ALSA_DEFAULT_DEVICE, ALSA_DEFAULT_RATE, ALSA_RATES};
 pub use windows_audio::{wasapi_float_to_f32, WasapiKind, WindowsAudio, WASAPI_DEFAULT_DEVICE};
 pub use apple_audio::{coreaudio_float_to_f32, speakers_from_channels, AppleAudio, CoreAudioSpeakers, COREAUDIO_DEFAULT_DEVICE};

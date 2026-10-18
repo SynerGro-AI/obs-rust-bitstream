@@ -2,36 +2,12 @@
 //!
 //! Parsed from libobs/media-io/audio-io.h.
 //! Holds sample rate, format, speaker layout, and clipping.
-//! Zero rate is rejected. Channel count matches OBS. No unwraps.
+//! Zero rate is rejected. Uses the existing AudioFormat and
+//! SpeakerLayout. No unwraps.
 //!
 //! Differential: stereo has more channels than mono.
 
-/// Matching OBS audio_format.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AudioFormat {
-    Unknown,
-    U8,
-    S16,
-    S32,
-    Float,
-    U8Planar,
-    S16Planar,
-    S32Planar,
-    FloatPlanar,
-}
-
-/// Matching OBS speaker_layout.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SpeakerLayout {
-    Unknown,
-    Mono,
-    Stereo,
-    TwoPointOne,
-    FourPointZero,
-    FourPointOne,
-    FivePointOne,
-    SevenPointOne,
-}
+use crate::audio_format::{AudioFormat, SpeakerLayout};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConvertError {
@@ -80,29 +56,9 @@ impl AudioConvertInfo {
         self.allow_clipping = allow;
     }
 
-    /// Channel count matching OBS get_audio_channels.
+    /// Channel count from the existing SpeakerLayout.
     pub fn channels(&self) -> u32 {
-        match self.speakers {
-            SpeakerLayout::Mono => 1,
-            SpeakerLayout::Stereo => 2,
-            SpeakerLayout::TwoPointOne => 3,
-            SpeakerLayout::FourPointZero => 4,
-            SpeakerLayout::FourPointOne => 5,
-            SpeakerLayout::FivePointOne => 6,
-            SpeakerLayout::SevenPointOne => 8,
-            SpeakerLayout::Unknown => 2,
-        }
-    }
-
-    /// Bytes per channel matching OBS get_audio_bytes_per_channel.
-    pub fn bytes_per_channel(&self) -> usize {
-        match self.format {
-            AudioFormat::U8 | AudioFormat::U8Planar => 1,
-            AudioFormat::S16 | AudioFormat::S16Planar => 2,
-            AudioFormat::S32 | AudioFormat::S32Planar => 4,
-            AudioFormat::Float | AudioFormat::FloatPlanar => 4,
-            AudioFormat::Unknown => 0,
-        }
+        self.speakers.channels()
     }
 
     /// True if the format is planar.
@@ -112,7 +68,7 @@ impl AudioConvertInfo {
             AudioFormat::U8Planar
                 | AudioFormat::S16Planar
                 | AudioFormat::S32Planar
-                | AudioFormat::FloatPlanar
+                | AudioFormat::F32Planar
         )
     }
 }
@@ -123,10 +79,9 @@ mod tests {
 
     #[test]
     fn create() {
-        let c = AudioConvertInfo::new(48000, AudioFormat::Float, SpeakerLayout::Stereo).unwrap();
+        let c = AudioConvertInfo::new(48000, AudioFormat::F32, SpeakerLayout::Stereo).unwrap();
         assert_eq!(c.rate(), 48000);
         assert_eq!(c.channels(), 2);
-        assert_eq!(c.bytes_per_channel(), 4);
         assert!(!c.is_planar());
     }
 

@@ -41,6 +41,7 @@ pub struct SystemStatus {
     pub scene_count: usize,
     pub active_scene: String,
     pub scene_summary: String,
+    pub transition: String,
 }
 
 impl SystemStatus {
@@ -180,6 +181,10 @@ impl SystemStatus {
         self.scene_summary = s.to_string();
     }
 
+    pub fn set_transition(&mut self, s: &str) {
+        self.transition = s.to_string();
+    }
+
     /// Current Unix time.
     pub fn now() -> u64 {
         std::time::SystemTime::now()
@@ -191,7 +196,7 @@ impl SystemStatus {
     /// Short summary.
     pub fn summary(&self) -> String {
         format!(
-            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={} sources={} active={} scenes={} scene={} scene_sum={}",
+            "gpu={} encoder={} video={} audio={} fps={} encode_ms={:.1} stamped={} version={} built={} opacity={:.1} captured={} source={} time={} available={} summary={} capture_fps={:.0} capture_faster={} bottleneck={} recommend={} healthy={} target={:.0} hit={} achieved={:.0} pacing={} sources={} active={} scenes={} scene={} scene_sum={} transition={}",
             self.gpu_present,
             self.encoder.as_str(),
             self.video_bytes,
@@ -220,7 +225,8 @@ impl SystemStatus {
             self.active_source,
             self.scene_count,
             self.active_scene,
-            self.scene_summary
+            self.scene_summary,
+            self.transition
         )
     }
 
@@ -339,6 +345,8 @@ mod tests {
         assert!(s2.summary().contains("scene=main"));
         s2.set_scene_summary("2 scenes | active main");
         assert!(s2.summary().contains("scene_sum=2"));
+        s2.set_transition("main -> break");
+        assert!(s2.summary().contains("transition=main"));
         assert!(s2.one_line().contains("healthy"));
         let mut buf2 = Vec::new();
         s2.write(&mut buf2).unwrap();

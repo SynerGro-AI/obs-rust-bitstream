@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
+use obs_rust_bitstream::{LayerPixels, LayerStack, LayerStackPixels, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -49,6 +49,7 @@ struct TuxedoApp {
     keys: Vec<f32>,
     maya_objects: Vec<(String, f32, f32, f32, bool)>,
     selected_object: String,
+    pixel_stack: LayerStackPixels,
 }
 
 impl Default for TuxedoApp {
@@ -82,6 +83,12 @@ impl Default for TuxedoApp {
                 ("mesh1".to_string(), 1.0, 0.0, 0.0, true),
             ],
             selected_object: "joint1".to_string(),
+            pixel_stack: {
+                let mut s = LayerStackPixels::new();
+                s.add(LayerPixels::new("Mountain Spire", "assets/mountain_spire.jpg"));
+                s.add(LayerPixels::new("Mist Overlay", "assets/mountain_spire.jpg"));
+                s
+            },
         }
     }
 }
@@ -160,13 +167,10 @@ impl eframe::App for TuxedoApp {
                         let aspect = size.y / size.x;
                         let w = 700.0;
                         let h = w * aspect;
-                        let factor = self.doc.as_ref().map(|d| {
-                            let vis: Vec<_> = d.layers.iter().filter(|l| l.visible).collect();
-                            if vis.is_empty() { 0.0 } else {
-                                let sum: f32 = vis.iter().map(|l| l.opacity as f32 / 255.0).sum();
-                                sum / vis.len() as f32
-                            }
-                        }).unwrap_or(1.0);
+                        let factor = {
+                            let vis = self.pixel_stack.visible();
+                            if vis.is_empty() { 0.0 } else { vis.len() as f32 / self.pixel_stack.layers.len() as f32 }
+                        };
                         ui.image((tex.id(), egui::vec2(w, h)));
                         if factor < 1.0 {
                             let alpha = ((1.0 - factor) * 200.0) as u8;

@@ -60,6 +60,24 @@ impl StreamTarget {
         })
     }
 
+    /// Stream to a domain you own. Builds rtmp://domain/live.
+    /// Returns None if the domain or key is empty.
+    pub fn owned(domain: &str, key: &str) -> Option<Self> {
+        if domain.is_empty() || key.is_empty() {
+            return None;
+        }
+        let url = if domain.starts_with("rtmp://") || domain.starts_with("rtmps://") {
+            domain.to_string()
+        } else {
+            format!("rtmp://{}/live", domain)
+        };
+        Some(Self {
+            platform: Platform::Custom,
+            url,
+            key: key.to_string(),
+        })
+    }
+
     /// Create a custom target. None if either is empty.
     pub fn custom(url: &str, key: &str) -> Option<Self> {
         if url.is_empty() || key.is_empty() {
@@ -101,6 +119,14 @@ mod tests {
         assert!(fb.endpoint().contains("facebook"));
         assert!(x.endpoint().contains("pscp"));
         assert!(dc.endpoint().contains("discord"));
+    }
+
+    #[test]
+    fn owned_domain() {
+        let t = StreamTarget::owned("stream.example.com", "my-key").unwrap();
+        assert!(t.endpoint().contains("stream.example.com"));
+        assert!(t.endpoint().contains("my-key"));
+        assert!(t.endpoint().starts_with("rtmp://"));
     }
 
     #[test]

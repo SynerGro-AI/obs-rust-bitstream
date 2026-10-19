@@ -140,8 +140,10 @@ impl eframe::App for TuxedoApp {
                         let w = 700.0;
                         let h = w * aspect;
                         let base_visible = self.doc.as_ref().map(|d| d.layers.first().map(|l| l.visible).unwrap_or(true)).unwrap_or(true);
-                        let tint = if base_visible { egui::Color32::WHITE } else { egui::Color32::from_rgba_unmultiplied(80, 80, 80, 255) };
-                        ui.image(egui::Image::from_texture(egui::load::SizedTexture::new(tex.id(), egui::vec2(w, h))).tint(tint));
+                        ui.image((tex.id(), egui::vec2(w, h)));
+                        if !base_visible {
+                            ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160));
+                        }
                     } else {
                         ui.label(egui::RichText::new("No image").color(muted));
                     }

@@ -192,8 +192,8 @@ fn main() {
                                                     let _ = ltx.send(());
                                                     let _ = loop_listener.accept();
                                                 });
-                                                let _ = lrx.recv_timeout(std::time::Duration::from_millis(200));
-                                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                                let _ = lrx.recv_timeout(std::time::Duration::from_millis(500));
+                                                std::thread::sleep(std::time::Duration::from_millis(100));
                                                 let mut rc3 = Reconnect::new();
                                                 match RtmpSocket::send("127.0.0.1", loop_addr.port(), &loop_payload, &mut rc3) {
                                                     Ok(sent) => println!("shell_loop_sent={}", sent.bytes),

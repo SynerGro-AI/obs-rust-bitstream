@@ -53,6 +53,7 @@ struct TuxedoApp {
     keys_pure: Keyframes,
     joints: JointHierarchy,
     reconnect: Reconnect,
+    thumbs: Vec<Option<egui::TextureHandle>>,
 }
 
 impl Default for TuxedoApp {
@@ -101,6 +102,7 @@ impl Default for TuxedoApp {
                 h
             },
             reconnect: Reconnect::new(),
+            thumbs: Vec::new(),
         }
     }
 }
@@ -166,6 +168,19 @@ impl eframe::App for TuxedoApp {
                 // Center: canvas
                 ui.vertical(|ui| {
                     // Canvas with real pixels
+                    if self.thumbs.is_empty() {
+                        for layer in &self.pixel_stack.layers {
+                            if let Ok(img) = image::open(&layer.path) {
+                                let small = img.resize(32, 32, image::imageops::FilterType::Nearest);
+                                let rgba = small.to_rgba8();
+                                let size = [rgba.width() as usize, rgba.height() as usize];
+                                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                                self.thumbs.push(Some(ctx.load_texture(&layer.name, color, egui::TextureOptions::LINEAR)));
+                            } else {
+                                self.thumbs.push(None);
+                            }
+                        }
+                    }
                     if self.canvas_texture.is_none() {
                         if let Ok(img) = image::open("assets/mountain_spire.jpg") {
                             let rgba = img.to_rgba8();
@@ -262,7 +277,7 @@ impl eframe::App for TuxedoApp {
                                             }
                                         }
                                         let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-                                        if let Some(tex) = &self.canvas_texture {
+                                        if let Some(Some(tex)) = self.thumbs.get(0) {
                                             ui.painter().image(tex.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
                                         } else {
                                             ui.painter().rect_filled(rect, 2.0, gold);

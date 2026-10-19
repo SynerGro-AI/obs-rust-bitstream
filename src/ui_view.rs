@@ -5,6 +5,7 @@
 //!
 //! Differential: a different tool produces a different view.
 
+use crate::edit_target::EditTarget;
 use crate::layer_select::LayerSelect;
 use crate::layer_stack::LayerStack;
 use crate::properties::Properties;
@@ -40,10 +41,27 @@ impl UiView {
         }
         out
     }
+
+    /// View plus the edit target.
+    pub fn render_with_target(
+        workspace: &Workspace,
+        stack: &LayerStack,
+        select: &LayerSelect,
+        target: &EditTarget,
+    ) -> String {
+        let mut out = Self::render(workspace, stack, select);
+        let kind = match target {
+            EditTarget::Layer(n) => format!("layer {}", n),
+            EditTarget::Group(n) => format!("group {}", n),
+        };
+        out.push_str(&format!("editing: {}\n", kind));
+        out
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::edit_target::EditTarget;
     use crate::layer_select::LayerSelect;
     use super::*;
     use crate::active_tool::ToolSource;
@@ -67,6 +85,16 @@ mod tests {
         let s = LayerStack::new();
         let view = UiView::render(&w, &s, &LayerSelect::new());
         assert!(view.contains("(none)"));
+    }
+
+    #[test]
+    fn shows_edit_target() {
+        let w = Workspace::new(16, 16);
+        let s = LayerStack::new();
+        let view = UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Layer("A".into()));
+        assert!(view.contains("editing: layer A"));
+        let view = UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Group("G".into()));
+        assert!(view.contains("editing: group G"));
     }
 
     #[test]

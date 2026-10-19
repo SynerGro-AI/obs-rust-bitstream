@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, OUTPUT_AV,
+    ShellRound, LayerComposite, EditRound, OUTPUT_AV,
 };
 
 fn main() {
@@ -191,6 +191,8 @@ fn main() {
                 photos.hide("Layer 1").ok();
                 println!("hidden:    {}", LayerComposite::line(&photos));
             }
+            let (layer, group) = EditRound::run();
+            println!("edit: layer={} group={}", layer, group);
         }
     }
 }

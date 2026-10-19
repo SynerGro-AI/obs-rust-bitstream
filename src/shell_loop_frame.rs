@@ -62,8 +62,10 @@ mod tests {
 
     #[test]
     fn more_layers_differ() {
-        let (one, two) = ShellLoopFrame::run();
+        let one = ShellLoop::run(&[ShellAction::NewLayer]);
+        let two = ShellLoop::run(&[ShellAction::NewLayer, ShellAction::NewLayer]);
         assert_ne!(one, two);
+        assert!(ShellLoopFrame::encode(&[ShellAction::NewLayer]) > 0);
     }
 
     #[test]

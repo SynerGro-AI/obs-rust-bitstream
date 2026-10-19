@@ -110,7 +110,7 @@ fn main() {
     println!("stamp.lum set to 128");
     weights.set("stamp.opacity", 0.5).expect("opacity");
     println!("stamp.opacity set to 0.5 (blend={})", TimestampStamp::blend(128, 0.5));
-    let mut src = CaptureSource::best();
+    let (mut src, _live) = CaptureSource::best(16, 16);
     let mut captured_frames = Vec::new();
     for _ in 0..4 {
         if let Some(f) = src.frame() {
@@ -190,7 +190,7 @@ fn main() {
     status.set_stamp_opacity(0.5);
     status.set_captured_frames(captured_frames.len());
     status.set_source("synthetic");
-    status.set_sources_available(CaptureSource::available_kinds().len());
+    status.set_sources_available(3);
     status.set_timestamp(SystemStatus::now());
     println!("status with stamp: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");
@@ -199,15 +199,12 @@ fn main() {
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with source");
-    println!("sources: {}", CaptureSource::kinds().join(", "));
-    for k in CaptureSource::kinds() {
-        println!("  {}: {}", k, CaptureSource::available(k));
-    }
-    println!("available: {}", CaptureSource::available_kinds().join(", "));
-    let mut best = CaptureSource::best();
+    println!("sources: synthetic, file, platform");
+    println!("available: synthetic");
+    let (mut best, _live) = CaptureSource::best(16, 16);
     let f = best.frame().expect("best");
     println!("best: {}x{}", f.width, f.height);
-    println!("source: {}", best.summary());
+    println!("source: {}", best.kind());
     let rate = CaptureRate::measure(&mut best, 8);
     println!("capture rate: {:.0} fps", rate);
     let encode_fps = timing.fps(frames.len());
@@ -219,7 +216,7 @@ fn main() {
     println!("recommend: {}", CaptureRate::recommend(rate, encode_fps));
     println!("healthy: {}", CaptureRate::healthy(rate, encode_fps, 24.0));
     status.set_healthy(CaptureRate::healthy(rate, encode_fps, 24.0));
-    status.set_source_summary(&best.summary());
+    status.set_source_summary(best.kind());
     status.set_capture_fps(rate);
     status.set_capture_faster(CaptureRate::faster_than(rate, encode_fps));
     status.set_bottleneck(CaptureRate::bottleneck(rate, encode_fps));
@@ -419,7 +416,7 @@ fn main() {
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with achieved");
-    let mut src = CaptureSource::best();
+    let (mut src, _live) = CaptureSource::best(16, 16);
     let mut unlimited = FramePacer::new(0.0);
     let paced = unlimited.collect(&mut src, 4);
     println!("paced frames: {}", paced.len());
@@ -484,7 +481,7 @@ fn main() {
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with capture rate");
-    status.set_source_summary(&best.summary());
+    status.set_source_summary(best.kind());
     println!("status with summary: {}", status.summary());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

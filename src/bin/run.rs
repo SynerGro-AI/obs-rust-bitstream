@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, OUTPUT_AV,
 };
 
 fn main() {
@@ -260,6 +260,13 @@ fn main() {
             println!("shell_sent: full={} half={}", sent_full, sent_half);
             let _ = std::fs::write("shell_sent.txt", format!("full={} half={}", sent_full, sent_half));
             println!("shell_sent_file=shell_sent.txt");
+            let actions = [
+                ShellAction::Tool("Brush"),
+                ShellAction::Size(30),
+                ShellAction::NewLayer,
+                ShellAction::Opacity(0.5),
+            ];
+            println!("shell_loop: {}", ShellLoop::run(&actions));
         }
     }
 }

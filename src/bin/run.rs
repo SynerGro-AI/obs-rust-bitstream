@@ -226,6 +226,8 @@ fn main() {
             println!("shell_publish_file=shell_publish.txt");
             let (sf, sh) = ShellSocket::run();
             println!("shell_socket: full={} half={}", sf, sh);
+            let _ = std::fs::write("shell_socket.txt", format!("full={} half={}", sf, sh));
+            println!("shell_socket_file=shell_socket.txt");
         }
     }
 }

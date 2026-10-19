@@ -99,11 +99,13 @@ impl Psd {
         out.extend_from_slice(&(layer_len + 4).to_be_bytes());
         out.extend_from_slice(&layer_len.to_be_bytes());
         out.extend_from_slice(&layer_section);
-        // Per-layer channel: 4 bytes (R,G,B,A stub) per layer.
+        // Per-layer patch: 2x2 raw RGBA (16 bytes) per layer.
         out.extend_from_slice(&0u16.to_be_bytes());
         for layer in &self.layers {
             out.push(layer.opacity);
-            out.extend_from_slice(&[layer.opacity, layer.opacity / 2, 0, 255]);
+            for _ in 0..4 {
+                out.extend_from_slice(&[layer.opacity, layer.opacity / 2, 0, 255]);
+            }
         }
         // Minimal 1x1 PNG as the composite thumbnail.
         let png: &[u8] = &[
@@ -183,7 +185,8 @@ mod tests {
         let path = std::env::temp_dir().join("ch.psd");
         d.save(&path).unwrap();
         let data = fs::read(&path).unwrap();
-        assert!(data.contains(&200));
+        let count = data.iter().filter(|&&b| b == 200).count();
+        assert!(count >= 5);
         let _ = fs::remove_file(&path);
     }
 

@@ -26,6 +26,7 @@ enum Mode {
     AfterEffects,
     Maya,
     Obs,
+    ToonBoom,
 }
 
 struct TuxedoApp {
@@ -127,6 +128,7 @@ impl eframe::App for TuxedoApp {
                     (Mode::AfterEffects, "AFTER EFFECTS"),
                     (Mode::Maya, "MAYA"),
                     (Mode::Obs, "OBS"),
+                    (Mode::ToonBoom, "TOONBOOM"),
                 ] {
                     let color = if self.mode == m { gold } else { fg };
                     if ui.button(egui::RichText::new(label).color(color)).clicked() {
@@ -404,6 +406,24 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new(format!("retry: {}s / {}", self.reconnect.retry_sec(), self.reconnect.retry_max())).color(muted));
                             if ui.button(egui::RichText::new("Retry").color(gold)).clicked() {
                                 self.reconnect.set_settings(self.reconnect.retry_max() + 1, self.reconnect.retry_sec());
+                            }
+                        }
+                        Mode::ToonBoom => {
+                            ui.label(egui::RichText::new("◆ DRAWING").color(gold));
+                            ui.label(egui::RichText::new(format!("frame: {:.0}", self.time * 24.0)).color(fg));
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Exposure").color(fg));
+                                ui.add(egui::Slider::new(&mut self.time, 0.0..=5.0).suffix(" s"));
+                            });
+                            ui.separator();
+                            ui.label(egui::RichText::new("◆ LAYERS").color(gold));
+                            for (name, _, _, _, vis) in &self.maya_objects {
+                                let eye = if *vis { "◉" } else { "○" };
+                                ui.label(egui::RichText::new(format!("{}  {}", eye, name)).color(fg));
+                            }
+                            ui.separator();
+                            if let Ok(v) = self.keys_pure.sample("position", (self.time * 1000.0) as u64) {
+                                ui.label(egui::RichText::new(format!("key: {:.2}", v)).color(gold));
                             }
                         }
                     }

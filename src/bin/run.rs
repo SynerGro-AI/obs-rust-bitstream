@@ -208,6 +208,8 @@ fn main() {
             let (normal, multiply) = BlendComposite::run();
             println!("blend: normal={:.1} multiply={:.1}", normal, multiply);
             println!("shell: {}", ShellStatus::line());
+            let _ = std::fs::write("shell.txt", ShellStatus::line());
+            println!("shell_file=shell.txt");
         }
     }
 }

@@ -107,7 +107,7 @@ mod imp {
 
                 // Read the actual frame size.
                 let media_type = reader
-                    .GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM)
+                    .GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32)
                     .map_err(|e| format!("GetCurrentMediaType: {}", e))?;
                 let size = media_type
                     .GetUINT64(&MF_MT_FRAME_SIZE)
@@ -142,7 +142,7 @@ mod imp {
         mt.SetGUID(&MF_MT_SUBTYPE, subtype)
             .map_err(|e| format!("SetGUID subtype: {}", e))?;
         reader
-            .SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, None, &mt)
+            .SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, None, &mt)
             .map_err(|e| format!("SetCurrentMediaType: {}", e))?;
         Ok(())
     }
@@ -165,7 +165,7 @@ mod imp {
                 let mut flags = 0u32;
                 self.reader
                     .ReadSample(
-                        MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+                        MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
                         0,
                         None,
                         Some(&mut flags),

@@ -354,11 +354,22 @@ pub mod rate_compare;
 pub mod report;
 pub mod timestamp_stamp;
 pub mod capture;
+#[cfg(target_os = "windows")]
 pub mod windows_capture;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod apple_capture;
+
+#[cfg(target_os = "linux")]
 pub mod linux_capture;
+
+#[cfg(target_os = "linux")]
 pub mod linux_audio;
+
+#[cfg(target_os = "windows")]
 pub mod windows_audio;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod apple_audio;
 pub mod audio_cpal;
 pub mod capture_select;
@@ -1285,8 +1296,13 @@ pub use rate_compare::RateCompare;
 pub use report::Report;
 pub use timestamp_stamp::TimestampStamp;
 pub use capture::{Capture, SyntheticCapture};
+#[cfg(target_os = "windows")]
 pub use windows_capture::WindowsCapture;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use apple_capture::AppleCapture;
+
+#[cfg(target_os = "linux")]
 pub use linux_capture::LinuxCapture;
 pub use capture_select::CaptureSource;
 pub use audio_capture::{AudioCapture, SyntheticAudio};
@@ -1301,8 +1317,13 @@ pub use audio_backend_round::AudioBackendRound;
 pub use audio_packet::AudioPacket;
 pub use audio_convert_info::{AudioConvertInfo, ConvertError};
 pub use audio_match::AudioMatch;
+#[cfg(target_os = "linux")]
 pub use linux_audio::{s16le_to_f32, AlsaFormat, LinuxAudio, ALSA_DEFAULT_DEVICE, ALSA_DEFAULT_RATE, ALSA_RATES};
+
+#[cfg(target_os = "windows")]
 pub use windows_audio::{wasapi_float_to_f32, WasapiKind, WindowsAudio, WASAPI_DEFAULT_DEVICE};
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use apple_audio::{coreaudio_float_to_f32, speakers_from_channels, AppleAudio, CoreAudioSpeakers, COREAUDIO_DEFAULT_DEVICE};
 pub use audio_cpal::open_cpal;
 pub use combined_status::CombinedStatus;

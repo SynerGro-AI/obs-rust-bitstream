@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar};
+use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -40,6 +40,7 @@ struct TuxedoApp {
     streaming: bool,
     recording: bool,
     canvas_texture: Option<egui::TextureHandle>,
+    last_action: String,
 }
 
 impl Default for TuxedoApp {
@@ -61,6 +62,7 @@ impl Default for TuxedoApp {
             streaming: true,
             recording: true,
             canvas_texture: None,
+            last_action: String::new(),
         }
     }
 }
@@ -141,6 +143,16 @@ impl eframe::App for TuxedoApp {
                         let h = w * aspect;
                         let base_visible = self.doc.as_ref().map(|d| d.layers.first().map(|l| l.visible).unwrap_or(true)).unwrap_or(true);
                         ui.image((tex.id(), egui::vec2(w, h)));
+                        let resp = ui.interact(ui.min_rect(), ui.id().with("canvas"), egui::Sense::click_and_drag());
+                        if resp.clicked() || resp.dragged() {
+                            if let Some(pos) = resp.interact_pointer_pos() {
+                                let rel = pos - ui.min_rect().min;
+                                let x = (rel.x.max(0.0) as u32).min(w as u32);
+                                let y = (rel.y.max(0.0) as u32).min(h as u32);
+                                let action = ToolDispatch::dispatch(&self.tool, x, y);
+                                self.last_action = format!("{:?}", action);
+                            }
+                        }
                         if !base_visible {
                             ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160));
                         }
@@ -217,6 +229,9 @@ impl eframe::App for TuxedoApp {
             // Bottom status
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(format!("Tool: {}  B", self.tool)).color(fg));
+                if !self.last_action.is_empty() {
+                    ui.label(egui::RichText::new(&self.last_action).color(gold));
+                }
                 ui.separator();
                 ui.label(egui::RichText::new(format!("Zoom: {:.1}%", self.zoom)).color(fg));
                 ui.separator();

@@ -311,6 +311,12 @@ fn main() {
             println!("shell_summary: {}", summary);
             let _ = std::fs::write("shell_summary.txt", &summary);
             println!("shell_summary_file=shell_summary.txt");
+            if let Ok(sent_str) = std::fs::read_to_string("shell_loop_sent.txt") {
+                if let Ok(sent) = sent_str.trim().parse::<usize>() {
+                    let with_sent = ShellSummary::line_with_sent(&actions, sent);
+                    println!("shell_summary_sent: {}", with_sent);
+                }
+            }
         }
     }
 }

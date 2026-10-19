@@ -232,6 +232,13 @@ impl eframe::App for TuxedoApp {
                                 ui.label(egui::RichText::new("Opacity").color(fg));
                                 ui.add(egui::Slider::new(&mut self.opacity, 0.0..=100.0).suffix("%"));
                             });
+                            if ui.button(egui::RichText::new("Save PSD").color(gold)).clicked() {
+                                if let Some(doc) = &mut self.doc {
+                                    doc.set_opacity(&self.selected_layer, self.opacity as u8);
+                                    let _ = doc.save(std::path::Path::new("assets/mountain_spire.psd"));
+                                    self.last_action = "Saved".to_string();
+                                }
+                            }
                         }
                         Mode::AfterEffects => {
                             ui.label(egui::RichText::new("TIMELINE").color(gold));

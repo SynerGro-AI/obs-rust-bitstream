@@ -275,6 +275,8 @@ fn main() {
             println!("shell_loop_frame_file=shell_loop_frame.txt");
             if let Some(payload) = ShellLoopSocket::payload(&actions) {
                 println!("shell_loop_socket: {} valid={}", payload.len(), ShellLoopSocket::valid(&payload));
+                let _ = std::fs::write("shell_loop_socket.txt", format!("{} valid={}", payload.len(), ShellLoopSocket::valid(&payload)));
+                println!("shell_loop_socket_file=shell_loop_socket.txt");
             }
         }
     }

@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, TimelineAction, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, TimelineAction, TimelineRest, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -366,6 +366,12 @@ fn main() {
             if let Ok(cut) = TimelineAction::roll(&mut ta, "a", "b", 6.0) {
                 println!("timeline_roll: cut={:.0} a={:.0} b_start={:.0}", cut, ta.get("a").unwrap().duration_secs(), ta.get("b").unwrap().start_secs());
             }
+            let m = TimelineRest::marker(3.5, "beat");
+            let area = TimelineRest::work_area(1.0, 5.0);
+            let mut remap = obs_rust_bitstream::timeline_rest::TimeRemap::new();
+            remap.add_key(0.0, 1.0);
+            remap.add_key(2.0, 0.5);
+            println!("timeline_rest: marker={:.1} work={:.0}-{:.0} speed={:.1}", m.time, area.start, area.end, remap.speed_at(3.0));
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);

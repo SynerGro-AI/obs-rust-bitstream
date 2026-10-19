@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, TimelineTools, ToolDispatch};
+use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -45,6 +45,8 @@ struct TuxedoApp {
     feather: f32,
     opacity: f32,
     strokes: Vec<(u32, u32)>,
+    time: f32,
+    keys: Vec<f32>,
 }
 
 impl Default for TuxedoApp {
@@ -71,6 +73,8 @@ impl Default for TuxedoApp {
             feather: 0.0,
             opacity: 100.0,
             strokes: Vec::new(),
+            time: 0.0,
+            keys: vec![0.0, 1.0, 2.5],
         }
     }
 }
@@ -261,11 +265,20 @@ impl eframe::App for TuxedoApp {
                         }
                         Mode::AfterEffects => {
                             ui.label(egui::RichText::new("◆ TIMELINE").color(gold));
-                            for tool in TimelineTools::tools() {
-                                ui.label(egui::RichText::new(format!("{}  {}", tool.name, tool.hotkey)).color(fg));
-                            }
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Time").color(fg));
+                                ui.add(egui::Slider::new(&mut self.time, 0.0..=5.0).suffix(" s"));
+                            });
+                            ui.label(egui::RichText::new(format!("{:.2}s", self.time)).color(muted));
                             ui.separator();
-                            ui.label(egui::RichText::new("Time: 00:00:00:00").color(muted));
+                            ui.label(egui::RichText::new("KEYFRAMES").color(gold));
+                            for k in &self.keys {
+                                let mark = if (self.time - k).abs() < 0.1 { "◆" } else { "◇" };
+                                ui.label(egui::RichText::new(format!("{}  {:.1}s", mark, k)).color(fg));
+                            }
+                            if ui.button(egui::RichText::new("Add Key").color(gold)).clicked() {
+                                self.keys.push(self.time);
+                            }
                         }
                         Mode::Maya => {
                             ui.label(egui::RichText::new("◆ OUTLINER").color(gold));

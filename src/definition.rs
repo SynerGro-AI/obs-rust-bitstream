@@ -43,6 +43,31 @@ impl Definition {
         self.quality
     }
 
+    /// Set the resolution from a preset name. None if unknown.
+    pub fn set_preset(&mut self, name: &str) -> Option<()> {
+        let (w, h) = match name {
+            "480p" => (854, 480),
+            "720p" => (1280, 720),
+            "1080p" => (1920, 1080),
+            "1440p" => (2560, 1440),
+            "4k" | "2160p" => (3840, 2160),
+            _ => return None,
+        };
+        self.set_pixels(w, h)
+    }
+
+    /// Preset name for the current size, or "custom".
+    pub fn preset(&self) -> &'static str {
+        match (self.width, self.height) {
+            (854, 480) => "480p",
+            (1280, 720) => "720p",
+            (1920, 1080) => "1080p",
+            (2560, 1440) => "1440p",
+            (3840, 2160) => "4k",
+            _ => "custom",
+        }
+    }
+
     /// Set the pixel count. None if either is zero.
     pub fn set_pixels(&mut self, width: u32, height: u32) -> Option<()> {
         if width == 0 || height == 0 {
@@ -97,6 +122,21 @@ mod tests {
         let mut d = Definition::new(1280, 720, 50.0).unwrap();
         d.set_pixels(1920, 1080).unwrap();
         assert_eq!(d.pixels(), 1920 * 1080);
+    }
+
+    #[test]
+    fn preset() {
+        let mut d = Definition::new(1280, 720, 50.0).unwrap();
+        assert_eq!(d.preset(), "720p");
+        d.set_preset("4k").unwrap();
+        assert_eq!(d.preset(), "4k");
+        assert_eq!(d.pixels(), 3840 * 2160);
+    }
+
+    #[test]
+    fn unknown_preset() {
+        let mut d = Definition::new(100, 100, 50.0).unwrap();
+        assert!(d.set_preset("nope").is_none());
     }
 
     #[test]

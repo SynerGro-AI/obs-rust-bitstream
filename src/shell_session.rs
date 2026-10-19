@@ -38,7 +38,7 @@ impl ShellSession {
 
     /// Serialize to a line.
     pub fn to_line(state: &SessionState) -> String {
-        format!("tool={} size={:.0} layers={}", state.tool, state.size, state.layers)
+        format!("tool={} size={:.0} layers={} selected={}", state.tool, state.size, state.layers, state.selected)
     }
 
     /// Parse a line. None if malformed.

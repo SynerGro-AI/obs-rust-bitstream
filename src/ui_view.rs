@@ -6,6 +6,7 @@
 //! Differential: a different tool produces a different view.
 
 use crate::layer_stack::LayerStack;
+use crate::properties::Properties;
 use crate::ps_layers::PsLayers;
 use crate::workspace::Workspace;
 
@@ -24,6 +25,12 @@ impl UiView {
         } else {
             for line in panel {
                 out.push_str(&format!("  {}\n", line));
+            }
+            // Selected is the top layer.
+            if let Some(top) = stack.layers().last() {
+                if let Some(props) = Properties::of(stack, top.name()) {
+                    out.push_str(&format!("selected: {}\n", Properties::line(&props)));
+                }
             }
         }
         out
@@ -45,6 +52,7 @@ mod tests {
         assert!(view.contains("tool=Brush"));
         assert!(view.contains("size="));
         assert!(view.contains("Layer 1"));
+        assert!(view.contains("selected:"));
     }
 
     #[test]

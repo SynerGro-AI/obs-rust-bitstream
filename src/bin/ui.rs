@@ -110,7 +110,7 @@ impl eframe::App for TuxedoApp {
                 // Left: tool catalog
                 ui.vertical(|ui| {
                     ui.set_width(200.0);
-                    ui.label(egui::RichText::new("PHOTOSHOP").color(gold));
+                    ui.label(egui::RichText::new("◆ PHOTOSHOP").color(gold));
                     for group in PsToolbar::groups() {
                         let open = self.expanded == Some(*group);
                         let label = format!("{} {}", if open { "▼" } else { "▶" }, group.label().to_uppercase());
@@ -194,7 +194,7 @@ impl eframe::App for TuxedoApp {
                     ui.set_width(280.0);
                     match self.mode {
                         Mode::Photoshop => {
-                            ui.label(egui::RichText::new("LAYERS").color(gold));
+                            ui.label(egui::RichText::new("◆ LAYERS").color(gold));
                             if let Some(doc) = &self.doc {
                                 ui.label(egui::RichText::new(format!("mountain_spire  {}×{}", doc.width, doc.height)).color(muted));
                                 let layer_info: Vec<(String, bool, u8)> = doc.layers.iter().map(|l| (l.name.clone(), l.visible, l.opacity)).collect();
@@ -207,6 +207,8 @@ impl eframe::App for TuxedoApp {
                                                 doc.toggle(&name);
                                             }
                                         }
+                                        let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
+                                        ui.painter().rect_filled(rect, 2.0, gold);
                                         if ui.button(egui::RichText::new(format!("{}  {}", name, opacity)).color(color)).clicked() {
                                             self.selected_layer = name.clone();
                                         }
@@ -216,7 +218,7 @@ impl eframe::App for TuxedoApp {
                                 ui.label(egui::RichText::new("No document").color(muted));
                             }
                             ui.separator();
-                            ui.label(egui::RichText::new("MASKS").color(gold));
+                            ui.label(egui::RichText::new("◆ MASKS").color(gold));
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Density").color(fg));
                                 ui.add(egui::Slider::new(&mut self.density, 0.0..=100.0).suffix("%"));
@@ -226,7 +228,7 @@ impl eframe::App for TuxedoApp {
                                 ui.add(egui::Slider::new(&mut self.feather, 0.0..=50.0).suffix(" px"));
                             });
                             ui.separator();
-                            ui.label(egui::RichText::new("PROPERTIES").color(gold));
+                            ui.label(egui::RichText::new("◆ PROPERTIES").color(gold));
                             ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Opacity").color(fg));
@@ -241,7 +243,7 @@ impl eframe::App for TuxedoApp {
                             }
                         }
                         Mode::AfterEffects => {
-                            ui.label(egui::RichText::new("TIMELINE").color(gold));
+                            ui.label(egui::RichText::new("◆ TIMELINE").color(gold));
                             for tool in TimelineTools::tools() {
                                 ui.label(egui::RichText::new(format!("{}  {}", tool.name, tool.hotkey)).color(fg));
                             }
@@ -249,13 +251,13 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new("Time: 00:00:00:00").color(muted));
                         }
                         Mode::Maya => {
-                            ui.label(egui::RichText::new("OUTLINER").color(gold));
+                            ui.label(egui::RichText::new("◆ OUTLINER").color(gold));
                             for btn in MayaShelves::on_shelf(self.maya_shelf) {
                                 ui.label(egui::RichText::new(btn.name).color(fg));
                             }
                         }
                         Mode::Obs => {
-                            ui.label(egui::RichText::new("STREAM").color(gold));
+                            ui.label(egui::RichText::new("◆ STREAM").color(gold));
                             let stream_color = if self.streaming { egui::Color32::from_rgb(0, 200, 0) } else { muted };
                             if ui.button(egui::RichText::new("● Streaming: Live").color(stream_color)).clicked() {
                                 self.streaming = !self.streaming;

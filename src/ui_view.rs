@@ -5,6 +5,7 @@
 //!
 //! Differential: a different tool produces a different view.
 
+use crate::layer_select::LayerSelect;
 use crate::layer_stack::LayerStack;
 use crate::properties::Properties;
 use crate::ps_layers::PsLayers;
@@ -13,8 +14,8 @@ use crate::workspace::Workspace;
 pub struct UiView;
 
 impl UiView {
-    /// Multi-line view of the workspace and layer stack.
-    pub fn render(workspace: &Workspace, stack: &LayerStack) -> String {
+    /// Multi-line view of the workspace, layer stack, and selection.
+    pub fn render(workspace: &Workspace, stack: &LayerStack, select: &LayerSelect) -> String {
         let mut out = String::new();
         out.push_str(&format!("tool={}\n", workspace.active()));
         out.push_str(&format!("options={}\n", workspace.options().line()));
@@ -26,9 +27,13 @@ impl UiView {
             for line in panel {
                 out.push_str(&format!("  {}\n", line));
             }
-            // Selected is the top layer.
-            if let Some(top) = stack.layers().last() {
-                if let Some(props) = Properties::of(stack, top.name()) {
+            // Selected layer, or the top if none chosen.
+            let name = select
+                .selected()
+                .map(|s| s.to_string())
+                .or_else(|| stack.layers().last().map(|l| l.name().to_string()));
+            if let Some(name) = name {
+                if let Some(props) = Properties::of(stack, &name) {
                     out.push_str(&format!("selected: {}\n", Properties::line(&props)));
                 }
             }
@@ -39,6 +44,7 @@ impl UiView {
 
 #[cfg(test)]
 mod tests {
+    use crate::layer_select::LayerSelect;
     use super::*;
     use crate::active_tool::ToolSource;
 
@@ -48,7 +54,7 @@ mod tests {
         w.click("Brush", ToolSource::Photoshop);
         let mut s = LayerStack::new();
         s.add("Layer 1").unwrap();
-        let view = UiView::render(&w, &s);
+        let view = UiView::render(&w, &s, &LayerSelect::new());
         assert!(view.contains("tool=Brush"));
         assert!(view.contains("size="));
         assert!(view.contains("Layer 1"));
@@ -59,7 +65,7 @@ mod tests {
     fn empty_layers() {
         let w = Workspace::new(16, 16);
         let s = LayerStack::new();
-        let view = UiView::render(&w, &s);
+        let view = UiView::render(&w, &s, &LayerSelect::new());
         assert!(view.contains("(none)"));
     }
 
@@ -70,6 +76,6 @@ mod tests {
         a.click("Brush", ToolSource::Photoshop);
         b.click("Crop", ToolSource::Photoshop);
         let s = LayerStack::new();
-        assert_ne!(UiView::render(&a, &s), UiView::render(&b, &s));
+        assert_ne!(UiView::render(&a, &s, &LayerSelect::new()), UiView::render(&b, &s, &LayerSelect::new()));
     }
 }

@@ -7,6 +7,7 @@
 
 use crate::active_tool::ToolSource;
 use crate::history::History;
+use crate::layer_select::LayerSelect;
 use crate::layer_stack::LayerStack;
 use crate::menu_history::MenuHistory;
 use crate::ps_menus::PsMenu;
@@ -24,7 +25,7 @@ impl ShellRound {
         let mut stack = LayerStack::new();
         let mut history = History::new();
         MenuHistory::click(&mut stack, &mut history, PsMenu::Layer, "New Layer");
-        UiView::render(&workspace, &stack)
+        UiView::render(&workspace, &stack, &LayerSelect::new())
     }
 
     /// True if the view contains the tool, the option, and the layer.
@@ -57,6 +58,6 @@ mod tests {
         a.click("Brush", ToolSource::Photoshop);
         b.click("Crop", ToolSource::Photoshop);
         let s = LayerStack::new();
-        assert_ne!(UiView::render(&a, &s), UiView::render(&b, &s));
+        assert_ne!(UiView::render(&a, &s, &LayerSelect::new()), UiView::render(&b, &s, &LayerSelect::new()));
     }
 }

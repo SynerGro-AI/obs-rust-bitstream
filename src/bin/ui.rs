@@ -113,6 +113,8 @@ impl Default for TuxedoApp {
             thumbs: Vec::new(),
             burned: Vec::new(),
             onion: false,
+            onion_frames: 1,
+            onion_opacity: 50.0,
             packets: 0,
             brush_size: 10.0,
             brush_hard: 80.0,
@@ -486,14 +488,31 @@ impl eframe::App for TuxedoApp {
                                 for f in 0..12 {
                                     let t = f as f32 / 24.0;
                                     let near = (self.time - t).abs() < 0.05;
-                                    let prev = self.onion && (self.time - t - 1.0 / 24.0).abs() < 0.05;
+                                    let mut prev = false;
+                                    if self.onion {
+                                        for n in 1..=self.onion_frames {
+                                            if (self.time - t - n as f32 / 24.0).abs() < 0.05 {
+                                                prev = true;
+                                            }
+                                        }
+                                    }
                                     let mark = if near { "◆" } else if prev { "◇" } else { "·" };
-                                    let color = if near { gold } else if prev { egui::Color32::from_rgb(150, 120, 60) } else { muted };
+                                    let color = if near { gold } else if prev { egui::Color32::from_rgb((150.0 * self.onion_opacity / 100.0) as u8, (120.0 * self.onion_opacity / 100.0) as u8, 60) } else { muted };
                                     ui.label(egui::RichText::new(mark).color(color));
                                 }
                             });
                             if ui.button(egui::RichText::new(if self.onion { "Onion: On" } else { "Onion: Off" }).color(gold)).clicked() {
                                 self.onion = !self.onion;
+                            }
+                            if self.onion {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Frames").color(fg));
+                                    ui.add(egui::Slider::new(&mut self.onion_frames, 1..=2));
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Opacity").color(fg));
+                                    ui.add(egui::Slider::new(&mut self.onion_opacity, 10.0..=100.0).suffix("%"));
+                                });
                             }
                             ui.separator();
                             ui.label(egui::RichText::new("◆ LAYERS").color(gold));

@@ -218,6 +218,8 @@ fn main() {
             println!("shell_runner_file=shell_runner.txt");
             let (pf, ph) = ShellRtmp::run();
             println!("shell_rtmp: full={} half={}", pf, ph);
+            let _ = std::fs::write("shell_rtmp.txt", format!("full={} half={}", pf, ph));
+            println!("shell_rtmp_file=shell_rtmp.txt");
         }
     }
 }

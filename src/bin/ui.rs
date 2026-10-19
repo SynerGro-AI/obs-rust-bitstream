@@ -156,6 +156,19 @@ impl eframe::App for TuxedoApp {
                 ui.separator();
                 ui.label(egui::RichText::new("Pro User").color(fg));
                 ui.label(egui::RichText::new("LICENSED").color(gold));
+                ui.separator();
+                if ui.button(egui::RichText::new("Open").color(fg)).clicked() {
+                    if let Some(doc) = Psd::load(std::path::Path::new("assets/mountain_spire.psd")) {
+                        self.doc = Some(doc);
+                        self.last_action = "Opened".to_string();
+                    }
+                }
+                if ui.button(egui::RichText::new("Save").color(fg)).clicked() {
+                    if let Some(doc) = &self.doc {
+                        let _ = doc.save(std::path::Path::new("assets/mountain_spire.psd"));
+                        self.last_action = "Saved".to_string();
+                    }
+                }
             });
 
             ui.separator();

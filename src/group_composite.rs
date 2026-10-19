@@ -30,7 +30,7 @@ impl GroupComposite {
         let mut single = LayerStack::new();
         single.add("A", Self::frame(200)).unwrap();
         single.add("B", Self::frame(200)).unwrap();
-        let _ = single.set_opacity("A", 128);
+        let _ = single.set_opacity("B", 128);
         let single_mean = LayerComposite::mean(&single).unwrap_or(0.0);
 
         let mut group = LayerStack::new();

@@ -363,14 +363,31 @@ See also the upstream [obs-rust/obs-studio](https://github.com/obs-rust/obs-stud
 
 GPL-2.0-or-later (matching OBS Studio).
 
-## Run locally
+## Trial download
+
+A prebuilt Linux binary is in `dist/obs-rust`.
 
 ```bash
 git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
 cd obs-rust-bitstream
-cargo test
-cargo run --bin ai_write
+chmod +x dist/obs-rust
+./dist/obs-rust
 ```
+
+It prints the shell status, platform targets, and a 💭 instruction for the active tool.
+
+To build from source (any OS):
+
+```bash
+cargo build --release --bin run
+./target/release/run
+```
+
+## Help
+
+When a tool is selected, a 💭 thought explains how to use it.
+When an option is selected, a 💭 thought explains that option.
+Press ? to see every bound key.
 
 Optional CC0 audio:
 

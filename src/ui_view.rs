@@ -10,6 +10,7 @@ use crate::layer_select::LayerSelect;
 use crate::layer_stack::LayerStack;
 use crate::properties::Properties;
 use crate::ps_layers::PsLayers;
+use crate::tool_help::ToolHelp;
 use crate::workspace::Workspace;
 
 pub struct UiView;
@@ -19,6 +20,7 @@ impl UiView {
     pub fn render(workspace: &Workspace, stack: &LayerStack, select: &LayerSelect) -> String {
         let mut out = String::new();
         out.push_str(&format!("tool={}\n", workspace.active()));
+        out.push_str(&format!("thought: {}\n", ToolHelp::tool(workspace.active())));
         out.push_str(&format!("options={}\n", workspace.options().line()));
         out.push_str("layers:\n");
         let panel = PsLayers::panel(stack);
@@ -74,6 +76,8 @@ mod tests {
         s.add("Layer 1").unwrap();
         let view = UiView::render(&w, &s, &LayerSelect::new());
         assert!(view.contains("tool=Brush"));
+        assert!(view.contains("thought:"));
+        assert!(view.contains("💭"));
         assert!(view.contains("size="));
         assert!(view.contains("Layer 1"));
         assert!(view.contains("selected:"));

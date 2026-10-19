@@ -109,6 +109,11 @@ impl LayerStack {
     pub fn remove(&mut self, name: &str) -> bool {
         if let Some(i) = self.layers.iter().position(|l| l.name() == name) {
             self.layers.remove(i);
+            self.index.remove(name);
+            // Rebuild index after the removed position.
+            for (n, layer) in self.layers.iter().enumerate() {
+                self.index.insert(layer.name().to_string(), n);
+            }
             true
         } else {
             false

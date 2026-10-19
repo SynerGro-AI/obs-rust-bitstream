@@ -184,12 +184,26 @@ impl eframe::App for TuxedoApp {
                         }
                     }
                     if self.canvas_texture.is_none() || self.last_action == "recomposite" {
-                        let path = self.pixel_stack.visible().last().map(|l| l.path.clone()).unwrap_or_else(|| "assets/mountain_spire.jpg".to_string());
-                        if let Ok(img) = image::open(&path) {
-                            let rgba = img.to_rgba8();
-                            let size = [rgba.width() as usize, rgba.height() as usize];
-                            let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                            self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
+                        let paths: Vec<_> = self.pixel_stack.visible().iter().map(|l| l.path.clone()).collect();
+                        if let Some(first) = paths.first() {
+                            if let Ok(base) = image::open(first) {
+                                let mut rgba = base.to_rgba8();
+                                for path in paths.iter().skip(1) {
+                                    if let Ok(over) = image::open(path) {
+                                        let over_rgba = over.to_rgba8();
+                                        for (i, p) in rgba.pixels_mut().enumerate() {
+                                            if let Some(op) = over_rgba.pixels().nth(i) {
+                                                for c in 0..3 {
+                                                    p[c] = ((p[c] as u16 + op[c] as u16) / 2) as u8;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                let size = [rgba.width() as usize, rgba.height() as usize];
+                                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                                self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
+                            }
                         }
                         self.last_action.clear();
                     }

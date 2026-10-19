@@ -222,6 +222,8 @@ fn main() {
             println!("shell_rtmp_file=shell_rtmp.txt");
             let (full_line, half_line) = ShellPublish::run();
             println!("shell_publish: full={} half={}", full_line, half_line);
+            let _ = std::fs::write("shell_publish.txt", format!("full={} half={}", full_line, half_line));
+            println!("shell_publish_file=shell_publish.txt");
         }
     }
 }

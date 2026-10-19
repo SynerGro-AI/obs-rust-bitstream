@@ -5,6 +5,7 @@
 //!
 //! Differential: a different blend produces a different line.
 
+use crate::active_tool::ToolSource;
 use crate::blend_composite::BlendComposite;
 use crate::edit_round::EditRound;
 use crate::group_composite::GroupComposite;
@@ -12,6 +13,7 @@ use crate::layer_composite::LayerComposite;
 use crate::photo_layers::LayerStack;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
+use crate::workspace::Workspace;
 
 pub struct ShellStatus;
 
@@ -22,9 +24,11 @@ impl ShellStatus {
         let (single, group_n) = GroupComposite::run();
         let (normal, multiply) = BlendComposite::run();
         let (shown, hidden) = Self::eye();
+        let mut w = Workspace::new(16, 16);
+        w.click("Brush", ToolSource::Photoshop);
         format!(
-            "edit={} group={} members={}/{} blend={:.0}/{:.0} eye={:.0}/{:.0}",
-            layer, group, single, group_n, normal, multiply, shown, hidden
+            "tool={} edit={} group={} members={}/{} blend={:.0}/{:.0} eye={:.0}/{:.0}",
+            w.active(), layer, group, single, group_n, normal, multiply, shown, hidden
         )
     }
 
@@ -51,7 +55,7 @@ impl ShellStatus {
 
     /// True if the line contains every section.
     pub fn complete(line: &str) -> bool {
-        line.contains("edit=") && line.contains("group=") && line.contains("blend=") && line.contains("eye=")
+        line.contains("tool=") && line.contains("edit=") && line.contains("group=") && line.contains("blend=") && line.contains("eye=")
     }
 }
 

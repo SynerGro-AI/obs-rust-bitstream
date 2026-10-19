@@ -6,6 +6,7 @@
 //!
 //! Differential: a different active tool changes the name.
 
+use crate::active_tool::{ActiveTool, ToolSource};
 use crate::ae_tools::AeTools;
 use crate::maya_shelves::MayaShelves;
 use crate::pixel_canvas::PixelCanvas;
@@ -14,7 +15,7 @@ use crate::toon_tools::ToonTools;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Workspace {
-    active: String,
+    active: ActiveTool,
     width: u32,
     height: u32,
 }
@@ -23,25 +24,26 @@ impl Workspace {
     /// One canvas. All tools available.
     pub fn new(width: u32, height: u32) -> Self {
         Self {
-            active: "Move".to_string(),
+            active: ActiveTool::new(),
             width,
             height,
         }
     }
 
     pub fn active(&self) -> &str {
-        &self.active
+        self.active.name()
     }
 
-    /// Set the active tool by name. Any tool from any toolbar.
-    /// Unknown names are rejected.
-    pub fn set_tool(&mut self, name: &str) -> bool {
-        if Self::all_tools().iter().any(|t| t == name) {
-            self.active = name.to_string();
-            true
-        } else {
-            false
+    pub fn active_source(&self) -> ToolSource {
+        self.active.source()
+    }
+
+    /// Toolbar click. Switches the active tool. Same canvas.
+    pub fn click(&mut self, name: &str, source: ToolSource) -> bool {
+        if !Self::all_tools().iter().any(|t| t == name) {
+            return false;
         }
+        self.active.activate(name, source)
     }
 
     /// Every tool name from all four toolbars.
@@ -69,7 +71,7 @@ impl Workspace {
 
     /// One line: active tool and canvas size.
     pub fn line(&self) -> String {
-        format!("tool={} canvas={}x{}", self.active, self.width, self.height)
+        format!("tool={} source={} canvas={}x{}", self.active.name(), self.active.source().label(), self.width, self.height)
     }
 }
 
@@ -80,11 +82,12 @@ mod tests {
     #[test]
     fn one_canvas() {
         let mut w = Workspace::new(64, 64);
-        assert!(w.set_tool("Brush"));
+        assert!(w.click("Brush", ToolSource::Photoshop));
         assert_eq!(w.active(), "Brush");
-        assert!(w.set_tool("Camera"));
+        assert!(w.click("Camera", ToolSource::Maya));
         assert_eq!(w.active(), "Camera");
-        assert!(w.set_tool("Onion Skin"));
+        assert_eq!(w.active_source(), ToolSource::Maya);
+        assert!(w.click("Onion Skin", ToolSource::ToonBoom));
         assert_eq!(w.active(), "Onion Skin");
         // Same canvas size throughout.
         assert_eq!(w.canvas().unwrap().width(), 64);
@@ -93,7 +96,7 @@ mod tests {
     #[test]
     fn rejects_unknown() {
         let mut w = Workspace::new(16, 16);
-        assert!(!w.set_tool("NotATool"));
+        assert!(!w.click("NotATool", ToolSource::Photoshop));
         assert_eq!(w.active(), "Move");
     }
 
@@ -101,8 +104,8 @@ mod tests {
     fn differential() {
         let mut a = Workspace::new(32, 32);
         let mut b = Workspace::new(32, 32);
-        a.set_tool("Lasso");
-        b.set_tool("Pen");
+        a.click("Lasso", ToolSource::Photoshop);
+        b.click("Pen", ToolSource::AfterEffects);
         assert_ne!(a.line(), b.line());
         // Same canvas dimensions.
         assert_eq!(a.canvas().unwrap().width(), b.canvas().unwrap().width());

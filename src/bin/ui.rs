@@ -39,6 +39,7 @@ struct TuxedoApp {
     doc: Option<Psd>,
     streaming: bool,
     recording: bool,
+    canvas_texture: Option<egui::TextureHandle>,
 }
 
 impl Default for TuxedoApp {
@@ -59,6 +60,7 @@ impl Default for TuxedoApp {
             doc: Psd::load(std::path::Path::new("assets/mountain_spire.psd")),
             streaming: true,
             recording: true,
+            canvas_texture: None,
         }
     }
 }
@@ -123,28 +125,24 @@ impl eframe::App for TuxedoApp {
 
                 // Center: canvas
                 ui.vertical(|ui| {
-                    // Canvas with gradient fill
-                    let canvas = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(700.0, 400.0));
-                    ui.painter().rect_filled(canvas, 4.0, egui::Color32::from_rgb(20, 18, 15));
-                    ui.painter().rect_stroke(canvas, 4.0, egui::Stroke::new(1.0_f32, gold));
-                    // Simple mountain silhouette
-                    let base = canvas.bottom() - 40.0;
-                    let points = vec![
-                        canvas.left_top() + egui::vec2(0.0, 200.0),
-                        canvas.left_top() + egui::vec2(150.0, 80.0),
-                        canvas.left_top() + egui::vec2(250.0, 40.0),
-                        canvas.left_top() + egui::vec2(350.0, 60.0),
-                        canvas.left_top() + egui::vec2(500.0, 100.0),
-                        canvas.left_top() + egui::vec2(700.0, 180.0),
-                        canvas.right_bottom(),
-                        canvas.left_bottom(),
-                    ];
-                    ui.painter().add(egui::Shape::convex_polygon(
-                        points,
-                        egui::Color32::from_rgb(40, 35, 30),
-                        egui::Stroke::NONE,
-                    ));
-                    ui.allocate_space(egui::vec2(700.0, 400.0));
+                    // Canvas with real pixels
+                    if self.canvas_texture.is_none() {
+                        if let Ok(img) = image::open("assets/mountain_spire.jpg") {
+                            let rgba = img.to_rgba8();
+                            let size = [rgba.width() as usize, rgba.height() as usize];
+                            let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                            self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
+                        }
+                    }
+                    if let Some(tex) = &self.canvas_texture {
+                        let size = tex.size_vec2();
+                        let aspect = size.y / size.x;
+                        let w = 700.0;
+                        let h = w * aspect;
+                        ui.image((tex.id(), egui::vec2(w, h)));
+                    } else {
+                        ui.label(egui::RichText::new("No image").color(muted));
+                    }
 
                     ui.separator();
                     // Maya shelf

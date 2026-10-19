@@ -30,13 +30,14 @@ objc2-core-media = { version = "0.3", optional = true }
 dispatch2 = { version = "0.2", optional = true }
 libc = "0.2.191"
 eframe = { version = "0.29", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["jpeg"] }
 cpal = { version = "0.15", optional = true }
 rusty_h264 = "0.14"
 windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Foundation"], optional = true }
 
 [features]
 default = []
-ui = ["eframe"]
+ui = ["eframe", "image"]
 avfoundation = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-av-foundation", "dep:objc2-core-video", "dep:objc2-core-media", "dep:dispatch2"]
 audio = ["dep:cpal"]
 windows = ["dep:windows"]

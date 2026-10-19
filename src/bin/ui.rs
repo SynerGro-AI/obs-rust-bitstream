@@ -58,6 +58,8 @@ struct TuxedoApp {
     thumbs: Vec<Option<egui::TextureHandle>>,
     burned: Vec<(String, u8, u8, u8)>,
     onion: bool,
+    onion_frames: u32,
+    onion_opacity: f32,
     packets: u32,
     brush_size: f32,
     brush_hard: f32,

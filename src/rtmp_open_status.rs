@@ -13,6 +13,7 @@ pub struct RtmpOpenStatus {
     pub publish: bool,
     pub metadata: bool,
     pub audio: bool,
+    pub close: bool,
     pub bytes: u64,
 }
 
@@ -26,20 +27,22 @@ impl RtmpOpenStatus {
             publish: true,
             metadata: true,
             audio: true,
+            close: true,
             bytes,
         }
     }
 
-    /// One line with every open step.
+    /// One line with every open and close step.
     pub fn one_line(&self) -> String {
         format!(
-            "handshake={} connect={} create={} publish={} metadata={} audio={} bytes={}",
+            "handshake={} connect={} create={} publish={} metadata={} audio={} close={} bytes={}",
             self.handshake as u8,
             self.connect as u8,
             self.create as u8,
             self.publish as u8,
             self.metadata as u8,
             self.audio as u8,
+            self.close as u8,
             self.bytes
         )
     }
@@ -52,9 +55,11 @@ mod tests {
     #[test]
     fn reports() {
         let s = RtmpOpenStatus::from(2856);
-        assert!(s.handshake && s.connect && s.create && s.publish && s.metadata && s.audio);
+        assert!(
+            s.handshake && s.connect && s.create && s.publish && s.metadata && s.audio && s.close
+        );
         assert_eq!(s.bytes, 2856);
-        assert!(s.one_line().contains("metadata=1"));
+        assert!(s.one_line().contains("close=1"));
     }
 
     #[test]

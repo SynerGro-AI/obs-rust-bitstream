@@ -319,13 +319,20 @@ impl eframe::App for TuxedoApp {
                         Mode::Obs => {
                             ui.label(egui::RichText::new("◆ STREAM").color(gold));
                             let stream_color = if self.streaming { egui::Color32::from_rgb(0, 200, 0) } else { muted };
-                            if ui.button(egui::RichText::new("● Streaming: Live").color(stream_color)).clicked() {
+                            if ui.button(egui::RichText::new("● Streaming").color(stream_color)).clicked() {
                                 self.streaming = !self.streaming;
                             }
                             let rec_color = if self.recording { egui::Color32::from_rgb(200, 0, 0) } else { muted };
-                            if ui.button(egui::RichText::new("● REC: 00:47:32").color(rec_color)).clicked() {
+                            if ui.button(egui::RichText::new("● Recording").color(rec_color)).clicked() {
                                 self.recording = !self.recording;
                             }
+                            ui.separator();
+                            ui.label(egui::RichText::new("◆ STATUS").color(gold));
+                            let stream_line = if self.streaming { "stream=live" } else { "stream=idle" };
+                            let rec_line = if self.recording { "record=on" } else { "record=off" };
+                            ui.label(egui::RichText::new(stream_line).color(fg));
+                            ui.label(egui::RichText::new(rec_line).color(fg));
+                            ui.label(egui::RichText::new("output=rtmp").color(muted));
                         }
                     }
                 });

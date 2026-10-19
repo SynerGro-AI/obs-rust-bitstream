@@ -45,6 +45,7 @@ struct TuxedoApp {
     density: f32,
     feather: f32,
     opacity: f32,
+    blend: String,
     strokes: Vec<(u32, u32, &'static str, String)>,
     time: f32,
     keys: Vec<f32>,
@@ -80,6 +81,7 @@ impl Default for TuxedoApp {
             density: 100.0,
             feather: 0.0,
             opacity: 100.0,
+            blend: "Normal".to_string(),
             strokes: Vec::new(),
             time: 0.0,
             keys: vec![0.0, 1.0, 2.5],
@@ -194,7 +196,9 @@ impl eframe::App for TuxedoApp {
                                         for (i, p) in rgba.pixels_mut().enumerate() {
                                             if let Some(op) = over_rgba.pixels().nth(i) {
                                                 for c in 0..3 {
-                                                    p[c] = ((p[c] as u16 + op[c] as u16) / 2) as u8;
+                                                    let mixed = (p[c] as u16 + op[c] as u16) / 2;
+                                                    let scaled = (mixed as f32 * self.density / 100.0) as u8;
+                                                    p[c] = scaled;
                                                 }
                                             }
                                         }
@@ -320,7 +324,10 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new("◆ MASKS").color(gold));
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Density").color(fg));
-                                ui.add(egui::Slider::new(&mut self.density, 0.0..=100.0).suffix("%"));
+                                if ui.add(egui::Slider::new(&mut self.density, 0.0..=100.0).suffix("%")).changed() {
+                                    self.last_action = "recomposite".to_string();
+                                    self.canvas_texture = None;
+                                }
                             });
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Feather").color(fg));
@@ -330,12 +337,17 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new("◆ PROPERTIES").color(gold));
                             ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Opacity").color(fg));
-                                if ui.add(egui::Slider::new(&mut self.opacity, 0.0..=100.0).suffix("%")).changed() {
-                                    if let Some(doc) = &mut self.doc {
-                                        doc.set_opacity(&self.selected_layer, (self.opacity * 2.55) as u8);
-                                    }
-                                }
+                                ui.label(egui::RichText::new("Blend").color(fg));
+                                egui::ComboBox::from_id_salt("blend")
+                                    .selected_text(&self.blend)
+                                    .show_ui(ui, |ui| {
+                                        for mode in ["Normal", "Multiply", "Screen", "Overlay"] {
+                                            if ui.selectable_value(&mut self.blend, mode.to_string(), mode).clicked() {
+                                                self.last_action = "recomposite".to_string();
+                                                self.canvas_texture = None;
+                                            }
+                                        }
+                                    });
                             });
                             if ui.button(egui::RichText::new("Save PSD").color(gold)).clicked() {
                                 if let Some(doc) = &mut self.doc {

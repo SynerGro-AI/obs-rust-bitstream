@@ -514,10 +514,13 @@ impl eframe::App for TuxedoApp {
                                 self.streaming = !self.streaming;
                                 if self.streaming {
                                     self.packets += 1;
-                                    let dump: Vec<u8> = (0..64).map(|i| (i * 3) as u8).collect();
+                                    let frames = 8u32;
+                                    let mut dump = Vec::new();
+                                    dump.extend_from_slice(&frames.to_le_bytes());
+                                    dump.extend((0..64).map(|i| (i * 3) as u8));
                                     let path = std::path::Path::new("assets/stream_dump.bin");
                                     let _ = std::fs::write(path, &dump);
-                                    self.last_action = format!("run {} bytes → {}", dump.len(), path.display());
+                                    self.last_action = format!("run {} frames → {}", frames, path.display());
                                 }
                             }
                             let rec_color = if self.recording { egui::Color32::from_rgb(200, 0, 0) } else { muted };

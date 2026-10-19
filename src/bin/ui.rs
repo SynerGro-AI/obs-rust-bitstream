@@ -66,6 +66,7 @@ struct TuxedoApp {
     brush_space: f32,
     brush_flow: f32,
     filter: String,
+    file_path: String,
 }
 
 impl Default for TuxedoApp {
@@ -126,6 +127,7 @@ impl Default for TuxedoApp {
             brush_space: 10.0,
             brush_flow: 100.0,
             filter: "None".to_string(),
+            file_path: "assets/mountain_spire.psd".to_string(),
         }
     }
 }
@@ -161,16 +163,17 @@ impl eframe::App for TuxedoApp {
                 ui.label(egui::RichText::new("Pro User").color(fg));
                 ui.label(egui::RichText::new("LICENSED").color(gold));
                 ui.separator();
+                ui.add(egui::TextEdit::singleline(&mut self.file_path).desired_width(200.0));
                 if ui.button(egui::RichText::new("Open").color(fg)).clicked() {
-                    if let Some(doc) = Psd::load(std::path::Path::new("assets/mountain_spire.psd")) {
+                    if let Some(doc) = Psd::load(std::path::Path::new(&self.file_path)) {
                         self.doc = Some(doc);
-                        self.last_action = "Opened".to_string();
+                        self.last_action = format!("Opened {}", self.file_path);
                     }
                 }
                 if ui.button(egui::RichText::new("Save").color(fg)).clicked() {
                     if let Some(doc) = &self.doc {
-                        let _ = doc.save(std::path::Path::new("assets/mountain_spire.psd"));
-                        self.last_action = "Saved".to_string();
+                        let _ = doc.save(std::path::Path::new(&self.file_path));
+                        self.last_action = format!("Saved {}", self.file_path);
                     }
                 }
             });

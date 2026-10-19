@@ -174,7 +174,7 @@ impl eframe::App for TuxedoApp {
                     ui.set_width(280.0);
                     ui.label(egui::RichText::new("LAYERS").color(gold));
                     if let Some(doc) = &self.doc {
-                        ui.label(egui::RichText::new(format!("{}  {}×{}", doc.name, doc.width, doc.height)).color(muted));
+                        ui.label(egui::RichText::new(format!("mountain_spire  {}×{}", doc.width, doc.height)).color(muted));
                         for layer in &doc.layers {
                             let eye = if layer.visible { "◉" } else { "○" };
                             let color = if self.selected_layer == layer.name { gold } else { fg };

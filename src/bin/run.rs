@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, TimelineAction, TimelineRest, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, TimelineAction, TimelineRest, Toolbar, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -372,6 +372,12 @@ fn main() {
             remap.add_key(0.0, 1.0);
             remap.add_key(2.0, 0.5);
             println!("timeline_rest: marker={:.1} work={:.0}-{:.0} speed={:.1}", m.time, area.start, area.end, remap.speed_at(3.0));
+            let mut tb = Toolbar::photoshop();
+            tb.expand("Paint");
+            tb.select("Brush");
+            println!("toolbar: active={} visible={}", tb.active(), tb.visible().len());
+            tb.retract("Paint");
+            println!("toolbar_retracted: visible={}", tb.visible().len());
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);

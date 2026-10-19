@@ -271,6 +271,8 @@ fn main() {
             println!("shell_loop_file=shell_loop.txt");
             let encoded = ShellLoopFrame::encode(&actions);
             println!("shell_loop_frame: {}", encoded);
+            let _ = std::fs::write("shell_loop_frame.txt", format!("{}", encoded));
+            println!("shell_loop_frame_file=shell_loop_frame.txt");
         }
     }
 }

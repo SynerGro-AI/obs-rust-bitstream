@@ -214,6 +214,8 @@ fn main() {
             println!("shell_frame: full={} half={}", full, half);
             let (ft, ht) = ShellRunner::compare();
             println!("shell_runner: full={} half={}", ft, ht);
+            let _ = std::fs::write("shell_runner.txt", format!("full={} half={}", ft, ht));
+            println!("shell_runner_file=shell_runner.txt");
         }
     }
 }

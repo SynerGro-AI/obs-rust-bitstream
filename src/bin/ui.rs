@@ -147,8 +147,18 @@ impl eframe::App for TuxedoApp {
                         let aspect = size.y / size.x;
                         let w = 700.0;
                         let h = w * aspect;
-                        let base_visible = self.doc.as_ref().map(|d| d.layers.first().map(|l| l.visible).unwrap_or(true)).unwrap_or(true);
+                        let factor = self.doc.as_ref().map(|d| {
+                            let vis: Vec<_> = d.layers.iter().filter(|l| l.visible).collect();
+                            if vis.is_empty() { 0.0 } else {
+                                let sum: f32 = vis.iter().map(|l| l.opacity as f32 / 255.0).sum();
+                                sum / vis.len() as f32
+                            }
+                        }).unwrap_or(1.0);
                         ui.image((tex.id(), egui::vec2(w, h)));
+                        if factor < 1.0 {
+                            let alpha = ((1.0 - factor) * 200.0) as u8;
+                            ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, alpha));
+                        }
                         let resp = ui.interact(ui.min_rect(), ui.id().with("canvas"), egui::Sense::click_and_drag());
                         if resp.clicked() || resp.dragged() {
                             if let Some(pos) = resp.interact_pointer_pos() {

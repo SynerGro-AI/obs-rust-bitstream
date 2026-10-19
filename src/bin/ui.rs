@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, Reconnect, ToolDispatch};
+use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, LiveWeights, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, Reconnect, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -67,6 +67,7 @@ struct TuxedoApp {
     brush_flow: f32,
     filter: String,
     file_path: String,
+    weights: LiveWeights,
 }
 
 impl Default for TuxedoApp {
@@ -128,6 +129,16 @@ impl Default for TuxedoApp {
             brush_flow: 100.0,
             filter: "None".to_string(),
             file_path: "assets/mountain_spire.psd".to_string(),
+            weights: {
+                let mut w = LiveWeights::new();
+                w.merge_lessons(&[
+                    ("brush.size", 12.0),
+                    ("brush.hardness", 0.8),
+                    ("filter.levels", 1.2),
+                    ("blend.multiply", 0.5),
+                ]);
+                w
+            },
         }
     }
 }

@@ -10,6 +10,7 @@ use crate::blend_composite::BlendComposite;
 use crate::edit_round::EditRound;
 use crate::group_composite::GroupComposite;
 use crate::layer_composite::LayerComposite;
+use crate::layer_select::LayerSelect;
 use crate::photo_layers::LayerStack;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
@@ -28,9 +29,14 @@ impl ShellStatus {
         w.click("Brush", ToolSource::Photoshop);
         w.options_mut().set("size", 30.0);
         let size = w.options().get("size").unwrap_or(0.0);
+        let mut sel = LayerSelect::new();
+        let mut meta = crate::layer_stack::LayerStack::new();
+        meta.add("Layer 1").ok();
+        sel.select(&meta, "Layer 1");
+        let selected = sel.selected().unwrap_or("none");
         format!(
-            "tool={} size={:.0} edit={} group={} members={}/{} blend={:.0}/{:.0} eye={:.0}/{:.0}",
-            w.active(), size, layer, group, single, group_n, normal, multiply, shown, hidden
+            "tool={} size={:.0} selected={} edit={} group={} members={}/{} blend={:.0}/{:.0} eye={:.0}/{:.0}",
+            w.active(), size, selected, layer, group, single, group_n, normal, multiply, shown, hidden
         )
     }
 
@@ -57,7 +63,7 @@ impl ShellStatus {
 
     /// True if the line contains every section.
     pub fn complete(line: &str) -> bool {
-        line.contains("tool=") && line.contains("edit=") && line.contains("group=") && line.contains("blend=") && line.contains("eye=")
+        line.contains("tool=") && line.contains("selected=") && line.contains("eye=")
     }
 }
 

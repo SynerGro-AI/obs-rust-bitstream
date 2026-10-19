@@ -278,8 +278,10 @@ impl eframe::App for TuxedoApp {
                                         self.strokes.push((x, y, "paint", self.selected_layer.clone()));
                                         self.burned.push((self.selected_layer.clone(), 201, 168, 76));
                                         let dab = (self.brush_size * self.brush_hard / 100.0) as usize;
-                                        for _ in 0..dab {
-                                            self.burned.push((self.selected_layer.clone(), 201, 168, 76));
+                                        for i in 0..dab {
+                                            let falloff = 1.0 - (i as f32 / dab.max(1) as f32) * (1.0 - self.brush_hard / 100.0);
+                                            let v = (201.0 * falloff) as u8;
+                                            self.burned.push((self.selected_layer.clone(), v, (168.0 * falloff) as u8, (76.0 * falloff) as u8));
                                         }
                                         self.last_action = "recomposite".to_string();
                                         self.canvas_texture = None;

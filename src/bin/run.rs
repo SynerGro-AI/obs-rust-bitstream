@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, OUTPUT_AV,
 };
 
 fn main() {
@@ -207,6 +207,7 @@ fn main() {
             println!("group_edit: single={} group={}", single, group);
             let (normal, multiply) = BlendComposite::run();
             println!("blend: normal={:.1} multiply={:.1}", normal, multiply);
+            println!("shell: {}", ShellStatus::line());
         }
     }
 }

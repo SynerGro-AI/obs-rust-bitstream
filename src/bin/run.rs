@@ -172,6 +172,14 @@ fn main() {
             println!("canvas_mean={:.3}", mean);
             println!("--- shell ---");
             print!("{}", ShellRound::run());
+            use obs_rust_bitstream::edit_target::EditTarget;
+            use obs_rust_bitstream::layer_select::LayerSelect;
+            use obs_rust_bitstream::ui_view::UiView;
+            use obs_rust_bitstream::workspace::Workspace;
+            let w = Workspace::new(16, 16);
+            let s = obs_rust_bitstream::layer_stack::LayerStack::new();
+            println!("{}", UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Layer("Layer 1".into())));
+            println!("{}", UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Group("Group 1".into())));
             // Composite of the showing layers.
             use obs_rust_bitstream::video_fourcc::VideoFormat;
             use obs_rust_bitstream::video_frame::VideoFrame;

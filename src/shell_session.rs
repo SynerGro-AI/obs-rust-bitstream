@@ -13,17 +13,19 @@ pub struct SessionState {
     pub tool: String,
     pub size: f32,
     pub layers: usize,
+    pub selected: String,
 }
 
 pub struct ShellSession;
 
 impl ShellSession {
     /// Save the workspace and layer count.
-    pub fn save(workspace: &Workspace, layers: usize) -> SessionState {
+    pub fn save(workspace: &Workspace, layers: usize, selected: &str) -> SessionState {
         SessionState {
             tool: workspace.active().to_string(),
             size: workspace.options().get("size").unwrap_or(0.0),
             layers,
+            selected: selected.to_string(),
         }
     }
 
@@ -44,6 +46,7 @@ impl ShellSession {
         let mut tool = None;
         let mut size = None;
         let mut layers = None;
+        let mut selected = None;
         for part in line.split_whitespace() {
             if let Some(v) = part.strip_prefix("tool=") {
                 tool = Some(v.to_string());
@@ -51,12 +54,15 @@ impl ShellSession {
                 size = v.parse().ok();
             } else if let Some(v) = part.strip_prefix("layers=") {
                 layers = v.parse().ok();
+            } else if let Some(v) = part.strip_prefix("selected=") {
+                selected = Some(v.to_string());
             }
         }
         Some(SessionState {
             tool: tool?,
             size: size?,
             layers: layers?,
+            selected: selected.unwrap_or_else(|| "none".to_string()),
         })
     }
 }
@@ -70,7 +76,7 @@ mod tests {
         let mut w = Workspace::new(32, 32);
         w.click("Brush", ToolSource::Photoshop);
         w.options_mut().set("size", 30.0);
-        let state = ShellSession::save(&w, 2);
+        let state = ShellSession::save(&w, 2, "Layer 1");
         let line = ShellSession::to_line(&state);
         let loaded = ShellSession::from_line(&line).unwrap();
         let mut w2 = Workspace::new(32, 32);
@@ -78,6 +84,7 @@ mod tests {
         assert_eq!(w2.active(), "Brush");
         assert!((w2.options().get("size").unwrap() - 30.0).abs() < 0.01);
         assert_eq!(layers, 2);
+        assert_eq!(loaded.selected, "Layer 1");
     }
 
     #[test]
@@ -91,6 +98,6 @@ mod tests {
         let mut b = Workspace::new(16, 16);
         a.click("Brush", ToolSource::Photoshop);
         b.click("Crop", ToolSource::Photoshop);
-        assert_ne!(ShellSession::save(&a, 1), ShellSession::save(&b, 1));
+        assert_ne!(ShellSession::save(&a, 1, "A"), ShellSession::save(&b, 1, "A"));
     }
 }

@@ -329,7 +329,7 @@ fn main() {
             let mut sw = Workspace::new(32, 32);
             sw.click("Brush", obs_rust_bitstream::active_tool::ToolSource::Photoshop);
             sw.options_mut().set("size", 30.0);
-            let state = ShellSession::save(&sw, 1);
+            let state = ShellSession::save(&sw, 1, "Layer 1");
             let line = ShellSession::to_line(&state);
             let _ = std::fs::write("shell_session.txt", &line);
             println!("shell_session: {}", line);

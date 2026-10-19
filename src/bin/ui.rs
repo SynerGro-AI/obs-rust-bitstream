@@ -169,9 +169,6 @@ impl eframe::App for TuxedoApp {
                                 self.last_action = format!("{:?}", action);
                             }
                         }
-                        if !base_visible {
-                            ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 160));
-                        }
                     } else {
                         ui.label(egui::RichText::new("No image").color(muted));
                     }

@@ -1,15 +1,16 @@
-//! Rust UI window (egui). Tuxedo theme.
+//! Rust UI window (egui). Tuxedo theme matching the suite layout.
 //!
 //! cargo run --features ui --bin ui
 //!
-//! Pulls the real PsToolbar and MayaShelves catalogs.
+//! Top mode tabs, left tool catalog, center canvas,
+//! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{MayaShelf, MayaShelves, PsGroup, PsToolbar};
+use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, PsGroup, PsToolbar};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1400.0, 900.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1600.0, 1000.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -19,20 +20,43 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Photoshop,
+    AfterEffects,
+    Maya,
+    Obs,
+}
+
 struct TuxedoApp {
+    mode: Mode,
     tool: String,
     expanded: Option<PsGroup>,
     maya_shelf: MayaShelf,
     zoom: f32,
+    layers: LayerStack,
+    selected_layer: String,
+    streaming: bool,
+    recording: bool,
 }
 
 impl Default for TuxedoApp {
     fn default() -> Self {
+        let mut layers = LayerStack::new();
+        let _ = layers.add("Mountain Spire");
+        let _ = layers.add("Mist Overlay");
+        let _ = layers.add("Valley Lights");
+        let _ = layers.add("Rock Foreground");
         Self {
-            tool: "Brush".to_string(),
+            mode: Mode::Photoshop,
+            tool: "Brush Tool".to_string(),
             expanded: Some(PsGroup::Paint),
             maya_shelf: MayaShelf::Modeling,
-            zoom: 100.0,
+            zoom: 27.3,
+            layers,
+            selected_layer: "Mountain Spire".to_string(),
+            streaming: true,
+            recording: true,
         }
     }
 }
@@ -42,41 +66,70 @@ impl eframe::App for TuxedoApp {
         let bg = egui::Color32::from_rgb(10, 10, 10);
         let fg = egui::Color32::from_rgb(245, 245, 245);
         let gold = egui::Color32::from_rgb(201, 168, 76);
+        let muted = egui::Color32::from_rgb(107, 107, 107);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
 
+            // Top bar
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("◆ TUXEDO EDIT").color(gold).size(18.0));
+                ui.label(egui::RichText::new("◆ TUXEDO EDIT").color(gold).size(16.0));
+                ui.label(egui::RichText::new("Professional Creative Suite").color(muted).size(10.0));
                 ui.separator();
-                ui.label(egui::RichText::new("4K").color(gold));
+                for (m, label) in [
+                    (Mode::Photoshop, "PHOTOSHOP"),
+                    (Mode::AfterEffects, "AFTER EFFECTS"),
+                    (Mode::Maya, "MAYA"),
+                    (Mode::Obs, "OBS"),
+                ] {
+                    let color = if self.mode == m { gold } else { fg };
+                    if ui.button(egui::RichText::new(label).color(color)).clicked() {
+                        self.mode = m;
+                    }
+                }
+                ui.separator();
+                ui.label(egui::RichText::new("Pro User").color(fg));
+                ui.label(egui::RichText::new("LICENSED").color(gold));
             });
 
             ui.separator();
 
             ui.horizontal(|ui| {
+                // Left: tool catalog
                 ui.vertical(|ui| {
-                    ui.set_width(220.0);
+                    ui.set_width(200.0);
                     ui.label(egui::RichText::new("PHOTOSHOP").color(gold));
                     for group in PsToolbar::groups() {
                         let open = self.expanded == Some(*group);
-                        let label = format!("{} {}", if open { "▼" } else { "▶" }, group.label());
+                        let label = format!("{} {}", if open { "▼" } else { "▶" }, group.label().to_uppercase());
                         if ui.button(egui::RichText::new(label).color(gold)).clicked() {
                             self.expanded = if open { None } else { Some(*group) };
                         }
                         if open {
                             for tool in PsToolbar::in_group(*group) {
                                 let text = format!("  {}  {}", tool.name, tool.hotkey);
-                                if ui.button(egui::RichText::new(text).color(fg)).clicked() {
+                                let color = if self.tool == tool.name { gold } else { fg };
+                                if ui.button(egui::RichText::new(text).color(color)).clicked() {
                                     self.tool = tool.name.to_string();
                                 }
                             }
                         }
                     }
+                });
+
+                ui.separator();
+
+                // Center: canvas
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("Canvas").color(fg));
+                    let canvas = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(700.0, 400.0));
+                    ui.painter().rect_stroke(canvas, 0.0, egui::Stroke::new(1.0_f32, gold));
+                    ui.allocate_space(egui::vec2(700.0, 400.0));
 
                     ui.separator();
-                    ui.label(egui::RichText::new("MAYA SHELVES").color(gold));
+                    // Maya shelf
                     ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("MAYA").color(gold));
                         for shelf in MayaShelves::shelves() {
                             let active = self.maya_shelf == *shelf;
                             let color = if active { gold } else { fg };
@@ -85,32 +138,67 @@ impl eframe::App for TuxedoApp {
                             }
                         }
                     });
-                    for btn in MayaShelves::on_shelf(self.maya_shelf) {
-                        if ui.button(egui::RichText::new(format!("  {}", btn.name)).color(fg)).clicked() {
-                            self.tool = btn.name.to_string();
+                    ui.horizontal_wrapped(|ui| {
+                        for btn in MayaShelves::on_shelf(self.maya_shelf) {
+                            if ui.button(egui::RichText::new(btn.name).color(fg)).clicked() {
+                                self.tool = btn.name.to_string();
+                            }
                         }
-                    }
+                    });
                 });
 
                 ui.separator();
 
+                // Right: layers, masks, properties
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("Canvas").color(fg));
-                    let canvas = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(800.0, 450.0));
-                    ui.painter().rect_stroke(canvas, 0.0, egui::Stroke::new(1.0_f32, gold));
-                    ui.allocate_space(egui::vec2(800.0, 450.0));
+                    ui.set_width(280.0);
+                    ui.label(egui::RichText::new("LAYERS").color(gold));
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Normal").color(fg));
+                        ui.label(egui::RichText::new("Opacity: 100%").color(muted));
+                    });
+                    for layer in ["Mountain Spire", "Mist Overlay", "Valley Lights", "Rock Foreground"] {
+                        let selected = self.selected_layer == layer;
+                        let color = if selected { gold } else { fg };
+                        let eye = if selected { "◉" } else { "○" };
+                        if ui.button(egui::RichText::new(format!("{}  {}", eye, layer)).color(color)).clicked() {
+                            self.selected_layer = layer.to_string();
+                        }
+                    }
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("MASKS").color(gold));
+                    ui.label(egui::RichText::new("Density: 100%  Feather: 0.0 px").color(muted));
+                    ui.label(egui::RichText::new("Kind: Grayscale  Invert: Off").color(muted));
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("PROPERTIES").color(gold));
+                    ui.label(egui::RichText::new("Canvas Size").color(fg));
+                    ui.label(egui::RichText::new("Width:  5760 px").color(muted));
+                    ui.label(egui::RichText::new("Height: 3240 px").color(muted));
+                    ui.label(egui::RichText::new("Resolution: 300 Pixels/Inch").color(muted));
+                    ui.label(egui::RichText::new("Color Profile").color(fg));
+                    ui.label(egui::RichText::new("Working RGB: Adobe RGB (1998)").color(muted));
                 });
             });
 
             ui.separator();
-            ui.label(
-                egui::RichText::new(format!(
-                    "◆ {}  ·  {:.0}%  ·  3840×2160",
-                    self.tool.to_uppercase(),
-                    self.zoom
-                ))
-                .color(fg),
-            );
+
+            // Bottom status
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("Tool: {}  B", self.tool)).color(fg));
+                ui.separator();
+                ui.label(egui::RichText::new(format!("Zoom: {:.1}%", self.zoom)).color(fg));
+                ui.separator();
+                ui.label(egui::RichText::new("Resolution: 5760 × 3240 px").color(fg));
+                ui.separator();
+                ui.label(egui::RichText::new("Document: mountain_spire_v2.psd").color(fg));
+                ui.separator();
+                let stream_color = if self.streaming { egui::Color32::from_rgb(0, 200, 0) } else { muted };
+                ui.label(egui::RichText::new("● Streaming: Live").color(stream_color));
+                let rec_color = if self.recording { egui::Color32::from_rgb(200, 0, 0) } else { muted };
+                ui.label(egui::RichText::new("● REC: 00:47:32").color(rec_color));
+            });
         });
     }
 }

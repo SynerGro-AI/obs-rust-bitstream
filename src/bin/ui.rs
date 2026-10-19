@@ -242,7 +242,11 @@ impl eframe::App for TuxedoApp {
                                 let action = ToolDispatch::dispatch(&self.tool, x, y);
                                 self.last_action = format!("{:?}", action);
                                 match action {
-                                    obs_rust_bitstream::CanvasAction::Paint { .. } => self.strokes.push((x, y, "paint", self.selected_layer.clone())),
+                                    obs_rust_bitstream::CanvasAction::Paint { .. } => {
+                                        self.strokes.push((x, y, "paint", self.selected_layer.clone()));
+                                        self.last_action = "recomposite".to_string();
+                                        self.canvas_texture = None;
+                                    }
                                     obs_rust_bitstream::CanvasAction::Select { .. } => self.strokes.push((x, y, "select", self.selected_layer.clone())),
                                     obs_rust_bitstream::CanvasAction::Crop { .. } => self.strokes.push((x, y, "crop", self.selected_layer.clone())),
                                     obs_rust_bitstream::CanvasAction::Heal { .. } => self.strokes.push((x, y, "heal", self.selected_layer.clone())),
@@ -337,7 +341,7 @@ impl eframe::App for TuxedoApp {
                                 if let Some(doc) = &mut self.doc {
                                     doc.set_opacity(&self.selected_layer, (self.opacity * 2.55) as u8);
                                     let _ = doc.save(std::path::Path::new("assets/mountain_spire.psd"));
-                                    self.last_action = format!("Saved d={:.0} f={:.0}", self.density, self.feather);
+                                    self.last_action = format!("Saved strokes={}", self.strokes.len());
                                 }
                             }
                         }

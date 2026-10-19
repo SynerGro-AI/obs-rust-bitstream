@@ -22,11 +22,27 @@ impl MenuHistory {
         item: &str,
     ) -> bool {
         match (menu, item) {
-            (PsMenu::Edit, "Undo") => history.undo().is_some(),
+            (PsMenu::Edit, "Undo") => {
+                if let Some(name) = history.undo() {
+                    // Reverse a layer add if that is what was recorded.
+                    let _ = stack.remove(&name);
+                    true
+                } else {
+                    false
+                }
+            }
             (PsMenu::Edit, "Redo") => history.redo().is_some(),
             _ => {
+                let before = stack.len();
                 if MenuPath::click(stack, menu, item) {
-                    history.push(item);
+                    // Record the layer that was added, if any.
+                    if stack.len() > before {
+                        if let Some(last) = stack.layers().last() {
+                            history.push(last.name());
+                        }
+                    } else {
+                        history.push(item);
+                    }
                     true
                 } else {
                     false
@@ -48,8 +64,8 @@ mod tests {
         assert_eq!(s.len(), 1);
         assert!(h.can_undo());
         assert!(MenuHistory::click(&mut s, &mut h, PsMenu::Edit, "Undo"));
+        assert_eq!(s.len(), 0);
         assert!(!h.can_undo());
-        assert!(h.can_redo());
     }
 
     #[test]

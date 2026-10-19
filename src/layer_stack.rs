@@ -105,6 +105,16 @@ impl LayerStack {
         self.layers.len()
     }
 
+    /// Remove a layer by name. Returns false if missing.
+    pub fn remove(&mut self, name: &str) -> bool {
+        if let Some(i) = self.layers.iter().position(|l| l.name() == name) {
+            self.layers.remove(i);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Composite opacity of all visible layers (product).
     pub fn composite_opacity(&self) -> f32 {
         self.layers

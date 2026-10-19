@@ -178,17 +178,28 @@ fn main() {
                                             Err(_) => println!("shell_socket_sent=0"),
                                         }
                                     }
-                                    // Loop payload through the socket.
+                                    // Loop payload on its own listener.
                                     let loop_actions = [
                                         ShellAction::Tool("Brush"),
                                         ShellAction::Size(30),
                                         ShellAction::NewLayer,
                                     ];
                                     if let Some(loop_payload) = ShellLoopSocket::payload(&loop_actions) {
-                                        let mut rc3 = Reconnect::new();
-                                        match RtmpSocket::send("127.0.0.1", addr.port(), &loop_payload, &mut rc3) {
-                                            Ok(sent) => println!("shell_loop_sent={}", sent.bytes),
-                                            Err(_) => println!("shell_loop_sent=0"),
+                                        if let Some(loop_listener) = std::net::TcpListener::bind("127.0.0.1:0").ok() {
+                                            if let Ok(loop_addr) = loop_listener.local_addr() {
+                                                let (ltx, lrx) = std::sync::mpsc::channel();
+                                                std::thread::spawn(move || {
+                                                    let _ = ltx.send(());
+                                                    let _ = loop_listener.accept();
+                                                });
+                                                let _ = lrx.recv_timeout(std::time::Duration::from_millis(200));
+                                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                                let mut rc3 = Reconnect::new();
+                                                match RtmpSocket::send("127.0.0.1", loop_addr.port(), &loop_payload, &mut rc3) {
+                                                    Ok(sent) => println!("shell_loop_sent={}", sent.bytes),
+                                                    Err(_) => println!("shell_loop_sent=0"),
+                                                }
+                                            }
                                         }
                                     }
                                 }

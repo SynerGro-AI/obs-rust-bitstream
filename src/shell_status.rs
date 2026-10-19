@@ -61,6 +61,11 @@ impl ShellStatus {
         (shown, hidden)
     }
 
+    /// True if two runs produce the same line.
+    pub fn stable() -> bool {
+        Self::line() == Self::line()
+    }
+
     /// True if the line contains every section.
     pub fn complete(line: &str) -> bool {
         line.contains("tool=") && line.contains("selected=") && line.contains("eye=")

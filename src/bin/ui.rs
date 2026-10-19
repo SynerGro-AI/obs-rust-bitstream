@@ -250,9 +250,21 @@ impl eframe::App for TuxedoApp {
                                 }
                                 if self.filter == "Levels" {
                                     for p in rgba.pixels_mut() {
-                                        p[0] = p[0].saturating_add(10);
-                                        p[1] = p[1].saturating_add(10);
-                                        p[2] = p[2].saturating_add(10);
+                                        p[0] = ((p[0] as f32 - 10.0).max(0.0) * 1.2).min(255.0) as u8;
+                                        p[1] = ((p[1] as f32 - 10.0).max(0.0) * 1.2).min(255.0) as u8;
+                                        p[2] = ((p[2] as f32 - 10.0).max(0.0) * 1.2).min(255.0) as u8;
+                                    }
+                                } else if self.filter == "Curves" {
+                                    for p in rgba.pixels_mut() {
+                                        for c in 0..3 {
+                                            let v = p[c] as f32 / 255.0;
+                                            p[c] = (v * v * 255.0) as u8;
+                                        }
+                                    }
+                                } else if self.filter == "Gaussian" {
+                                    for p in rgba.pixels_mut() {
+                                        let avg = (p[0] as u16 + p[1] as u16 + p[2] as u16) / 3;
+                                        p[0] = avg as u8; p[1] = avg as u8; p[2] = avg as u8;
                                     }
                                 }
                                 let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());

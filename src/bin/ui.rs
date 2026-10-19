@@ -41,6 +41,9 @@ struct TuxedoApp {
     recording: bool,
     canvas_texture: Option<egui::TextureHandle>,
     last_action: String,
+    density: f32,
+    feather: f32,
+    opacity: f32,
 }
 
 impl Default for TuxedoApp {
@@ -63,6 +66,9 @@ impl Default for TuxedoApp {
             recording: true,
             canvas_texture: None,
             last_action: String::new(),
+            density: 100.0,
+            feather: 0.0,
+            opacity: 100.0,
         }
     }
 }
@@ -210,8 +216,22 @@ impl eframe::App for TuxedoApp {
                                 ui.label(egui::RichText::new("No document").color(muted));
                             }
                             ui.separator();
+                            ui.label(egui::RichText::new("MASKS").color(gold));
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Density").color(fg));
+                                ui.add(egui::Slider::new(&mut self.density, 0.0..=100.0).suffix("%"));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Feather").color(fg));
+                                ui.add(egui::Slider::new(&mut self.feather, 0.0..=50.0).suffix(" px"));
+                            });
+                            ui.separator();
                             ui.label(egui::RichText::new("PROPERTIES").color(gold));
                             ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Opacity").color(fg));
+                                ui.add(egui::Slider::new(&mut self.opacity, 0.0..=100.0).suffix("%"));
+                            });
                         }
                         Mode::AfterEffects => {
                             ui.label(egui::RichText::new("TIMELINE").color(gold));

@@ -343,6 +343,9 @@ impl eframe::App for TuxedoApp {
                                 let _ = self.keys_pure.add("position", (self.time * 1000.0) as u64, self.time);
                             }
                             ui.label(egui::RichText::new(format!("pure keys: {}", self.keys_pure.count("position"))).color(muted));
+                            if let Ok(v) = self.keys_pure.sample("position", (self.time * 1000.0) as u64) {
+                                ui.label(egui::RichText::new(format!("sampled: {:.2}", v)).color(gold));
+                            }
                         }
                         Mode::Maya => {
                             ui.label(egui::RichText::new("◆ OUTLINER").color(gold));
@@ -372,6 +375,10 @@ impl eframe::App for TuxedoApp {
                                     obj.4 = !obj.4;
                                 }
                                 ui.label(egui::RichText::new(format!("pure joints: {}", self.joints.len())).color(muted));
+                                if let Ok(j) = self.joints.get(&self.selected_object) {
+                                    let (x, y, z) = j.position();
+                                    ui.label(egui::RichText::new(format!("pos: {:.1} {:.1} {:.1}", x, y, z)).color(gold));
+                                }
                             }
                         }
                         Mode::Obs => {

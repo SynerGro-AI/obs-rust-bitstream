@@ -12,10 +12,12 @@ use crate::maya_shelves::MayaShelves;
 use crate::pixel_canvas::PixelCanvas;
 use crate::ps_toolbar::PsToolbar;
 use crate::toon_tools::ToonTools;
+use crate::tool_option_set::ToolOptionSet;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Workspace {
     active: ActiveTool,
+    options: ToolOptionSet,
     width: u32,
     height: u32,
 }
@@ -23,8 +25,11 @@ pub struct Workspace {
 impl Workspace {
     /// One canvas. All tools available.
     pub fn new(width: u32, height: u32) -> Self {
+        let active = ActiveTool::new();
+        let options = ToolOptionSet::for_tool(&active);
         Self {
-            active: ActiveTool::new(),
+            active,
+            options,
             width,
             height,
         }
@@ -38,12 +43,26 @@ impl Workspace {
         self.active.source()
     }
 
-    /// Toolbar click. Switches the active tool. Same canvas.
+    pub fn options(&self) -> &ToolOptionSet {
+        &self.options
+    }
+
+    pub fn options_mut(&mut self) -> &mut ToolOptionSet {
+        &mut self.options
+    }
+
+    /// Toolbar click. Switches the active tool and reloads its options.
+    /// Same canvas.
     pub fn click(&mut self, name: &str, source: ToolSource) -> bool {
         if !Self::all_tools().iter().any(|t| t == name) {
             return false;
         }
-        self.active.activate(name, source)
+        if self.active.activate(name, source) {
+            self.options = ToolOptionSet::for_tool(&self.active);
+            true
+        } else {
+            false
+        }
     }
 
     /// Every tool name from all four toolbars.
@@ -100,6 +119,18 @@ mod tests {
         assert_eq!(w.active(), "Move");
     }
 
+    #[test]
+    fn options_follow_tool() {
+        let mut w = Workspace::new(32, 32);
+        w.click("Brush", ToolSource::Photoshop);
+        assert_eq!(w.options().get("size"), Some(20.0));
+        w.options_mut().set("size", 40.0);
+        assert_eq!(w.options().get("size"), Some(40.0));
+        // Switching reloads defaults.
+        w.click("Crop", ToolSource::Photoshop);
+        assert!(w.options().get("size").is_none());
+        assert!(w.options().get("ratio_w").is_some());
+    }
     #[test]
     fn differential() {
         let mut a = Workspace::new(32, 32);

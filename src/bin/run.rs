@@ -134,6 +134,7 @@ fn main() {
                                     std::thread::spawn(move || {
                                         let _ = tx.send(());
                                         let _ = listener.accept();
+                                        let _ = listener.accept();
                                     });
                                     let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
                                     std::thread::sleep(std::time::Duration::from_millis(50));

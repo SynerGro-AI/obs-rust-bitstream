@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Phshp, PsGroup, PsToolbar};
+use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -36,7 +36,7 @@ struct TuxedoApp {
     zoom: f32,
     layers: LayerStack,
     selected_layer: String,
-    doc: Option<Phshp>,
+    doc: Option<Psd>,
     streaming: bool,
     recording: bool,
 }
@@ -56,7 +56,7 @@ impl Default for TuxedoApp {
             zoom: 27.3,
             layers,
             selected_layer: "Mountain Spire".to_string(),
-            doc: Phshp::load(std::path::Path::new("assets/mountain_spire.phshp")),
+            doc: Psd::load(std::path::Path::new("assets/mountain_spire.psd")),
             streaming: true,
             recording: true,
         }
@@ -175,11 +175,11 @@ impl eframe::App for TuxedoApp {
                     ui.label(egui::RichText::new("LAYERS").color(gold));
                     if let Some(doc) = &self.doc {
                         ui.label(egui::RichText::new(format!("{}  {}×{}", doc.name, doc.width, doc.height)).color(muted));
-                        for (name, vis) in &doc.layers {
-                            let eye = if *vis { "◉" } else { "○" };
-                            let color = if self.selected_layer == *name { gold } else { fg };
-                            if ui.button(egui::RichText::new(format!("{}  {}", eye, name)).color(color)).clicked() {
-                                self.selected_layer = name.clone();
+                        for layer in &doc.layers {
+                            let eye = if layer.visible { "◉" } else { "○" };
+                            let color = if self.selected_layer == layer.name { gold } else { fg };
+                            if ui.button(egui::RichText::new(format!("{}  {}  {}", eye, layer.name, layer.opacity)).color(color)).clicked() {
+                                self.selected_layer = layer.name.clone();
                             }
                         }
                     } else {

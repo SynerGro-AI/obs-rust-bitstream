@@ -236,7 +236,11 @@ impl eframe::App for TuxedoApp {
                                             }
                                         }
                                         let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-                                        ui.painter().rect_filled(rect, 2.0, gold);
+                                        if let Some(tex) = &self.canvas_texture {
+                                            ui.painter().image(tex.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+                                        } else {
+                                            ui.painter().rect_filled(rect, 2.0, gold);
+                                        }
                                         if ui.button(egui::RichText::new(format!("{}  {}", name, opacity)).color(color)).clicked() {
                                             self.selected_layer = name.clone();
                                         }

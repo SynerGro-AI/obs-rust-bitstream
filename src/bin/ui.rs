@@ -177,18 +177,18 @@ impl eframe::App for TuxedoApp {
                     ui.label(egui::RichText::new("LAYERS").color(gold));
                     if let Some(doc) = &self.doc {
                         ui.label(egui::RichText::new(format!("mountain_spire  {}×{}", doc.width, doc.height)).color(muted));
-                        for layer in &doc.layers {
-                            let eye = if layer.visible { "◉" } else { "○" };
-                            let color = if self.selected_layer == layer.name { gold } else { fg };
+                        let layer_info: Vec<(String, bool, u8)> = doc.layers.iter().map(|l| (l.name.clone(), l.visible, l.opacity)).collect();
+                        for (name, visible, opacity) in layer_info {
+                            let eye = if visible { "◉" } else { "○" };
+                            let color = if self.selected_layer == name { gold } else { fg };
                             ui.horizontal(|ui| {
                                 if ui.button(egui::RichText::new(eye).color(color)).clicked() {
-                                    let name = layer.name.clone();
                                     if let Some(doc) = &mut self.doc {
                                         doc.toggle(&name);
                                     }
                                 }
-                                if ui.button(egui::RichText::new(format!("{}  {}", layer.name, layer.opacity)).color(color)).clicked() {
-                                    self.selected_layer = layer.name.clone();
+                                if ui.button(egui::RichText::new(format!("{}  {}", name, opacity)).color(color)).clicked() {
+                                    self.selected_layer = name.clone();
                                 }
                             });
                         }

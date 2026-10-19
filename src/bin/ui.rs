@@ -454,6 +454,8 @@ impl eframe::App for TuxedoApp {
                                 self.streaming = !self.streaming;
                                 if self.streaming {
                                     self.packets += 1;
+                                    let dump: Vec<u8> = (0..64).map(|i| (i * 3) as u8).collect();
+                                    self.last_action = format!("run {} bytes", dump.len());
                                 }
                             }
                             let rec_color = if self.recording { egui::Color32::from_rgb(200, 0, 0) } else { muted };

@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, OUTPUT_AV,
 };
 
 fn main() {
@@ -170,6 +170,8 @@ fn main() {
             let _ = pipe.tick(&mut cap, &mut audio, &mut out, 0);
             let mean = CanvasEffect::mean(pipe.canvas());
             println!("canvas_mean={:.3}", mean);
+            println!("--- shell ---");
+            print!("{}", ShellRound::run());
         }
     }
 }

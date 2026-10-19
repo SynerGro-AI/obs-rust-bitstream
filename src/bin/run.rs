@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -322,6 +322,8 @@ fn main() {
             let mut eh = History::new();
             let er = ShellEvent::handle(&mut ew, &mut es, &mut eh, ShellInput::Key("B"));
             println!("shell_event: {}", er);
+            let (plain, bright) = ShellFilter::run();
+            println!("shell_filter: plain={} bright={}", plain, bright);
         }
     }
 }

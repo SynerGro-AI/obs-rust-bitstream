@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
+use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, TimelineTools, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -183,44 +183,62 @@ impl eframe::App for TuxedoApp {
 
                 ui.separator();
 
-                // Right: layers, masks, properties
+                // Right: mode-specific panel
                 ui.vertical(|ui| {
                     ui.set_width(280.0);
-                    ui.label(egui::RichText::new("LAYERS").color(gold));
-                    if let Some(doc) = &self.doc {
-                        ui.label(egui::RichText::new(format!("mountain_spire  {}×{}", doc.width, doc.height)).color(muted));
-                        let layer_info: Vec<(String, bool, u8)> = doc.layers.iter().map(|l| (l.name.clone(), l.visible, l.opacity)).collect();
-                        for (name, visible, opacity) in layer_info {
-                            let eye = if visible { "◉" } else { "○" };
-                            let color = if self.selected_layer == name { gold } else { fg };
-                            ui.horizontal(|ui| {
-                                if ui.button(egui::RichText::new(eye).color(color)).clicked() {
-                                    if let Some(doc) = &mut self.doc {
-                                        doc.toggle(&name);
-                                    }
+                    match self.mode {
+                        Mode::Photoshop => {
+                            ui.label(egui::RichText::new("LAYERS").color(gold));
+                            if let Some(doc) = &self.doc {
+                                ui.label(egui::RichText::new(format!("mountain_spire  {}×{}", doc.width, doc.height)).color(muted));
+                                let layer_info: Vec<(String, bool, u8)> = doc.layers.iter().map(|l| (l.name.clone(), l.visible, l.opacity)).collect();
+                                for (name, visible, opacity) in layer_info {
+                                    let eye = if visible { "◉" } else { "○" };
+                                    let color = if self.selected_layer == name { gold } else { fg };
+                                    ui.horizontal(|ui| {
+                                        if ui.button(egui::RichText::new(eye).color(color)).clicked() {
+                                            if let Some(doc) = &mut self.doc {
+                                                doc.toggle(&name);
+                                            }
+                                        }
+                                        if ui.button(egui::RichText::new(format!("{}  {}", name, opacity)).color(color)).clicked() {
+                                            self.selected_layer = name.clone();
+                                        }
+                                    });
                                 }
-                                if ui.button(egui::RichText::new(format!("{}  {}", name, opacity)).color(color)).clicked() {
-                                    self.selected_layer = name.clone();
-                                }
-                            });
+                            } else {
+                                ui.label(egui::RichText::new("No document").color(muted));
+                            }
+                            ui.separator();
+                            ui.label(egui::RichText::new("PROPERTIES").color(gold));
+                            ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
                         }
-                    } else {
-                        ui.label(egui::RichText::new("No document").color(muted));
+                        Mode::AfterEffects => {
+                            ui.label(egui::RichText::new("TIMELINE").color(gold));
+                            for tool in TimelineTools::tools() {
+                                ui.label(egui::RichText::new(format!("{}  {}", tool.name, tool.hotkey)).color(fg));
+                            }
+                            ui.separator();
+                            ui.label(egui::RichText::new("Time: 00:00:00:00").color(muted));
+                        }
+                        Mode::Maya => {
+                            ui.label(egui::RichText::new("OUTLINER").color(gold));
+                            for btn in MayaShelves::on_shelf(self.maya_shelf) {
+                                ui.label(egui::RichText::new(btn.name).color(fg));
+                            }
+                        }
+                        Mode::Obs => {
+                            ui.label(egui::RichText::new("STREAM").color(gold));
+                            let stream_color = if self.streaming { egui::Color32::from_rgb(0, 200, 0) } else { muted };
+                            if ui.button(egui::RichText::new("● Streaming: Live").color(stream_color)).clicked() {
+                                self.streaming = !self.streaming;
+                            }
+                            let rec_color = if self.recording { egui::Color32::from_rgb(200, 0, 0) } else { muted };
+                            if ui.button(egui::RichText::new("● REC: 00:47:32").color(rec_color)).clicked() {
+                                self.recording = !self.recording;
+                            }
+                        }
                     }
-
-                    ui.separator();
-                    ui.label(egui::RichText::new("MASKS").color(gold));
-                    ui.label(egui::RichText::new("Density: 100%  Feather: 0.0 px").color(muted));
-                    ui.label(egui::RichText::new("Kind: Grayscale  Invert: Off").color(muted));
-
-                    ui.separator();
-                    ui.label(egui::RichText::new("PROPERTIES").color(gold));
-                    ui.label(egui::RichText::new("Canvas Size").color(fg));
-                    ui.label(egui::RichText::new("Width:  5760 px").color(muted));
-                    ui.label(egui::RichText::new("Height: 3240 px").color(muted));
-                    ui.label(egui::RichText::new("Resolution: 300 Pixels/Inch").color(muted));
-                    ui.label(egui::RichText::new("Color Profile").color(fg));
-                    ui.label(egui::RichText::new("Working RGB: Adobe RGB (1998)").color(muted));
                 });
             });
 

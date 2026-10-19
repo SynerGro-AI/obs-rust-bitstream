@@ -149,6 +149,33 @@ fn main() {
                                         }
                                         Err(_) => println!("socket attempts={}", rc.attempts()),
                                     }
+                                    // Shell payload through the same socket path.
+                                    if let Some(shell_payload) = {
+                                        use obs_rust_bitstream::photo_layers::LayerStack as PhotoLayers;
+                                        use obs_rust_bitstream::video_fourcc::VideoFormat;
+                                        use obs_rust_bitstream::video_frame::VideoFrame;
+                                        let mut s = PhotoLayers::new();
+                                        if let Some(mut bg) = VideoFrame::new(VideoFormat::Y800, 16, 16) {
+                                            if let Some(p) = bg.planes.get_mut(0) {
+                                                for px in p.iter_mut() { *px = 100; }
+                                            }
+                                            let mut top = bg.clone();
+                                            if let Some(p) = top.planes.get_mut(0) {
+                                                for px in p.iter_mut() { *px = 200; }
+                                            }
+                                            let _ = s.add("Background", bg);
+                                            let _ = s.add("Layer 1", top);
+                                            ShellSocket::payload(&s)
+                                        } else {
+                                            None
+                                        }
+                                    } {
+                                        let mut rc2 = Reconnect::new();
+                                        match RtmpSocket::send("127.0.0.1", addr.port(), &shell_payload, &mut rc2) {
+                                            Ok(sent) => println!("shell_socket_sent={}", sent.bytes),
+                                            Err(_) => println!("shell_socket_sent=0"),
+                                        }
+                                    }
                                 }
                             }
                         }

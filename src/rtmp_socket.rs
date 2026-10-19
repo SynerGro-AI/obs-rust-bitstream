@@ -114,6 +114,13 @@ impl RtmpSocket {
             total = total.saturating_add(chunk.len() as u64);
             count = count.saturating_add(1);
         }
+        let close = crate::rtmp_close::RtmpClose::body(1.0);
+        let close_chunk = crate::rtmp_chunk::RtmpChunk::wrap(3, 20, 0, &close);
+        stream.write_all(&close_chunk).map_err(|_| {
+            reconnect.start();
+            SocketError::Write
+        })?;
+        total = total.saturating_add(close_chunk.len() as u64);
         let _ = stream.flush();
         reconnect.success();
         let mut rtmp = RtmpStream::new(&format!("rtmp://{}:{}/live", host, port))

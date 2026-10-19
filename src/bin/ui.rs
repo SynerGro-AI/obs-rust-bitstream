@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
+use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, Reconnect, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -52,6 +52,7 @@ struct TuxedoApp {
     pixel_stack: LayerStackPixels,
     keys_pure: Keyframes,
     joints: JointHierarchy,
+    reconnect: Reconnect,
 }
 
 impl Default for TuxedoApp {
@@ -99,6 +100,7 @@ impl Default for TuxedoApp {
                 }
                 h
             },
+            reconnect: Reconnect::new(),
         }
     }
 }
@@ -368,6 +370,13 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new(stream_line).color(fg));
                             ui.label(egui::RichText::new(rec_line).color(fg));
                             ui.label(egui::RichText::new("output=rtmp").color(muted));
+                            ui.separator();
+                            ui.label(egui::RichText::new("◆ RECONNECT").color(gold));
+                            ui.label(egui::RichText::new(format!("attempts: {}", self.reconnect.attempts())).color(fg));
+                            ui.label(egui::RichText::new(format!("retry: {}s / {}", self.reconnect.retry_sec(), self.reconnect.retry_max())).color(muted));
+                            if ui.button(egui::RichText::new("Retry").color(gold)).clicked() {
+                                self.reconnect.set_settings(self.reconnect.retry_max() + 1, self.reconnect.retry_sec());
+                            }
                         }
                     }
                 });

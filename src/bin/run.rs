@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, OUTPUT_AV,
 };
 
 fn main() {
@@ -216,6 +216,8 @@ fn main() {
             println!("shell_runner: full={} half={}", ft, ht);
             let _ = std::fs::write("shell_runner.txt", format!("full={} half={}", ft, ht));
             println!("shell_runner_file=shell_runner.txt");
+            let (pf, ph) = ShellRtmp::run();
+            println!("shell_rtmp: full={} half={}", pf, ph);
         }
     }
 }

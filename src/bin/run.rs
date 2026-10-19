@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, OUTPUT_AV,
 };
 
 fn main() {
@@ -273,6 +273,9 @@ fn main() {
             println!("shell_loop_frame: {}", encoded);
             let _ = std::fs::write("shell_loop_frame.txt", format!("{}", encoded));
             println!("shell_loop_frame_file=shell_loop_frame.txt");
+            if let Some(payload) = ShellLoopSocket::payload(&actions) {
+                println!("shell_loop_socket: {} valid={}", payload.len(), ShellLoopSocket::valid(&payload));
+            }
         }
     }
 }

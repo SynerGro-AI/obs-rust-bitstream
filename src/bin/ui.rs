@@ -63,6 +63,7 @@ struct TuxedoApp {
     packets: u32,
     brush_size: f32,
     brush_hard: f32,
+    filter: String,
 }
 
 impl Default for TuxedoApp {
@@ -120,6 +121,7 @@ impl Default for TuxedoApp {
             packets: 0,
             brush_size: 10.0,
             brush_hard: 80.0,
+            filter: "None".to_string(),
         }
     }
 }
@@ -231,6 +233,13 @@ impl eframe::App for TuxedoApp {
                                     let count = self.burned.len().min(50);
                                     for (i, p) in rgba.pixels_mut().enumerate().take(count * 20).step_by(20) {
                                         p[0] = 201; p[1] = 168; p[2] = 76;
+                                    }
+                                }
+                                if self.filter == "Levels" {
+                                    for p in rgba.pixels_mut() {
+                                        p[0] = p[0].saturating_add(10);
+                                        p[1] = p[1].saturating_add(10);
+                                        p[2] = p[2].saturating_add(10);
                                     }
                                 }
                                 let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
@@ -370,7 +379,19 @@ impl eframe::App for TuxedoApp {
                                 ui.add(egui::Slider::new(&mut self.feather, 0.0..=50.0).suffix(" px"));
                             });
                             ui.separator();
-                            ui.label(egui::RichText::new("◆ PROPERTIES").color(gold));
+                            ui.label(egui::RichText::new("◆ FILTERS").color(gold));
+                            ui.horizontal(|ui| {
+                                egui::ComboBox::from_id_salt("filter")
+                                    .selected_text(&self.filter)
+                                    .show_ui(ui, |ui| {
+                                        for f in ["None", "Levels", "Curves", "Gaussian"] {
+                                            if ui.selectable_value(&mut self.filter, f.to_string(), f).clicked() {
+                                                self.last_action = "recomposite".to_string();
+                                                self.canvas_texture = None;
+                                            }
+                                        }
+                                    });
+                            });
                             ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Blend").color(fg));

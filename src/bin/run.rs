@@ -324,6 +324,8 @@ fn main() {
             println!("shell_event: {}", er);
             let (plain, bright) = ShellFilter::run();
             println!("shell_filter: plain={} bright={}", plain, bright);
+            let _ = std::fs::write("shell_filter.txt", format!("plain={} bright={}", plain, bright));
+            println!("shell_filter_file=shell_filter.txt");
         }
     }
 }

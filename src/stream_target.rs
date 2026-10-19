@@ -12,6 +12,7 @@ pub enum Platform {
     Twitch,
     Facebook,
     X,
+    Discord,
     Custom,
 }
 
@@ -22,6 +23,7 @@ impl Platform {
             Platform::Twitch => "rtmp://live.twitch.tv/app",
             Platform::Facebook => "rtmps://live-api-s.facebook.com:443/rtmp",
             Platform::X => "rtmp://ingest.pscp.tv:80/x",
+            Platform::Discord => "discord://go-live",
             Platform::Custom => "",
         }
     }
@@ -32,6 +34,7 @@ impl Platform {
             Platform::Twitch => "twitch",
             Platform::Facebook => "facebook",
             Platform::X => "x",
+            Platform::Discord => "discord",
             Platform::Custom => "custom",
         }
     }
@@ -92,10 +95,12 @@ mod tests {
         let tw = StreamTarget::new(Platform::Twitch, "tw-key").unwrap();
         let fb = StreamTarget::new(Platform::Facebook, "fb-key").unwrap();
         let x = StreamTarget::new(Platform::X, "x-key").unwrap();
+        let dc = StreamTarget::new(Platform::Discord, "dc-key").unwrap();
         assert!(yt.endpoint().contains("youtube"));
         assert!(tw.endpoint().contains("twitch"));
         assert!(fb.endpoint().contains("facebook"));
         assert!(x.endpoint().contains("pscp"));
+        assert!(dc.endpoint().contains("discord"));
     }
 
     #[test]

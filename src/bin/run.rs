@@ -340,7 +340,7 @@ fn main() {
                 let _ = std::fs::write("youtube.txt", yt.endpoint());
                 println!("youtube_file=youtube.txt");
             }
-            for p in [Platform::YouTube, Platform::Twitch, Platform::Facebook, Platform::X] {
+            for p in [Platform::YouTube, Platform::Twitch, Platform::Facebook, Platform::X, Platform::Discord] {
                 if let Some(t) = StreamTarget::new(p, "demo") {
                     println!("platform: {}", t.line());
                 }

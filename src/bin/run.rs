@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, TimelineAction, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -360,6 +360,12 @@ fn main() {
             }
             println!("timeline_tools: {}", TimelineTools::line());
             println!("timeline_thought: {}", TimelineTools::thought("Razor"));
+            let mut ta = obs_rust_bitstream::video_timeline::VideoTimeline::new();
+            let _ = ta.add("a", 0.0, 5.0, "s");
+            let _ = ta.add("b", 5.0, 5.0, "s");
+            if let Ok(cut) = TimelineAction::roll(&mut ta, "a", "b", 6.0) {
+                println!("timeline_roll: cut={:.0} a={:.0} b_start={:.0}", cut, ta.get("a").unwrap().duration_secs(), ta.get("b").unwrap().start_secs());
+            }
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);

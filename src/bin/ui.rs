@@ -6,6 +6,26 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
+
+fn resolve_asset(path: &str) -> std::path::PathBuf {
+    let p = std::path::Path::new(path);
+    if p.exists() {
+        return p.to_path_buf();
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let next = dir.join(path);
+            if next.exists() {
+                return next;
+            }
+            let up = dir.join("..").join(path);
+            if up.exists() {
+                return up;
+            }
+        }
+    }
+    p.to_path_buf()
+}
 use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, LiveWeights, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, Reconnect, ToolDispatch, WeightBridge};
 
 fn main() -> eframe::Result<()> {
@@ -203,8 +223,9 @@ impl eframe::App for TuxedoApp {
 
             ui.horizontal(|ui| {
                 // Left: tool catalog
+                egui::ScrollArea::vertical().id_salt("left").show(ui, |ui| {
                 ui.vertical(|ui| {
-                    ui.set_width(200.0);
+                    ui.set_width(180.0);
                     ui.label(egui::RichText::new("◆ PHOTOSHOP").color(gold));
                     for group in PsToolbar::groups() {
                         let open = self.expanded == Some(*group);
@@ -223,6 +244,7 @@ impl eframe::App for TuxedoApp {
                         }
                     }
                 });
+                });
 
                 ui.separator();
 
@@ -231,7 +253,7 @@ impl eframe::App for TuxedoApp {
                     // Canvas with real pixels
                     if self.thumbs.is_empty() {
                         for layer in &self.pixel_stack.layers {
-                            if let Ok(img) = image::open(&layer.path) {
+                            if let Ok(img) = image::open(resolve_asset(&layer.path)) {
                                 let small = img.resize(32, 32, image::imageops::FilterType::Nearest);
                                 let rgba = small.to_rgba8();
                                 let size = [rgba.width() as usize, rgba.height() as usize];
@@ -245,10 +267,10 @@ impl eframe::App for TuxedoApp {
                     if self.canvas_texture.is_none() || self.last_action == "recomposite" {
                         let paths: Vec<_> = self.pixel_stack.visible().iter().map(|l| l.path.clone()).collect();
                         if let Some(first) = paths.first() {
-                            if let Ok(base) = image::open(first) {
+                            if let Ok(base) = image::open(resolve_asset(first)) {
                                 let mut rgba = base.to_rgba8();
                                 for path in paths.iter().skip(1) {
-                                    if let Ok(over) = image::open(path) {
+                                    if let Ok(over) = image::open(resolve_asset(path)) {
                                         let over_rgba = over.to_rgba8();
                                         for (i, p) in rgba.pixels_mut().enumerate() {
                                             if let Some(op) = over_rgba.pixels().nth(i) {
@@ -305,7 +327,7 @@ impl eframe::App for TuxedoApp {
                     if let Some(tex) = &self.canvas_texture {
                         let size = tex.size_vec2();
                         let aspect = size.y / size.x;
-                        let w = 700.0;
+                        let w = ui.available_width().min(600.0);
                         let h = w * aspect;
                         let factor = {
                             let vis = self.pixel_stack.visible();
@@ -360,7 +382,7 @@ impl eframe::App for TuxedoApp {
                             }
                         }
                     } else {
-                        ui.label(egui::RichText::new("No image").color(muted));
+                        ui.label(egui::RichText::new("No image — place assets/ next to the binary or run from the repo root").color(muted));
                     }
 
                     ui.separator();
@@ -387,8 +409,9 @@ impl eframe::App for TuxedoApp {
                 ui.separator();
 
                 // Right: mode-specific panel
+                egui::ScrollArea::vertical().id_salt("right").show(ui, |ui| {
                 ui.vertical(|ui| {
-                    ui.set_width(280.0);
+                    ui.set_width(260.0);
                     match self.mode {
                         Mode::Photoshop => {
                             ui.label(egui::RichText::new("◆ LAYERS").color(gold));
@@ -627,6 +650,7 @@ impl eframe::App for TuxedoApp {
                             }
                         }
                     }
+                });
                 });
             });
 

@@ -462,6 +462,7 @@ impl eframe::App for TuxedoApp {
                                     ("brush.size", 16.0),
                                     ("filter.levels", 1.4),
                                 ]);
+                                let _ = std::fs::write("assets/weights.txt", format!("brush.size={}\nfilter.levels=1.4\n", WeightBridge::read_or(&self.weights, "brush.size", 0.0)));
                                 self.last_action = "suggested".to_string();
                             }
                             if ui.button(egui::RichText::new("Save PSD").color(gold)).clicked() {
@@ -627,6 +628,8 @@ impl eframe::App for TuxedoApp {
                 if !self.last_action.is_empty() {
                     ui.label(egui::RichText::new(&self.last_action).color(gold));
                 }
+                let brush_w = WeightBridge::read_or(&self.weights, "brush.size", 0.0);
+                ui.label(egui::RichText::new(format!("w={:.1}", brush_w)).color(muted));
                 ui.separator();
                 ui.label(egui::RichText::new(format!("Zoom: {:.1}%", self.zoom)).color(fg));
                 ui.separator();

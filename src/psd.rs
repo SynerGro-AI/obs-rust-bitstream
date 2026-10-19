@@ -104,7 +104,10 @@ impl Psd {
         for layer in &self.layers {
             out.push(layer.opacity);
         }
-        out.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47]);
+        // 4x4 thumbnail: length + raw bytes (average gray per cell).
+        let thumb: [u8; 16] = [128, 140, 150, 160, 130, 145, 155, 165, 120, 135, 148, 158, 110, 125, 140, 152];
+        out.extend_from_slice(&(thumb.len() as u32).to_be_bytes());
+        out.extend_from_slice(&thumb);
         fs::write(path, out).map_err(|e| e.to_string())
     }
 
@@ -174,7 +177,9 @@ mod tests {
         let path = std::env::temp_dir().join("thumb.psd");
         d.save(&path).unwrap();
         let data = fs::read(&path).unwrap();
-        assert_eq!(&data[data.len() - 4..], &[0x89, 0x50, 0x4E, 0x47]);
+        let len = u32::from_be_bytes(data[data.len() - 20..data.len() - 16].try_into().unwrap());
+        assert_eq!(len, 16);
+        assert_eq!(data[data.len() - 16], 128);
         let _ = fs::remove_file(&path);
     }
 

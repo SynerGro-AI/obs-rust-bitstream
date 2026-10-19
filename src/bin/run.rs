@@ -382,6 +382,9 @@ fn main() {
             if let Some(d) = Definition::new(1920, 1080, 80.0) {
                 println!("definition: {}", d.line());
             }
+            let mut res = Definition::new(1280, 720, 50.0).unwrap();
+            res.set_preset("4k").unwrap();
+            println!("resolution: {} {}", res.preset(), res.line());
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);

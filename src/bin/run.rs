@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -333,6 +333,8 @@ fn main() {
             let line = ShellSession::to_line(&state);
             let _ = std::fs::write("shell_session.txt", &line);
             println!("shell_session: {}", line);
+            let (m0, m1) = DisplayFrame::run();
+            println!("display_frame: m0={} m1={}", m0, m1);
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);

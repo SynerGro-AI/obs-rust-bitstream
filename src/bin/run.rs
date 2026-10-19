@@ -258,6 +258,8 @@ fn main() {
             println!("shell_socket_file=shell_socket.txt");
             let (sent_full, sent_half) = ShellSent::run();
             println!("shell_sent: full={} half={}", sent_full, sent_half);
+            let _ = std::fs::write("shell_sent.txt", format!("full={} half={}", sent_full, sent_half));
+            println!("shell_sent_file=shell_sent.txt");
         }
     }
 }

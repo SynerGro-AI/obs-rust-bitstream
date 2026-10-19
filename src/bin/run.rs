@@ -135,6 +135,7 @@ fn main() {
                                         let _ = tx.send(());
                                         let _ = listener.accept();
                                         let _ = listener.accept();
+                                        let _ = listener.accept();
                                     });
                                     let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
                                     std::thread::sleep(std::time::Duration::from_millis(50));
@@ -175,6 +176,19 @@ fn main() {
                                         match RtmpSocket::send("127.0.0.1", addr.port(), &shell_payload, &mut rc2) {
                                             Ok(sent) => println!("shell_socket_sent={}", sent.bytes),
                                             Err(_) => println!("shell_socket_sent=0"),
+                                        }
+                                    }
+                                    // Loop payload through the socket.
+                                    let loop_actions = [
+                                        ShellAction::Tool("Brush"),
+                                        ShellAction::Size(30),
+                                        ShellAction::NewLayer,
+                                    ];
+                                    if let Some(loop_payload) = ShellLoopSocket::payload(&loop_actions) {
+                                        let mut rc3 = Reconnect::new();
+                                        match RtmpSocket::send("127.0.0.1", addr.port(), &loop_payload, &mut rc3) {
+                                            Ok(sent) => println!("shell_loop_sent={}", sent.bytes),
+                                            Err(_) => println!("shell_loop_sent=0"),
                                         }
                                     }
                                 }

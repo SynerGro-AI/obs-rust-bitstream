@@ -397,3 +397,16 @@ curl -L -o /tmp/bell1.wav \
 ```
 
 Outputs: `out.avbn`, `status.txt`, `report.txt`, `stamped.avbn`.
+
+## Windows release
+
+On a Windows machine (or with the mingw toolchain):
+
+```bash
+rustup target add x86_64-pc-windows-gnu
+cargo build --release --features ui --target x86_64-pc-windows-gnu --bin ui
+```
+
+The binary is `target/x86_64-pc-windows-gnu/release/ui.exe`.
+Dark mode is on by default; the top-bar button switches to light.
+

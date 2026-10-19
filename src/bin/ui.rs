@@ -68,6 +68,7 @@ struct TuxedoApp {
     filter: String,
     file_path: String,
     weights: LiveWeights,
+    dark: bool,
 }
 
 impl Default for TuxedoApp {
@@ -139,16 +140,22 @@ impl Default for TuxedoApp {
                 ]);
                 w
             },
+            dark: true,
         }
     }
 }
 
 impl eframe::App for TuxedoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let bg = egui::Color32::from_rgb(10, 10, 10);
-        let fg = egui::Color32::from_rgb(245, 245, 245);
+        let bg = if self.dark { egui::Color32::from_rgb(10, 10, 10) } else { egui::Color32::from_rgb(245, 245, 245) };
+        let fg = if self.dark { egui::Color32::from_rgb(245, 245, 245) } else { egui::Color32::from_rgb(20, 20, 20) };
         let gold = egui::Color32::from_rgb(201, 168, 76);
-        let muted = egui::Color32::from_rgb(107, 107, 107);
+        let muted = if self.dark { egui::Color32::from_rgb(107, 107, 107) } else { egui::Color32::from_rgb(140, 140, 140) };
+        if self.dark {
+            ctx.set_visuals(egui::Visuals::dark());
+        } else {
+            ctx.set_visuals(egui::Visuals::light());
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
@@ -173,6 +180,9 @@ impl eframe::App for TuxedoApp {
                 ui.separator();
                 ui.label(egui::RichText::new("Pro User").color(fg));
                 ui.label(egui::RichText::new("LICENSED").color(gold));
+                if ui.button(egui::RichText::new(if self.dark { "Dark" } else { "Light" }).color(gold)).clicked() {
+                    self.dark = !self.dark;
+                }
                 ui.separator();
                 ui.add(egui::TextEdit::singleline(&mut self.file_path).desired_width(200.0));
                 if ui.button(egui::RichText::new("Open").color(fg)).clicked() {

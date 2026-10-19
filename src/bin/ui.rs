@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerPixels, LayerStack, LayerStackPixels, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
+use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, ToolDispatch};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -50,6 +50,8 @@ struct TuxedoApp {
     maya_objects: Vec<(String, f32, f32, f32, bool)>,
     selected_object: String,
     pixel_stack: LayerStackPixels,
+    keys_pure: Keyframes,
+    joints: JointHierarchy,
 }
 
 impl Default for TuxedoApp {
@@ -88,6 +90,14 @@ impl Default for TuxedoApp {
                 s.add(LayerPixels::new("Mountain Spire", "assets/mountain_spire.jpg"));
                 s.add(LayerPixels::new("Mist Overlay", "assets/mountain_spire.jpg"));
                 s
+            },
+            keys_pure: Keyframes::new(),
+            joints: {
+                let mut h = JointHierarchy::new();
+                if let Ok(j) = Joint::new("joint1") {
+                    h.add(j);
+                }
+                h
             },
         }
     }
@@ -307,7 +317,9 @@ impl eframe::App for TuxedoApp {
                             }
                             if ui.button(egui::RichText::new("Add Key").color(gold)).clicked() {
                                 self.keys.push(self.time);
+                                let _ = self.keys_pure.add("position", (self.time * 1000.0) as u64, self.time);
                             }
+                            ui.label(egui::RichText::new(format!("pure keys: {}", self.keys_pure.count("position"))).color(muted));
                         }
                         Mode::Maya => {
                             ui.label(egui::RichText::new("◆ OUTLINER").color(gold));
@@ -336,6 +348,7 @@ impl eframe::App for TuxedoApp {
                                 if ui.button(egui::RichText::new("Toggle Visible").color(gold)).clicked() {
                                     obj.4 = !obj.4;
                                 }
+                                ui.label(egui::RichText::new(format!("pure joints: {}", self.joints.len())).color(muted));
                             }
                         }
                         Mode::Obs => {

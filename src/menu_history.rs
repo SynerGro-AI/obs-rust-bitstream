@@ -31,7 +31,15 @@ impl MenuHistory {
                     false
                 }
             }
-            (PsMenu::Edit, "Redo") => history.redo().is_some(),
+            (PsMenu::Edit, "Redo") => {
+                if let Some(name) = history.redo() {
+                    // Restore a layer add if that is what was undone.
+                    let _ = stack.add(&name);
+                    true
+                } else {
+                    false
+                }
+            }
             _ => {
                 let before = stack.len();
                 if MenuPath::click(stack, menu, item) {
@@ -66,6 +74,17 @@ mod tests {
         assert!(MenuHistory::click(&mut s, &mut h, PsMenu::Edit, "Undo"));
         assert_eq!(s.len(), 0);
         assert!(!h.can_undo());
+    }
+
+    #[test]
+    fn redo_restores() {
+        let mut s = LayerStack::new();
+        let mut h = History::new();
+        MenuHistory::click(&mut s, &mut h, PsMenu::Layer, "New Layer");
+        MenuHistory::click(&mut s, &mut h, PsMenu::Edit, "Undo");
+        assert_eq!(s.len(), 0);
+        assert!(MenuHistory::click(&mut s, &mut h, PsMenu::Edit, "Redo"));
+        assert_eq!(s.len(), 1);
     }
 
     #[test]

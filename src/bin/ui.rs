@@ -59,6 +59,8 @@ struct TuxedoApp {
     burned: Vec<(String, u8, u8, u8)>,
     onion: bool,
     packets: u32,
+    brush_size: f32,
+    brush_hard: f32,
 }
 
 impl Default for TuxedoApp {
@@ -112,6 +114,8 @@ impl Default for TuxedoApp {
             burned: Vec::new(),
             onion: false,
             packets: 0,
+            brush_size: 10.0,
+            brush_hard: 80.0,
         }
     }
 }
@@ -269,6 +273,10 @@ impl eframe::App for TuxedoApp {
                                     obs_rust_bitstream::CanvasAction::Paint { .. } => {
                                         self.strokes.push((x, y, "paint", self.selected_layer.clone()));
                                         self.burned.push((self.selected_layer.clone(), 201, 168, 76));
+                                        let dab = (self.brush_size * self.brush_hard / 100.0) as usize;
+                                        for _ in 0..dab {
+                                            self.burned.push((self.selected_layer.clone(), 201, 168, 76));
+                                        }
                                         self.last_action = "recomposite".to_string();
                                         self.canvas_texture = None;
                                     }
@@ -344,11 +352,12 @@ impl eframe::App for TuxedoApp {
                             ui.separator();
                             ui.label(egui::RichText::new("◆ MASKS").color(gold));
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Density").color(fg));
-                                if ui.add(egui::Slider::new(&mut self.density, 0.0..=100.0).suffix("%")).changed() {
-                                    self.last_action = "recomposite".to_string();
-                                    self.canvas_texture = None;
-                                }
+                                ui.label(egui::RichText::new("Size").color(fg));
+                                ui.add(egui::Slider::new(&mut self.brush_size, 1.0..=50.0).suffix(" px"));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Hard").color(fg));
+                                ui.add(egui::Slider::new(&mut self.brush_hard, 0.0..=100.0).suffix("%"));
                             });
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Feather").color(fg));

@@ -614,6 +614,7 @@ pub mod pixel_selection;
 pub mod photo_layers;
 pub mod layer_composite;
 pub mod edit_composite;
+pub mod group_composite;
 pub mod ai_tools;
 pub mod ai_approve;
 pub mod hue_sat;
@@ -1051,6 +1052,7 @@ pub use pixel_selection::{Selection as PixelSelection, SelectError as PixelSelec
 pub use photo_layers::{LayerStack as PhotoLayers, Layer as PhotoLayer, LayerError as PhotoLayerError};
 pub use layer_composite::LayerComposite;
 pub use edit_composite::EditComposite;
+pub use group_composite::GroupComposite;
 pub use ai_tools::{AiTools, CurveSuggestion, BalanceSuggestion, EffectSuggestion};
 pub use ai_approve::{AiApprove, ApproveMode, PendingChange};
 pub use hue_sat::{HueSat, HueSatError};

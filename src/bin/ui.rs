@@ -44,7 +44,7 @@ struct TuxedoApp {
     density: f32,
     feather: f32,
     opacity: f32,
-    strokes: Vec<(u32, u32, &'static str)>,
+    strokes: Vec<(u32, u32, &'static str, String)>,
     time: f32,
     keys: Vec<f32>,
     maya_objects: Vec<(String, f32, f32, f32, bool)>,
@@ -206,7 +206,8 @@ impl eframe::App for TuxedoApp {
                             ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, alpha));
                         }
                         let origin = ui.min_rect().min;
-                        for (sx, sy, kind) in &self.strokes {
+                        for (sx, sy, kind, layer) in &self.strokes {
+                            if layer != &self.selected_layer { continue; }
                             let p = origin + egui::vec2(*sx as f32, *sy as f32);
                             let color = match *kind {
                                 "select" => egui::Color32::from_rgb(100, 150, 255),
@@ -225,10 +226,10 @@ impl eframe::App for TuxedoApp {
                                 let action = ToolDispatch::dispatch(&self.tool, x, y);
                                 self.last_action = format!("{:?}", action);
                                 match action {
-                                    obs_rust_bitstream::CanvasAction::Paint { .. } => self.strokes.push((x, y, "paint")),
-                                    obs_rust_bitstream::CanvasAction::Select { .. } => self.strokes.push((x, y, "select")),
-                                    obs_rust_bitstream::CanvasAction::Crop { .. } => self.strokes.push((x, y, "crop")),
-                                    obs_rust_bitstream::CanvasAction::Heal { .. } => self.strokes.push((x, y, "heal")),
+                                    obs_rust_bitstream::CanvasAction::Paint { .. } => self.strokes.push((x, y, "paint", self.selected_layer.clone())),
+                                    obs_rust_bitstream::CanvasAction::Select { .. } => self.strokes.push((x, y, "select", self.selected_layer.clone())),
+                                    obs_rust_bitstream::CanvasAction::Crop { .. } => self.strokes.push((x, y, "crop", self.selected_layer.clone())),
+                                    obs_rust_bitstream::CanvasAction::Heal { .. } => self.strokes.push((x, y, "heal", self.selected_layer.clone())),
                                     _ => {}
                                 }
                             }

@@ -44,7 +44,7 @@ struct TuxedoApp {
     density: f32,
     feather: f32,
     opacity: f32,
-    strokes: Vec<(u32, u32)>,
+    strokes: Vec<(u32, u32, &'static str)>,
     time: f32,
     keys: Vec<f32>,
     maya_objects: Vec<(String, f32, f32, f32, bool)>,
@@ -177,9 +177,15 @@ impl eframe::App for TuxedoApp {
                             ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, alpha));
                         }
                         let origin = ui.min_rect().min;
-                        for (sx, sy) in &self.strokes {
+                        for (sx, sy, kind) in &self.strokes {
                             let p = origin + egui::vec2(*sx as f32, *sy as f32);
-                            ui.painter().circle_filled(p, 4.0, gold);
+                            let color = match *kind {
+                                "select" => egui::Color32::from_rgb(100, 150, 255),
+                                "crop" => egui::Color32::from_rgb(255, 200, 100),
+                                "heal" => egui::Color32::from_rgb(100, 255, 150),
+                                _ => gold,
+                            };
+                            ui.painter().circle_filled(p, 4.0, color);
                         }
                         let resp = ui.interact(ui.min_rect(), ui.id().with("canvas"), egui::Sense::click_and_drag());
                         if resp.clicked() || resp.dragged() {
@@ -189,8 +195,12 @@ impl eframe::App for TuxedoApp {
                                 let y = (rel.y.max(0.0) as u32).min(h as u32);
                                 let action = ToolDispatch::dispatch(&self.tool, x, y);
                                 self.last_action = format!("{:?}", action);
-                                if matches!(action, obs_rust_bitstream::CanvasAction::Paint { .. }) {
-                                    self.strokes.push((x, y));
+                                match action {
+                                    obs_rust_bitstream::CanvasAction::Paint { .. } => self.strokes.push((x, y, "paint")),
+                                    obs_rust_bitstream::CanvasAction::Select { .. } => self.strokes.push((x, y, "select")),
+                                    obs_rust_bitstream::CanvasAction::Crop { .. } => self.strokes.push((x, y, "crop")),
+                                    obs_rust_bitstream::CanvasAction::Heal { .. } => self.strokes.push((x, y, "heal")),
+                                    _ => {}
                                 }
                             }
                         }

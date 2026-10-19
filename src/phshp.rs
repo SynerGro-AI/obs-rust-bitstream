@@ -1,14 +1,14 @@
-//! Safe pure Phshp (layered document).
+//! Safe pure Phshp (binary layered document).
 //!
-//! A transferable layered file. Holds a name, canvas size,
-//! and a list of layer names with visibility. Saves and
-//! loads as a simple text format so it can move between
-//! tools. No unwraps.
+//! A transferable layered file. Binary header, length-prefixed
+//! strings, no text. Saves and loads. No unwraps.
 //!
 //! Differential: a different layer list produces a different file.
 
 use std::fs;
 use std::path::Path;
+
+const MAGIC: &[u8; 4] = b"PHSH";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Phshp {
@@ -32,33 +32,51 @@ impl Phshp {
         self.layers.push((name.to_string(), visible));
     }
 
-    /// Save as a simple text file. One layer per line.
+    /// Save as binary. Magic, name, size, layer count, layers.
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        let mut out = format!("PHSHP\n{} {} {}\n", self.name, self.width, self.height);
+        let mut out = Vec::new();
+        out.extend_from_slice(MAGIC);
+        let name_bytes = self.name.as_bytes();
+        out.extend_from_slice(&(name_bytes.len() as u32).to_le_bytes());
+        out.extend_from_slice(name_bytes);
+        out.extend_from_slice(&self.width.to_le_bytes());
+        out.extend_from_slice(&self.height.to_le_bytes());
+        out.extend_from_slice(&(self.layers.len() as u32).to_le_bytes());
         for (name, vis) in &self.layers {
-            out.push_str(&format!("{} {}\n", if *vis { "1" } else { "0" }, name));
+            out.push(if *vis { 1 } else { 0 });
+            let nb = name.as_bytes();
+            out.extend_from_slice(&(nb.len() as u32).to_le_bytes());
+            out.extend_from_slice(nb);
         }
         fs::write(path, out).map_err(|e| e.to_string())
     }
 
-    /// Load from a simple text file. None if the header is wrong.
+    /// Load from binary. None if the magic is wrong.
     pub fn load(path: &Path) -> Option<Self> {
-        let text = fs::read_to_string(path).ok()?;
-        let mut lines = text.lines();
-        if lines.next()? != "PHSHP" {
+        let data = fs::read(path).ok()?;
+        if data.len() < 4 || &data[0..4] != MAGIC {
             return None;
         }
-        let header = lines.next()?;
-        let mut parts = header.split_whitespace();
-        let name = parts.next()?.to_string();
-        let width: u32 = parts.next()?.parse().ok()?;
-        let height: u32 = parts.next()?.parse().ok()?;
+        let mut i = 4;
+        let name_len = u32::from_le_bytes(data.get(i..i + 4)?.try_into().ok()?) as usize;
+        i += 4;
+        let name = String::from_utf8(data.get(i..i + name_len)?.to_vec()).ok()?;
+        i += name_len;
+        let width = u32::from_le_bytes(data.get(i..i + 4)?.try_into().ok()?);
+        i += 4;
+        let height = u32::from_le_bytes(data.get(i..i + 4)?.try_into().ok()?);
+        i += 4;
+        let count = u32::from_le_bytes(data.get(i..i + 4)?.try_into().ok()?) as usize;
+        i += 4;
         let mut doc = Self::new(&name, width, height);
-        for line in lines {
-            let mut p = line.splitn(2, ' ');
-            let vis = p.next()? == "1";
-            let name = p.next()?.to_string();
-            doc.add_layer(&name, vis);
+        for _ in 0..count {
+            let vis = *data.get(i)? == 1;
+            i += 1;
+            let nlen = u32::from_le_bytes(data.get(i..i + 4)?.try_into().ok()?) as usize;
+            i += 4;
+            let lname = String::from_utf8(data.get(i..i + nlen)?.to_vec()).ok()?;
+            i += nlen;
+            doc.add_layer(&lname, vis);
         }
         Some(doc)
     }
@@ -73,12 +91,13 @@ mod tests {
     fn round_trip() {
         let mut d = Phshp::new("mountain", 5760, 3240);
         d.add_layer("Mountain Spire", true);
-        d.add_layer("Mist Overlay", true);
+        d.add_layer("Mist Overlay", false);
         let path = env::temp_dir().join("test.phshp");
         d.save(&path).unwrap();
         let loaded = Phshp::load(&path).unwrap();
         assert_eq!(loaded.name, "mountain");
         assert_eq!(loaded.layers.len(), 2);
+        assert!(!loaded.layers[1].1);
         let _ = fs::remove_file(&path);
     }
 

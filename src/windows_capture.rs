@@ -13,6 +13,26 @@
 use crate::capture::Capture;
 use crate::video_frame::VideoFrame;
 
+/// Convert packed YUYV (Y0 U Y1 V) to Y800 luma.
+pub fn yuyv_to_y800(yuyv: &[u8], width: u32, height: u32) -> Option<VideoFrame> {
+    let expected = (width as usize)
+        .checked_mul(height as usize)?
+        .checked_mul(2)?;
+    if yuyv.len() < expected || width == 0 || height == 0 {
+        return None;
+    }
+    let mut frame = VideoFrame::new(crate::video_fourcc::VideoFormat::Y800, width, height)?;
+    let plane = frame.planes.get_mut(0)?;
+    let pixels = (width as usize) * (height as usize);
+    for i in 0..pixels {
+        let src = i * 2;
+        if src < yuyv.len() {
+            plane[i] = yuyv[src];
+        }
+    }
+    Some(frame)
+}
+
 /// Convert NV12 (Y plane followed by interleaved UV) to Y800.
 /// Returns None if the buffer is shorter than the Y plane.
 pub fn nv12_to_y800(nv12: &[u8], width: u32, height: u32) -> Option<VideoFrame> {
@@ -57,7 +77,8 @@ mod imp {
             unsafe {
                 // Initialize COM.
                 CoInitializeEx(None, COINIT_MULTITHREADED)
-                    .map_err(|e| format!("CoInitializeEx: {}", e))?;
+                    .ok()
+                    .map_err(|e| format!("CoInitializeEx: {:?}", e))?;
 
                 // Initialize Media Foundation.
                 MFStartup(MF_VERSION, 0).map_err(|e| format!("MFStartup: {}", e))?;
@@ -92,10 +113,8 @@ mod imp {
                     .map_err(|e| format!("ActivateObject: {}", e))?;
 
                 // Create the source reader.
-                let mut reader: Option<IMFSourceReader> = None;
-                MFCreateSourceReaderFromMediaSource(&source, None, &mut reader)
-                    .map_err(|e| format!("MFCreateSourceReader: {}", e))?;
-                let reader = reader.ok_or("no source reader")?;
+                let reader = MFCreateSourceReaderFromMediaSource(&source, None)
+                    .map_err(|e| format!("MFCreateSourceReader: {:?}", e))?;
 
                 // Prefer YUY2, fall back to NV12.
                 let mut is_nv12 = false;
@@ -134,9 +153,8 @@ mod imp {
         use windows::Win32::Media::MediaFoundation::{
             MFCreateMediaType, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MFMediaType_Video,
         };
-        let mut mt: Option<IMFMediaType> = None;
-        MFCreateMediaType(&mut mt).map_err(|e| format!("MFCreateMediaType: {}", e))?;
-        let mt = mt.ok_or("no media type")?;
+        let mt = MFCreateMediaType()
+            .map_err(|e| format!("MFCreateMediaType: {:?}", e))?;
         mt.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)
             .map_err(|e| format!("SetGUID major: {}", e))?;
         mt.SetGUID(&MF_MT_SUBTYPE, subtype)
@@ -182,7 +200,7 @@ mod imp {
                 let frame = if self.is_nv12 {
                     nv12_to_y800(slice, self.width, self.height)
                 } else {
-                    crate::linux_capture::yuyv_to_y800(slice, self.width, self.height)
+                    yuyv_to_y800(slice, self.width, self.height)
                 };
                 let _ = buffer.Unlock();
                 frame

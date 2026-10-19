@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, PsGroup, PsToolbar};
+use obs_rust_bitstream::{LayerStack, MayaShelf, MayaShelves, Phshp, PsGroup, PsToolbar};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -36,6 +36,7 @@ struct TuxedoApp {
     zoom: f32,
     layers: LayerStack,
     selected_layer: String,
+    doc: Option<Phshp>,
     streaming: bool,
     recording: bool,
 }
@@ -55,6 +56,7 @@ impl Default for TuxedoApp {
             zoom: 27.3,
             layers,
             selected_layer: "Mountain Spire".to_string(),
+            doc: Phshp::load(std::path::Path::new("assets/mountain_spire.phshp")),
             streaming: true,
             recording: true,
         }
@@ -171,17 +173,17 @@ impl eframe::App for TuxedoApp {
                 ui.vertical(|ui| {
                     ui.set_width(280.0);
                     ui.label(egui::RichText::new("LAYERS").color(gold));
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Normal").color(fg));
-                        ui.label(egui::RichText::new("Opacity: 100%").color(muted));
-                    });
-                    for layer in ["Mountain Spire", "Mist Overlay", "Valley Lights", "Rock Foreground"] {
-                        let selected = self.selected_layer == layer;
-                        let color = if selected { gold } else { fg };
-                        let eye = if selected { "◉" } else { "○" };
-                        if ui.button(egui::RichText::new(format!("{}  {}", eye, layer)).color(color)).clicked() {
-                            self.selected_layer = layer.to_string();
+                    if let Some(doc) = &self.doc {
+                        ui.label(egui::RichText::new(format!("{}  {}×{}", doc.name, doc.width, doc.height)).color(muted));
+                        for (name, vis) in &doc.layers {
+                            let eye = if *vis { "◉" } else { "○" };
+                            let color = if self.selected_layer == *name { gold } else { fg };
+                            if ui.button(egui::RichText::new(format!("{}  {}", eye, name)).color(color)).clicked() {
+                                self.selected_layer = name.clone();
+                            }
                         }
+                    } else {
+                        ui.label(egui::RichText::new("No document").color(muted));
                     }
 
                     ui.separator();

@@ -2,14 +2,14 @@
 //!
 //! cargo run --features ui --bin ui
 //!
-//! Black background, white text, gold accent.
-//! Toolbar groups expand and retract. Status shows tool and canvas.
+//! Pulls the real PsToolbar and MayaShelves catalogs.
 
 use eframe::egui;
+use obs_rust_bitstream::{MayaShelf, MayaShelves, PsGroup, PsToolbar};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1200.0, 800.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1400.0, 900.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -21,7 +21,8 @@ fn main() -> eframe::Result<()> {
 
 struct TuxedoApp {
     tool: String,
-    expanded: bool,
+    expanded: Option<PsGroup>,
+    maya_shelf: MayaShelf,
     zoom: f32,
 }
 
@@ -29,7 +30,8 @@ impl Default for TuxedoApp {
     fn default() -> Self {
         Self {
             tool: "Brush".to_string(),
-            expanded: false,
+            expanded: Some(PsGroup::Paint),
+            maya_shelf: MayaShelf::Modeling,
             zoom: 100.0,
         }
     }
@@ -54,19 +56,38 @@ impl eframe::App for TuxedoApp {
 
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.set_width(180.0);
-                    for group in ["SELECT", "CROP", "PAINT", "RETOUCH", "DRAW", "VIEW"] {
-                        if ui.button(egui::RichText::new(format!("◆ {}", group)).color(gold)).clicked() {
-                            if group == "PAINT" {
-                                self.expanded = !self.expanded;
-                            }
+                    ui.set_width(220.0);
+                    ui.label(egui::RichText::new("PHOTOSHOP").color(gold));
+                    for group in PsToolbar::groups() {
+                        let open = self.expanded == Some(*group);
+                        let label = format!("{} {}", if open { "▼" } else { "▶" }, group.label());
+                        if ui.button(egui::RichText::new(label).color(gold)).clicked() {
+                            self.expanded = if open { None } else { Some(*group) };
                         }
-                        if group == "PAINT" && self.expanded {
-                            for tool in ["Brush", "Eraser", "Clone"] {
-                                if ui.button(egui::RichText::new(format!("  {}", tool)).color(fg)).clicked() {
-                                    self.tool = tool.to_string();
+                        if open {
+                            for tool in PsToolbar::in_group(*group) {
+                                let text = format!("  {}  {}", tool.name, tool.hotkey);
+                                if ui.button(egui::RichText::new(text).color(fg)).clicked() {
+                                    self.tool = tool.name.to_string();
                                 }
                             }
+                        }
+                    }
+
+                    ui.separator();
+                    ui.label(egui::RichText::new("MAYA SHELVES").color(gold));
+                    ui.horizontal(|ui| {
+                        for shelf in MayaShelves::shelves() {
+                            let active = self.maya_shelf == *shelf;
+                            let color = if active { gold } else { fg };
+                            if ui.button(egui::RichText::new(shelf.label()).color(color)).clicked() {
+                                self.maya_shelf = *shelf;
+                            }
+                        }
+                    });
+                    for btn in MayaShelves::on_shelf(self.maya_shelf) {
+                        if ui.button(egui::RichText::new(format!("  {}", btn.name)).color(fg)).clicked() {
+                            self.tool = btn.name.to_string();
                         }
                     }
                 });
@@ -75,16 +96,20 @@ impl eframe::App for TuxedoApp {
 
                 ui.vertical(|ui| {
                     ui.label(egui::RichText::new("Canvas").color(fg));
-                    let canvas = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(640.0, 360.0));
-                    ui.painter().rect_stroke(canvas, 0.0, egui::Stroke::new(1.0, gold));
-                    ui.allocate_space(egui::vec2(640.0, 360.0));
+                    let canvas = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(800.0, 450.0));
+                    ui.painter().rect_stroke(canvas, 0.0, egui::Stroke::new(1.0_f32, gold));
+                    ui.allocate_space(egui::vec2(800.0, 450.0));
                 });
             });
 
             ui.separator();
             ui.label(
-                egui::RichText::new(format!("◆ {}  ·  {:.0}%  ·  3840×2160", self.tool.to_uppercase(), self.zoom))
-                    .color(fg),
+                egui::RichText::new(format!(
+                    "◆ {}  ·  {:.0}%  ·  3840×2160",
+                    self.tool.to_uppercase(),
+                    self.zoom
+                ))
+                .color(fg),
             );
         });
     }

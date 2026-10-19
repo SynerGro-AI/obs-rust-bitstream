@@ -99,7 +99,11 @@ impl Psd {
         out.extend_from_slice(&(layer_len + 4).to_be_bytes());
         out.extend_from_slice(&layer_len.to_be_bytes());
         out.extend_from_slice(&layer_section);
+        // Image data: one byte per layer (opacity) as a simple channel stub.
         out.extend_from_slice(&0u16.to_be_bytes());
+        for layer in &self.layers {
+            out.push(layer.opacity);
+        }
         fs::write(path, out).map_err(|e| e.to_string())
     }
 
@@ -161,6 +165,19 @@ impl Psd {
 mod tests {
     use super::*;
     use std::env;
+
+    #[test]
+    fn channel_bytes() {
+        let mut d = Psd::new(10, 10);
+        d.add_layer("a", true, 200);
+        d.add_layer("b", true, 100);
+        let path = std::env::temp_dir().join("ch.psd");
+        d.save(&path).unwrap();
+        let data = fs::read(&path).unwrap();
+        assert_eq!(&data[0..4], b"8BPS");
+        assert!(data.len() > 26);
+        let _ = fs::remove_file(&path);
+    }
 
     #[test]
     fn magic() {

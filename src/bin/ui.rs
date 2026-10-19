@@ -57,6 +57,7 @@ struct TuxedoApp {
     reconnect: Reconnect,
     thumbs: Vec<Option<egui::TextureHandle>>,
     burned: Vec<(String, u8, u8, u8)>,
+    onion: bool,
 }
 
 impl Default for TuxedoApp {
@@ -108,6 +109,7 @@ impl Default for TuxedoApp {
             reconnect: Reconnect::new(),
             thumbs: Vec::new(),
             burned: Vec::new(),
+            onion: false,
         }
     }
 }
@@ -468,10 +470,16 @@ impl eframe::App for TuxedoApp {
                             ui.horizontal(|ui| {
                                 for f in 0..12 {
                                     let t = f as f32 / 24.0;
-                                    let mark = if (self.time - t).abs() < 0.05 { "◆" } else { "·" };
-                                    ui.label(egui::RichText::new(mark).color(if mark == "◆" { gold } else { muted }));
+                                    let near = (self.time - t).abs() < 0.05;
+                                    let prev = self.onion && (self.time - t - 1.0 / 24.0).abs() < 0.05;
+                                    let mark = if near { "◆" } else if prev { "◇" } else { "·" };
+                                    let color = if near { gold } else if prev { egui::Color32::from_rgb(150, 120, 60) } else { muted };
+                                    ui.label(egui::RichText::new(mark).color(color));
                                 }
                             });
+                            if ui.button(egui::RichText::new(if self.onion { "Onion: On" } else { "Onion: Off" }).color(gold)).clicked() {
+                                self.onion = !self.onion;
+                            }
                             ui.separator();
                             ui.label(egui::RichText::new("◆ LAYERS").color(gold));
                             for (name, _, _, _, vis) in &self.maya_objects {

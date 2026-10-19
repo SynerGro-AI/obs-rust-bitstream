@@ -243,6 +243,7 @@ pub mod audio_timeline;
 pub mod video_timeline;
 pub mod razor;
 pub mod timeline_tools;
+pub mod timeline_action;
 pub mod layer_stack;
 pub mod layer_select;
 pub mod edit_target;
@@ -829,6 +830,7 @@ pub use audio_timeline::{AudioTimeline, Track, TimelineError as AudioTimelineErr
 pub use video_timeline::{VideoTimeline, Clip, VideoError};
 pub use razor::Razor;
 pub use timeline_tools::TimelineTools;
+pub use timeline_action::TimelineAction;
 pub use layer_stack::{LayerStack, Layer, BlendMode, LayerError};
 pub use layer_select::LayerSelect;
 pub use edit_target::{EditTarget, EditApply};

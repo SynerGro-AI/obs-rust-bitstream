@@ -81,10 +81,17 @@ impl RtmpSocket {
             reconnect.start();
             SocketError::Write
         })?;
+        // One audio chunk so the stream has both types.
+        let audio = crate::rtmp_audio::RtmpAudio::chunk(0, &[0u8; 64]);
+        stream.write_all(&audio).map_err(|_| {
+            reconnect.start();
+            SocketError::Write
+        })?;
         let mut total = (handshake.len()
             + connect_chunk.len()
             + create_chunk.len()
-            + publish_chunk.len()) as u64;
+            + publish_chunk.len()
+            + audio.len()) as u64;
         let mut count = 0usize;
         for (i, data) in packets.iter().enumerate() {
             let chunk = crate::rtmp_chunk::RtmpChunk::wrap(

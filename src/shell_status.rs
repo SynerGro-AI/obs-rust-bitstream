@@ -26,9 +26,11 @@ impl ShellStatus {
         let (shown, hidden) = Self::eye();
         let mut w = Workspace::new(16, 16);
         w.click("Brush", ToolSource::Photoshop);
+        w.options_mut().set("size", 30.0);
+        let size = w.options().get("size").unwrap_or(0.0);
         format!(
-            "tool={} edit={} group={} members={}/{} blend={:.0}/{:.0} eye={:.0}/{:.0}",
-            w.active(), layer, group, single, group_n, normal, multiply, shown, hidden
+            "tool={} size={:.0} edit={} group={} members={}/{} blend={:.0}/{:.0} eye={:.0}/{:.0}",
+            w.active(), size, layer, group, single, group_n, normal, multiply, shown, hidden
         )
     }
 

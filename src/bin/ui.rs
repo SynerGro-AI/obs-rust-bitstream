@@ -63,6 +63,8 @@ struct TuxedoApp {
     packets: u32,
     brush_size: f32,
     brush_hard: f32,
+    brush_space: f32,
+    brush_flow: f32,
     filter: String,
 }
 
@@ -311,11 +313,12 @@ impl eframe::App for TuxedoApp {
                                     obs_rust_bitstream::CanvasAction::Paint { .. } => {
                                         self.strokes.push((x, y, "paint", self.selected_layer.clone()));
                                         self.burned.push((self.selected_layer.clone(), 201, 168, 76));
-                                        let dab = (self.brush_size * self.brush_hard / 100.0) as usize;
-                                        for i in 0..dab {
+                                        let dab = (self.brush_size * self.brush_hard / 100.0 / self.brush_space.max(1.0)) as usize;
+                                        for i in 0..dab.max(1) {
                                             let falloff = 1.0 - (i as f32 / dab.max(1) as f32) * (1.0 - self.brush_hard / 100.0);
-                                            let v = (201.0 * falloff) as u8;
-                                            self.burned.push((self.selected_layer.clone(), v, (168.0 * falloff) as u8, (76.0 * falloff) as u8));
+                                            let flow = self.brush_flow / 100.0;
+                                            let v = (201.0 * falloff * flow) as u8;
+                                            self.burned.push((self.selected_layer.clone(), v, (168.0 * falloff * flow) as u8, (76.0 * falloff * flow) as u8));
                                         }
                                         self.last_action = "recomposite".to_string();
                                         self.canvas_texture = None;
@@ -396,8 +399,12 @@ impl eframe::App for TuxedoApp {
                                 ui.add(egui::Slider::new(&mut self.brush_size, 1.0..=50.0).suffix(" px"));
                             });
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("Hard").color(fg));
-                                ui.add(egui::Slider::new(&mut self.brush_hard, 0.0..=100.0).suffix("%"));
+                                ui.label(egui::RichText::new("Space").color(fg));
+                                ui.add(egui::Slider::new(&mut self.brush_space, 1.0..=50.0).suffix(" px"));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Flow").color(fg));
+                                ui.add(egui::Slider::new(&mut self.brush_flow, 10.0..=100.0).suffix("%"));
                             });
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Feather").color(fg));

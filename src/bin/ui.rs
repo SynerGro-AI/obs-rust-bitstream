@@ -457,6 +457,13 @@ impl eframe::App for TuxedoApp {
                                         }
                                     });
                             });
+                            if ui.button(egui::RichText::new("Suggest").color(gold)).clicked() {
+                                self.weights.merge_lessons(&[
+                                    ("brush.size", 16.0),
+                                    ("filter.levels", 1.4),
+                                ]);
+                                self.last_action = "suggested".to_string();
+                            }
                             if ui.button(egui::RichText::new("Save PSD").color(gold)).clicked() {
                                 if let Some(doc) = &mut self.doc {
                                     doc.set_opacity(&self.selected_layer, (self.opacity * 2.55) as u8);

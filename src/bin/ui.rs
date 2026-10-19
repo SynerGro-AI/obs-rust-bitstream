@@ -123,6 +123,8 @@ impl Default for TuxedoApp {
             packets: 0,
             brush_size: 10.0,
             brush_hard: 80.0,
+            brush_space: 10.0,
+            brush_flow: 100.0,
             filter: "None".to_string(),
         }
     }

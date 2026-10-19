@@ -345,6 +345,9 @@ fn main() {
                     println!("platform: {}", t.line());
                 }
             }
+            if let Some(owned) = StreamTarget::owned("stream.example.com", "my-key") {
+                println!("owned: {}", owned.endpoint());
+            }
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);

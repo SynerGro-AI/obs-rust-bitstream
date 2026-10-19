@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, OUTPUT_AV,
 };
 
 fn main() {
@@ -269,6 +269,8 @@ fn main() {
             println!("shell_loop: {}", ShellLoop::run(&actions));
             let _ = std::fs::write("shell_loop.txt", ShellLoop::run(&actions));
             println!("shell_loop_file=shell_loop.txt");
+            let encoded = ShellLoopFrame::encode(&actions);
+            println!("shell_loop_frame: {}", encoded);
         }
     }
 }

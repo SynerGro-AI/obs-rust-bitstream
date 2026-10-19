@@ -47,6 +47,8 @@ struct TuxedoApp {
     strokes: Vec<(u32, u32)>,
     time: f32,
     keys: Vec<f32>,
+    maya_objects: Vec<(String, f32, f32, f32, bool)>,
+    selected_object: String,
 }
 
 impl Default for TuxedoApp {
@@ -75,6 +77,11 @@ impl Default for TuxedoApp {
             strokes: Vec::new(),
             time: 0.0,
             keys: vec![0.0, 1.0, 2.5],
+            maya_objects: vec![
+                ("joint1".to_string(), 0.0, 0.0, 0.0, true),
+                ("mesh1".to_string(), 1.0, 0.0, 0.0, true),
+            ],
+            selected_object: "joint1".to_string(),
         }
     }
 }
@@ -282,8 +289,31 @@ impl eframe::App for TuxedoApp {
                         }
                         Mode::Maya => {
                             ui.label(egui::RichText::new("◆ OUTLINER").color(gold));
-                            for btn in MayaShelves::on_shelf(self.maya_shelf) {
-                                ui.label(egui::RichText::new(btn.name).color(fg));
+                            for (name, _, _, _, vis) in &self.maya_objects {
+                                let eye = if *vis { "◉" } else { "○" };
+                                let color = if self.selected_object == *name { gold } else { fg };
+                                if ui.button(egui::RichText::new(format!("{}  {}", eye, name)).color(color)).clicked() {
+                                    self.selected_object = name.clone();
+                                }
+                            }
+                            ui.separator();
+                            ui.label(egui::RichText::new("◆ ATTRIBUTES").color(gold));
+                            if let Some(obj) = self.maya_objects.iter_mut().find(|o| o.0 == self.selected_object) {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("X").color(fg));
+                                    ui.add(egui::Slider::new(&mut obj.1, -10.0..=10.0));
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Y").color(fg));
+                                    ui.add(egui::Slider::new(&mut obj.2, -10.0..=10.0));
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("Z").color(fg));
+                                    ui.add(egui::Slider::new(&mut obj.3, -10.0..=10.0));
+                                });
+                                if ui.button(egui::RichText::new("Toggle Visible").color(gold)).clicked() {
+                                    obj.4 = !obj.4;
+                                }
                             }
                         }
                         Mode::Obs => {

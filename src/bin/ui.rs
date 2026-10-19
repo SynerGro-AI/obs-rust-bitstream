@@ -58,6 +58,7 @@ struct TuxedoApp {
     thumbs: Vec<Option<egui::TextureHandle>>,
     burned: Vec<(String, u8, u8, u8)>,
     onion: bool,
+    packets: u32,
 }
 
 impl Default for TuxedoApp {
@@ -110,6 +111,7 @@ impl Default for TuxedoApp {
             thumbs: Vec::new(),
             burned: Vec::new(),
             onion: false,
+            packets: 0,
         }
     }
 }
@@ -437,6 +439,9 @@ impl eframe::App for TuxedoApp {
                             let stream_color = if self.streaming { egui::Color32::from_rgb(0, 200, 0) } else { muted };
                             if ui.button(egui::RichText::new("● Streaming").color(stream_color)).clicked() {
                                 self.streaming = !self.streaming;
+                                if self.streaming {
+                                    self.packets += 1;
+                                }
                             }
                             let rec_color = if self.recording { egui::Color32::from_rgb(200, 0, 0) } else { muted };
                             if ui.button(egui::RichText::new("● Recording").color(rec_color)).clicked() {
@@ -449,6 +454,7 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new(stream_line).color(fg));
                             ui.label(egui::RichText::new(rec_line).color(fg));
                             ui.label(egui::RichText::new("output=rtmp").color(muted));
+                            ui.label(egui::RichText::new(format!("packets: {}", self.packets)).color(fg));
                             ui.separator();
                             ui.label(egui::RichText::new("◆ RECONNECT").color(gold));
                             ui.label(egui::RichText::new(format!("attempts: {}", self.reconnect.attempts())).color(fg));

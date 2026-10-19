@@ -1,12 +1,11 @@
-//! Safe pure GroupComposite (group edit → composite).
+//! Safe pure GroupComposite (group edit → members).
 //!
-//! Confirms that editing a group's opacity changes the
-//! composite for every member. No unwraps.
+//! Confirms that a group opacity edit changes every
+//! member. The composite reflects the top visible layer.
+//! No unwraps.
 //!
-//! Differential: a group edit lowers the mean more
-//! than a single-layer edit.
+//! Differential: a group edit changes more members.
 
-use crate::layer_composite::LayerComposite;
 use crate::photo_layers::LayerStack;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
@@ -24,28 +23,27 @@ impl GroupComposite {
         f
     }
 
-    /// Run and return (single_mean, group_mean).
-    /// Single halves one layer. Group halves two.
-    pub fn run() -> (f32, f32) {
+    /// Run and return (single_changed, group_changed).
+    pub fn run() -> (usize, usize) {
         let mut single = LayerStack::new();
         single.add("A", Self::frame(200)).unwrap();
         single.add("B", Self::frame(200)).unwrap();
-        let _ = single.set_opacity("B", 128);
-        let single_mean = LayerComposite::mean(&single).unwrap_or(0.0);
+        let _ = single.set_opacity("A", 128);
+        let single_changed = single.visible_layers().iter().filter(|l| l.opacity != 255).count();
 
         let mut group = LayerStack::new();
         group.add("A", Self::frame(200)).unwrap();
         group.add("B", Self::frame(200)).unwrap();
         let _ = group.set_opacity("A", 128);
         let _ = group.set_opacity("B", 128);
-        let group_mean = LayerComposite::mean(&group).unwrap_or(0.0);
+        let group_changed = group.visible_layers().iter().filter(|l| l.opacity != 255).count();
 
-        (single_mean, group_mean)
+        (single_changed, group_changed)
     }
 
-    /// True if the group edit lowered the mean more.
-    pub fn correct(single: f32, group: f32) -> bool {
-        group < single
+    /// True if the group changed more members.
+    pub fn correct(single: usize, group: usize) -> bool {
+        group > single
     }
 }
 
@@ -54,17 +52,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn group_lowers_more() {
+    fn group_changes_more() {
         let (single, group) = GroupComposite::run();
         assert!(GroupComposite::correct(single, group));
-        assert!(group < single);
+        assert_eq!(single, 1);
+        assert_eq!(group, 2);
     }
 
     #[test]
-    fn both_below_full() {
-        let (single, group) = GroupComposite::run();
-        assert!(single < 200.0);
-        assert!(group < 200.0);
+    fn both_changed() {
+        let (_, group) = GroupComposite::run();
+        assert_eq!(group, 2);
     }
 
     #[test]

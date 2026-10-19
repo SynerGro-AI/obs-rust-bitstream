@@ -196,8 +196,16 @@ impl eframe::App for TuxedoApp {
                                         for (i, p) in rgba.pixels_mut().enumerate() {
                                             if let Some(op) = over_rgba.pixels().nth(i) {
                                                 for c in 0..3 {
-                                                    let mixed = (p[c] as u16 + op[c] as u16) / 2;
-                                                    let scaled = (mixed as f32 * self.density / 100.0) as u8;
+                                                    let a = p[c] as f32 / 255.0;
+                                                    let b = op[c] as f32 / 255.0;
+                                                    let mixed = match self.blend.as_str() {
+                                                        "Multiply" => a * b,
+                                                        "Screen" => 1.0 - (1.0 - a) * (1.0 - b),
+                                                        "Overlay" => if a < 0.5 { 2.0 * a * b } else { 1.0 - 2.0 * (1.0 - a) * (1.0 - b) },
+                                                        _ => (a + b) / 2.0,
+                                                    };
+                                                    let feathered = mixed * (1.0 - self.feather / 100.0).max(0.5);
+                                                    let scaled = (feathered * self.density / 100.0 * 255.0) as u8;
                                                     p[c] = scaled;
                                                 }
                                             }

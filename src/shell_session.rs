@@ -38,7 +38,7 @@ impl ShellSession {
 
     /// Serialize to a line.
     pub fn to_line(state: &SessionState) -> String {
-        format!("tool={} size={:.0} layers={} selected={}", state.tool, state.size, state.layers, state.selected)
+        format!("tool={} size={:.0} layers={} selected={}", state.tool, state.size, state.layers, state.selected.replace(' ', "_"))
     }
 
     /// Parse a line. None if malformed.
@@ -62,7 +62,7 @@ impl ShellSession {
             tool: tool?,
             size: size?,
             layers: layers?,
-            selected: selected.unwrap_or_else(|| "none".to_string()),
+            selected: selected.unwrap_or_else(|| "none".to_string()).replace('_', " "),
         })
     }
 }

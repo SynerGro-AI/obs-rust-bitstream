@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, OUTPUT_AV,
 };
 
 fn main() {
@@ -172,6 +172,25 @@ fn main() {
             println!("canvas_mean={:.3}", mean);
             println!("--- shell ---");
             print!("{}", ShellRound::run());
+            // Composite of the showing layers.
+            use obs_rust_bitstream::video_fourcc::VideoFormat;
+            use obs_rust_bitstream::video_frame::VideoFrame;
+            use obs_rust_bitstream::photo_layers::LayerStack as PhotoLayers;
+            let mut photos = PhotoLayers::new();
+            if let Some(mut bg) = VideoFrame::new(VideoFormat::Y800, 4, 4) {
+                if let Some(p) = bg.planes.get_mut(0) {
+                    for px in p.iter_mut() { *px = 100; }
+                }
+                let mut top = bg.clone();
+                if let Some(p) = top.planes.get_mut(0) {
+                    for px in p.iter_mut() { *px = 200; }
+                }
+                let _ = photos.add("Background", bg);
+                let _ = photos.add("Layer 1", top);
+                println!("composite: {}", LayerComposite::line(&photos));
+                photos.hide("Layer 1").ok();
+                println!("hidden:    {}", LayerComposite::line(&photos));
+            }
         }
     }
 }

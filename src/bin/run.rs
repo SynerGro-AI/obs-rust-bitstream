@@ -379,9 +379,8 @@ fn main() {
             tb.retract("Paint");
             println!("toolbar_retracted: visible={}", tb.visible().len());
             println!("status: {}", StatusBar::line("Brush", 100.0, 1920, 1080));
-            if let Some(d) = Definition::new(1920, 1080, 80.0) {
-                println!("definition: {}", d.line());
-            }
+            let d = Definition::default_4k();
+            println!("definition: {}", d.line());
             let mut res = Definition::new(1280, 720, 50.0).unwrap();
             res.set_preset("4k").unwrap();
             println!("resolution: {} {}", res.preset(), res.line());

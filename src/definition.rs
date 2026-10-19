@@ -14,6 +14,11 @@ pub struct Definition {
 }
 
 impl Definition {
+    /// Default definition: 4K at quality 80.
+    pub fn default_4k() -> Self {
+        Self::new(3840, 2160, 80.0).unwrap()
+    }
+
     /// Create a definition. None if width or height is zero.
     pub fn new(width: u32, height: u32, quality: f32) -> Option<Self> {
         if width == 0 || height == 0 {
@@ -103,6 +108,13 @@ impl Definition {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_is_4k() {
+        let d = Definition::default_4k();
+        assert_eq!(d.preset(), "4k");
+        assert_eq!(d.pixels(), 3840 * 2160);
+    }
 
     #[test]
     fn creates() {

@@ -1,1 +1,0 @@
-gpu=false encoder=software video=200 audio=8 fps=30 encode_ms=0.0 stamped=false version=0.1.0

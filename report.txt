@@ -1,3 +1,0 @@
-gpu=false encoder=software video=126 audio=8 fps=30 encode_ms=8.3 stamped=false version=0.1.0
-8x8=3083 16x16=4216 32x32=1523
-time=1792274457

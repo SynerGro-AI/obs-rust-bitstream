@@ -90,7 +90,7 @@ impl Default for TuxedoApp {
             pixel_stack: {
                 let mut s = LayerStackPixels::new();
                 s.add(LayerPixels::new("Mountain Spire", "assets/mountain_spire.jpg"));
-                s.add(LayerPixels::new("Mist Overlay", "assets/mountain_spire.jpg"));
+                s.add(LayerPixels::new("Mist Overlay", "assets/mist_overlay.jpg"));
                 s
             },
             keys_pure: Keyframes::new(),
@@ -181,13 +181,15 @@ impl eframe::App for TuxedoApp {
                             }
                         }
                     }
-                    if self.canvas_texture.is_none() {
-                        if let Ok(img) = image::open("assets/mountain_spire.jpg") {
+                    if self.canvas_texture.is_none() || self.last_action == "recomposite" {
+                        let path = self.pixel_stack.visible().last().map(|l| l.path.clone()).unwrap_or_else(|| "assets/mountain_spire.jpg".to_string());
+                        if let Ok(img) = image::open(&path) {
                             let rgba = img.to_rgba8();
                             let size = [rgba.width() as usize, rgba.height() as usize];
                             let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
                             self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
                         }
+                        self.last_action.clear();
                     }
                     if let Some(tex) = &self.canvas_texture {
                         let size = tex.size_vec2();
@@ -275,6 +277,9 @@ impl eframe::App for TuxedoApp {
                                             if let Some(doc) = &mut self.doc {
                                                 doc.toggle(&name);
                                             }
+                                            self.pixel_stack.toggle(&name);
+                                            self.last_action = "recomposite".to_string();
+                                            self.canvas_texture = None;
                                         }
                                         let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
                                         if let Some(Some(tex)) = self.thumbs.get(0) {

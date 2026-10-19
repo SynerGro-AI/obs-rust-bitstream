@@ -440,10 +440,20 @@ impl eframe::App for TuxedoApp {
                         }
                         Mode::ToonBoom => {
                             ui.label(egui::RichText::new("◆ DRAWING").color(gold));
-                            ui.label(egui::RichText::new(format!("frame: {:.0}", self.time * 24.0)).color(fg));
+                            let frame = (self.time * 24.0) as u32;
+                            ui.label(egui::RichText::new(format!("frame: {}", frame)).color(fg));
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Exposure").color(fg));
                                 ui.add(egui::Slider::new(&mut self.time, 0.0..=5.0).suffix(" s"));
+                            });
+                            ui.separator();
+                            ui.label(egui::RichText::new("◆ FRAME STRIP").color(gold));
+                            ui.horizontal(|ui| {
+                                for f in 0..12 {
+                                    let t = f as f32 / 24.0;
+                                    let mark = if (self.time - t).abs() < 0.05 { "◆" } else { "·" };
+                                    ui.label(egui::RichText::new(mark).color(if mark == "◆" { gold } else { muted }));
+                                }
                             });
                             ui.separator();
                             ui.label(egui::RichText::new("◆ LAYERS").color(gold));

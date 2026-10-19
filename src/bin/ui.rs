@@ -260,13 +260,17 @@ impl eframe::App for TuxedoApp {
                             ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Opacity").color(fg));
-                                ui.add(egui::Slider::new(&mut self.opacity, 0.0..=100.0).suffix("%"));
+                                if ui.add(egui::Slider::new(&mut self.opacity, 0.0..=100.0).suffix("%")).changed() {
+                                    if let Some(doc) = &mut self.doc {
+                                        doc.set_opacity(&self.selected_layer, (self.opacity * 2.55) as u8);
+                                    }
+                                }
                             });
                             if ui.button(egui::RichText::new("Save PSD").color(gold)).clicked() {
                                 if let Some(doc) = &mut self.doc {
-                                    doc.set_opacity(&self.selected_layer, self.opacity as u8);
+                                    doc.set_opacity(&self.selected_layer, (self.opacity * 2.55) as u8);
                                     let _ = doc.save(std::path::Path::new("assets/mountain_spire.psd"));
-                                    self.last_action = "Saved".to_string();
+                                    self.last_action = format!("Saved d={:.0} f={:.0}", self.density, self.feather);
                                 }
                             }
                         }

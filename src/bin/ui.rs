@@ -6,7 +6,7 @@
 //! right layers/masks/properties, bottom Maya shelf and status.
 
 use eframe::egui;
-use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, LiveWeights, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, Reconnect, ToolDispatch};
+use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerStack, LayerStackPixels, LiveWeights, MayaShelf, MayaShelves, Psd, PsGroup, PsToolbar, Reconnect, ToolDispatch, WeightBridge};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {

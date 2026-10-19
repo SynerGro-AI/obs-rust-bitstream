@@ -56,6 +56,7 @@ struct TuxedoApp {
     joints: JointHierarchy,
     reconnect: Reconnect,
     thumbs: Vec<Option<egui::TextureHandle>>,
+    burned: Vec<(String, u8, u8, u8)>,
 }
 
 impl Default for TuxedoApp {
@@ -106,6 +107,7 @@ impl Default for TuxedoApp {
             },
             reconnect: Reconnect::new(),
             thumbs: Vec::new(),
+            burned: Vec::new(),
         }
     }
 }
@@ -213,6 +215,12 @@ impl eframe::App for TuxedoApp {
                                     }
                                 }
                                 let size = [rgba.width() as usize, rgba.height() as usize];
+                                if !self.burned.is_empty() {
+                                    let count = self.burned.len().min(50);
+                                    for (i, p) in rgba.pixels_mut().enumerate().take(count * 20).step_by(20) {
+                                        p[0] = 201; p[1] = 168; p[2] = 76;
+                                    }
+                                }
                                 let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
                                 self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
                             }
@@ -256,6 +264,7 @@ impl eframe::App for TuxedoApp {
                                 match action {
                                     obs_rust_bitstream::CanvasAction::Paint { .. } => {
                                         self.strokes.push((x, y, "paint", self.selected_layer.clone()));
+                                        self.burned.push((self.selected_layer.clone(), 201, 168, 76));
                                         self.last_action = "recomposite".to_string();
                                         self.canvas_texture = None;
                                     }
@@ -361,7 +370,7 @@ impl eframe::App for TuxedoApp {
                                 if let Some(doc) = &mut self.doc {
                                     doc.set_opacity(&self.selected_layer, (self.opacity * 2.55) as u8);
                                     let _ = doc.save(std::path::Path::new("assets/mountain_spire.psd"));
-                                    self.last_action = format!("Saved strokes={}", self.strokes.len());
+                                    self.last_action = format!("Saved burned={}", self.burned.len());
                                 }
                             }
                         }

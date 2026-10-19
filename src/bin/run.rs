@@ -136,7 +136,7 @@ fn main() {
                                         let _ = listener.accept();
                                     });
                                     let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
-                                    std::thread::sleep(std::time::Duration::from_millis(30));
+                                    std::thread::sleep(std::time::Duration::from_millis(50));
                                     let mut rc = Reconnect::new();
                                     match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
                                         Ok(sent) => {

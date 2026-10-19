@@ -104,10 +104,15 @@ impl Psd {
         for layer in &self.layers {
             out.push(layer.opacity);
         }
-        // 4x4 thumbnail: length + raw bytes (average gray per cell).
-        let thumb: [u8; 16] = [128, 140, 150, 160, 130, 145, 155, 165, 120, 135, 148, 158, 110, 125, 140, 152];
-        out.extend_from_slice(&(thumb.len() as u32).to_be_bytes());
-        out.extend_from_slice(&thumb);
+        // Minimal 1x1 PNG as the composite thumbnail.
+        let png: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE,
+        ];
+        out.extend_from_slice(&(png.len() as u32).to_be_bytes());
+        out.extend_from_slice(png);
         fs::write(path, out).map_err(|e| e.to_string())
     }
 
@@ -177,9 +182,9 @@ mod tests {
         let path = std::env::temp_dir().join("thumb.psd");
         d.save(&path).unwrap();
         let data = fs::read(&path).unwrap();
-        let len = u32::from_be_bytes(data[data.len() - 20..data.len() - 16].try_into().unwrap());
-        assert_eq!(len, 16);
-        assert_eq!(data[data.len() - 16], 128);
+        let len = u32::from_be_bytes(data[data.len() - 37..data.len() - 33].try_into().unwrap());
+        assert_eq!(len, 33);
+        assert_eq!(&data[data.len() - 33..data.len() - 29], b"\x89PNG");
         let _ = fs::remove_file(&path);
     }
 

@@ -42,6 +42,13 @@ impl Psd {
         }
     }
 
+    /// Toggle a layer's visibility. None if the name is missing.
+    pub fn toggle(&mut self, name: &str) -> Option<bool> {
+        let layer = self.layers.iter_mut().find(|l| l.name == name)?;
+        layer.visible = !layer.visible;
+        Some(layer.visible)
+    }
+
     pub fn add_layer(&mut self, name: &str, visible: bool, opacity: u8) {
         self.layers.push(PsdLayer {
             name: name.to_string(),
@@ -173,6 +180,15 @@ mod tests {
         assert_eq!(loaded.layers[0].name, "Mountain Spire");
         assert!(!loaded.layers[1].visible);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn toggle() {
+        let mut d = Psd::new(100, 100);
+        d.add_layer("one", true, 255);
+        assert_eq!(d.toggle("one"), Some(false));
+        assert_eq!(d.toggle("one"), Some(true));
+        assert_eq!(d.toggle("missing"), None);
     }
 
     #[test]

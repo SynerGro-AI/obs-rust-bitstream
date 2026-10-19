@@ -139,7 +139,9 @@ impl eframe::App for TuxedoApp {
                         let aspect = size.y / size.x;
                         let w = 700.0;
                         let h = w * aspect;
-                        ui.image((tex.id(), egui::vec2(w, h)));
+                        let base_visible = self.doc.as_ref().map(|d| d.layers.first().map(|l| l.visible).unwrap_or(true)).unwrap_or(true);
+                        let tint = if base_visible { egui::Color32::WHITE } else { egui::Color32::from_rgba_unmultiplied(80, 80, 80, 255) };
+                        ui.image(egui::Image::from_texture(egui::load::SizedTexture::new(tex.id(), egui::vec2(w, h))).tint(tint));
                     } else {
                         ui.label(egui::RichText::new("No image").color(muted));
                     }
@@ -176,9 +178,17 @@ impl eframe::App for TuxedoApp {
                         for layer in &doc.layers {
                             let eye = if layer.visible { "◉" } else { "○" };
                             let color = if self.selected_layer == layer.name { gold } else { fg };
-                            if ui.button(egui::RichText::new(format!("{}  {}  {}", eye, layer.name, layer.opacity)).color(color)).clicked() {
-                                self.selected_layer = layer.name.clone();
-                            }
+                            ui.horizontal(|ui| {
+                                if ui.button(egui::RichText::new(eye).color(color)).clicked() {
+                                    let name = layer.name.clone();
+                                    if let Some(doc) = &mut self.doc {
+                                        doc.toggle(&name);
+                                    }
+                                }
+                                if ui.button(egui::RichText::new(format!("{}  {}", layer.name, layer.opacity)).color(color)).clicked() {
+                                    self.selected_layer = layer.name.clone();
+                                }
+                            });
                         }
                     } else {
                         ui.label(egui::RichText::new("No document").color(muted));

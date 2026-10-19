@@ -267,6 +267,8 @@ fn main() {
                 ShellAction::Opacity(0.5),
             ];
             println!("shell_loop: {}", ShellLoop::run(&actions));
+            let _ = std::fs::write("shell_loop.txt", ShellLoop::run(&actions));
+            println!("shell_loop_file=shell_loop.txt");
         }
     }
 }

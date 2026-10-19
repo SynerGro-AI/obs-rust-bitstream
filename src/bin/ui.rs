@@ -44,6 +44,7 @@ struct TuxedoApp {
     density: f32,
     feather: f32,
     opacity: f32,
+    strokes: Vec<(u32, u32)>,
 }
 
 impl Default for TuxedoApp {
@@ -69,6 +70,7 @@ impl Default for TuxedoApp {
             density: 100.0,
             feather: 0.0,
             opacity: 100.0,
+            strokes: Vec::new(),
         }
     }
 }
@@ -159,6 +161,11 @@ impl eframe::App for TuxedoApp {
                             let alpha = ((1.0 - factor) * 200.0) as u8;
                             ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, alpha));
                         }
+                        let origin = ui.min_rect().min;
+                        for (sx, sy) in &self.strokes {
+                            let p = origin + egui::vec2(*sx as f32, *sy as f32);
+                            ui.painter().circle_filled(p, 4.0, gold);
+                        }
                         let resp = ui.interact(ui.min_rect(), ui.id().with("canvas"), egui::Sense::click_and_drag());
                         if resp.clicked() || resp.dragged() {
                             if let Some(pos) = resp.interact_pointer_pos() {
@@ -167,6 +174,9 @@ impl eframe::App for TuxedoApp {
                                 let y = (rel.y.max(0.0) as u32).min(h as u32);
                                 let action = ToolDispatch::dispatch(&self.tool, x, y);
                                 self.last_action = format!("{:?}", action);
+                                if matches!(action, obs_rust_bitstream::CanvasAction::Paint { .. }) {
+                                    self.strokes.push((x, y));
+                                }
                             }
                         }
                     } else {

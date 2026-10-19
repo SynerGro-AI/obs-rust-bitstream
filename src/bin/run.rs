@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -326,6 +326,13 @@ fn main() {
             println!("shell_filter: plain={} bright={}", plain, bright);
             let _ = std::fs::write("shell_filter.txt", format!("plain={} bright={}", plain, bright));
             println!("shell_filter_file=shell_filter.txt");
+            let mut sw = Workspace::new(32, 32);
+            sw.click("Brush", obs_rust_bitstream::active_tool::ToolSource::Photoshop);
+            sw.options_mut().set("size", 30.0);
+            let state = ShellSession::save(&sw, 1);
+            let line = ShellSession::to_line(&state);
+            let _ = std::fs::write("shell_session.txt", &line);
+            println!("shell_session: {}", line);
         }
     }
 }

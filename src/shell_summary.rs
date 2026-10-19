@@ -23,9 +23,19 @@ impl ShellSummary {
         format!("{} encoded={} payload={} valid={}", status, encoded, payload, valid)
     }
 
+    /// One line covering the full path including the sent count.
+    pub fn line_with_sent(actions: &[ShellAction], sent: usize) -> String {
+        format!("{} sent={}", Self::line(actions), sent)
+    }
+
     /// True if the line contains every section.
     pub fn complete(line: &str) -> bool {
         line.contains("tool=") && line.contains("encoded=") && line.contains("payload=") && line.contains("valid=")
+    }
+
+    /// True if the line includes the sent count.
+    pub fn has_sent(line: &str) -> bool {
+        line.contains("sent=")
     }
 }
 
@@ -47,6 +57,14 @@ mod tests {
     fn empty_is_move() {
         let line = ShellSummary::line(&[]);
         assert!(line.contains("tool=Move"));
+    }
+
+    #[test]
+    fn has_sent_count() {
+        let actions = [ShellAction::NewLayer];
+        let line = ShellSummary::line_with_sent(&actions, 1920);
+        assert!(ShellSummary::has_sent(&line));
+        assert!(line.contains("sent=1920"));
     }
 
     #[test]

@@ -333,6 +333,13 @@ fn main() {
             let line = ShellSession::to_line(&state);
             let _ = std::fs::write("shell_session.txt", &line);
             println!("shell_session: {}", line);
+            if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
+                if let Some(loaded) = ShellSession::from_line(&saved) {
+                    let mut lw = Workspace::new(32, 32);
+                    let layers = ShellSession::load(&mut lw, &loaded);
+                    println!("shell_session_loaded: tool={} size={:.0} layers={}", lw.active(), lw.options().get("size").unwrap_or(0.0), layers);
+                }
+            }
         }
     }
 }

@@ -121,9 +121,27 @@ impl eframe::App for TuxedoApp {
 
                 // Center: canvas
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("Canvas").color(fg));
+                    // Canvas with gradient fill
                     let canvas = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(700.0, 400.0));
-                    ui.painter().rect_stroke(canvas, 0.0, egui::Stroke::new(1.0_f32, gold));
+                    ui.painter().rect_filled(canvas, 4.0, egui::Color32::from_rgb(20, 18, 15));
+                    ui.painter().rect_stroke(canvas, 4.0, egui::Stroke::new(1.0_f32, gold));
+                    // Simple mountain silhouette
+                    let base = canvas.bottom() - 40.0;
+                    let points = vec![
+                        canvas.left_top() + egui::vec2(0.0, 200.0),
+                        canvas.left_top() + egui::vec2(150.0, 80.0),
+                        canvas.left_top() + egui::vec2(250.0, 40.0),
+                        canvas.left_top() + egui::vec2(350.0, 60.0),
+                        canvas.left_top() + egui::vec2(500.0, 100.0),
+                        canvas.left_top() + egui::vec2(700.0, 180.0),
+                        canvas.right_bottom(),
+                        canvas.left_bottom(),
+                    ];
+                    ui.painter().add(egui::Shape::convex_polygon(
+                        points,
+                        egui::Color32::from_rgb(40, 35, 30),
+                        egui::Stroke::NONE,
+                    ));
                     ui.allocate_space(egui::vec2(700.0, 400.0));
 
                     ui.separator();

@@ -25,6 +25,7 @@ impl ToolHelp {
             "Gradient" => "💭 Gradient fills with a blend. Drag to set the direction. Opacity controls the strength.",
             "Lasso" => "💭 Lasso selects a freehand region. Drag to draw the outline, then release to close it.",
             "Marquee" => "💭 Marquee selects a rectangular region. Drag from corner to corner.",
+            "Razor" | "Split" => "💭 Razor cuts a clip or track at the playhead. Click on a clip to split it into two. The left piece keeps the name. The right piece gets _r.",
             _ => "💭 Select a tool from the toolbar. Its options appear above the canvas.",
         }
     }

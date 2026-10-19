@@ -9,7 +9,7 @@ use obs_rust_bitstream::{
     ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
     StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
     CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, History, Workspace, OUTPUT_AV,
+    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, History, Workspace, OUTPUT_AV,
 };
 
 fn main() {
@@ -347,6 +347,16 @@ fn main() {
             }
             if let Some(owned) = StreamTarget::owned("stream.example.com", "my-key") {
                 println!("owned: {}", owned.endpoint());
+            }
+            let mut vt = obs_rust_bitstream::video_timeline::VideoTimeline::new();
+            let _ = vt.add("clip", 0.0, 10.0, "src");
+            if let Ok((l, r)) = Razor::split_video(&mut vt, "clip", 4.0) {
+                println!("razor_video: {} + {} dur={:.0}/{:.0}", l, r, vt.get(&l).unwrap().duration_secs(), vt.get(&r).unwrap().duration_secs());
+            }
+            let mut at = obs_rust_bitstream::audio_timeline::AudioTimeline::new();
+            let _ = at.add("track", 0.0);
+            if let Ok((l, r)) = Razor::split_audio(&mut at, "track", 5.0) {
+                println!("razor_audio: {} + {} tracks={}", l, r, at.len());
             }
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {

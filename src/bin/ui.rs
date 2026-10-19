@@ -267,10 +267,11 @@ impl eframe::App for TuxedoApp {
                                     }
                                 }
                                 if self.filter == "Levels" {
+                                    let lift = WeightBridge::read_or(&self.weights, "filter.levels", 1.2);
                                     for p in rgba.pixels_mut() {
-                                        p[0] = ((p[0] as f32 - 10.0).max(0.0) * 1.2).min(255.0) as u8;
-                                        p[1] = ((p[1] as f32 - 10.0).max(0.0) * 1.2).min(255.0) as u8;
-                                        p[2] = ((p[2] as f32 - 10.0).max(0.0) * 1.2).min(255.0) as u8;
+                                        p[0] = ((p[0] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
+                                        p[1] = ((p[1] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
+                                        p[2] = ((p[2] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
                                     }
                                 } else if self.filter == "Curves" {
                                     for p in rgba.pixels_mut() {
@@ -329,7 +330,9 @@ impl eframe::App for TuxedoApp {
                                     obs_rust_bitstream::CanvasAction::Paint { .. } => {
                                         self.strokes.push((x, y, "paint", self.selected_layer.clone()));
                                         self.burned.push((self.selected_layer.clone(), 201, 168, 76));
-                                        let dab = (self.brush_size * self.brush_hard / 100.0 / self.brush_space.max(1.0)) as usize;
+                                        let size_w = WeightBridge::read_or(&self.weights, "brush.size", self.brush_size);
+                                        let hard_w = WeightBridge::read_or(&self.weights, "brush.hardness", self.brush_hard / 100.0);
+                                        let dab = (size_w * hard_w / self.brush_space.max(1.0)) as usize;
                                         for i in 0..dab.max(1) {
                                             let falloff = 1.0 - (i as f32 / dab.max(1) as f32) * (1.0 - self.brush_hard / 100.0);
                                             let flow = self.brush_flow / 100.0;

@@ -46,15 +46,14 @@ pub fn nv12_to_y800(nv12: &[u8], width: u32, height: u32) -> Option<VideoFrame> 
     Some(frame)
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "windows"))]
 mod imp {
     use super::*;
-    use windows::core::Interface;
     use windows::Win32::Media::MediaFoundation::{
         MFCreateAttributes, MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFStartup,
         MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
-        MF_MT_FRAME_SIZE, MF_MT_SUBTYPE, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_VERSION,
-        MFVideoFormat_NV12, MFVideoFormat_YUY2, IMFActivate, IMFMediaType, IMFSourceReader,
+        MF_MT_FRAME_SIZE, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_VERSION,
+        MFVideoFormat_NV12, MFVideoFormat_YUY2, IMFActivate, IMFSourceReader,
     };
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 
@@ -169,7 +168,7 @@ mod imp {
         fn drop(&mut self) {
             if self.com_inited {
                 unsafe {
-                    windows::Win32::Media::MediaFoundation::MFShutdown();
+                    let _ = windows::Win32::Media::MediaFoundation::MFShutdown();
                     CoUninitialize();
                 }
             }
@@ -217,20 +216,36 @@ mod imp {
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "windows"))]
 pub use imp::WindowsCapture;
 
-#[cfg(not(windows))]
+/// Stub when the `windows` feature (Media Foundation) is off.
+#[cfg(not(all(windows, feature = "windows")))]
 pub struct WindowsCapture;
 
-#[cfg(not(windows))]
+#[cfg(not(all(windows, feature = "windows")))]
+impl Capture for WindowsCapture {
+    fn frame(&mut self) -> Option<VideoFrame> {
+        None
+    }
+
+    fn width(&self) -> u32 {
+        0
+    }
+
+    fn height(&self) -> u32 {
+        0
+    }
+}
+
+#[cfg(not(all(windows, feature = "windows")))]
 impl WindowsCapture {
     pub fn open() -> Result<Self, String> {
-        Err("Windows Media Foundation capture requires Windows".to_string())
+        Err("Windows Media Foundation capture requires Windows and the `windows` feature".to_string())
     }
 
     pub fn open_index(_index: u32) -> Result<Self, String> {
-        Err("Windows Media Foundation capture requires Windows".to_string())
+        Err("Windows Media Foundation capture requires Windows and the `windows` feature".to_string())
     }
 }
 

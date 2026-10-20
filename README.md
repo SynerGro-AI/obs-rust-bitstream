@@ -7,6 +7,76 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 
 Reusable patterns + differential helper + AI scaffold for automated assistance.
 
+## Desktop app: Seraphina Studio
+
+A single egui/eframe window that hosts five workspaces. Windows is the
+primary target; it also runs on Linux and macOS.
+
+| Mode | What is real today | What is stubbed / not built yet |
+|------|--------------------|---------------------------------|
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader` (step 1–16 bits, No-wrap `usize` vs Wrap `u8` counter, hex view, read log) | Go live / Record / reconnect are **simulated** status only — no encoder or RTMP output |
+| **Paint** | Layer compositing (Normal/Multiply/Screen/Overlay, opacity), brush & eraser, marquee clipping, crop, eyedropper, filters, zoom/pan, undo/redo, PNG export, PSD layer-structure save | PSD pixel data is not decoded (header + layer list only); no healing/clone/text tools |
+| **3D** | Wireframe layout viewport (orbit/dolly/select), outliner, transforms, keyframed Y channel, joints mirrored into `JointHierarchy` | No meshes, materials, renderer, IK or file import |
+| **Animate** | Frame-by-frame drawing, onion skin, add/duplicate/delete frames, playback, undo | No export, no layers per frame |
+| **Composite** | Keyframed per-layer opacity with linear interpolation, blend modes, scrubbing timeline | No effects stack or render-to-file |
+| **Seraphina panel** | Chat UI over the `AssistantBackend` trait; 👍/👎 and tool use feed `OnlineLearner`, which nudges `LiveWeights` by small bounded steps | The shipped backend is an **offline stub** that answers with built-in tips. No model is called and nothing is trained |
+
+To connect a real model, implement `assistant::AssistantBackend` and set
+`AssistantPanel::backend`. To change how weights learn, implement
+`assistant::OnlineLearner`.
+
+### Run on Windows (recommended)
+
+1. Install Rust with [rustup](https://rustup.rs) (`rustup-init.exe`). Keep the default
+   **MSVC** toolchain (`stable-x86_64-pc-windows-msvc`). If prompted, install the
+   Visual Studio Build Tools workload “Desktop development with C++”.
+2. In PowerShell:
+
+   ```powershell
+   git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
+   cd obs-rust-bitstream
+   cargo run --release --features ui --bin ui
+   ```
+
+The release build is `target\release\ui.exe`. It looks for `assets\` and the
+sample streams (`out.h264`, `out.obsr`) in the working directory, next to the
+exe, or up to four folders above it. Copy them alongside the exe to ship it.
+Release builds on Windows use the GUI subsystem, so no console window opens.
+
+Optional: `--features "ui windows"` also builds the Media Foundation camera
+capture code.
+
+### Run on Linux / macOS
+
+```bash
+cargo run --release --features ui --bin ui
+```
+
+Linux needs an X11 or Wayland session with OpenGL. On minimal installs:
+`sudo apt install libxkbcommon-x11-0 libgl1 libegl1`.
+
+### Cross-compile a Windows .exe from Linux
+
+```bash
+sudo apt install mingw-w64
+rustup target add x86_64-pc-windows-gnu
+cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
+# -> target/x86_64-pc-windows-gnu/release/ui.exe
+```
+
+### Tests
+
+```bash
+cargo test                       # library (1700+ tests)
+cargo test --features ui --bin ui  # UI smoke tests, headless
+```
+
+### Shortcuts
+
+`Ctrl+1…5` switch mode · `F1` / `?` shortcut sheet · `Ctrl+.` toggle Seraphina ·
+Paint: `B E M C I H Z` tools, `Ctrl+Z` / `Ctrl+Shift+Z`, `Ctrl+0` fit ·
+Animate / 3D / Composite: `Space` play.
+
 ## Foundation modules (live)
 
 | Module | What it does | Notes |
@@ -400,13 +470,6 @@ Outputs: `out.avbn`, `status.txt`, `report.txt`, `stamped.avbn`.
 
 ## Windows release
 
-On a Windows machine (or with the mingw toolchain):
-
-```bash
-rustup target add x86_64-pc-windows-gnu
-cargo build --release --features ui --target x86_64-pc-windows-gnu --bin ui
-```
-
-The binary is `target/x86_64-pc-windows-gnu/release/ui.exe`.
-Dark mode is on by default; the top-bar button switches to light.
+See [Desktop app: Seraphina Studio](#desktop-app-seraphina-studio) above.
+Note: `dist/obs-rust-ui` is a stale Linux prebuilt of an older “Tuxedo Edit” UI revision. It does not match the current source; rebuild instead.
 

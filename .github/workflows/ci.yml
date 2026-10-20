@@ -13,3 +13,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --verbose
+      # UI tests run headless against egui::Context; no display needed.
+      - run: cargo test --features ui --bin ui
+
+  windows-ui:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --features ui --bin ui
+      - run: cargo test --features ui --bin ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seraphina-studio-windows
+          path: |
+            target/release/ui.exe
+            assets/
+            out.h264
+            out.avbn
+            out.obsr

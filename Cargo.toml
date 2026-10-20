@@ -47,3 +47,8 @@ windows = ["dep:windows"]
 name = "ui"
 path = "src/bin/ui/main.rs"
 required-features = ["ui"]
+
+# Optimise dependencies (image decode, egui) even in debug builds so
+# `cargo run --features ui --bin ui` stays responsive.
+[profile.dev.package."*"]
+opt-level = 2

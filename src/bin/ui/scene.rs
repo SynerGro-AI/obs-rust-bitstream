@@ -1,18 +1,23 @@
-//! 3D mode: wireframe viewport with an outliner, Select/Move/Rotate/
-//! Scale gizmo drags, editable cube meshes (extrude, bevel) and a
-//! keyframed Y channel. Wireframe only: no renderer behind it yet.
+//! 3D mode: polygon meshes with a z-buffered, flat-shaded software
+//! viewport (`mesh3d::Frame3d`), Maya-style tools (move / rotate / scale,
+//! extrude, bevel, edge loop, multi-cut, bridge, booleans, quad draw),
+//! joints, lights, cameras and a keyed Y channel. Every edit goes through
+//! `SceneState::apply(AppCommand)`.
 
 use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::{self, Clock, Track};
 use crate::{ToastKind, Toasts};
 use eframe::egui::{self, Color32, Pos2, Rounding, Stroke, Vec2};
-use obs_rust_bitstream::ui_canvas::KeyTrack;
+use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, V3};
+use obs_rust_bitstream::ui_canvas::{KeyTrack, Raster};
 use obs_rust_bitstream::{Joint, JointHierarchy};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Cube,
+    Mesh,
     Joint,
     Light,
     Camera,
@@ -22,63 +27,11 @@ impl Kind {
     fn icon(&self) -> &'static str {
         match self {
             Kind::Cube => "⬛",
+            Kind::Mesh => "◆",
             Kind::Joint => "◉",
             Kind::Light => "☀",
             Kind::Camera => "🎥",
         }
-    }
-}
-
-/// Edge mesh in object space. `top` is the current top face ring.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Mesh {
-    pub verts: Vec<[f32; 3]>,
-    pub edges: Vec<(usize, usize)>,
-    pub top: Vec<usize>,
-    pub faces: usize,
-}
-
-impl Mesh {
-    pub fn cube() -> Self {
-        let h = 0.5;
-        let verts = vec![[-h, -h, -h], [h, -h, -h], [h, -h, h], [-h, -h, h], [-h, h, -h], [h, h, -h], [h, h, h], [-h, h, h]];
-        let edges = vec![(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)];
-        Self { verts, edges, top: vec![4, 5, 6, 7], faces: 6 }
-    }
-
-    fn add_ring(&mut self, ring: Vec<[f32; 3]>, side_faces: usize) {
-        let base = self.verts.len();
-        let n = ring.len();
-        self.verts.extend(ring);
-        for k in 0..n {
-            self.edges.push((base + k, base + (k + 1) % n));
-            self.edges.push((self.top[k], base + k));
-        }
-        self.top = (base..base + n).collect();
-        self.faces += side_faces;
-    }
-
-    /// Extrude the top face straight up by `d`.
-    pub fn extrude(&mut self, d: f32) {
-        let ring: Vec<[f32; 3]> = self.top.iter().map(|&i| {
-            let v = self.verts[i];
-            [v[0], v[1] + d, v[2]]
-        }).collect();
-        let n = ring.len();
-        self.add_ring(ring, n);
-    }
-
-    /// Chamfer the top face: inset toward its centre by `a` and lift.
-    pub fn bevel(&mut self, a: f32) {
-        let a = a.clamp(0.02, 0.45);
-        let n = self.top.len() as f32;
-        let c = self.top.iter().fold([0.0f32; 3], |acc, &i| [acc[0] + self.verts[i][0] / n, acc[1] + self.verts[i][1] / n, acc[2] + self.verts[i][2] / n]);
-        let ring: Vec<[f32; 3]> = self.top.iter().map(|&i| {
-            let v = self.verts[i];
-            [v[0] + (c[0] - v[0]) * a, v[1] + a * 0.5, v[2] + (c[2] - v[2]) * a]
-        }).collect();
-        let k = ring.len();
-        self.add_ring(ring, k);
     }
 }
 
@@ -88,15 +41,21 @@ pub enum Gizmo {
     Move,
     Rotate,
     Scale,
+    EdgeLoop,
+    MultiCut,
+    QuadDraw,
 }
 
 impl Gizmo {
     pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
+        match s.to_lowercase().replace([' ', '-'], "_").as_str() {
             "select" => Some(Gizmo::Select),
             "move" | "translate" => Some(Gizmo::Move),
             "rotate" => Some(Gizmo::Rotate),
             "scale" => Some(Gizmo::Scale),
+            "edge_loop" | "edgeloop" => Some(Gizmo::EdgeLoop),
+            "multi_cut" | "multicut" => Some(Gizmo::MultiCut),
+            "quad_draw" | "quaddraw" => Some(Gizmo::QuadDraw),
             _ => None,
         }
     }
@@ -107,6 +66,53 @@ impl Gizmo {
             Gizmo::Move => "Move",
             Gizmo::Rotate => "Rotate",
             Gizmo::Scale => "Scale",
+            Gizmo::EdgeLoop => "Edge Loop",
+            Gizmo::MultiCut => "Multi-Cut",
+            Gizmo::QuadDraw => "Quad Draw",
+        }
+    }
+
+    fn hint(&self) -> &'static str {
+        match self {
+            Gizmo::Select => "Click a mesh to select it. Drag (or Alt-drag) orbits, scroll dollies.",
+            Gizmo::Move => "Drag to move on the ground plane; Shift-drag moves Y.",
+            Gizmo::Rotate => "Drag left/right to rotate around Y.",
+            Gizmo::Scale => "Drag left/right to scale uniformly.",
+            Gizmo::EdgeLoop => "Click near an edge of a quad: a loop is inserted through that ring at the click position.",
+            Gizmo::MultiCut => "Click near one edge of a face, then near another edge of the same face to cut it.",
+            Gizmo::QuadDraw => "Click four points on the ground grid to place a quad. Corners weld to earlier quads.",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shading {
+    Shaded,
+    Wireframe,
+    ShadedWire,
+}
+
+impl Shading {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().replace([' ', '-', '+'], "_").as_str() {
+            "shaded" | "solid" => Some(Shading::Shaded),
+            "wireframe" | "wire" => Some(Shading::Wireframe),
+            "shaded_wire" | "shaded_wireframe" | "wireframe_on_shaded" | "shaded__wire" => Some(Shading::ShadedWire),
+            _ => None,
+        }
+    }
+    pub fn label(&self) -> &'static str {
+        match self {
+            Shading::Shaded => "Shaded",
+            Shading::Wireframe => "Wireframe",
+            Shading::ShadedWire => "Shaded + wire",
+        }
+    }
+    fn key(&self) -> &'static str {
+        match self {
+            Shading::Shaded => "shaded",
+            Shading::Wireframe => "wireframe",
+            Shading::ShadedWire => "shaded_wire",
         }
     }
 }
@@ -121,19 +127,47 @@ pub struct Obj {
     pub visible: bool,
     pub parent: Option<usize>,
     pub track_y: KeyTrack,
-    pub mesh: Option<Mesh>,
+    pub mesh: Option<PolyMesh>,
 }
 
 impl Obj {
     fn new(name: &str, kind: Kind, pos: [f32; 3]) -> Self {
-        let mesh = (kind == Kind::Cube).then(Mesh::cube);
+        let mesh = (kind == Kind::Cube).then(PolyMesh::cube);
         Self { name: name.to_string(), kind, pos, rot_y: 0.0, scale: 1.0, visible: true, parent: None, track_y: KeyTrack::new(), mesh }
     }
+
+    pub fn to_world(&self, v: V3) -> V3 {
+        let (s, co) = self.rot_y.to_radians().sin_cos();
+        let k = self.scale;
+        [self.pos[0] + (v[0] * co - v[2] * s) * k, self.pos[1] + v[1] * k, self.pos[2] + (v[0] * s + v[2] * co) * k]
+    }
+
+    pub fn to_local(&self, w: V3) -> V3 {
+        let (s, co) = self.rot_y.to_radians().sin_cos();
+        let k = self.scale.max(1e-6);
+        let d = [(w[0] - self.pos[0]) / k, (w[1] - self.pos[1]) / k, (w[2] - self.pos[2]) / k];
+        [d[0] * co + d[2] * s, d[1], -d[0] * s + d[2] * co]
+    }
+
+    pub fn world_mesh(&self) -> Option<PolyMesh> {
+        self.mesh.as_ref().map(|m| m.transformed(|v| self.to_world(v)))
+    }
+}
+
+/// A click on a face edge: object, face, edge index within the face, t.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgePick {
+    pub obj: usize,
+    pub face: usize,
+    pub edge: usize,
+    pub t: f32,
 }
 
 pub struct SceneState {
     pub objs: Vec<Obj>,
     pub selected: Option<usize>,
+    /// The selection before the current one (second operand of Boolean / Bridge).
+    pub prev_selected: Option<usize>,
     pub yaw: f32,
     pub pitch: f32,
     pub dist: f32,
@@ -141,9 +175,22 @@ pub struct SceneState {
     pub clock: Clock,
     pub joints: JointHierarchy,
     pub gizmo: Gizmo,
+    pub shading: Shading,
     pub shelf_tab: usize,
+    pub cut_start: Option<EdgePick>,
+    pub quad_pts: Vec<V3>,
+    /// Last rendered viewport (for recording / streaming).
+    pub frame: Option<Arc<Raster>>,
+    ids: Vec<u32>,
+    ids_w: usize,
+    ids_h: usize,
+    ppp: f32,
+    tex: Option<egui::TextureHandle>,
     counter: usize,
+    drag_rot: Option<(f32, f32)>,
 }
+
+pub const MESH_GREY: [u8; 3] = [168, 172, 182];
 
 impl SceneState {
     pub fn new() -> Self {
@@ -165,7 +212,34 @@ impl SceneState {
             }
         }
         let _ = joints.set_parent("knee", "hip");
-        Self { objs, selected: Some(0), yaw: 0.6, pitch: 0.45, dist: 11.0, grid: true, clock: Clock::new(3.0), joints, gizmo: Gizmo::Select, shelf_tab: 0, counter: 1 }
+        Self {
+            objs,
+            selected: Some(0),
+            prev_selected: None,
+            yaw: 0.6,
+            pitch: 0.45,
+            dist: 11.0,
+            grid: true,
+            clock: Clock::new(3.0),
+            joints,
+            gizmo: Gizmo::Select,
+            shading: Shading::Shaded,
+            shelf_tab: 0,
+            cut_start: None,
+            quad_pts: Vec::new(),
+            frame: None,
+            ids: Vec::new(),
+            ids_w: 0,
+            ids_h: 0,
+            ppp: 1.0,
+            tex: None,
+            counter: 1,
+            drag_rot: None,
+        }
+    }
+
+    pub fn camera(&self) -> Camera {
+        Camera { yaw: self.yaw, pitch: self.pitch, dist: self.dist }
     }
 
     pub fn tick(&mut self, dt: f32) {
@@ -183,23 +257,56 @@ impl SceneState {
         }
     }
 
-    pub fn add(&mut self, kind: Kind, toasts: &mut Toasts) {
-        self.counter += 1;
-        let base = match kind {
-            Kind::Cube => "cube",
-            Kind::Joint => "joint",
-            Kind::Light => "light",
-            Kind::Camera => "camera",
+    fn select(&mut self, i: Option<usize>) {
+        if i != self.selected {
+            if self.selected.is_some() {
+                self.prev_selected = self.selected;
+            }
+            self.selected = i;
+        }
+    }
+
+    pub fn add(&mut self, kind: &str, toasts: &mut Toasts) -> Result<String, String> {
+        let (k, base, mesh) = match kind.to_lowercase().as_str() {
+            "cube" => (Kind::Cube, "cube", Some(PolyMesh::cube())),
+            "plane" => (Kind::Mesh, "plane", Some(PolyMesh::plane())),
+            "cylinder" => (Kind::Mesh, "cylinder", Some(PolyMesh::cylinder(16))),
+            "joint" => (Kind::Joint, "joint", None),
+            "light" => (Kind::Light, "light", None),
+            "camera" => (Kind::Camera, "camera", None),
+            other => return Err(format!("unknown kind '{}' (cube, plane, cylinder, joint, light, camera)", other)),
         };
+        self.counter += 1;
         let name = format!("{}{}", base, self.counter);
-        if kind == Kind::Joint {
+        if k == Kind::Joint {
             if let Ok(j) = Joint::new(&name) {
                 self.joints.add(j);
             }
         }
-        self.objs.push(Obj::new(&name, kind, [0.0, 0.5, 0.0]));
-        self.selected = Some(self.objs.len() - 1);
+        let y = if kind == "plane" { 0.0 } else { 0.5 };
+        let mut o = Obj::new(&name, k, [0.0, y, 0.0]);
+        o.mesh = mesh;
+        self.objs.push(o);
+        self.select(Some(self.objs.len() - 1));
         toasts.push(ToastKind::Success, &format!("Added {}", name));
+        Ok(format!("added {}", name))
+    }
+
+    fn remove_obj(&mut self, i: usize) {
+        if i >= self.objs.len() {
+            return;
+        }
+        self.objs.remove(i);
+        let fix = |x: Option<usize>| match x {
+            Some(p) if p == i => None,
+            Some(p) if p > i => Some(p - 1),
+            other => other,
+        };
+        for o in &mut self.objs {
+            o.parent = fix(o.parent);
+        }
+        self.prev_selected = fix(self.prev_selected);
+        self.selected = fix(self.selected);
     }
 
     pub fn delete_selected(&mut self) {
@@ -207,14 +314,7 @@ impl SceneState {
         if i >= self.objs.len() {
             return;
         }
-        self.objs.remove(i);
-        for o in &mut self.objs {
-            o.parent = match o.parent {
-                Some(p) if p == i => None,
-                Some(p) if p > i => Some(p - 1),
-                other => other,
-            };
-        }
+        self.remove_obj(i);
         self.selected = if self.objs.is_empty() { None } else { Some(i.min(self.objs.len() - 1)) };
     }
 
@@ -225,44 +325,78 @@ impl SceneState {
         }
     }
 
+    fn find_mesh(&self, name: Option<&str>) -> Result<usize, String> {
+        let i = self.find(name)?;
+        if self.objs[i].mesh.is_none() {
+            return Err(format!("{} isn't a mesh", self.objs[i].name));
+        }
+        Ok(i)
+    }
+
+    /// Second operand: `with`, else the previous selection, else the only other mesh.
+    fn other_mesh(&self, a: usize, with: Option<&str>) -> Result<usize, String> {
+        if let Some(w) = with.filter(|w| !w.trim().is_empty()) {
+            let b = self.find_mesh(Some(w))?;
+            return if b == a { Err("pick two different meshes".into()) } else { Ok(b) };
+        }
+        if let Some(b) = self.prev_selected.filter(|&b| b != a && b < self.objs.len() && self.objs[b].mesh.is_some()) {
+            return Ok(b);
+        }
+        let others: Vec<usize> = (0..self.objs.len()).filter(|&i| i != a && self.objs[i].mesh.is_some()).collect();
+        match others.as_slice() {
+            [b] => Ok(*b),
+            [] => Err("needs a second mesh: add another cube first".into()),
+            _ => Err("select the second mesh first, then the target (or pass `with`)".into()),
+        }
+    }
+
+    fn mesh_mut(&mut self, i: usize) -> &mut PolyMesh {
+        self.objs[i].mesh.get_or_insert_with(PolyMesh::default)
+    }
+
     /// Execute a 3D command. `None` = not a 3D command.
     pub fn apply(&mut self, cmd: &AppCommand, toasts: &mut Toasts) -> Option<Result<String, String>> {
         use AppCommand as C;
         Some(match cmd {
-            C::SceneAdd { kind } => {
-                let k = match kind.to_lowercase().as_str() {
-                    "cube" => Kind::Cube,
-                    "joint" => Kind::Joint,
-                    "light" => Kind::Light,
-                    "camera" => Kind::Camera,
-                    other => return Some(Err(format!("unknown kind '{}'", other))),
-                };
-                self.add(k, toasts);
-                Ok(format!("added {}", self.objs.last().map(|o| o.name.clone()).unwrap_or_default()))
-            }
+            C::SceneAdd { kind } => self.add(kind, toasts),
             C::SceneSelect { object } => self.find(Some(object)).map(|i| {
-                self.selected = Some(i);
+                self.select(Some(i));
                 format!("selected {}", self.objs[i].name)
             }),
             C::SceneGizmo { mode } => match Gizmo::from_str(mode) {
                 Some(g) => {
                     self.gizmo = g;
+                    self.cut_start = None;
+                    if g != Gizmo::QuadDraw {
+                        self.quad_pts.clear();
+                    }
                     Ok(format!("{} tool", g.label()))
                 }
-                None => Err(format!("unknown gizmo '{}'", mode)),
+                None => Err(format!("unknown tool '{}'", mode)),
+            },
+            C::SceneShading { mode } => match Shading::parse(mode) {
+                Some(s) => {
+                    self.shading = s;
+                    Ok(format!("viewport: {}", s.label()))
+                }
+                None => Err(format!("unknown shading '{}' (shaded, wireframe, shaded_wire)", mode)),
             },
             C::SceneTransform { object, translate, rotate_y, scale } => self.find(object.as_deref()).map(|i| {
+                let t = self.clock.time;
                 let o = &mut self.objs[i];
                 let mut parts = Vec::new();
-                if let Some(t) = translate {
+                if let Some(d) = translate {
                     for k in 0..3 {
-                        o.pos[k] += t[k];
+                        o.pos[k] += d[k];
                     }
-                    parts.push(format!("moved {:.2}, {:.2}, {:.2}", t[0], t[1], t[2]));
+                    if d[1] != 0.0 && !o.track_y.is_empty() {
+                        o.track_y.set(t, o.pos[1]);
+                    }
+                    parts.push(format!("moved {:.2}, {:.2}, {:.2}", d[0], d[1], d[2]));
                 }
                 if let Some(r) = rotate_y {
-                    o.rot_y = *r;
-                    parts.push(format!("rotated Y {:.0}°", r));
+                    o.rot_y = r % 360.0;
+                    parts.push(format!("rotated Y {:.0}°", o.rot_y));
                 }
                 if let Some(s) = scale {
                     o.scale = s.clamp(0.05, 20.0);
@@ -270,20 +404,104 @@ impl SceneState {
                 }
                 format!("{} {}", o.name, parts.join(", "))
             }),
-            C::SceneExtrude { distance } => self.find(None).and_then(|i| {
-                let o = &mut self.objs[i];
+            C::SceneExtrude { distance } => self.find_mesh(None).and_then(|i| {
                 let d = distance.unwrap_or(0.5).clamp(-5.0, 5.0);
-                let m = o.mesh.as_mut().ok_or_else(|| format!("{} has no mesh to extrude", o.name))?;
-                m.extrude(d);
-                Ok(format!("extruded {} top face by {:.2}", o.name, d))
+                let m = self.mesh_mut(i);
+                let f = m.top_face().ok_or("mesh has no faces")?;
+                m.extrude(f, d)?;
+                Ok(format!("extruded {} top face by {:.2}", self.objs[i].name, d))
             }),
-            C::SceneBevel { amount } => self.find(None).and_then(|i| {
-                let o = &mut self.objs[i];
-                let a = amount.unwrap_or(0.15);
-                let m = o.mesh.as_mut().ok_or_else(|| format!("{} has no mesh to bevel", o.name))?;
-                m.bevel(a);
-                Ok(format!("bevelled {} top face ({:.2})", o.name, a.clamp(0.02, 0.45)))
+            C::SceneBevel { amount } => self.find_mesh(None).and_then(|i| {
+                let a = amount.unwrap_or(0.15).clamp(0.02, 0.45);
+                let m = self.mesh_mut(i);
+                let f = m.top_face().ok_or("mesh has no faces")?;
+                m.bevel(f, a, a * 0.5)?;
+                Ok(format!("bevelled {} top face ({:.2})", self.objs[i].name, a))
             }),
+            C::SceneEdgeLoop { object, edge, t } => self.find_mesh(object.as_deref()).and_then(|i| {
+                let m = self.mesh_mut(i);
+                let (a, b) = match edge {
+                    Some([a, b]) => (*a, *b),
+                    None => m.default_loop_edge().ok_or("no quad faces to loop through")?,
+                };
+                let n = m.edge_loop(a, b, t.unwrap_or(0.5))?;
+                let faces = m.faces.len();
+                Ok(format!("inserted an edge loop on {} ({} quads split, {} faces)", self.objs[i].name, n, faces))
+            }),
+            C::SceneMultiCut { object, face, from_edge, to_edge, from_t, to_t } => self.find_mesh(object.as_deref()).and_then(|i| {
+                let m = self.mesh_mut(i);
+                let f = match face {
+                    Some(f) => *f,
+                    None => m.top_face().ok_or("mesh has no faces")?,
+                };
+                let n = m.faces.get(f).map(|x| x.len()).ok_or_else(|| format!("face {} doesn't exist", f))?;
+                let a = from_edge.unwrap_or(0);
+                let b = to_edge.unwrap_or(n / 2);
+                m.multi_cut(f, a, from_t.unwrap_or(0.5), b, to_t.unwrap_or(0.5))?;
+                let faces = m.faces.len();
+                Ok(format!("cut face {} of {} ({} faces)", f, self.objs[i].name, faces))
+            }),
+            C::SceneBridge { object, with } => self.find_mesh(object.as_deref()).and_then(|a| {
+                let b = self.other_mesh(a, with.as_deref())?;
+                let other = self.objs[b].world_mesh().unwrap_or_default();
+                let oa = self.objs[a].clone();
+                let local = other.transformed(|w| oa.to_local(w));
+                let mut merged = self.objs[a].mesh.clone().unwrap_or_default();
+                let split = merged.merge(&local);
+                let (fa, fb) = merged.facing_pair(split).ok_or("no pair of facing faces with the same corner count")?;
+                merged.bridge(fa, fb)?;
+                let (na, nb) = (self.objs[a].name.clone(), self.objs[b].name.clone());
+                self.objs[a].mesh = Some(merged);
+                self.objs[a].kind = Kind::Mesh;
+                self.remove_obj(b);
+                let a = if b < a { a - 1 } else { a };
+                self.selected = Some(a);
+                self.prev_selected = None;
+                Ok(format!("bridged {} to {} (merged into {})", na, nb, na))
+            }),
+            C::SceneBoolean { op, object, with } => {
+                let Some(op) = BoolOp::parse(op) else { return Some(Err(format!("unknown boolean '{}' (union, difference, intersection)", op))) };
+                self.find_mesh(object.as_deref()).and_then(|a| {
+                    let b = self.other_mesh(a, with.as_deref())?;
+                    let oa = self.objs[a].clone();
+                    let mb = self.objs[b].world_mesh().unwrap_or_default().transformed(|w| oa.to_local(w));
+                    let ma = self.objs[a].mesh.clone().unwrap_or_default();
+                    let r = m3::boolean(&ma, &mb, op);
+                    if r.faces.is_empty() {
+                        return Err(format!("the {} is empty (do the meshes overlap?)", op.label()));
+                    }
+                    let (na, nb) = (self.objs[a].name.clone(), self.objs[b].name.clone());
+                    let faces = r.faces.len();
+                    self.objs[a].mesh = Some(r);
+                    self.objs[a].kind = Kind::Mesh;
+                    self.remove_obj(b);
+                    let a = if b < a { a - 1 } else { a };
+                    self.selected = Some(a);
+                    self.prev_selected = None;
+                    Ok(format!("{} {} {} → {} ({} faces)", na, op.label(), nb, na, faces))
+                })
+            }
+            C::SceneQuadDraw { points } => {
+                if points.len() != 4 {
+                    return Some(Err(format!("quad draw needs 4 points, got {}", points.len())));
+                }
+                let i = match self.objs.iter().position(|o| o.name == "quadDraw1") {
+                    Some(i) => i,
+                    None => {
+                        let mut o = Obj::new("quadDraw1", Kind::Mesh, [0.0, 0.0, 0.0]);
+                        o.mesh = Some(PolyMesh::default());
+                        self.objs.push(o);
+                        self.objs.len() - 1
+                    }
+                };
+                let o = self.objs[i].clone();
+                let pts = [o.to_local(points[0]), o.to_local(points[1]), o.to_local(points[2]), o.to_local(points[3])];
+                let m = self.mesh_mut(i);
+                m.quad_draw(&pts, 0.12 / o.scale.max(1e-3), None);
+                let (v, f) = (m.verts.len(), m.faces.len());
+                self.select(Some(i));
+                Ok(format!("quad added to quadDraw1 ({} verts, {} faces)", v, f))
+            }
             C::SetKeyframe => self.find(None).map(|i| {
                 let t = self.clock.time;
                 let o = &mut self.objs[i];
@@ -307,23 +525,156 @@ impl SceneState {
     }
 
     pub fn context(&self) -> String {
-        let objs: Vec<String> = self.objs.iter().enumerate().map(|(i, o)| format!("{}{} ({:?} at {:.1},{:.1},{:.1} rotY {:.0} scale {:.2}{})", if self.selected == Some(i) { "*" } else { "" }, o.name, o.kind, o.pos[0], o.pos[1], o.pos[2], o.rot_y, o.scale, o.mesh.as_ref().map(|m| format!(", {} faces", m.faces)).unwrap_or_default())).collect();
-        format!("3D: gizmo {}, objects (* = selected): {}", self.gizmo.label(), objs.join("; "))
+        let objs: Vec<String> = self
+            .objs
+            .iter()
+            .enumerate()
+            .map(|(i, o)| {
+                let mark = if self.selected == Some(i) { "*" } else if self.prev_selected == Some(i) { "+" } else { "" };
+                let mesh = o.mesh.as_ref().map(|m| format!(", {} verts {} faces{}", m.verts.len(), m.faces.len(), if m.is_closed() { " closed" } else { "" })).unwrap_or_default();
+                format!("{}{} ({:?} at {:.1},{:.1},{:.1} rotY {:.0} scale {:.2}{})", mark, o.name, o.kind, o.pos[0], o.pos[1], o.pos[2], o.rot_y, o.scale, mesh)
+            })
+            .collect();
+        format!("3D: tool {}, viewport {}, objects (* selected, + previous selection = second operand for boolean/bridge): {}", self.gizmo.label(), self.shading.label(), objs.join("; "))
     }
 
-    fn project(&self, v: [f32; 3], center: Pos2, f: f32) -> Option<Pos2> {
-        let (sy, cy) = self.yaw.sin_cos();
-        let (sp, cp) = self.pitch.sin_cos();
-        let x = v[0] * cy - v[2] * sy;
-        let z0 = v[0] * sy + v[2] * cy;
-        let y = v[1] * cp - z0 * sp;
-        let z = v[1] * sp + z0 * cp;
-        let depth = self.dist - z;
-        if depth < 0.2 {
+    fn light_pos(&self) -> V3 {
+        self.objs.iter().find(|o| o.kind == Kind::Light && o.visible).map(|o| o.pos).unwrap_or([-2.5, 3.0, 2.0])
+    }
+
+    /// Rasterise the scene (meshes, grid, bones, camera gizmos) at `w`×`h`.
+    pub fn render(&self, w: usize, h: usize, bg: Color32, grid: Color32, accent: Color32) -> Frame3d {
+        let cam = self.camera();
+        let mut f = Frame3d::new(w.max(1), h.max(1), [bg.r(), bg.g(), bg.b()]);
+        let gc = [grid.r(), grid.g(), grid.b(), 255];
+        if self.grid {
+            for i in -5..=5 {
+                let v = i as f32;
+                f.world_line(&cam, [v, 0.0, -5.0], [v, 0.0, 5.0], gc);
+                f.world_line(&cam, [-5.0, 0.0, v], [5.0, 0.0, v], gc);
+            }
+            f.world_line(&cam, [0.0, 0.002, 0.0], [1.5, 0.002, 0.0], [230, 80, 80, 255]);
+            f.world_line(&cam, [0.0, 0.0, 0.0], [0.0, 1.5, 0.0], [90, 200, 100, 255]);
+            f.world_line(&cam, [0.0, 0.002, 0.0], [0.0, 0.002, 1.5], [90, 140, 240, 255]);
+        }
+        let light = self.light_pos();
+        let acc = [accent.r(), accent.g(), accent.b()];
+        for (i, o) in self.objs.iter().enumerate() {
+            if !o.visible {
+                continue;
+            }
+            let sel = self.selected == Some(i);
+            let second = self.prev_selected == Some(i);
+            let col = if sel { [214, 214, 220] } else { [212, 212, 216] };
+            match (&o.kind, o.world_mesh()) {
+                (_, Some(m)) => {
+                    let base = if sel {
+                        [(MESH_GREY[0] as u16 * 3 / 5 + acc[0] as u16 * 2 / 5) as u8, (MESH_GREY[1] as u16 * 3 / 5 + acc[1] as u16 * 2 / 5) as u8, (MESH_GREY[2] as u16 * 3 / 5 + acc[2] as u16 * 2 / 5) as u8]
+                    } else {
+                        MESH_GREY
+                    };
+                    let wire = if sel {
+                        Some([acc[0], acc[1], acc[2], 255])
+                    } else if second {
+                        Some([acc[0], acc[1], acc[2], 140])
+                    } else if self.shading != Shading::Shaded {
+                        Some([40, 42, 48, 200])
+                    } else {
+                        None
+                    };
+                    if self.shading == Shading::Wireframe {
+                        let wc = if sel || second { wire.unwrap_or([0, 0, 0, 255]) } else { [col[0], col[1], col[2], 220] };
+                        for (u, v) in m.edges() {
+                            f.world_line(&cam, m.verts[u], m.verts[v], wc);
+                        }
+                    } else {
+                        f.mesh(&cam, &m, base, light, ((i as u32) + 1) << 16, wire);
+                    }
+                }
+                (Kind::Joint, None) => {
+                    if let Some(pp) = o.parent.and_then(|pi| self.objs.get(pi)) {
+                        f.world_line(&cam, pp.pos, o.pos, if sel { [acc[0], acc[1], acc[2], 255] } else { [col[0], col[1], col[2], 200] });
+                    }
+                }
+                (Kind::Camera, None) => {
+                    let c = o.pos;
+                    let tip = [c[0], c[1], c[2] - 0.8];
+                    let wc = if sel { [acc[0], acc[1], acc[2], 255] } else { [col[0], col[1], col[2], 220] };
+                    let corners = [(-0.3, -0.2), (0.3, -0.2), (0.3, 0.2), (-0.3, 0.2)];
+                    for k in 0..4 {
+                        let (dx, dy) = corners[k];
+                        let (ex, ey) = corners[(k + 1) % 4];
+                        f.world_line(&cam, c, [tip[0] + dx, tip[1] + dy, tip[2]], wc);
+                        f.world_line(&cam, [tip[0] + dx, tip[1] + dy, tip[2]], [tip[0] + ex, tip[1] + ey, tip[2]], wc);
+                    }
+                }
+                _ => {}
+            }
+        }
+        f
+    }
+
+    /// (object, face) under a viewport position (logical points from the rect origin).
+    fn pick(&self, local: Vec2) -> Option<(usize, usize)> {
+        let (x, y) = (local.x * self.ppp, local.y * self.ppp);
+        if self.ids_w == 0 || x < 0.0 || y < 0.0 || x >= self.ids_w as f32 || y >= self.ids_h as f32 {
             return None;
         }
-        Some(Pos2::new(center.x + x * f / depth, center.y - y * f / depth))
+        let id = self.ids[y as usize * self.ids_w + x as usize];
+        if id == 0 {
+            return None;
+        }
+        Some(((id >> 16) as usize - 1, (id & 0xFFFF) as usize))
     }
+
+    /// Nearest edge of a picked face to a screen point, with the t along it.
+    fn edge_pick(&self, obj: usize, face: usize, at: Pos2, rect: egui::Rect) -> Option<EdgePick> {
+        let m = self.objs.get(obj)?.world_mesh()?;
+        let f = m.faces.get(face)?;
+        let cam = self.camera();
+        let mut best: Option<(f32, usize, f32)> = None;
+        for k in 0..f.len() {
+            let (a, b) = (m.verts[f[k]], m.verts[f[(k + 1) % f.len()]]);
+            let (Some(pa), Some(pb)) = (cam.project(a, rect.width(), rect.height()), cam.project(b, rect.width(), rect.height())) else { continue };
+            let pa = Vec2::new(pa[0], pa[1]);
+            let pb = Vec2::new(pb[0], pb[1]);
+            let q = at - rect.min;
+            let ab = pb - pa;
+            let t = ((q - pa).dot(ab) / ab.length_sq().max(1e-6)).clamp(0.0, 1.0);
+            let d = (pa + ab * t - q).length();
+            if best.map(|x| d < x.0).unwrap_or(true) {
+                best = Some((d, k, t));
+            }
+        }
+        best.map(|(_, edge, t)| EdgePick { obj, face, edge, t: t.clamp(0.05, 0.95) })
+    }
+
+    /// Screen point → ground plane (y = 0).
+    fn ground_point(&self, at: Pos2, rect: egui::Rect) -> Option<V3> {
+        let f = rect.height() * 1.1;
+        let q = at - rect.center();
+        let (sy, cy) = self.yaw.sin_cos();
+        let (sp, cp) = self.pitch.sin_cos();
+        let to_world = |d: f32| -> V3 {
+            let (xv, yv, zv) = (q.x * d / f, -q.y * d / f, self.dist - d);
+            let y = yv * cp + zv * sp;
+            let z0 = -yv * sp + zv * cp;
+            [xv * cy + z0 * sy, y, -xv * sy + z0 * cy]
+        };
+        let (p1, p2) = (to_world(1.0), to_world(2.0));
+        let dy = p2[1] - p1[1];
+        if dy.abs() < 1e-6 {
+            return None;
+        }
+        let t = -p1[1] / dy;
+        if t < -1.0 {
+            return None;
+        }
+        let p = m3::lerp(p1, p2, t);
+        Some([(p[0] * 20.0).round() / 20.0, 0.0, (p[2] * 20.0).round() / 20.0])
+    }
+
+    // ---- panels -----------------------------------------------------------------
 
     pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "View", |ui| {
@@ -335,25 +686,54 @@ impl SceneState {
             }
             ui.checkbox(&mut self.grid, "Show grid");
         });
-        theme::card(ui, p, "Create", |ui| {
-            for (label, kind) in [("Cube", Kind::Cube), ("Joint", Kind::Joint), ("Light", Kind::Light), ("Camera", Kind::Camera)] {
-                if ui.add_sized([ui.available_width(), 28.0], theme::toggle_button(p, &format!("{}  {}", kind.icon(), label), false)).clicked() {
-                    bus.push(AppCommand::SceneAdd { kind: label.to_lowercase() });
+        theme::card(ui, p, "Display", |ui| {
+            for (s, key) in [(Shading::Shaded, "5"), (Shading::Wireframe, "4"), (Shading::ShadedWire, "6")] {
+                if ui.add_sized([ui.available_width(), 26.0], theme::toggle_button(p, &format!("{}   ({})", s.label(), key), self.shading == s)).clicked() {
+                    bus.push(AppCommand::SceneShading { mode: s.key().into() });
                 }
             }
         });
-        theme::card(ui, p, "", |ui| {
-            ui.label(theme::muted(p, "Wireframe only (no materials or renderer yet). Pick Select/Move/Rotate/Scale on the shelf below; Select-drag or Alt-drag orbits, Shift+Move drags Y, scroll dollies."));
+        theme::card(ui, p, "Create", |ui| {
+            for (label, kind) in [("Cube", "cube"), ("Plane", "plane"), ("Cylinder", "cylinder"), ("Joint", "joint"), ("Light", "light"), ("Camera", "camera")] {
+                if ui.add_sized([ui.available_width(), 26.0], theme::toggle_button(p, label, false)).clicked() {
+                    bus.push(AppCommand::SceneAdd { kind: kind.into() });
+                }
+            }
+        });
+        theme::card(ui, p, self.gizmo.label(), |ui| {
+            ui.label(theme::muted(p, self.gizmo.hint()));
+            match self.gizmo {
+                Gizmo::EdgeLoop => {
+                    if ui.add(theme::toggle_button(p, "Insert at the default edge", false)).clicked() {
+                        bus.push(AppCommand::SceneEdgeLoop { object: None, edge: None, t: None });
+                    }
+                }
+                Gizmo::MultiCut => {
+                    if self.cut_start.is_some() {
+                        ui.label(egui::RichText::new("First point set: click a second edge of the same face.").color(p.accent));
+                    }
+                    if ui.add(theme::toggle_button(p, "Cut the top face in half", false)).clicked() {
+                        bus.push(AppCommand::SceneMultiCut { object: None, face: None, from_edge: None, to_edge: None, from_t: None, to_t: None });
+                    }
+                }
+                Gizmo::QuadDraw => {
+                    ui.label(theme::muted(p, &format!("{} of 4 points placed", self.quad_pts.len())));
+                    if !self.quad_pts.is_empty() && ui.add(theme::toggle_button(p, "Clear points", false)).clicked() {
+                        self.quad_pts.clear();
+                    }
+                }
+                _ => {}
+            }
         });
     }
 
-    pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette) {
+    pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let rect = resp.rect;
-        painter.rect_filled(rect, Rounding::ZERO, p.canvas);
         let alt = ui.input(|i| i.modifiers.alt);
         let shift = ui.input(|i| i.modifiers.shift);
-        let orbit = resp.dragged_by(egui::PointerButton::Middle) || (resp.dragged_by(egui::PointerButton::Primary) && (alt || self.gizmo == Gizmo::Select));
+        let click_tool = matches!(self.gizmo, Gizmo::EdgeLoop | Gizmo::MultiCut | Gizmo::QuadDraw);
+        let orbit = resp.dragged_by(egui::PointerButton::Middle) || (resp.dragged_by(egui::PointerButton::Primary) && (alt || self.gizmo == Gizmo::Select || click_tool));
         if orbit {
             let d = resp.drag_delta();
             self.yaw += d.x * 0.008;
@@ -363,25 +743,28 @@ impl SceneState {
                 let d = resp.drag_delta();
                 let k = self.dist / (rect.height() * 1.1);
                 let (sy, cy) = self.yaw.sin_cos();
-                let t = self.clock.time;
-                let o = &mut self.objs[i];
+                let name = Some(self.objs[i].name.clone());
+                if resp.drag_started() {
+                    self.drag_rot = Some((self.objs[i].rot_y, self.objs[i].scale));
+                }
+                let (r0, s0) = self.drag_rot.unwrap_or((self.objs[i].rot_y, self.objs[i].scale));
+                let total = ui.input(|inp| match (inp.pointer.press_origin(), inp.pointer.latest_pos()) {
+                    (Some(a), Some(b)) => b - a,
+                    _ => Vec2::ZERO,
+                });
                 match self.gizmo {
-                    Gizmo::Move => {
-                        if shift {
-                            o.pos[1] -= d.y * k;
-                            if !o.track_y.is_empty() {
-                                o.track_y.set(t, o.pos[1]);
-                            }
-                        } else {
-                            o.pos[0] += (d.x * cy + d.y * sy) * k;
-                            o.pos[2] += (-d.x * sy + d.y * cy) * k;
-                        }
+                    Gizmo::Move if d != Vec2::ZERO => {
+                        let t = if shift { [0.0, -d.y * k, 0.0] } else { [(d.x * cy + d.y * sy) * k, 0.0, (-d.x * sy + d.y * cy) * k] };
+                        bus.push(AppCommand::SceneTransform { object: name, translate: Some(t), rotate_y: None, scale: None });
                     }
-                    Gizmo::Rotate => o.rot_y = (o.rot_y + d.x * 0.6) % 360.0,
-                    Gizmo::Scale => o.scale = (o.scale * (1.0 + d.x * 0.01)).clamp(0.05, 20.0),
-                    Gizmo::Select => {}
+                    Gizmo::Rotate if d != Vec2::ZERO => bus.push(AppCommand::SceneTransform { object: name, translate: None, rotate_y: Some((r0 + total.x * 0.6) % 360.0), scale: None }),
+                    Gizmo::Scale if d != Vec2::ZERO => bus.push(AppCommand::SceneTransform { object: name, translate: None, rotate_y: None, scale: Some((s0 * (1.0 + total.x * 0.01)).clamp(0.05, 20.0)) }),
+                    _ => {}
                 }
             }
+        }
+        if resp.drag_stopped() {
+            self.drag_rot = None;
         }
         if resp.hovered() {
             let s = ui.input(|i| i.raw_scroll_delta.y);
@@ -393,27 +776,32 @@ impl SceneState {
                 Gizmo::Move => egui::CursorIcon::Move,
                 Gizmo::Rotate => egui::CursorIcon::Alias,
                 Gizmo::Scale => egui::CursorIcon::ResizeHorizontal,
+                _ => egui::CursorIcon::Crosshair,
             };
             ui.ctx().set_cursor_icon(c);
         }
-        let center = rect.center();
-        let f = rect.height() * 1.1;
-        let line = |a: [f32; 3], b: [f32; 3], s: Stroke| {
-            if let (Some(pa), Some(pb)) = (self.project(a, center, f), self.project(b, center, f)) {
-                painter.line_segment([pa, pb], s);
-            }
-        };
-        if self.grid {
-            let gs = Stroke::new(1.0_f32, p.border.gamma_multiply(0.8));
-            for i in -5..=5 {
-                let v = i as f32;
-                line([v, 0.0, -5.0], [v, 0.0, 5.0], gs);
-                line([-5.0, 0.0, v], [5.0, 0.0, v], gs);
-            }
-            line([0.0, 0.0, 0.0], [1.5, 0.0, 0.0], Stroke::new(2.0_f32, Color32::from_rgb(230, 80, 80)));
-            line([0.0, 0.0, 0.0], [0.0, 1.5, 0.0], Stroke::new(2.0_f32, Color32::from_rgb(90, 200, 100)));
-            line([0.0, 0.0, 0.0], [0.0, 0.0, 1.5], Stroke::new(2.0_f32, Color32::from_rgb(90, 140, 240)));
+
+        // ---- render
+        let ppp = ui.ctx().pixels_per_point();
+        let (pw, ph) = ((rect.width() * ppp).round().max(1.0) as usize, (rect.height() * ppp).round().max(1.0) as usize);
+        let frame = self.render(pw, ph, p.canvas, p.border.gamma_multiply(0.9), p.accent);
+        let img = egui::ColorImage::from_rgba_unmultiplied([pw, ph], &frame.rgba);
+        match &mut self.tex {
+            Some(t) => t.set(img, egui::TextureOptions::LINEAR),
+            None => self.tex = Some(ui.ctx().load_texture("viewport3d", img, egui::TextureOptions::LINEAR)),
         }
+        if let Some(t) = &self.tex {
+            painter.image(t.id(), rect, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+        }
+        self.frame = Raster::from_rgba(pw as u32, ph as u32, frame.rgba).map(Arc::new);
+        self.ids = frame.ids;
+        self.ids_w = pw;
+        self.ids_h = ph;
+        self.ppp = ppp;
+
+        // ---- overlays: icons and labels
+        let cam = self.camera();
+        let proj = |v: V3| cam.project(v, rect.width(), rect.height()).map(|q| rect.min + Vec2::new(q[0], q[1]));
         let mut best: Option<(usize, f32)> = None;
         let click = if resp.clicked() { resp.interact_pointer_pos() } else { None };
         for (i, o) in self.objs.iter().enumerate() {
@@ -422,62 +810,98 @@ impl SceneState {
             }
             let sel = self.selected == Some(i);
             let col = if sel { p.accent } else { p.text.gamma_multiply(0.8) };
-            let st = Stroke::new(if sel { 2.0_f32 } else { 1.2 }, col);
-            let c = o.pos;
+            let Some(sp) = proj(o.pos) else { continue };
             match o.kind {
-                Kind::Cube => {
-                    if let Some(m) = &o.mesh {
-                        let (s, co) = o.rot_y.to_radians().sin_cos();
-                        let k = o.scale;
-                        let w: Vec<[f32; 3]> = m.verts.iter().map(|v| [c[0] + (v[0] * co - v[2] * s) * k, c[1] + v[1] * k, c[2] + (v[0] * s + v[2] * co) * k]).collect();
-                        for (a, b) in &m.edges {
-                            line(w[*a], w[*b], st);
-                        }
-                    }
-                }
                 Kind::Joint => {
-                    if let Some(pp) = o.parent.and_then(|pi| self.objs.get(pi)) {
-                        line(pp.pos, c, Stroke::new(2.0_f32, col.gamma_multiply(0.7)));
-                    }
-                    if let Some(sp) = self.project(c, center, f) {
-                        painter.circle_stroke(sp, 6.0, st);
-                    }
+                    painter.circle_stroke(sp, 6.0, Stroke::new(if sel { 2.0_f32 } else { 1.2 }, col));
                 }
                 Kind::Light => {
-                    if let Some(sp) = self.project(c, center, f) {
-                        painter.circle_filled(sp, 5.0, Color32::from_rgb(255, 214, 10));
-                        for k in 0..8 {
-                            let a = k as f32 * std::f32::consts::FRAC_PI_4;
-                            let d = Vec2::new(a.cos(), a.sin());
-                            painter.line_segment([sp + d * 8.0, sp + d * 13.0], Stroke::new(1.2_f32, col));
-                        }
+                    painter.circle_filled(sp, 5.0, Color32::from_rgb(255, 214, 10));
+                    for k in 0..8 {
+                        let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                        let d = Vec2::new(a.cos(), a.sin());
+                        painter.line_segment([sp + d * 8.0, sp + d * 13.0], Stroke::new(1.2_f32, col));
                     }
                 }
-                Kind::Camera => {
-                    let tip = [c[0], c[1], c[2] - 0.8];
-                    for (dx, dy) in [(-0.3, -0.2), (0.3, -0.2), (0.3, 0.2), (-0.3, 0.2)] {
-                        line(c, [tip[0] + dx, tip[1] + dy, tip[2]], st);
-                    }
-                    line([tip[0] - 0.3, tip[1] - 0.2, tip[2]], [tip[0] + 0.3, tip[1] - 0.2, tip[2]], st);
-                    line([tip[0] + 0.3, tip[1] - 0.2, tip[2]], [tip[0] + 0.3, tip[1] + 0.2, tip[2]], st);
-                    line([tip[0] + 0.3, tip[1] + 0.2, tip[2]], [tip[0] - 0.3, tip[1] + 0.2, tip[2]], st);
-                    line([tip[0] - 0.3, tip[1] + 0.2, tip[2]], [tip[0] - 0.3, tip[1] - 0.2, tip[2]], st);
-                }
+                _ => {}
             }
-            if let (Some(cp), Some(sp)) = (click, self.project(c, center, f)) {
+            if let Some(cp) = click {
                 let d = cp.distance(sp);
-                if d < 28.0 && best.map(|b| d < b.1).unwrap_or(true) {
+                if o.mesh.is_none() && d < 22.0 && best.map(|b| d < b.1).unwrap_or(true) {
                     best = Some((i, d));
                 }
             }
-            if let Some(sp) = self.project(c, center, f) {
-                painter.text(sp + Vec2::new(10.0, -10.0), egui::Align2::LEFT_BOTTOM, &o.name, egui::FontId::proportional(11.0), if sel { p.accent } else { p.muted });
+            painter.text(sp + Vec2::new(10.0, -10.0), egui::Align2::LEFT_BOTTOM, &o.name, egui::FontId::proportional(11.0), if sel { p.accent } else { p.muted });
+        }
+        // pending tool state
+        if let Some(cs) = self.cut_start {
+            if let Some(m) = self.objs.get(cs.obj).and_then(|o| o.world_mesh()) {
+                if let Some(f) = m.faces.get(cs.face) {
+                    let v = m3::lerp(m.verts[f[cs.edge]], m.verts[f[(cs.edge + 1) % f.len()]], cs.t);
+                    if let Some(sp) = proj(v) {
+                        painter.circle_filled(sp, 4.5, p.accent);
+                        if let Some(hp) = resp.hover_pos() {
+                            painter.line_segment([sp, hp], Stroke::new(1.5_f32, p.accent));
+                        }
+                    }
+                }
             }
         }
-        if click.is_some() {
-            self.selected = best.map(|b| b.0);
+        for (k, q) in self.quad_pts.iter().enumerate() {
+            if let Some(sp) = proj(*q) {
+                painter.circle_filled(sp, 4.0, p.accent);
+                if let Some(nq) = self.quad_pts.get(k + 1).and_then(|n| proj(*n)) {
+                    painter.line_segment([sp, nq], Stroke::new(1.5_f32, p.accent));
+                }
+            }
         }
-        painter.text(rect.min + Vec2::new(SP_MD, SP_MD), egui::Align2::LEFT_TOP, format!("Perspective  ·  {} objects  ·  {} tool", self.objs.len(), self.gizmo.label()), egui::FontId::proportional(12.0), p.muted);
+
+        // ---- clicks
+        if let Some(cp) = click {
+            let picked = self.pick(cp - rect.min);
+            match self.gizmo {
+                Gizmo::EdgeLoop => {
+                    if let Some(ep) = picked.and_then(|(o, f)| self.edge_pick(o, f, cp, rect)) {
+                        let o = &self.objs[ep.obj];
+                        if let Some(m) = &o.mesh {
+                            let f = &m.faces[ep.face];
+                            let (a, b) = (f[ep.edge], f[(ep.edge + 1) % f.len()]);
+                            bus.push(AppCommand::SceneSelect { object: o.name.clone() });
+                            bus.push(AppCommand::SceneEdgeLoop { object: Some(o.name.clone()), edge: Some([a, b]), t: Some(ep.t) });
+                        }
+                    }
+                }
+                Gizmo::MultiCut => match picked.and_then(|(o, f)| self.edge_pick(o, f, cp, rect)) {
+                    Some(ep) => match self.cut_start {
+                        Some(cs) if cs.obj == ep.obj && cs.face == ep.face && cs.edge != ep.edge => {
+                            let name = self.objs[ep.obj].name.clone();
+                            bus.push(AppCommand::SceneSelect { object: name.clone() });
+                            bus.push(AppCommand::SceneMultiCut { object: Some(name), face: Some(ep.face), from_edge: Some(cs.edge), to_edge: Some(ep.edge), from_t: Some(cs.t), to_t: Some(ep.t) });
+                            self.cut_start = None;
+                        }
+                        _ => self.cut_start = Some(ep),
+                    },
+                    None => self.cut_start = None,
+                },
+                Gizmo::QuadDraw => {
+                    if let Some(g) = self.ground_point(cp, rect) {
+                        let snapped = self.objs.iter().find(|o| o.name == "quadDraw1").and_then(|o| o.world_mesh()).and_then(|m| m.verts.iter().copied().find(|v| m3::length(m3::sub(*v, g)) < 0.15)).unwrap_or(g);
+                        self.quad_pts.push(snapped);
+                        if self.quad_pts.len() == 4 {
+                            bus.push(AppCommand::SceneQuadDraw { points: std::mem::take(&mut self.quad_pts) });
+                        }
+                    }
+                }
+                _ => {
+                    let target = picked.map(|(o, _)| o).or(best.map(|b| b.0));
+                    match target {
+                        Some(i) => bus.push(AppCommand::SceneSelect { object: self.objs[i].name.clone() }),
+                        None => self.select(None),
+                    }
+                }
+            }
+        }
+        painter.text(rect.min + Vec2::new(SP_MD, SP_MD), egui::Align2::LEFT_TOP, format!("Perspective  ·  {} objects  ·  {} tool  ·  {}", self.objs.len(), self.gizmo.label(), self.shading.label()), egui::FontId::proportional(12.0), p.muted);
     }
 
     pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
@@ -486,6 +910,7 @@ impl SceneState {
             let mut vis = None;
             for (i, o) in self.objs.iter().enumerate() {
                 let on = self.selected == Some(i);
+                let second = self.prev_selected == Some(i);
                 egui::Frame::none().fill(if on { p.accent_soft() } else { Color32::TRANSPARENT }).rounding(Rounding::same(R_SM + 1.0)).inner_margin(egui::Margin::symmetric(SP_XS, 1.0)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         if o.parent.is_some() {
@@ -494,7 +919,8 @@ impl SceneState {
                         if ui.add(egui::Button::new(egui::RichText::new(if o.visible { "👁" } else { "–" }).color(p.muted)).frame(false)).clicked() {
                             vis = Some(i);
                         }
-                        if ui.add(egui::Button::new(egui::RichText::new(format!("{}  {}", o.kind.icon(), o.name)).color(if on { p.accent } else { p.text })).frame(false)).clicked() {
+                        let label = format!("{}  {}{}", o.kind.icon(), o.name, if second { "  ·  2nd" } else { "" });
+                        if ui.add(egui::Button::new(egui::RichText::new(label).color(if on { p.accent } else { p.text })).frame(false)).clicked() {
                             pick = Some(i);
                         }
                     });
@@ -517,38 +943,71 @@ impl SceneState {
             });
             return;
         };
-        let mut delete = false;
         theme::card(ui, p, "Transform", |ui| {
-            let o = &mut self.objs[i];
+            let o = &self.objs[i];
+            let name = Some(o.name.clone());
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(&o.name).strong().color(p.text));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add(theme::toggle_button(p, "Delete", false)).clicked() {
-                        delete = true;
+                        bus.push(AppCommand::SceneDelete { object: None });
                     }
                 });
             });
+            let (mut pos, mut rot, mut sc) = (o.pos, o.rot_y, o.scale);
             egui::Grid::new("xf").num_columns(2).spacing([SP_SM, 6.0]).show(ui, |ui| {
                 ui.label(theme::muted(p, "Position"));
                 ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut o.pos[0]).speed(0.05).prefix("x ").max_decimals(2));
-                    let r = ui.add(egui::DragValue::new(&mut o.pos[1]).speed(0.05).prefix("y ").max_decimals(2));
-                    if r.changed() && !o.track_y.is_empty() {
-                        o.track_y.set(t, o.pos[1]);
-                    }
-                    ui.add(egui::DragValue::new(&mut o.pos[2]).speed(0.05).prefix("z ").max_decimals(2));
+                    ui.add(egui::DragValue::new(&mut pos[0]).speed(0.05).prefix("x ").max_decimals(2));
+                    ui.add(egui::DragValue::new(&mut pos[1]).speed(0.05).prefix("y ").max_decimals(2));
+                    ui.add(egui::DragValue::new(&mut pos[2]).speed(0.05).prefix("z ").max_decimals(2));
                 });
                 ui.end_row();
                 ui.label(theme::muted(p, "Rotate Y"));
-                ui.add(egui::DragValue::new(&mut o.rot_y).speed(1.0).suffix("°"));
+                ui.add(egui::DragValue::new(&mut rot).speed(1.0).suffix("°"));
                 ui.end_row();
                 ui.label(theme::muted(p, "Scale"));
-                ui.add(egui::DragValue::new(&mut o.scale).speed(0.02).range(0.05..=20.0));
+                ui.add(egui::DragValue::new(&mut sc).speed(0.02).range(0.05..=20.0));
                 ui.end_row();
             });
+            let d = [pos[0] - o.pos[0], pos[1] - o.pos[1], pos[2] - o.pos[2]];
+            if d != [0.0; 3] {
+                bus.push(AppCommand::SceneTransform { object: name.clone(), translate: Some(d), rotate_y: None, scale: None });
+            }
+            if rot != o.rot_y {
+                bus.push(AppCommand::SceneTransform { object: name.clone(), translate: None, rotate_y: Some(rot), scale: None });
+            }
+            if sc != o.scale {
+                bus.push(AppCommand::SceneTransform { object: name, translate: None, rotate_y: None, scale: Some(sc) });
+            }
         });
+        if let Some(m) = &self.objs[i].mesh {
+            let (v, f, closed) = (m.verts.len(), m.faces.len(), m.is_closed());
+            let other = self.prev_selected.filter(|&b| b != i && b < self.objs.len() && self.objs[b].mesh.is_some()).map(|b| self.objs[b].name.clone());
+            theme::card(ui, p, "Mesh", |ui| {
+                theme::kv(ui, p, "Vertices", format!("{}", v));
+                theme::kv(ui, p, "Faces", format!("{}", f));
+                theme::kv(ui, p, "Closed", if closed { "yes" } else { "no" }.to_string());
+                ui.label(theme::muted(p, &match &other {
+                    Some(n) => format!("Second operand: {}", n),
+                    None => "Select another mesh, then this one, to Bridge or Boolean them.".into(),
+                }));
+                ui.add_enabled_ui(other.is_some(), |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, op) in [("Union", "union"), ("Difference", "difference"), ("Intersect", "intersection")] {
+                            if ui.add(theme::toggle_button(p, label, false)).clicked() {
+                                bus.push(AppCommand::SceneBoolean { op: op.into(), object: None, with: other.clone() });
+                            }
+                        }
+                        if ui.add(theme::toggle_button(p, "Bridge", false)).clicked() {
+                            bus.push(AppCommand::SceneBridge { object: None, with: other.clone() });
+                        }
+                    });
+                });
+            });
+        }
         theme::card(ui, p, "Animation · Y position", |ui| {
-            let o = &mut self.objs[i];
+            let o = &self.objs[i];
             theme::kv(ui, p, "Keys", format!("{}", o.track_y.keys().len()));
             ui.horizontal(|ui| {
                 if ui.add(theme::primary_button(p, "Add key")).on_hover_text("Key the current Y at the playhead  (K)").clicked() {
@@ -566,9 +1025,6 @@ impl SceneState {
                 }
             }
         });
-        if delete {
-            bus.push(AppCommand::SceneDelete { object: None });
-        }
     }
 
     pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
@@ -582,5 +1038,85 @@ impl SceneState {
                 self.selected = self.objs.iter().position(|o| &o.name == name);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn toasts() -> Toasts {
+        Toasts { now: 0.0, items: Vec::new() }
+    }
+
+    #[test]
+    fn modelling_tools_work_on_primitives_through_commands() {
+        let mut s = SceneState::new();
+        let mut t = toasts();
+        let run = |s: &mut SceneState, t: &mut Toasts, c: AppCommand| s.apply(&c, t).unwrap();
+        // edge loop on the cube
+        run(&mut s, &mut t, AppCommand::SceneEdgeLoop { object: None, edge: None, t: None }).unwrap();
+        let m = s.objs[0].mesh.as_ref().unwrap();
+        assert_eq!(m.faces.len(), 10);
+        assert!(m.is_closed());
+        // multi-cut on a plane
+        run(&mut s, &mut t, AppCommand::SceneAdd { kind: "plane".into() }).unwrap();
+        run(&mut s, &mut t, AppCommand::SceneMultiCut { object: None, face: None, from_edge: None, to_edge: None, from_t: None, to_t: None }).unwrap();
+        assert_eq!(s.objs[s.selected.unwrap()].mesh.as_ref().unwrap().faces.len(), 2);
+        // quad draw welds
+        let q = |x: f32| [[x, 0.0, 0.0], [x + 1.0, 0.0, 0.0], [x + 1.0, 0.0, 1.0], [x, 0.0, 1.0]];
+        run(&mut s, &mut t, AppCommand::SceneQuadDraw { points: q(3.0).to_vec() }).unwrap();
+        run(&mut s, &mut t, AppCommand::SceneQuadDraw { points: q(4.0).to_vec() }).unwrap();
+        let qd = s.objs.iter().find(|o| o.name == "quadDraw1").unwrap().mesh.as_ref().unwrap();
+        assert_eq!((qd.verts.len(), qd.faces.len()), (6, 2));
+        assert!(run(&mut s, &mut t, AppCommand::SceneQuadDraw { points: vec![[0.0; 3]; 3] }).is_err());
+    }
+
+    #[test]
+    fn boolean_and_bridge_between_two_objects() {
+        let mut t = toasts();
+        for (op, vol) in [("union", 1.5f32), ("difference", 0.5), ("intersection", 0.5)] {
+            let mut s = SceneState::new();
+            s.apply(&AppCommand::SceneAdd { kind: "cube".into() }, &mut t).unwrap().unwrap();
+            s.apply(&AppCommand::SceneTransform { object: None, translate: Some([0.5, 0.0, 0.0]), rotate_y: None, scale: None }, &mut t).unwrap().unwrap();
+            // select cube1 last so the new cube is the second operand
+            s.apply(&AppCommand::SceneSelect { object: "cube1".into() }, &mut t).unwrap().unwrap();
+            let n = s.objs.len();
+            let msg = s.apply(&AppCommand::SceneBoolean { op: op.into(), object: None, with: None }, &mut t).unwrap().unwrap();
+            assert!(msg.contains(op), "{}", msg);
+            assert_eq!(s.objs.len(), n - 1);
+            let m = s.objs[s.selected.unwrap()].mesh.as_ref().unwrap();
+            assert!((m.volume() - vol).abs() < 2e-3, "{} volume {}", op, m.volume());
+        }
+        let mut s = SceneState::new();
+        s.apply(&AppCommand::SceneAdd { kind: "cube".into() }, &mut t).unwrap().unwrap();
+        s.apply(&AppCommand::SceneTransform { object: None, translate: Some([2.0, 0.0, 0.0]), rotate_y: None, scale: None }, &mut t).unwrap().unwrap();
+        s.apply(&AppCommand::SceneSelect { object: "cube1".into() }, &mut t).unwrap().unwrap();
+        s.apply(&AppCommand::SceneBridge { object: None, with: None }, &mut t).unwrap().unwrap();
+        let m = s.objs[0].mesh.as_ref().unwrap();
+        assert!(m.is_closed());
+        assert!((m.volume() - 3.0).abs() < 1e-3, "{}", m.volume());
+        // a boolean with nothing else to combine is a clear error
+        let mut lone = SceneState::new();
+        assert!(lone.apply(&AppCommand::SceneBoolean { op: "union".into(), object: None, with: None }, &mut t).unwrap().is_err());
+    }
+
+    #[test]
+    fn shaded_viewport_renders_selection_highlight_and_picks() {
+        let mut s = SceneState::new();
+        s.dist = 4.0;
+        let f = s.render(240, 160, Color32::from_rgb(20, 20, 22), Color32::from_gray(60), Color32::from_rgb(214, 180, 92));
+        let mesh_px = f.ids.iter().filter(|&&i| i >> 16 == 1).count();
+        assert!(mesh_px > 2000, "{}", mesh_px);
+        // highlighted (gold tinted) vs. unselected grey
+        let goldish = (0..f.ids.len()).filter(|&i| f.ids[i] >> 16 == 1 && f.rgba[i * 4] as i32 - f.rgba[i * 4 + 2] as i32 > 20).count();
+        assert!(goldish > mesh_px / 2, "selected mesh is tinted ({} of {})", goldish, mesh_px);
+        s.selected = None;
+        let g = s.render(240, 160, Color32::from_rgb(20, 20, 22), Color32::from_gray(60), Color32::from_rgb(214, 180, 92));
+        let goldish = (0..g.ids.len()).filter(|&i| g.ids[i] >> 16 == 1 && g.rgba[i * 4] as i32 - g.rgba[i * 4 + 2] as i32 > 20).count();
+        assert!(goldish < mesh_px / 10);
+        s.shading = Shading::Wireframe;
+        let w = s.render(240, 160, Color32::from_rgb(20, 20, 22), Color32::from_gray(60), Color32::from_rgb(214, 180, 92));
+        assert_eq!(w.ids.iter().filter(|&&i| i != 0).count(), 0, "wireframe draws no faces");
     }
 }

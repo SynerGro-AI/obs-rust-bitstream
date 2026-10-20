@@ -30,7 +30,7 @@ use commands::{parse_tool_call, AppCommand, Origin};
 use eframe::egui::{self, Color32, Key, Rounding, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::assistant::WorkspaceContext;
-use obs_rust_bitstream::ui_canvas::{format_clock, Raster};
+use obs_rust_bitstream::ui_canvas::{format_clock, BlendMode, KeyTrack, Raster};
 use std::collections::HashMap;
 use theme::{Palette, SP_LG, SP_MD, SP_SM, SP_XS};
 
@@ -206,6 +206,71 @@ pub struct Snapshot {
     rec: Option<f64>,
 }
 
+/// 3D scene state for the general undo history.
+#[derive(Clone)]
+struct SceneSnap {
+    objs: Vec<scene::Obj>,
+    selected: Option<usize>,
+    prev: Option<usize>,
+}
+
+/// Composite layer parameters (pixels never change in Composite, so they are not copied).
+#[derive(Clone)]
+struct CompSnap {
+    params: Vec<(f32, bool, BlendMode, KeyTrack)>,
+    selected: usize,
+}
+
+/// Linear undo/redo stack. Repeated edits of the same kind on the same target
+/// within `COALESCE_S` (a drag, a slider) collapse into one step.
+pub struct History<T> {
+    undo: Vec<T>,
+    redo: Vec<T>,
+    last: Option<(String, f64)>,
+}
+
+const HISTORY_LIMIT: usize = 64;
+const COALESCE_S: f64 = 0.6;
+
+impl<T> History<T> {
+    fn new() -> Self {
+        Self { undo: Vec::new(), redo: Vec::new(), last: None }
+    }
+    /// Record `before` unless this edit continues the previous one (keys starting with `!` never merge). Returns true when a step was pushed.
+    fn record(&mut self, key: String, now: f64, before: T) -> bool {
+        let merge = !key.starts_with('!') && matches!(&self.last, Some((k, t)) if *k == key && now - *t < COALESCE_S);
+        self.last = Some((key, now));
+        if merge {
+            return false;
+        }
+        self.undo.push(before);
+        if self.undo.len() > HISTORY_LIMIT {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+        true
+    }
+    fn cancel(&mut self) {
+        self.undo.pop();
+        self.last = None;
+    }
+    fn undo(&mut self, current: T) -> Option<T> {
+        let s = self.undo.pop()?;
+        self.redo.push(current);
+        self.last = None;
+        Some(s)
+    }
+    fn redo(&mut self, current: T) -> Option<T> {
+        let s = self.redo.pop()?;
+        self.undo.push(current);
+        self.last = None;
+        Some(s)
+    }
+    pub fn depth(&self) -> (usize, usize) {
+        (self.undo.len(), self.redo.len())
+    }
+}
+
 pub struct App {
     pub ctx: egui::Context,
     pub dark: bool,
@@ -234,6 +299,8 @@ pub struct App {
     pub bus: Vec<AppCommand>,
     pub log: Vec<(Origin, String, Result<String, String>)>,
     snapshots: HashMap<u64, Snapshot>,
+    scene_hist: History<SceneSnap>,
+    comp_hist: History<CompSnap>,
     sel_ov: paint::SelOverlay,
     last_time: Option<f64>,
 }
@@ -285,6 +352,8 @@ impl App {
             bus: Vec::new(),
             log: Vec::new(),
             snapshots: HashMap::new(),
+            scene_hist: History::new(),
+            comp_hist: History::new(),
             sel_ov: paint::SelOverlay::default(),
             toasts,
             last_time: None,
@@ -395,8 +464,74 @@ impl App {
 
     /// The single entry point for every action in the app.
     pub fn dispatch(&mut self, cmd: &AppCommand, origin: Origin) -> Result<String, String> {
-        use AppCommand as C;
         let now = self.now();
+        let recorded = self.record_history(cmd, now);
+        let r = self.dispatch_inner(cmd, now);
+        match (recorded, &r) {
+            (Some(Mode::Scene), Err(_)) => self.scene_hist.cancel(),
+            (Some(Mode::Composite), Err(_)) => self.comp_hist.cancel(),
+            _ => {}
+        }
+        self.finish(cmd, origin, r)
+    }
+
+    /// Which edits are undoable, and the coalescing key for each.
+    fn history_key(&self, cmd: &AppCommand) -> Option<(Mode, String)> {
+        use AppCommand as C;
+        let target = |o: &Option<String>| o.clone().unwrap_or_default();
+        match cmd {
+            C::SceneTransform { object, translate, rotate_y, scale } => Some((Mode::Scene, format!("xf:{}:{}{}{}", target(object), translate.is_some() as u8, rotate_y.is_some() as u8, scale.is_some() as u8))),
+            C::SceneAdd { .. } | C::SceneExtrude { .. } | C::SceneBevel { .. } | C::SceneDelete { .. } | C::SceneEdgeLoop { .. } | C::SceneMultiCut { .. } | C::SceneBridge { .. } | C::SceneBoolean { .. } | C::SceneQuadDraw { .. } => Some((Mode::Scene, format!("!{}", cmd.name()))),
+            C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Scene => Some((Mode::Scene, format!("!{}", cmd.name()))),
+            C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Composite => Some((Mode::Composite, format!("!{}", cmd.name()))),
+            C::SetLayerOpacity { layer, .. } if self.mode == Mode::Composite => Some((Mode::Composite, format!("opacity:{:?}", layer))),
+            C::SetLayerBlend { .. } | C::SetLayerVisibility { .. } if self.mode == Mode::Composite => Some((Mode::Composite, format!("!{}", cmd.name()))),
+            _ => None,
+        }
+    }
+
+    fn record_history(&mut self, cmd: &AppCommand, now: f64) -> Option<Mode> {
+        let (mode, key) = self.history_key(cmd)?;
+        let pushed = match mode {
+            Mode::Scene => {
+                let s = self.scene_snap();
+                self.scene_hist.record(key, now, s)
+            }
+            _ => {
+                let s = self.comp_snap();
+                self.comp_hist.record(key, now, s)
+            }
+        };
+        pushed.then_some(mode)
+    }
+
+    fn scene_snap(&self) -> SceneSnap {
+        SceneSnap { objs: self.scene.objs.clone(), selected: self.scene.selected, prev: self.scene.prev_selected }
+    }
+
+    fn set_scene_snap(&mut self, s: SceneSnap) {
+        self.scene.objs = s.objs;
+        let n = self.scene.objs.len();
+        self.scene.selected = s.selected.filter(|i| *i < n);
+        self.scene.prev_selected = s.prev.filter(|i| *i < n);
+    }
+
+    fn comp_snap(&self) -> CompSnap {
+        CompSnap { params: self.comp.layers.iter().map(|l| (l.layer.opacity, l.layer.visible, l.layer.blend, l.opacity.clone())).collect(), selected: self.comp.selected }
+    }
+
+    fn set_comp_snap(&mut self, s: CompSnap) {
+        for (l, (o, v, b, k)) in self.comp.layers.iter_mut().zip(s.params) {
+            l.layer.opacity = o;
+            l.layer.visible = v;
+            l.layer.blend = b;
+            l.opacity = k;
+        }
+        self.comp.selected = s.selected.min(self.comp.layers.len().saturating_sub(1));
+    }
+
+    fn dispatch_inner(&mut self, cmd: &AppCommand, now: f64) -> Result<String, String> {
+        use AppCommand as C;
         let r: Result<String, String> = match cmd {
             C::SwitchMode { mode } => match Mode::parse(mode) {
                 Some(m) => {
@@ -441,7 +576,29 @@ impl App {
                     }
                     Ok(cmd.name())
                 }
-                m => Err(format!("{} mode has no undo history yet; use Undo on Seraphina's action card", m.label())),
+                Mode::Scene => {
+                    let cur = self.scene_snap();
+                    let r = if matches!(cmd, C::Undo) { self.scene_hist.undo(cur) } else { self.scene_hist.redo(cur) };
+                    match r {
+                        Some(s) => {
+                            self.set_scene_snap(s);
+                            Ok(format!("3D {}", cmd.name()))
+                        }
+                        None => Err(format!("nothing to {} in 3D", cmd.name())),
+                    }
+                }
+                Mode::Composite => {
+                    let cur = self.comp_snap();
+                    let r = if matches!(cmd, C::Undo) { self.comp_hist.undo(cur) } else { self.comp_hist.redo(cur) };
+                    match r {
+                        Some(s) => {
+                            self.set_comp_snap(s);
+                            Ok(format!("Composite {}", cmd.name()))
+                        }
+                        None => Err(format!("nothing to {} in Composite", cmd.name())),
+                    }
+                }
+                m => Err(format!("{} mode has no undo history", m.label())),
             },
             C::OpenFile { path } => {
                 self.mode = Mode::Paint;
@@ -472,7 +629,19 @@ impl App {
                 }
                 self.stream.apply(cmd, now).unwrap_or(Err("unsupported".into()))
             }
-            C::SceneAdd { .. } | C::SceneSelect { .. } | C::SceneGizmo { .. } | C::SceneTransform { .. } | C::SceneExtrude { .. } | C::SceneBevel { .. } | C::SceneDelete { .. } => {
+            C::SceneAdd { .. }
+            | C::SceneSelect { .. }
+            | C::SceneGizmo { .. }
+            | C::SceneTransform { .. }
+            | C::SceneExtrude { .. }
+            | C::SceneBevel { .. }
+            | C::SceneDelete { .. }
+            | C::SceneEdgeLoop { .. }
+            | C::SceneMultiCut { .. }
+            | C::SceneBridge { .. }
+            | C::SceneBoolean { .. }
+            | C::SceneQuadDraw { .. }
+            | C::SceneShading { .. } => {
                 self.mode = Mode::Scene;
                 self.scene.apply(cmd, &mut self.toasts).unwrap_or(Err("unsupported".into()))
             }
@@ -489,7 +658,7 @@ impl App {
                 None => Err(format!("{} isn't handled", cmd.name())),
             },
         };
-        self.finish(cmd, origin, r)
+        r
     }
 
     fn finish(&mut self, cmd: &AppCommand, origin: Origin, r: Result<String, String>) -> Result<String, String> {
@@ -718,6 +887,11 @@ impl App {
                     for (k, g) in [(Key::Q, "select"), (Key::W, "move"), (Key::E, "rotate"), (Key::R, "scale")] {
                         if pressed(k) {
                             out.push(AppCommand::SceneGizmo { mode: g.into() });
+                        }
+                    }
+                    for (k, s) in [(Key::Num4, "wireframe"), (Key::Num5, "shaded"), (Key::Num6, "shaded_wire")] {
+                        if pressed(k) {
+                            out.push(AppCommand::SceneShading { mode: s.into() });
                         }
                     }
                 }
@@ -1102,7 +1276,7 @@ impl App {
                 });
                 self.paint.center(ui, &p, &mut self.bus, &mut self.toasts, &mut self.sel_ov);
             }
-            Mode::Scene => self.scene.center(ui, &p),
+            Mode::Scene => self.scene.center(ui, &p, &mut self.bus),
             Mode::Animate => self.anim.center(ui, &p),
             Mode::Composite => self.comp.center(ui, &p),
         });
@@ -1152,7 +1326,6 @@ fn main() -> eframe::Result<()> {
 mod tests {
     use super::*;
     use crate::llm::{LlmReply, MockProvider, ToolCall};
-    use obs_rust_bitstream::ui_canvas::BlendMode;
     use std::sync::Arc;
 
     fn input(t: f64) -> egui::RawInput {
@@ -1438,17 +1611,66 @@ mod tests {
     }
 
     #[test]
+    fn general_undo_for_3d_and_composite() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let n0 = app.scene.objs.len();
+        app.dispatch(&AppCommand::SceneAdd { kind: "cylinder".into() }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::SceneEdgeLoop { object: Some("cube1".into()), edge: None, t: None }, Origin::User).unwrap();
+        assert_eq!(app.scene.objs[0].mesh.as_ref().unwrap().faces.len(), 10);
+        // a drag = many transforms in quick succession -> one undo step
+        for k in 0..20 {
+            app.toasts.now = 10.0 + k as f64 * 0.016;
+            app.dispatch(&AppCommand::SceneTransform { object: Some("cube1".into()), translate: Some([0.1, 0.0, 0.0]), rotate_y: None, scale: None }, Origin::User).unwrap();
+        }
+        assert!((app.scene.objs[0].pos[0] - 2.0).abs() < 1e-4);
+        assert_eq!(app.scene_hist.depth(), (3, 0));
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.scene.objs[0].pos[0].abs() < 1e-4, "whole drag undone");
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert_eq!(app.scene.objs[0].mesh.as_ref().unwrap().faces.len(), 6, "edge loop undone");
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert_eq!(app.scene.objs.len(), n0, "add undone");
+        assert!(app.dispatch(&AppCommand::Undo, Origin::User).is_err());
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        assert_eq!(app.scene.objs.len(), n0 + 1);
+        assert_eq!(app.scene.objs[0].mesh.as_ref().unwrap().faces.len(), 10);
+        // failed edits leave no empty undo step
+        let d = app.scene_hist.depth().0;
+        assert!(app.dispatch(&AppCommand::SceneBoolean { op: "xor".into(), object: None, with: None }, Origin::User).is_err());
+        assert_eq!(app.scene_hist.depth().0, d);
+
+        // Composite: opacity slider + blend change
+        app.dispatch(&AppCommand::SwitchMode { mode: "composite".into() }, Origin::User).unwrap();
+        let name = app.comp.layers[0].layer.name.clone();
+        let (o0, b0) = (app.comp.layers[0].layer.opacity, app.comp.layers[0].layer.blend);
+        app.toasts.now = 20.0;
+        app.dispatch(&AppCommand::SetLayerOpacity { layer: Some(name.clone()), opacity: 30.0 }, Origin::User).unwrap();
+        app.toasts.now = 20.1;
+        app.dispatch(&AppCommand::SetLayerOpacity { layer: Some(name.clone()), opacity: 20.0 }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::SetLayerBlend { layer: Some(name.clone()), mode: "multiply".into() }, Origin::User).unwrap();
+        assert_eq!(app.comp.layers[0].layer.blend, BlendMode::Multiply);
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert_eq!(app.comp.layers[0].layer.blend, b0);
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!((app.comp.layers[0].layer.opacity - o0).abs() < 1e-4, "slider drag undone in one step");
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        assert!((app.comp.layers[0].layer.opacity - 0.2).abs() < 1e-3);
+    }
+
+    #[test]
     fn scene_commands() {
         let ctx = egui::Context::default();
         let mut app = app_with(&ctx, None);
         app.dispatch(&AppCommand::SceneAdd { kind: "cube".into() }, Origin::User).unwrap();
         assert_eq!(app.mode, Mode::Scene);
         let i = app.scene.selected.unwrap();
-        let f0 = app.scene.objs[i].mesh.as_ref().unwrap().faces;
+        let f0 = app.scene.objs[i].mesh.as_ref().unwrap().faces.len();
         app.dispatch(&AppCommand::SceneExtrude { distance: Some(0.5) }, Origin::User).unwrap();
         app.dispatch(&AppCommand::SceneBevel { amount: Some(0.2) }, Origin::User).unwrap();
         let m = app.scene.objs[i].mesh.as_ref().unwrap();
-        assert_eq!(m.faces, f0 + 8);
+        assert_eq!(m.faces.len(), f0 + 8);
         assert_eq!(m.verts.len(), 16);
         app.dispatch(&AppCommand::SceneGizmo { mode: "rotate".into() }, Origin::User).unwrap();
         assert_eq!(app.current_tool(), "Rotate Tool");

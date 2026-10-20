@@ -74,6 +74,12 @@ pub enum AppCommand {
     SceneExtrude { distance: Option<f32> },
     SceneBevel { amount: Option<f32> },
     SceneDelete { object: Option<String> },
+    SceneEdgeLoop { object: Option<String>, edge: Option<[usize; 2]>, t: Option<f32> },
+    SceneMultiCut { object: Option<String>, face: Option<usize>, from_edge: Option<usize>, to_edge: Option<usize>, from_t: Option<f32>, to_t: Option<f32> },
+    SceneBridge { object: Option<String>, with: Option<String> },
+    SceneBoolean { op: String, object: Option<String>, with: Option<String> },
+    SceneQuadDraw { points: Vec<[f32; 3]> },
+    SceneShading { mode: String },
     // ---- timeline
     TimelinePlay { playing: Option<bool> },
     TimelineScrub { time: f32 },
@@ -84,6 +90,11 @@ pub enum AppCommand {
     ResetReader,
     SetStreaming { live: bool },
     SetRecording { recording: bool },
+    RetryStream,
+    SetOutputSource { source: String },
+    SetStreamTarget { url: String },
+    /// UI only: never exposed as a tool, never logged with its value.
+    SetStreamKey { key: String },
     // ---- video generation
     VideoGenerate { prompt: String, duration: Option<u32> },
     GenerateImage { prompt: String },
@@ -105,7 +116,7 @@ impl AppCommand {
     /// Commands Seraphina may not run without the user (file writes and
     /// paid/networked generation). The Triad mercy wheel blocks these.
     pub fn needs_user(&self) -> bool {
-        matches!(self, AppCommand::OpenFile { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::VideoGenerate { .. } | AppCommand::GenerateImage { .. } | AppCommand::VideoExtend { .. } | AppCommand::VideoStitch { .. } | AppCommand::SetStreaming { live: true } | AppCommand::SetRecording { recording: true })
+        matches!(self, AppCommand::OpenFile { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::VideoGenerate { .. } | AppCommand::GenerateImage { .. } | AppCommand::VideoExtend { .. } | AppCommand::VideoStitch { .. } | AppCommand::SetStreaming { live: true } | AppCommand::SetRecording { recording: true } | AppCommand::SetStreamTarget { .. } | AppCommand::SetStreamKey { .. } | AppCommand::RetryStream)
     }
 }
 
@@ -117,6 +128,9 @@ pub fn parse_tool_call(name: &str, arguments: &str) -> Result<AppCommand, String
         Value::Null => serde_json::Map::new(),
         _ => return Err("arguments must be a JSON object".into()),
     };
+    if !tool_specs().iter().any(|t| t.name == name) {
+        return Err(format!("unknown tool '{}'", name));
+    }
     obj.insert("cmd".into(), Value::String(name.to_string()));
     serde_json::from_value(Value::Object(obj)).map_err(|e| format!("{}: {}", name, e))
 }
@@ -185,21 +199,30 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "open_file", description: "Open an image as a new layer, or read a PSD header (user approval required).", params: obj(json!({ "path": s("file path") }), &["path"]) },
         ToolSpec { name: "save_psd", description: "Save the document as a layered PSD with pixels, <name>_edit.psd (user approval required).", params: obj(json!({}), &[]) },
         ToolSpec { name: "export_png", description: "Export a flattened PNG (user approval required).", params: obj(json!({}), &[]) },
-        ToolSpec { name: "scene_add", description: "Add a 3D object.", params: obj(json!({ "kind": { "type": "string", "enum": ["cube", "joint", "light", "camera"] } }), &["kind"]) },
+        ToolSpec { name: "scene_add", description: "Add a 3D object.", params: obj(json!({ "kind": { "type": "string", "enum": ["cube", "plane", "cylinder", "joint", "light", "camera"] } }), &["kind"]) },
         ToolSpec { name: "scene_select", description: "Select a 3D object by name.", params: obj(json!({ "object": s("object name") }), &["object"]) },
-        ToolSpec { name: "scene_gizmo", description: "3D viewport drag mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["select", "move", "rotate", "scale"] } }), &["mode"]) },
+        ToolSpec { name: "scene_gizmo", description: "3D viewport drag mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["select", "move", "rotate", "scale", "edge_loop", "multi_cut", "quad_draw"] } }), &["mode"]) },
         ToolSpec { name: "scene_transform", description: "Translate (relative), rotate Y (absolute degrees) or scale (absolute) a 3D object.", params: obj(json!({ "object": s("object name; omit for selected"), "translate": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }, "rotate_y": n("degrees"), "scale": n("uniform scale") }), &[]) },
         ToolSpec { name: "scene_extrude", description: "Extrude the selected mesh's top face.", params: obj(json!({ "distance": n("units, default 0.5") }), &[]) },
         ToolSpec { name: "scene_bevel", description: "Bevel (chamfer) the selected mesh's top face.", params: obj(json!({ "amount": n("0.05-0.45, default 0.15") }), &[]) },
         ToolSpec { name: "scene_delete", description: "Delete a 3D object.", params: obj(json!({ "object": s("object name; omit for selected") }), &[]) },
+        ToolSpec { name: "scene_edge_loop", description: "Insert an edge loop through the quad ring crossing an edge (default: the most vertical quad edge).", params: obj(json!({ "object": s("object; omit for selected"), "edge": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "vertex indices [a, b]" }, "t": n("position along the edge 0-1, default 0.5") }), &[]) },
+        ToolSpec { name: "scene_multi_cut", description: "Split one face with a cut between two of its edges (default: top face, edges 0 and 2 at their midpoints).", params: obj(json!({ "object": s("object; omit for selected"), "face": n("face index"), "from_edge": n("edge index within the face"), "to_edge": n("edge index within the face"), "from_t": n("0-1"), "to_t": n("0-1") }), &[]) },
+        ToolSpec { name: "scene_bridge", description: "Merge another mesh into this one and bridge their two facing faces with quads.", params: obj(json!({ "object": s("object; omit for selected"), "with": s("other mesh; omit for the previously selected one") }), &[]) },
+        ToolSpec { name: "scene_boolean", description: "Boolean of two meshes (the result replaces `object`; `with` is removed).", params: obj(json!({ "op": { "type": "string", "enum": ["union", "difference", "intersection"] }, "object": s("object; omit for selected"), "with": s("other mesh; omit for the previously selected one") }), &["op"]) },
+        ToolSpec { name: "scene_quad_draw", description: "Add a quad (4 world-space points) to the quad-draw mesh, welding shared corners.", params: obj(json!({ "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }, "minItems": 4, "maxItems": 4 } }), &["points"]) },
+        ToolSpec { name: "scene_shading", description: "Viewport display mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["shaded", "wireframe", "shaded_wire"] } }), &["mode"]) },
         ToolSpec { name: "timeline_play", description: "Play or pause the current mode's timeline.", params: obj(json!({ "playing": b("omit to toggle") }), &[]) },
         ToolSpec { name: "timeline_scrub", description: "Move the playhead (seconds).", params: obj(json!({ "time": n("seconds") }), &["time"]) },
         ToolSpec { name: "set_keyframe", description: "Key the selected 3D object's Y / composite layer opacity / animate frame at the playhead.", params: obj(json!({}), &[]) },
         ToolSpec { name: "delete_keyframe", description: "Delete the key at the playhead.", params: obj(json!({}), &[]) },
         ToolSpec { name: "run_reader", description: "Run the bitstream reader over the loaded stream.", params: obj(json!({ "width": n("bits per read 1-16"), "reads": n("number of reads, default 32"), "wrap": b("true = u8 wrapping counter, false = safe usize") }), &[]) },
         ToolSpec { name: "reset_reader", description: "Rewind the bitstream reader.", params: obj(json!({}), &[]) },
-        ToolSpec { name: "set_streaming", description: "Start/stop the (simulated) live stream. Starting needs the user.", params: obj(json!({ "live": b("live") }), &["live"]) },
-        ToolSpec { name: "set_recording", description: "Start/stop recording state. Starting needs the user.", params: obj(json!({ "recording": b("recording") }), &["recording"]) },
+        ToolSpec { name: "set_streaming", description: "Go live to the RTMP target from Settings via ffmpeg, or end the stream. Starting needs the user.", params: obj(json!({ "live": b("live") }), &["live"]) },
+        ToolSpec { name: "set_recording", description: "Start/stop recording the canvas (or screen) to MP4 via ffmpeg. Starting needs the user.", params: obj(json!({ "recording": b("recording") }), &["recording"]) },
+        ToolSpec { name: "retry_stream", description: "Reconnect the live stream now (after a dropped connection).", params: obj(json!({}), &[]) },
+        ToolSpec { name: "set_output_source", description: "What recording/streaming captures.", params: obj(json!({ "source": { "type": "string", "enum": ["canvas", "screen"] } }), &["source"]) },
+        ToolSpec { name: "set_stream_target", description: "RTMP server URL (the stream key is set by the user in Settings).", params: obj(json!({ "url": s("rtmp://host/app") }), &["url"]) },
         ToolSpec { name: "generate_image", description: "Generate an image with Grok Imagine and add it to Paint as a new layer (user approval required; billed per image).", params: obj(json!({ "prompt": s("prompt") }), &["prompt"]) },
         ToolSpec { name: "video_generate", description: "Queue a Grok Imagine video generation (user approval required).", params: obj(json!({ "prompt": s("prompt"), "duration": n("seconds 1-15") }), &["prompt"]) },
         ToolSpec { name: "video_extend", description: "Extend a generated clip (user approval required).", params: obj(json!({ "clip": n("clip index"), "prompt": s("prompt") }), &["clip", "prompt"]) },
@@ -270,6 +293,8 @@ mod tests {
         assert!(parse_tool_call("format_disk", "{}").is_err());
         assert!(parse_tool_call("undo", "[1,2]").is_err());
         assert!(parse_tool_call("undo", "{not json").is_err());
+        assert!(parse_tool_call("set_stream_key", r#"{"key":"x"}"#).is_err(), "UI-only commands are not tools");
+        assert_eq!(parse_tool_call("scene_boolean", r#"{"op":"difference"}"#), Ok(AppCommand::SceneBoolean { op: "difference".into(), object: None, with: None }));
     }
 
     #[test]

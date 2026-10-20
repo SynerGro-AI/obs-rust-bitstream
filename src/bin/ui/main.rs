@@ -15,6 +15,7 @@ mod assistant_panel;
 mod commands;
 mod composite;
 mod llm;
+mod materials;
 mod maya;
 mod output;
 mod paint;
@@ -138,15 +139,17 @@ pub enum Mode {
     Scene,
     Animate,
     Stream,
+    Materials,
 }
 
 impl Mode {
     /// Header order, as in the mockup.
-    pub const ALL: [Mode; 5] = [Mode::Paint, Mode::Composite, Mode::Scene, Mode::Animate, Mode::Stream];
+    pub const ALL: [Mode; 6] = [Mode::Paint, Mode::Composite, Mode::Scene, Mode::Animate, Mode::Stream, Mode::Materials];
 
     pub fn label(&self) -> &'static str {
         match self {
             Mode::Stream => "Stream",
+            Mode::Materials => "Materials",
             Mode::Paint => "Paint",
             Mode::Scene => "3D",
             Mode::Animate => "Animate",
@@ -157,6 +160,7 @@ impl Mode {
     pub fn icon(&self) -> &'static str {
         match self {
             Mode::Stream => ic::BROADCAST,
+            Mode::Materials => ic::ATOM,
             Mode::Paint => ic::PAINT_BRUSH,
             Mode::Scene => ic::CUBE,
             Mode::Animate => ic::FILM_STRIP,
@@ -167,6 +171,7 @@ impl Mode {
     pub fn style(&self) -> (&'static str, &'static str) {
         match self {
             Mode::Stream => ("OBS", "OBS-style streaming and bitstream inspection"),
+            Mode::Materials => ("Lab", "Materials Lab: periodic table, composition builder, PBR materials"),
             Mode::Paint => ("Ps", "Photoshop-style raster editing"),
             Mode::Scene => ("Ma", "Maya-style 3D layout"),
             Mode::Animate => ("Tb", "Toon Boom-style frame-by-frame animation"),
@@ -177,6 +182,7 @@ impl Mode {
     pub fn parse(s: &str) -> Option<Mode> {
         match s.trim().to_lowercase().as_str() {
             "stream" | "obs" => Some(Mode::Stream),
+            "materials" | "material" | "lab" | "materials_lab" | "materials lab" => Some(Mode::Materials),
             "paint" | "photoshop" => Some(Mode::Paint),
             "3d" | "scene" | "maya" => Some(Mode::Scene),
             "animate" | "animation" => Some(Mode::Animate),
@@ -202,6 +208,8 @@ pub struct Snapshot {
     scene_sel: Option<usize>,
     comp_layers: Vec<composite::CompLayer>,
     comp_sel: usize,
+    scene_assign: obs_rust_bitstream::material_assign::MaterialAssign,
+    mats: materials::MatSnap,
     anim_frames: Vec<Raster>,
     live: bool,
     rec: bool,
@@ -211,6 +219,7 @@ pub struct Snapshot {
 #[derive(Clone)]
 struct SceneSnap {
     objs: Vec<scene::Obj>,
+    assign: obs_rust_bitstream::material_assign::MaterialAssign,
     selected: Option<usize>,
     prev: Option<usize>,
 }
@@ -296,6 +305,7 @@ pub struct App {
     pub scene: scene::SceneState,
     pub anim: animate::AnimState,
     pub comp: composite::CompState,
+    pub materials: materials::MaterialsState,
     pub assistant: assistant_panel::AssistantPanel,
     pub video: videogen::VideoGenPanel,
     pub bus: Vec<AppCommand>,
@@ -303,6 +313,7 @@ pub struct App {
     snapshots: HashMap<u64, Snapshot>,
     scene_hist: History<SceneSnap>,
     comp_hist: History<CompSnap>,
+    mat_hist: History<materials::MatSnap>,
     sel_ov: paint::SelOverlay,
     last_time: Option<f64>,
 }
@@ -350,6 +361,7 @@ impl App {
             scene: scene::SceneState::new(),
             anim: animate::AnimState::new(),
             comp: composite::CompState::new(),
+            materials: materials::MaterialsState::new(),
             assistant,
             video,
             bus: Vec::new(),
@@ -357,6 +369,7 @@ impl App {
             snapshots: HashMap::new(),
             scene_hist: History::new(),
             comp_hist: History::new(),
+            mat_hist: History::new(),
             sel_ov: paint::SelOverlay::default(),
             toasts,
             last_time: None,
@@ -380,6 +393,7 @@ impl App {
             Mode::Scene => format!("{} Tool", self.scene.gizmo.label()),
             Mode::Animate => if self.anim.erase { "Eraser" } else { "Pencil" }.to_string(),
             Mode::Composite => "Keyframe".to_string(),
+            Mode::Materials => self.materials.selected.and_then(obs_rust_bitstream::element_data::get).map(|e| e.name.to_string()).unwrap_or_else(|| "Periodic table".into()),
         }
     }
 
@@ -398,6 +412,7 @@ impl App {
             Mode::Composite => format!("{} × {} px", composite::PW, composite::PH),
             Mode::Scene => "Viewport".into(),
             Mode::Stream => format!("{} bytes", self.stream.insp.data().len()),
+            Mode::Materials => "118 elements".into(),
         }
     }
 
@@ -408,6 +423,7 @@ impl App {
             Mode::Scene => "Untitled scene".into(),
             Mode::Animate => format!("{} frames", self.anim.frames.len()),
             Mode::Composite => "Comp 1".into(),
+            Mode::Materials => format!("{} materials", self.materials.lib.profiles.len()),
         }
     }
 
@@ -422,7 +438,7 @@ impl App {
             None => "not configured (no key)".into(),
         };
         format!(
-            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
+            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream, Materials). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
             self.mode.label(),
             if self.dark { "dark" } else { "light" },
             self.show_tools,
@@ -436,6 +452,7 @@ impl App {
             self.comp.context(),
             self.stream.context(),
             self.output.context(),
+            self.materials.context(),
             vid
         )
     }
@@ -448,6 +465,8 @@ impl App {
             scene_sel: self.scene.selected,
             comp_layers: self.comp.layers.clone(),
             comp_sel: self.comp.selected,
+            scene_assign: self.scene.assign.clone(),
+            mats: self.materials.snap(),
             anim_frames: self.anim.frames.clone(),
             live: self.output.is_live(),
             rec: self.output.is_recording(),
@@ -461,6 +480,8 @@ impl App {
         self.scene.selected = s.scene_sel;
         self.comp.layers = s.comp_layers;
         self.comp.selected = s.comp_sel;
+        self.scene.assign = s.scene_assign;
+        self.materials.restore(s.mats);
         self.anim.restore(s.anim_frames);
         // undoing an AI batch that started output really stops it
         if !s.live && self.output.is_live() {
@@ -481,6 +502,7 @@ impl App {
         match (recorded, &r) {
             (Some(Mode::Scene), Err(_)) => self.scene_hist.cancel(),
             (Some(Mode::Composite), Err(_)) => self.comp_hist.cancel(),
+            (Some(Mode::Materials), Err(_)) => self.mat_hist.cancel(),
             _ => {}
         }
         self.finish(cmd, origin, r)
@@ -493,6 +515,8 @@ impl App {
         match cmd {
             C::SceneTransform { object, translate, rotate_y, scale } => Some((Mode::Scene, format!("xf:{}:{}{}{}", target(object), translate.is_some() as u8, rotate_y.is_some() as u8, scale.is_some() as u8))),
             C::SceneAdd { .. } | C::SceneExtrude { .. } | C::SceneBevel { .. } | C::SceneDelete { .. } | C::SceneEdgeLoop { .. } | C::SceneMultiCut { .. } | C::SceneBridge { .. } | C::SceneBoolean { .. } | C::SceneQuadDraw { .. } => Some((Mode::Scene, format!("!{}", cmd.name()))),
+            C::MaterialAssign { .. } => Some((Mode::Scene, "!material_assign".into())),
+            C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => Some((Mode::Materials, format!("!{}", cmd.name()))),
             C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Scene => Some((Mode::Scene, format!("!{}", cmd.name()))),
             C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Composite => Some((Mode::Composite, format!("!{}", cmd.name()))),
             C::SetLayerOpacity { layer, .. } if self.mode == Mode::Composite => Some((Mode::Composite, format!("opacity:{:?}", layer))),
@@ -508,6 +532,10 @@ impl App {
                 let s = self.scene_snap();
                 self.scene_hist.record(key, now, s)
             }
+            Mode::Materials => {
+                let s = self.materials.snap();
+                self.mat_hist.record(key, now, s)
+            }
             _ => {
                 let s = self.comp_snap();
                 self.comp_hist.record(key, now, s)
@@ -517,11 +545,12 @@ impl App {
     }
 
     fn scene_snap(&self) -> SceneSnap {
-        SceneSnap { objs: self.scene.objs.clone(), selected: self.scene.selected, prev: self.scene.prev_selected }
+        SceneSnap { objs: self.scene.objs.clone(), assign: self.scene.assign.clone(), selected: self.scene.selected, prev: self.scene.prev_selected }
     }
 
     fn set_scene_snap(&mut self, s: SceneSnap) {
         self.scene.objs = s.objs;
+        self.scene.assign = s.assign;
         let n = self.scene.objs.len();
         self.scene.selected = s.selected.filter(|i| *i < n);
         self.scene.prev_selected = s.prev.filter(|i| *i < n);
@@ -609,6 +638,17 @@ impl App {
                         None => Err(format!("nothing to {} in Composite", cmd.name())),
                     }
                 }
+                Mode::Materials => {
+                    let cur = self.materials.snap();
+                    let r = if matches!(cmd, C::Undo) { self.mat_hist.undo(cur) } else { self.mat_hist.redo(cur) };
+                    match r {
+                        Some(s) => {
+                            self.materials.restore(s);
+                            Ok(format!("Materials {}", cmd.name()))
+                        }
+                        None => Err(format!("nothing to {} in Materials", cmd.name())),
+                    }
+                }
                 m => Err(format!("{} mode has no undo history", m.label())),
             },
             C::OpenFile { path } => {
@@ -686,6 +726,23 @@ impl App {
             | C::SceneShading { .. } => {
                 self.mode = Mode::Scene;
                 self.scene.apply(cmd, &mut self.toasts).unwrap_or(Err("unsupported".into()))
+            }
+            C::MaterialAssign { object, material } => {
+                self.mode = Mode::Scene;
+                match self.scene.check_mesh_target(object.as_deref()) {
+                    Ok(obj) => match self.materials.lib.resolve(material) {
+                        Ok(name) => {
+                            self.scene.surfaces = self.materials.lib.profiles.iter().map(|(k, p)| (k.clone(), materials::surface_of(&p.pbr))).collect();
+                            self.scene.assign_material(&obj, &name)
+                        }
+                        Err(e) => Err(e),
+                    },
+                    Err(e) => Err(e),
+                }
+            }
+            C::MaterialsSelect { .. } | C::MaterialsSearch { .. } | C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => {
+                self.mode = Mode::Materials;
+                self.materials.apply(cmd).unwrap_or(Err("unsupported".into()))
             }
             C::TimelinePlay { .. } | C::TimelineScrub { .. } | C::SetKeyframe | C::DeleteKeyframe => match self.mode {
                 Mode::Scene => self.scene.apply(cmd, &mut self.toasts),
@@ -833,7 +890,7 @@ impl App {
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
         let mut out = Vec::new();
-        for (k, m) in [(Key::Num1, Mode::Paint), (Key::Num2, Mode::Composite), (Key::Num3, Mode::Scene), (Key::Num4, Mode::Animate), (Key::Num5, Mode::Stream)] {
+        for (k, m) in [(Key::Num1, Mode::Paint), (Key::Num2, Mode::Composite), (Key::Num3, Mode::Scene), (Key::Num4, Mode::Animate), (Key::Num5, Mode::Stream), (Key::Num6, Mode::Materials)] {
             if cmd && pressed(k) {
                 out.push(AppCommand::SwitchMode { mode: m.label().into() });
             }
@@ -938,7 +995,7 @@ impl App {
                     }
                 }
             }
-            Mode::Composite => {}
+            Mode::Composite | Mode::Materials => {}
         }
         self.bus.extend(out);
     }
@@ -1228,9 +1285,17 @@ impl App {
                 std::sync::Arc::new(out)
             }),
             Mode::Stream => Some(std::sync::Arc::new(self.stream.bit_raster())),
+            Mode::Materials => self.scene.frame.clone(),
         };
         if let Some(f) = frame {
             self.output.push_frame(f);
+        }
+    }
+
+    /// The 3D viewport draws with the library's current PBR values.
+    fn sync_scene_materials(&mut self) {
+        if self.scene.surfaces.len() != self.materials.lib.profiles.len() || self.materials.lib.profiles.iter().any(|(k, pr)| self.scene.surfaces.get(k) != Some(&materials::surface_of(&pr.pbr))) {
+            self.scene.surfaces = self.materials.lib.profiles.iter().map(|(k, pr)| (k.clone(), materials::surface_of(&pr.pbr))).collect();
         }
     }
 
@@ -1271,6 +1336,7 @@ impl App {
         self.edge_resize(ctx);
 
         let p = self.pal;
+        self.sync_scene_materials();
         self.header(ctx);
         self.status_bar(ctx);
 
@@ -1320,6 +1386,10 @@ impl App {
                         Mode::Scene => self.scene.inspector(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.inspector(ui, &p, &mut self.toasts, &mut self.bus),
                         Mode::Composite => self.comp.inspector(ui, &p, &mut self.bus),
+                        Mode::Materials => {
+                            let sel = self.scene.selected.and_then(|i| self.scene.objs.get(i)).filter(|o| o.mesh.is_some()).map(|o| o.name.clone());
+                            self.materials.inspector(ui, &p, &mut self.bus, sel.as_deref())
+                        }
                         Mode::Paint => {}
                     });
                 }
@@ -1347,6 +1417,7 @@ impl App {
                         Mode::Scene => self.scene.tools(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.tools(ui, &p),
                         Mode::Composite => self.comp.tools(ui, &p, &mut self.bus),
+                        Mode::Materials => self.materials.tools(ui, &p, &mut self.bus),
                         Mode::Paint => {}
                     });
                 }
@@ -1371,6 +1442,7 @@ impl App {
             Mode::Scene => self.scene.center(ui, &p, &mut self.bus),
             Mode::Animate => self.anim.center(ui, &p),
             Mode::Composite => self.comp.center(ui, &p),
+            Mode::Materials => self.materials.center(ui, &p, &mut self.bus),
         });
         self.windows(ctx);
         self.toasts.show(ctx, &p);
@@ -1470,6 +1542,66 @@ mod tests {
             })
             .flatten()
             .collect()
+    }
+
+    #[test]
+    fn seraphina_makes_the_cube_copper_and_builds_water_with_undo() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        run(&mut app, &ctx, 2, 0.0);
+        app.scene.shading = scene::Shading::Shaded;
+        // grey before
+        let grey = app.scene.surface_of("cube1");
+        assert_eq!(grey, obs_rust_bitstream::mesh3d::Surface::grey());
+        // "make the cube copper" → material_assign through the Triad gate
+        app.run_tool_calls(vec![call("material_assign", r#"{"object":"cube1","material":"copper"}"#)]);
+        let lines = action_lines(&app);
+        assert!(lines.iter().any(|(_, l)| l.status == LineStatus::Done && l.text.contains("cube1 is now Copper")), "{:?}", lines.iter().map(|l| &l.1.text).collect::<Vec<_>>());
+        assert_eq!(app.scene.assign.material_of("cube1"), Ok("Copper"));
+        assert!(app.materials.lib.registry.get("Copper").is_ok(), "saved into MaterialRegistry");
+        let cu = app.scene.surface_of("cube1");
+        assert_eq!(cu.metalness, 1.0);
+        // the rendered cube is copper-coloured (red > blue) where it was grey
+        app.scene.selected = None;
+        let f = app.scene.render(320, 200, Color32::BLACK, Color32::from_gray(40), app.pal.accent);
+        let (mut r, mut b, mut n) = (0u64, 0u64, 0u64);
+        for (i, id) in f.ids.iter().enumerate() {
+            if *id >> 16 == 1 {
+                r += f.rgba[i * 4] as u64;
+                b += f.rgba[i * 4 + 2] as u64;
+                n += 1;
+            }
+        }
+        // copper F0 in sRGB is ≈ (250, 209, 194): red/blue ≈ 1.29 (grey is bluish, < 1)
+        assert!(n > 500 && r > b * 115 / 100, "copper cube: n {} r {} b {}", n, r, b);
+        // undo in 3D removes the assignment
+        app.mode = Mode::Scene;
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.scene.assign.material_of("cube1").is_err());
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        assert_eq!(app.scene.assign.material_of("cube1"), Ok("Copper"));
+        // non-mesh targets and junk materials are rejected
+        assert!(app.dispatch(&AppCommand::MaterialAssign { object: Some("key_light".into()), material: "gold".into() }, Origin::User).is_err());
+        assert!(app.dispatch(&AppCommand::MaterialAssign { object: Some("cube1".into()), material: "unobtainium".into() }, Origin::User).is_err());
+        // "build H2O"
+        app.run_tool_calls(vec![call("materials_build", r#"{"formula":"H2O"}"#)]);
+        assert_eq!(app.mode, Mode::Materials);
+        let w = app.materials.built.clone().unwrap();
+        assert_eq!(w.formula, "H2O");
+        assert!(w.analysis.charge_balanced && (w.pbr.ior - 1.333).abs() < 1e-3);
+        app.dispatch(&AppCommand::MaterialsSave { name: None }, Origin::User).unwrap();
+        assert!(app.materials.lib.profiles.contains_key("Water"));
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(!app.materials.lib.profiles.contains_key("Water"), "undo the save");
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.materials.built.is_none(), "undo the build");
+        // the whole AI batch can be undone too
+        let batch = lines[0].0;
+        assert!(app.undo_batch(batch));
+        assert!(app.scene.assign.material_of("cube1").is_err());
+        // Materials mode renders with the inspector and builder populated
+        app.dispatch(&AppCommand::MaterialsPreset { preset: "gold".into() }, Origin::User).unwrap();
+        run(&mut app, &ctx, 3, 10.0);
     }
 
     #[test]

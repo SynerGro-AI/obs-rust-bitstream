@@ -462,6 +462,12 @@ pub struct Profile {
     pub preset: Option<&'static str>,
 }
 
+/// Profile of a preset (measured values), whatever its formula collides with.
+pub fn preset_profile(p: &Preset) -> Profile {
+    let c = parse_formula(p.formula).unwrap_or_default();
+    Profile { name: p.name.to_string(), formula: p.formula.to_string(), analysis: analyze(&c), pbr: p.pbr, env: p.env.clone(), notes: vec![format!("measured values (preset '{}')", p.key)], preset: Some(p.key) }
+}
+
 fn elem_density(z: u32) -> Option<f32> {
     element_data::get(z).and_then(|e| e.density).map(|d| d * 1000.0)
 }

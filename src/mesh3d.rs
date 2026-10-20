@@ -897,6 +897,94 @@ pub fn shade(normal: V3, to_light: V3, to_eye: V3, base: [u8; 3]) -> [u8; 3] {
     [(base[0] as f32 * k).min(255.0) as u8, (base[1] as f32 * k).min(255.0) as u8, (base[2] as f32 * k).min(255.0) as u8]
 }
 
+/// Surface parameters for [`shade_surface`] (linear-RGB base colour).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Surface {
+    pub base: [f32; 3],
+    pub metalness: f32,
+    pub roughness: f32,
+    pub ior: f32,
+}
+
+impl Surface {
+    /// The default untextured grey (dielectric).
+    pub fn grey() -> Self {
+        Self::from_srgb8([168, 172, 182], 0.0, 0.55, 1.5)
+    }
+
+    pub fn from_srgb8(c: [u8; 3], metalness: f32, roughness: f32, ior: f32) -> Self {
+        Self { base: [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2])], metalness, roughness, ior }
+    }
+
+    /// Normal-incidence reflectance per channel: the base colour for metals,
+    /// ((n−1)/(n+1))² for dielectrics, blended by metalness.
+    pub fn f0(&self) -> [f32; 3] {
+        let d = ((self.ior - 1.0) / (self.ior + 1.0)).powi(2);
+        let m = self.metalness.clamp(0.0, 1.0);
+        [d + (self.base[0] - d) * m, d + (self.base[1] - d) * m, d + (self.base[2] - d) * m]
+    }
+
+    /// Blinn-Phong exponent from roughness (Walter et al. 2007 mapping α → 2/α² − 2, α = r²).
+    pub fn shininess(&self) -> f32 {
+        let a = (self.roughness.clamp(0.02, 1.0)).powi(2);
+        (2.0 / (a * a) - 2.0).clamp(1.0, 8192.0)
+    }
+}
+
+pub fn srgb_to_linear(c: u8) -> f32 {
+    let c = c as f32 / 255.0;
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+pub fn linear_to_srgb(c: f32) -> u8 {
+    let c = c.clamp(0.0, 1.0);
+    let s = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 };
+    (s * 255.0).round() as u8
+}
+
+/// Blinn-Phong with Schlick Fresnel, energy-normalised specular
+/// ((s+8)/8π), metals tinting the highlight with their F0 and losing the
+/// diffuse term, plus a constant ambient/environment term so metals don't
+/// render black. Linear in, sRGB out.
+pub fn shade_surface(normal: V3, to_light: V3, to_eye: V3, s: &Surface) -> [u8; 3] {
+    let mut n = normalize(normal);
+    let v = normalize(to_eye);
+    if dot(n, v) < 0.0 {
+        n = scale(n, -1.0);
+    }
+    let l = normalize(to_light);
+    let h = normalize(add(l, v));
+    let ndl = dot(n, l).max(0.0);
+    let ndh = dot(n, h).max(0.0);
+    let vdh = dot(v, h).max(0.0);
+    let ndv = dot(n, v).max(0.0);
+    let f0 = s.f0();
+    let shin = s.shininess();
+    let spec = (shin + 8.0) / (8.0 * std::f32::consts::PI) * ndh.powf(shin) * ndl;
+    let fres = (1.0 - vdh).powi(5);
+    let fres_v = (1.0 - ndv).powi(5);
+    let metal = s.metalness.clamp(0.0, 1.0);
+    const LIGHT: f32 = 2.6;
+    const AMBIENT: f32 = 0.10;
+    let mut out = [0.0f32; 3];
+    for k in 0..3 {
+        let f = f0[k] + (1.0 - f0[k]) * fres;
+        let diffuse = s.base[k] * (1.0 - metal) * (1.0 - f);
+        // ambient: diffuse sky + a crude environment reflection (F at the view angle)
+        let env = (f0[k] + (1.0 - f0[k]) * fres_v) * (0.35 + 0.65 * (1.0 - s.roughness.clamp(0.0, 1.0)));
+        out[k] = AMBIENT * diffuse + AMBIENT * 2.2 * env + LIGHT * (diffuse * ndl / std::f32::consts::PI * 2.0 + f * spec * 0.25) + 0.08 * diffuse * ndv;
+    }
+    // hue-preserving Reinhard shoulder on the max channel, so a bright
+    // copper highlight stays copper instead of clipping to white
+    let m = out[0].max(out[1]).max(out[2]);
+    let k = if m > 0.6 { (0.6 + (m - 0.6) / (1.0 + (m - 0.6) / 0.4)) / m } else { 1.0 };
+    [linear_to_srgb(out[0] * k), linear_to_srgb(out[1] * k), linear_to_srgb(out[2] * k)]
+}
+
 /// Colour + depth + id buffers.
 pub struct Frame3d {
     pub w: usize,
@@ -988,9 +1076,26 @@ impl Frame3d {
         self.ids[y as usize * self.w + x as usize]
     }
 
-    /// Draw a mesh already placed in world space.
+    /// Draw a mesh already placed in world space (flat Lambert).
     #[allow(clippy::too_many_arguments)]
     pub fn mesh(&mut self, cam: &Camera, m: &PolyMesh, base: [u8; 3], light_pos: V3, id_base: u32, wire: Option<[u8; 4]>) {
+        self.mesh_with(cam, m, light_pos, id_base, wire, |n, l, v| shade(n, l, v, base));
+    }
+
+    /// Draw a mesh with a material surface (Blinn-Phong); `tint` mixes the
+    /// shaded colour toward a highlight colour (selection) by `tint.3`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn mesh_surface(&mut self, cam: &Camera, m: &PolyMesh, s: &Surface, light_pos: V3, id_base: u32, wire: Option<[u8; 4]>, tint: Option<([u8; 3], f32)>) {
+        self.mesh_with(cam, m, light_pos, id_base, wire, |n, l, v| {
+            let c = shade_surface(n, l, v, s);
+            match tint {
+                Some((t, k)) => [0, 1, 2].map(|i| (c[i] as f32 + (t[i] as f32 - c[i] as f32) * k).round() as u8),
+                None => c,
+            }
+        });
+    }
+
+    fn mesh_with(&mut self, cam: &Camera, m: &PolyMesh, light_pos: V3, id_base: u32, wire: Option<[u8; 4]>, sh: impl Fn(V3, V3, V3) -> [u8; 3]) {
         let (w, h) = (self.w as f32, self.h as f32);
         let eye = cam.eye();
         let proj: Vec<Option<[f32; 3]>> = m.verts.iter().map(|v| cam.project(*v, w, h)).collect();
@@ -998,7 +1103,7 @@ impl Frame3d {
             let (Some(a), Some(b), Some(c)) = (proj[tri[0]], proj[tri[1]], proj[tri[2]]) else { continue };
             let n = m.face_normal(fi);
             let ctr = m.face_center(fi);
-            let col = shade(n, sub(light_pos, ctr), sub(eye, ctr), base);
+            let col = sh(n, sub(light_pos, ctr), sub(eye, ctr));
             self.tri([a, b, c], col, id_base + fi as u32);
         }
         if let Some(wc) = wire {
@@ -1169,6 +1274,34 @@ mod tests {
             let i = (8 * 20 + 10) * 4;
             assert_eq!(&f.rgba[i..i + 3], &[0, 0, 255]);
             assert_eq!(f.id_at(10.0, 8.0), 2);
+        }
+    }
+
+    #[test]
+    fn blinn_phong_metal_vs_dielectric() {
+        let copper = Surface { base: [0.955, 0.638, 0.538], metalness: 1.0, roughness: 0.3, ior: 1.5 };
+        let red_plastic = Surface { base: [0.8, 0.05, 0.05], metalness: 0.0, roughness: 0.3, ior: 1.5 };
+        let n = [0.0, 1.0, 0.0];
+        // mirror configuration: light and eye symmetric about the normal → peak highlight
+        let (l, v) = ([1.0, 1.0, 0.0], [-1.0, 1.0, 0.0]);
+        let cu = shade_surface(n, l, v, &copper);
+        assert!(cu[0] as i32 > cu[2] as i32 + 20, "metal highlight is tinted: {:?}", cu);
+        let pl = shade_surface(n, l, v, &red_plastic);
+        // dielectric highlight is white: green/blue get a big specular lift
+        let off = shade_surface(n, [1.0, 1.0, 0.0], [0.0, 1.0, 1.0], &red_plastic);
+        assert!(pl[1] as i32 > off[1] as i32 + 40, "white specular on plastic: {:?} vs {:?}", pl, off);
+        // a metal has no diffuse: off-specular it is much darker than at the peak
+        let cu_off = shade_surface(n, [1.0, 1.0, 0.0], [0.0, 1.0, 1.0], &copper);
+        assert!(cu[0] as i32 > cu_off[0] as i32 + 30, "{:?} {:?}", cu, cu_off);
+        // smoother → tighter, brighter peak
+        let rough = Surface { roughness: 0.8, ..copper };
+        assert!(shade_surface(n, l, v, &copper)[1] > shade_surface(n, l, v, &rough)[1]);
+        // Fresnel: water IOR 1.333 has F0 ≈ 0.02, glass 1.5 ≈ 0.04
+        assert!((Surface { ior: 1.333, ..red_plastic }.f0()[0] - 0.0204).abs() < 0.001);
+        assert!((Surface { ior: 1.5, ..red_plastic }.f0()[0] - 0.04).abs() < 0.001);
+        // sRGB round trip
+        for c in [0u8, 1, 50, 128, 200, 255] {
+            assert_eq!(linear_to_srgb(srgb_to_linear(c)), c);
         }
     }
 

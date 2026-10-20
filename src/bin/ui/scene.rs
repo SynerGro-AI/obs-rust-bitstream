@@ -1,4 +1,4 @@
-//! 3D mode: polygon meshes with a z-buffered, flat-shaded software
+//! 3D mode: polygon meshes with a z-buffered, Blinn-Phong-shaded software
 //! viewport (`mesh3d::Frame3d`), Maya-style tools (move / rotate / scale,
 //! extrude, bevel, edge loop, multi-cut, bridge, booleans, quad draw),
 //! joints, lights, cameras and a keyed Y channel. Every edit goes through
@@ -9,7 +9,9 @@ use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::{self, Clock, Track};
 use crate::{ToastKind, Toasts};
 use eframe::egui::{self, Color32, Pos2, Rounding, Stroke, Vec2};
-use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, V3};
+use obs_rust_bitstream::material_assign::MaterialAssign;
+use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, Surface, V3};
+use std::collections::HashMap;
 use obs_rust_bitstream::ui_canvas::{KeyTrack, Raster};
 use obs_rust_bitstream::{Joint, JointHierarchy};
 use std::sync::Arc;
@@ -181,6 +183,10 @@ pub struct SceneState {
     pub quad_pts: Vec<V3>,
     /// Last rendered viewport (for recording / streaming).
     pub frame: Option<Arc<Raster>>,
+    /// Object name → material name (the library's `MaterialAssign`).
+    pub assign: MaterialAssign,
+    /// Material name → shading surface, kept in sync with the library by the app.
+    pub surfaces: HashMap<String, Surface>,
     ids: Vec<u32>,
     ids_w: usize,
     ids_h: usize,
@@ -190,7 +196,6 @@ pub struct SceneState {
     drag_rot: Option<(f32, f32)>,
 }
 
-pub const MESH_GREY: [u8; 3] = [168, 172, 182];
 
 impl SceneState {
     pub fn new() -> Self {
@@ -228,6 +233,8 @@ impl SceneState {
             cut_start: None,
             quad_pts: Vec::new(),
             frame: None,
+            assign: MaterialAssign::new(),
+            surfaces: HashMap::new(),
             ids: Vec::new(),
             ids_w: 0,
             ids_h: 0,
@@ -524,6 +531,29 @@ impl SceneState {
         })
     }
 
+    /// Name of the mesh object a material command targets (default: the selection).
+    pub fn check_mesh_target(&self, object: Option<&str>) -> Result<String, String> {
+        let i = match object {
+            Some(n) => self.objs.iter().position(|o| o.name.eq_ignore_ascii_case(n.trim())).ok_or_else(|| format!("no object named '{}'", n))?,
+            None => self.selected.filter(|i| *i < self.objs.len()).ok_or("select a mesh first")?,
+        };
+        let o = &self.objs[i];
+        if o.mesh.is_none() {
+            return Err(format!("{} is a {:?}, not a mesh; materials go on meshes", o.name, o.kind));
+        }
+        Ok(o.name.clone())
+    }
+
+    pub fn assign_material(&mut self, object: &str, material: &str) -> Result<String, String> {
+        self.assign.assign(object, material).map_err(|e| format!("assign: {:?}", e))?;
+        Ok(format!("{} is now {}", object, material))
+    }
+
+    /// Shading surface of an object (its material, or the default grey).
+    pub fn surface_of(&self, name: &str) -> Surface {
+        self.assign.material_of(name).ok().and_then(|m| self.surfaces.get(m)).copied().unwrap_or_else(Surface::grey)
+    }
+
     pub fn context(&self) -> String {
         let objs: Vec<String> = self
             .objs
@@ -531,7 +561,8 @@ impl SceneState {
             .enumerate()
             .map(|(i, o)| {
                 let mark = if self.selected == Some(i) { "*" } else if self.prev_selected == Some(i) { "+" } else { "" };
-                let mesh = o.mesh.as_ref().map(|m| format!(", {} verts {} faces{}", m.verts.len(), m.faces.len(), if m.is_closed() { " closed" } else { "" })).unwrap_or_default();
+                let mat = self.assign.material_of(&o.name).map(|m| format!(", material {}", m)).unwrap_or_default();
+                let mesh = o.mesh.as_ref().map(|m| format!(", {} verts {} faces{}{}", m.verts.len(), m.faces.len(), if m.is_closed() { " closed" } else { "" }, mat)).unwrap_or_default();
                 format!("{}{} ({:?} at {:.1},{:.1},{:.1} rotY {:.0} scale {:.2}{})", mark, o.name, o.kind, o.pos[0], o.pos[1], o.pos[2], o.rot_y, o.scale, mesh)
             })
             .collect();
@@ -568,11 +599,10 @@ impl SceneState {
             let col = if sel { [214, 214, 220] } else { [212, 212, 216] };
             match (&o.kind, o.world_mesh()) {
                 (_, Some(m)) => {
-                    let base = if sel {
-                        [(MESH_GREY[0] as u16 * 3 / 5 + acc[0] as u16 * 2 / 5) as u8, (MESH_GREY[1] as u16 * 3 / 5 + acc[1] as u16 * 2 / 5) as u8, (MESH_GREY[2] as u16 * 3 / 5 + acc[2] as u16 * 2 / 5) as u8]
-                    } else {
-                        MESH_GREY
-                    };
+                    let surf = self.surface_of(&o.name);
+                    let has_mat = self.assign.material_of(&o.name).is_ok();
+                    // selection: tint toward the accent (lighter for materials so their colour still reads)
+                    let tint = sel.then_some((acc, if has_mat { 0.18 } else { 0.4 }));
                     let wire = if sel {
                         Some([acc[0], acc[1], acc[2], 255])
                     } else if second {
@@ -588,7 +618,7 @@ impl SceneState {
                             f.world_line(&cam, m.verts[u], m.verts[v], wc);
                         }
                     } else {
-                        f.mesh(&cam, &m, base, light, ((i as u32) + 1) << 16, wire);
+                        f.mesh_surface(&cam, &m, &surf, light, ((i as u32) + 1) << 16, wire, tint);
                     }
                 }
                 (Kind::Joint, None) => {
@@ -1004,6 +1034,39 @@ impl SceneState {
                         }
                     });
                 });
+            });
+        }
+        if self.objs[i].mesh.is_some() {
+            let name = self.objs[i].name.clone();
+            let cur = self.assign.material_of(&name).ok().map(|s| s.to_string());
+            theme::card(ui, p, "Material", |ui| {
+                let mut choice: Option<String> = None;
+                egui::ComboBox::from_id_salt("mat_pick").width(ui.available_width() - 8.0).selected_text(cur.clone().unwrap_or_else(|| "Default grey".into())).show_ui(ui, |ui| {
+                    let mut names: Vec<String> = self.surfaces.keys().cloned().collect();
+                    for pr in obs_rust_bitstream::material_pbr::presets() {
+                        if !names.iter().any(|n| n == pr.name) {
+                            names.push(pr.key.to_string());
+                        }
+                    }
+                    for n in names {
+                        if ui.selectable_label(cur.as_deref() == Some(n.as_str()), &n).clicked() {
+                            choice = Some(n);
+                        }
+                    }
+                });
+                if let Some(m) = choice {
+                    bus.push(AppCommand::MaterialAssign { object: Some(name.clone()), material: m });
+                }
+                if let Some(m) = &cur {
+                    if let Some(sf) = self.surfaces.get(m) {
+                        theme::kv(ui, p, "Metalness", format!("{:.2}", sf.metalness));
+                        theme::kv(ui, p, "Roughness", format!("{:.2}", sf.roughness));
+                        theme::kv(ui, p, "IOR", format!("{:.3}", sf.ior));
+                    }
+                }
+                if ui.add(theme::toggle_button(p, "Open Materials Lab", false)).clicked() {
+                    bus.push(AppCommand::SwitchMode { mode: "materials".into() });
+                }
             });
         }
         theme::card(ui, p, "Animation · Y position", |ui| {

@@ -80,6 +80,17 @@ pub enum AppCommand {
     SceneBoolean { op: String, object: Option<String>, with: Option<String> },
     SceneQuadDraw { points: Vec<[f32; 3]> },
     SceneShading { mode: String },
+    // ---- materials lab
+    MaterialsSelect { element: String },
+    MaterialsSearch { query: String },
+    MaterialsAdd { element: String, count: Option<u32> },
+    MaterialsRemove { element: String },
+    MaterialsClear,
+    MaterialsBuild { formula: Option<String> },
+    MaterialsBuildAtom { protons: u32, neutrons: u32, electrons: u32 },
+    MaterialsPreset { preset: String },
+    MaterialsSave { name: Option<String> },
+    MaterialAssign { object: Option<String>, material: String },
     // ---- timeline
     TimelinePlay { playing: Option<bool> },
     TimelineScrub { time: f32 },
@@ -110,7 +121,7 @@ impl AppCommand {
     /// Whether this command changes document state (and so belongs in
     /// an AI action's undo snapshot). View-only commands return false.
     pub fn mutates(&self) -> bool {
-        !matches!(self, AppCommand::Zoom { .. } | AppCommand::Pan { .. } | AppCommand::SetTheme { .. } | AppCommand::TogglePanel { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. })
+        !matches!(self, AppCommand::Zoom { .. } | AppCommand::Pan { .. } | AppCommand::MaterialsSelect { .. } | AppCommand::MaterialsSearch { .. } | AppCommand::SetTheme { .. } | AppCommand::TogglePanel { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. })
     }
 
     /// Commands Seraphina may not run without the user (file writes and
@@ -154,7 +165,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
     let b = |d: &str| json!({ "type": "boolean", "description": d });
     let pts = json!({ "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }, "description": "Image-space [x, y] points" });
     vec![
-        ToolSpec { name: "switch_mode", description: "Switch workspace mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["paint", "composite", "3d", "animate", "stream"] } }), &["mode"]) },
+        ToolSpec { name: "switch_mode", description: "Switch workspace mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["paint", "composite", "3d", "animate", "stream", "materials"] } }), &["mode"]) },
         ToolSpec { name: "set_theme", description: "Dark or light appearance.", params: obj(json!({ "dark": b("true for dark") }), &["dark"]) },
         ToolSpec { name: "toggle_panel", description: "Show or hide a panel.", params: obj(json!({ "panel": { "type": "string", "enum": ["tools", "inspector", "timeline", "assistant", "videogen", "shelf"] }, "visible": b("omit to toggle") }), &["panel"]) },
         ToolSpec { name: "select_tool", description: "Pick a Paint tool.", params: obj(json!({ "tool": { "type": "string", "enum": ["move", "marquee", "lasso", "quick_select", "crop", "healing", "clone", "brush", "eraser", "gradient", "dodge", "burn", "pen", "type", "hand", "zoom", "eyedropper"] } }), &["tool"]) },
@@ -212,6 +223,16 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "scene_boolean", description: "Boolean of two meshes (the result replaces `object`; `with` is removed).", params: obj(json!({ "op": { "type": "string", "enum": ["union", "difference", "intersection"] }, "object": s("object; omit for selected"), "with": s("other mesh; omit for the previously selected one") }), &["op"]) },
         ToolSpec { name: "scene_quad_draw", description: "Add a quad (4 world-space points) to the quad-draw mesh, welding shared corners.", params: obj(json!({ "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }, "minItems": 4, "maxItems": 4 } }), &["points"]) },
         ToolSpec { name: "scene_shading", description: "Viewport display mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["shaded", "wireframe", "shaded_wire"] } }), &["mode"]) },
+        ToolSpec { name: "materials_select", description: "Show an element's detail card in the Materials Lab.", params: obj(json!({ "element": s("symbol, name or atomic number") }), &["element"]) },
+        ToolSpec { name: "materials_search", description: "Filter the periodic table.", params: obj(json!({ "query": s("symbol, name fragment or atomic number; empty clears") }), &["query"]) },
+        ToolSpec { name: "materials_add", description: "Add atoms of an element to the composition builder.", params: obj(json!({ "element": s("symbol, name or atomic number"), "count": n("atoms, default 1") }), &["element"]) },
+        ToolSpec { name: "materials_remove", description: "Remove one atom of an element from the composition builder.", params: obj(json!({ "element": s("symbol, name or atomic number") }), &["element"]) },
+        ToolSpec { name: "materials_clear", description: "Clear the composition builder.", params: obj(json!({}), &[]) },
+        ToolSpec { name: "materials_build", description: "Build a material from a chemical formula (e.g. H2O, Fe2O3, Ca(OH)2, CuZn) or the builder's composition: checks nuclear stability and charge balance, derives PBR and physical properties.", params: obj(json!({ "formula": s("formula; omit to use the builder composition") }), &[]) },
+        ToolSpec { name: "materials_build_atom", description: "Build an element from protons, neutrons and electrons (rejects ions and unstable nuclei).", params: obj(json!({ "protons": n("1-118"), "neutrons": n("neutrons"), "electrons": n("electrons (= protons for neutral)") }), &["protons", "neutrons", "electrons"]) },
+        ToolSpec { name: "materials_preset", description: "Load a measured material preset.", params: obj(json!({ "preset": { "type": "string", "enum": ["gold", "copper", "iron", "aluminum", "silicon", "glass", "water", "graphite", "diamond"] } }), &["preset"]) },
+        ToolSpec { name: "materials_save", description: "Save the built material to the library (MaterialRegistry).", params: obj(json!({ "name": s("name; default the material's name") }), &[]) },
+        ToolSpec { name: "material_assign", description: "Assign a material to a 3D mesh object (e.g. 'make the cube copper'). The material may be a library name, a preset (gold, copper, iron, aluminum, silicon, glass, water, graphite, diamond) or a formula; it is saved to the library if new.", params: obj(json!({ "object": s("object name; omit for selected"), "material": s("library name, preset or formula") }), &["material"]) },
         ToolSpec { name: "timeline_play", description: "Play or pause the current mode's timeline.", params: obj(json!({ "playing": b("omit to toggle") }), &[]) },
         ToolSpec { name: "timeline_scrub", description: "Move the playhead (seconds).", params: obj(json!({ "time": n("seconds") }), &["time"]) },
         ToolSpec { name: "set_keyframe", description: "Key the selected 3D object's Y / composite layer opacity / animate frame at the playhead.", params: obj(json!({}), &[]) },
@@ -294,6 +315,8 @@ mod tests {
         assert!(parse_tool_call("undo", "[1,2]").is_err());
         assert!(parse_tool_call("undo", "{not json").is_err());
         assert!(parse_tool_call("set_stream_key", r#"{"key":"x"}"#).is_err(), "UI-only commands are not tools");
+        assert_eq!(parse_tool_call("material_assign", r#"{"object":"cube1","material":"copper"}"#), Ok(AppCommand::MaterialAssign { object: Some("cube1".into()), material: "copper".into() }));
+        assert_eq!(parse_tool_call("materials_build", r#"{"formula":"H2O"}"#), Ok(AppCommand::MaterialsBuild { formula: Some("H2O".into()) }));
         assert_eq!(parse_tool_call("scene_boolean", r#"{"op":"difference"}"#), Ok(AppCommand::SceneBoolean { op: "difference".into(), object: None, with: None }));
     }
 

@@ -91,7 +91,7 @@ pub fn default_env() -> obs_rust_bitstream::material_env::EnvMeta {
 }
 
 pub fn surface_of(p: &Pbr) -> Surface {
-    Surface { base: p.base_color, metalness: p.metalness, roughness: p.roughness, ior: p.ior }
+    Surface { base: p.base_color, metalness: p.metalness, roughness: p.roughness, ior: p.ior, transmission: p.transmission }
 }
 
 #[derive(Clone)]

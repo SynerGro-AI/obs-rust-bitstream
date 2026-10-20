@@ -289,7 +289,10 @@ impl SceneState {
     pub fn tick(&mut self, dt: f32) {
         self.clock.tick(dt);
         let t = self.clock.time;
-        for o in &mut self.objs {
+        // while a physics simulation exists it owns the transforms; keyframes
+        // resume once the arena is reset
+        let animate = self.arena.is_none();
+        for o in self.objs.iter_mut().filter(|_| animate) {
             if let Some(y) = o.track_y.sample(t) {
                 o.pos[1] = y;
             }
@@ -635,7 +638,11 @@ impl SceneState {
         }
         let light = self.light_pos();
         let acc = [accent.r(), accent.g(), accent.b()];
-        for (i, o) in self.objs.iter().enumerate() {
+        // opaque objects first, transparent (glass, water) last so they blend over them
+        let mut order: Vec<usize> = (0..self.objs.len()).collect();
+        order.sort_by_key(|&i| (self.objs[i].mesh.is_some() && self.surface_of(&self.objs[i].name).transmission > 0.0) as u8);
+        for i in order {
+            let o = &self.objs[i];
             if !o.visible {
                 continue;
             }

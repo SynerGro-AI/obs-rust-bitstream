@@ -315,6 +315,8 @@ pub struct App {
     pub dock_tab: usize,
     pub shelf_tab: usize,
     pub native_frame: bool,
+    /// Repaint at ~10 fps even when idle (SERAPHINA_CONTINUOUS; for screen capture).
+    pub continuous: bool,
     pub toasts: Toasts,
     pub stream: stream::StreamState,
     pub output: output::Output,
@@ -372,6 +374,7 @@ impl App {
             dock_tab: 0,
             shelf_tab: 0,
             native_frame: true,
+            continuous: false,
             stream: stream::StreamState::new(),
             output: output::Output::load(),
             paint,
@@ -1419,6 +1422,42 @@ impl App {
         }
     }
 
+    /// Dispatch a JSON-lines command script (see `--run`). Commands that need
+    /// the user's approval (file writes, network, going live) are skipped.
+    pub fn run_script(&mut self, path: &str) -> usize {
+        let text = match std::fs::read_to_string(path) {
+            Ok(t) => t,
+            Err(e) => {
+                self.toasts.push(ToastKind::Error, &format!("script {}: {}", path, e));
+                return 0;
+            }
+        };
+        let mut n = 0;
+        for (i, line) in text.lines().enumerate() {
+            let l = line.trim();
+            if l.is_empty() || l.starts_with('#') || l.starts_with("//") {
+                continue;
+            }
+            match serde_json::from_str::<AppCommand>(l) {
+                Ok(c) if c.needs_user() => self.toasts.push(ToastKind::Error, &format!("script line {}: {} needs the user; skipped", i + 1, c.name())),
+                Ok(c) => {
+                    match self.dispatch(&c, Origin::User) {
+                        Ok(msg) => {
+                            eprintln!("script line {}: {}: {}", i + 1, c.name(), msg);
+                            n += 1;
+                        }
+                        Err(e) => {
+                            eprintln!("script line {}: {} failed: {}", i + 1, c.name(), e);
+                            self.toasts.push(ToastKind::Error, &format!("script line {}: {}", i + 1, e));
+                        }
+                    }
+                }
+                Err(e) => self.toasts.push(ToastKind::Error, &format!("script line {}: {}", i + 1, e)),
+            }
+        }
+        n
+    }
+
     /// Turn every visible mesh into a rigid body with its material's properties.
     fn arena_build(&mut self) -> Result<(), String> {
         use obs_rust_bitstream::arena::{Arena, Body};
@@ -1646,6 +1685,9 @@ impl App {
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
+        if self.continuous {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         self.process_bus();
         if had || !self.assistant.requests.is_empty() || self.assistant.want_send {
             ctx.request_repaint();
@@ -1662,7 +1704,10 @@ impl eframe::App for App {
 fn main() -> eframe::Result<()> {
     let start_mode = std::env::var("SERAPHINA_MODE").ok();
     // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
-    let open_arg = std::env::args().nth(1).filter(|a| !a.starts_with('-'));
+    let args: Vec<String> = std::env::args().collect();
+    let open_arg = args.get(1).filter(|a| !a.starts_with('-')).cloned();
+    // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
+    let run_script = args.iter().position(|a| a == "--run").and_then(|i| args.get(i + 1)).cloned();
     let start_light = std::env::var("SERAPHINA_LIGHT").is_ok();
     let native = std::env::var("SERAPHINA_NATIVE_FRAME").is_ok();
     let options = eframe::NativeOptions {
@@ -1675,6 +1720,7 @@ fn main() -> eframe::Result<()> {
         Box::new(move |cc| {
             let mut app = App::new(&cc.egui_ctx);
             app.native_frame = native;
+            app.continuous = std::env::var("SERAPHINA_CONTINUOUS").is_ok();
             if let Some(m) = start_mode.as_deref().and_then(Mode::parse) {
                 app.mode = m;
             }
@@ -1683,6 +1729,9 @@ fn main() -> eframe::Result<()> {
             }
             if let Some(path) = open_arg {
                 app.bus.push(AppCommand::OpenFile { path });
+            }
+            if let Some(path) = run_script {
+                app.run_script(&path);
             }
             Ok(Box::new(app))
         }),
@@ -1864,6 +1913,39 @@ mod tests {
         // errors
         assert!(app.dispatch(&AppCommand::ArenaEnv { preset: Some("jupiter".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).is_err());
         assert!(app.dispatch(&AppCommand::ArenaBody { object: Some("key_light".into()), temperature_c: None, heater_w: Some(1.0), fixed: None, velocity: None }, Origin::User).is_err());
+    }
+
+    #[test]
+    fn demo_scripts_run_cleanly() {
+        let ctx = egui::Context::default();
+        for f in ["materials_scene", "arena_moon", "arena_melt"] {
+            let mut app = app_with(&ctx, None);
+            let path = format!("{}/docs/scripts/{}.jsonl", env!("CARGO_MANIFEST_DIR"), f);
+            let lines = std::fs::read_to_string(&path).unwrap().lines().filter(|l| l.trim().starts_with('{')).count();
+            assert_eq!(app.run_script(&path), lines, "{}: every line dispatches", f);
+            run(&mut app, &ctx, 2, 0.0);
+        }
+        let mut app = app_with(&ctx, None);
+        assert_eq!(app.run_script("/nonexistent.jsonl"), 0);
+    }
+
+    #[test]
+    fn physics_owns_keyframed_objects_until_reset() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        // cube1 carries keyframes in the default scene
+        assert!(!app.scene.objs[0].track_y.is_empty());
+        let y0 = app.scene.objs[0].pos[1];
+        app.dispatch(&AppCommand::SceneTransform { object: Some("cube1".into()), translate: Some([0.0, 2.6, 0.0]), rotate_y: None, scale: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaEnv { preset: Some("moon".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(300) }, Origin::User).unwrap();
+        run(&mut app, &ctx, 3, 0.0);
+        // 1.25 s on the Moon: Δy = ½·1.62·1.25² = 1.266 m
+        let y = app.scene.objs[0].pos[1];
+        assert!((y - (y0 + 2.6 - 1.266)).abs() < 0.01, "y {}", y);
+        app.dispatch(&AppCommand::ArenaReset, Origin::User).unwrap();
+        run(&mut app, &ctx, 2, 0.0);
+        assert!(app.scene.arena.is_none());
     }
 
     #[test]

@@ -1,0 +1,14 @@
+# Ice and aluminium heated in Earth air: 30 cm ice cube with a 1 MW heater (melts in ~9 s), 30 cm Al cube with 5 MW (melts in ~14 s), copper for reference
+{"cmd":"scene_delete","object":"cube1"}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[-0.8,-0.4,0],"scale":0.3}
+{"cmd":"material_assign","material":"ice"}
+{"cmd":"arena_body","temperature_c":-5,"heater_w":1000000}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[0.8,-0.4,0],"scale":0.3}
+{"cmd":"material_assign","material":"aluminum"}
+{"cmd":"arena_body","heater_w":5000000}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[0,-0.4,-1.2],"scale":0.3}
+{"cmd":"material_assign","material":"copper"}
+{"cmd":"arena_env","preset":"earth"}

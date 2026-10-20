@@ -228,6 +228,7 @@ pub mod periodic_table;
 pub mod element_data;
 pub mod element_props;
 pub mod material_env;
+pub mod material_pbr;
 pub mod compound;
 pub mod reaction;
 pub mod audio_channel;

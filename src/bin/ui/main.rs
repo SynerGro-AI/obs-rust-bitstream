@@ -524,9 +524,14 @@ impl App {
     /// Run everything the UI queued this frame.
     pub fn process_bus(&mut self) {
         let cmds = std::mem::take(&mut self.bus);
+        if cmds.is_empty() {
+            return;
+        }
         for c in cmds {
             let _ = self.dispatch(&c, Origin::User);
         }
+        // Panels drawn earlier this frame (status bar, learning counter) are now stale.
+        self.ctx.request_repaint();
     }
 
     /// Execute Seraphina's tool calls through the Triad gate.

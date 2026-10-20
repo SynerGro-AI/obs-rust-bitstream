@@ -3,3 +3,4 @@ Cargo.lock
 slice.obsr
 *.txt
 !reports/
+!packaging/windows/README.txt

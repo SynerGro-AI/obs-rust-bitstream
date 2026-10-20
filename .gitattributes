@@ -1,0 +1,8 @@
+# keep test fixtures byte-exact on Windows checkouts (core.autocrlf)
+*.psd binary
+*.jpg binary
+*.png binary
+*.h264 binary
+*.avbn binary
+*.obsr binary
+*.phshp binary

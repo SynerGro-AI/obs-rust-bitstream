@@ -77,6 +77,19 @@ cargo test --features ui --bin ui  # UI smoke tests, headless
 Paint: `B E M C I H Z` tools, `Ctrl+Z` / `Ctrl+Shift+Z`, `Ctrl+0` fit ·
 Animate / 3D / Composite: `Space` play.
 
+## CI: Grok PR review
+
+`.github/workflows/grok-review.yml` runs on every pull request. It installs
+the Grok CLI from `https://x.ai/cli/install.sh` and asks it to review the PR
+for bugs. The job has `contents: read` and `pull-requests: write`
+permissions so it can post the review.
+
+**Required setup:** add the repository secret **`XAI_API_KEY`** under
+GitHub → Settings → Secrets and variables → Actions → New repository
+secret. Without it the review step fails. GitHub does not pass secrets to
+workflows triggered from forks, so pull requests from forks skip the
+authenticated review.
+
 ## Foundation modules (live)
 
 | Module | What it does | Notes |

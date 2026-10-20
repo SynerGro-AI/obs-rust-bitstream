@@ -7,8 +7,6 @@
 
 use eframe::egui;
 
-const FALLBACK_JPG: &[u8] = include_bytes!("../../assets/mountain_spire.jpg");
-
 fn resolve_asset(path: &str) -> std::path::PathBuf {
     let p = std::path::Path::new(path);
     if p.exists() {
@@ -263,9 +261,7 @@ impl eframe::App for TuxedoApp {
                     if self.canvas_texture.is_none() || self.last_action == "recomposite" {
                         let paths: Vec<_> = self.pixel_stack.visible().iter().map(|l| l.path.clone()).collect();
                         if let Some(first) = paths.first() {
-                            let base = image::open(resolve_asset(first))
-                                .or_else(|_| image::load_from_memory(FALLBACK_JPG));
-                            if let Ok(base) = base {
+                            if let Ok(base) = image::open(resolve_asset(first)) {
                                 let mut rgba = base.to_rgba8();
                                 for path in paths.iter().skip(1) {
                                     if let Ok(over) = image::open(resolve_asset(path)) {

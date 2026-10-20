@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug, Default)]
@@ -60,7 +61,8 @@ mod tests {
     fn differential() {
         let mut p = SourceProfiler::new();
         p.start("x");
-        let d = p.end("x").unwrap_or(Duration::ZERO);
-        assert_equal(d.as_nanos() >= 0, true, "source profiler delta");
+        let d = p.end("x");
+        assert_equal(d.is_some(), true, "source profiler delta");
+        assert_equal(d.unwrap_or(Duration::MAX) < Duration::from_secs(60), true, "source profiler delta bounded");
     }
 }

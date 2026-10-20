@@ -7,7 +7,6 @@
 //! Differential: more frames produce a larger byte count.
 
 use crate::live_weights::LiveWeights;
-use crate::obs_encoder_defaults::ObsEncoderDefaults;
 use crate::output_info::OutputInfo;
 use crate::output_service::OutputService;
 use crate::program_stream::ProgramStream;

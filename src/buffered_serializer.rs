@@ -7,6 +7,7 @@
 //! Differential: buffered writes produce the same final bytes
 //! as direct writes.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug)]

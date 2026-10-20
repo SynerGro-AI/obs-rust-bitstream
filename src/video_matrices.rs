@@ -8,6 +8,7 @@
 //!
 //! Differential: known coefficients match the published values.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

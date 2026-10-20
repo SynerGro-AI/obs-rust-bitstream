@@ -6,6 +6,7 @@
 //!
 //! Differential: output size matches the scale factor.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

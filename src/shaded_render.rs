@@ -46,7 +46,7 @@ impl ShadedRender {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::material::Material;
+    
 
     #[test]
     fn shades_red() {

@@ -6,6 +6,7 @@
 //!
 //! Differential: identity * m == m.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 use crate::vec4::Vec4;
 

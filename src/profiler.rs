@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug, Default)]

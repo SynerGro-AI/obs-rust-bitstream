@@ -6,6 +6,7 @@
 //!
 //! Differential: plane count and sizes match the format rules.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 use crate::video_fourcc::VideoFormat;
 

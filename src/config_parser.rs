@@ -8,6 +8,7 @@
 //! Differential: parsed keys match a reference HashMap of the input.
 
 use crate::config::Config;
+#[cfg(test)]
 use crate::diff::assert_equal;
 use crate::cf_lexer::{CfLexer, CfTokenType};
 

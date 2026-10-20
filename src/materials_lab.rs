@@ -7,7 +7,6 @@
 //! Differential: carbon-12 (6p, 6n, 6e) is stable and produces
 //! a material; an unbalanced charge is rejected.
 
-use crate::material::Material;
 use crate::material_registry::{MaterialRegistry, MaterialRegistryError};
 use crate::periodic_table::PeriodicTable;
 use crate::vec3::Vec3;

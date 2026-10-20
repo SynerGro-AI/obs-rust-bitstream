@@ -8,6 +8,7 @@
 //! fall back to defaults exactly as documented.
 
 use std::collections::HashMap;
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug, Default)]

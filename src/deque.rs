@@ -9,6 +9,7 @@
 //! as a reference circular implementation.
 
 use std::collections::VecDeque;
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug, Default)]

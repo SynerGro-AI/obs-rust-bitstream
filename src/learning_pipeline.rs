@@ -13,6 +13,7 @@ use crate::environment::Environment;
 use crate::physics::PhysicsSettings;
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)] // Recorded for replay; only `altitude` is read today.
 pub struct Experience {
     time: f32,
     altitude: f32,

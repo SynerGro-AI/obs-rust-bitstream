@@ -6,6 +6,7 @@
 //!
 //! Differential: center matches (min + max) / 2.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 use crate::vec3::Vec3;
 

@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn weather() {
-        let (r, g, b) = TopicBackground::render("weather");
+        let (r, _g, b) = TopicBackground::render("weather");
         assert!(b > r);
     }
 

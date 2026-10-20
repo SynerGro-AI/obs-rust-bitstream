@@ -7,6 +7,7 @@
 //! Differential: round-trip mul → db → mul is close to original
 //! for normal values.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 pub fn mul_to_db(mul: f32) -> f32 {

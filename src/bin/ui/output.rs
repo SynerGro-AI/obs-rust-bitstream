@@ -250,14 +250,14 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
     let mut push = |xs: &[&str]| a.extend(xs.iter().map(|s| s.to_string()));
     match cfg.source {
         Source::Canvas => {
-            push(&["-thread_queue_size", "64", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{}x{}", w, h), "-framerate", &fps.to_string(), "-i", "pipe:0"]);
+            push(&["-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{}x{}", w, h), "-framerate", &fps.to_string(), "-i", "pipe:0"]);
         }
         Source::Screen => {
             if cfg!(windows) {
-                push(&["-thread_queue_size", "64", "-f", "gdigrab", "-framerate", &fps.to_string(), "-draw_mouse", "1", "-i", "desktop"]);
+                push(&["-f", "gdigrab", "-framerate", &fps.to_string(), "-draw_mouse", "1", "-i", "desktop"]);
             } else {
                 let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into());
-                push(&["-thread_queue_size", "64", "-f", "x11grab", "-framerate", &fps.to_string(), "-draw_mouse", "1", "-i", &display]);
+                push(&["-f", "x11grab", "-framerate", &fps.to_string(), "-draw_mouse", "1", "-i", &display]);
             }
         }
     }
@@ -267,10 +267,10 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
         Audio::Silent => push(&["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]),
         Audio::Device => {
             if cfg!(windows) {
-                push(&["-thread_queue_size", "512", "-f", "dshow", "-i", &format!("audio={}", cfg.audio_device)]);
+                push(&["-f", "dshow", "-i", &format!("audio={}", cfg.audio_device)]);
             } else {
                 let dev = if cfg.audio_device.trim().is_empty() { "default" } else { cfg.audio_device.trim() };
-                push(&["-thread_queue_size", "512", "-f", "pulse", "-i", dev]);
+                push(&["-f", "pulse", "-i", dev]);
             }
         }
     }
@@ -1022,6 +1022,8 @@ mod tests {
         let mut c = OutputConfig { width: 641, height: 359, ..Default::default() };
         let a = build_args(&c, Kind::Record, "/tmp/x.mp4").join(" ");
         assert!(a.contains("-f rawvideo -pix_fmt rgba -s 640x358 -framerate 30 -i pipe:0"), "{}", a);
+        // ffmpeg master (2026) made thread_queue_size muxer-only; as an input option it aborts startup
+        assert!(!a.contains("thread_queue_size"));
         assert!(a.contains("anullsrc") && a.contains("-c:a aac") && a.contains("-shortest"));
         assert!(a.contains("-c:v libx264") && a.contains("yuv420p") && a.ends_with("-movflags +faststart -f mp4 -y /tmp/x.mp4"));
         c.audio = Audio::None;

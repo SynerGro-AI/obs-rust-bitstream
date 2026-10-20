@@ -101,7 +101,12 @@ pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 
 /// Apply palette, type scale and spacing to the context.
 pub fn apply(ctx: &egui::Context, p: &Palette) {
-    let mut style = (*ctx.style()).clone();
+    // Pin the theme: egui's default `ThemePreference::System` would swap in
+    // its stock light style whenever the OS reports a light theme (Windows
+    // default, and Wine), ignoring the app's own palette.
+    let theme = if p.dark { egui::Theme::Dark } else { egui::Theme::Light };
+    ctx.set_theme(theme);
+    let mut style = (*ctx.style_of(theme)).clone();
     let mut v = if p.dark { egui::Visuals::dark() } else { egui::Visuals::light() };
     v.panel_fill = p.panel;
     v.window_fill = p.surface;
@@ -155,7 +160,7 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
         (TextStyle::Monospace, FontId::monospace(12.0)),
     ]
     .into();
-    ctx.set_style(style);
+    ctx.set_style_of(theme, style);
 }
 
 // ---- brand ----------------------------------------------------------------

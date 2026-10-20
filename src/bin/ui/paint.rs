@@ -1587,7 +1587,7 @@ impl PaintState {
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             ui.horizontal(|ui| {
                 let w = (ui.available_width() - 2.0 * SP_SM) / 3.0;
-                if ui.add_sized([w, 24.0], theme::toggle_button(p, "Open", false)).on_hover_text("Images become a new layer; a PSD reads its header").clicked() || enter {
+                if ui.add_sized([w, 24.0], theme::toggle_button(p, "Open", false)).on_hover_text("Images become a new layer; a PSD opens with all of its layers").clicked() || enter {
                     bus.push(AppCommand::OpenFile { path: self.path.clone() });
                 }
                 if ui.add_sized([w, 24.0], theme::toggle_button(p, "Save PSD", false)).on_hover_text("Writes <name>_edit.psd; never overwrites the source").clicked() {

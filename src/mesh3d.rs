@@ -162,6 +162,45 @@ impl PolyMesh {
         !dir.is_empty() && dir.iter().all(|(&(a, b), &c)| c == 1 && dir.get(&(b, a)) == Some(&1))
     }
 
+    /// Insert every vertex that lies on the interior of a face edge into that
+    /// edge, so neighbouring faces share edges exactly (BSP splits leave
+    /// T-junctions). Returns the number of insertions.
+    pub fn fix_t_junctions(&mut self, eps: f32) -> usize {
+        let mut n = 0;
+        for fi in 0..self.faces.len() {
+            let f = self.faces[fi].clone();
+            let mut out = Vec::with_capacity(f.len());
+            for i in 0..f.len() {
+                let (a, b) = (f[i], f[(i + 1) % f.len()]);
+                out.push(a);
+                let (pa, pb) = (self.verts[a], self.verts[b]);
+                let ab = sub(pb, pa);
+                let len2 = dot(ab, ab);
+                if len2 < eps * eps {
+                    continue;
+                }
+                let mut on: Vec<(f32, usize)> = Vec::new();
+                for (vi, &v) in self.verts.iter().enumerate() {
+                    if vi == a || vi == b || f.contains(&vi) {
+                        continue;
+                    }
+                    let t = dot(sub(v, pa), ab) / len2;
+                    if t <= 1e-4 || t >= 1.0 - 1e-4 {
+                        continue;
+                    }
+                    if length(sub(v, add(pa, scale(ab, t)))) < eps {
+                        on.push((t, vi));
+                    }
+                }
+                on.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap_or(std::cmp::Ordering::Equal));
+                n += on.len();
+                out.extend(on.into_iter().map(|(_, v)| v));
+            }
+            self.faces[fi] = out;
+        }
+        n
+    }
+
     /// Signed volume (positive for outward-facing closed meshes).
     pub fn volume(&self) -> f32 {
         let mut v = 0.0;
@@ -786,7 +825,9 @@ pub fn boolean(a: &PolyMesh, b: &PolyMesh, op: BoolOp) -> PolyMesh {
             na.invert();
         }
     }
-    from_polys(na.all_polygons())
+    let mut m = from_polys(na.all_polygons());
+    m.fix_t_junctions(1e-4);
+    m
 }
 
 // ---- software rasterizer --------------------------------------------------------
@@ -1091,6 +1132,12 @@ mod tests {
         // a cylinder drilled through a cube
         let drill = PolyMesh::cylinder(12).transformed(|v| [v[0] * 0.6, v[1] * 2.0, v[2] * 0.6]);
         let holed = boolean(&a, &drill, BoolOp::Difference);
+        assert!(holed.is_closed(), "drilled cube is watertight after T-junction repair");
+        // same-height cylinder: coplanar caps on both ends
+        let flush = boolean(&PolyMesh::cube(), &PolyMesh::cylinder(16).transformed(|v| [v[0] * 0.6, v[1], v[2] * 0.6]), BoolOp::Difference);
+        assert!(flush.is_closed(), "flush difference is watertight");
+        let hole = 0.5 * 16.0 * 0.09 * (std::f32::consts::TAU / 16.0).sin();
+        assert!((flush.volume() - (1.0 - hole)).abs() < 1e-3, "{}", flush.volume());
         let hole = 12.0 / 2.0 * 0.09 * (std::f32::consts::TAU / 12.0).sin();
         assert!(near(holed.volume(), 1.0 - hole, 2e-3), "{}", holed.volume());
         assert_eq!(BoolOp::parse("Subtract"), Some(BoolOp::Difference));

@@ -1391,6 +1391,8 @@ impl eframe::App for App {
 
 fn main() -> eframe::Result<()> {
     let start_mode = std::env::var("SERAPHINA_MODE").ok();
+    // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
+    let open_arg = std::env::args().nth(1).filter(|a| !a.starts_with('-'));
     let start_light = std::env::var("SERAPHINA_LIGHT").is_ok();
     let native = std::env::var("SERAPHINA_NATIVE_FRAME").is_ok();
     let options = eframe::NativeOptions {
@@ -1408,6 +1410,9 @@ fn main() -> eframe::Result<()> {
             }
             if start_light {
                 app.set_dark(false);
+            }
+            if let Some(path) = open_arg {
+                app.bus.push(AppCommand::OpenFile { path });
             }
             Ok(Box::new(app))
         }),

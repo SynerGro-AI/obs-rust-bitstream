@@ -877,7 +877,10 @@ impl Output {
         let ff = self.ffmpeg();
         theme::card(ui, p, "Output · ffmpeg", |ui| {
             match &ff {
-                Ok(path) => theme::kv(ui, p, "ffmpeg", path.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default() + if path.parent().map(|d| d.as_os_str().is_empty()).unwrap_or(true) { "" } else { " ✓" }),
+                Ok(path) => {
+                    theme::kv(ui, p, "ffmpeg", format!("{}  found", ic::CHECK_CIRCLE));
+                    ui.label(theme::muted(p, &path.display().to_string()));
+                }
                 Err(e) => {
                     ui.label(egui::RichText::new("ffmpeg not found").color(p.danger).strong());
                     ui.add(egui::Label::new(theme::muted(p, e)).wrap());
@@ -928,7 +931,7 @@ impl Output {
             if let Some(path) = &self.last_record {
                 ui.label(theme::muted(p, &format!("Last recording: {}", path.display())));
             }
-            theme::kv(ui, p, "RTMP URL", if self.cfg.rtmp_url.trim().is_empty() { "not set".into() } else { self.cfg.rtmp_url.clone() });
+            ui.add(egui::Label::new(theme::muted(p, &format!("RTMP URL: {}", if self.cfg.rtmp_url.trim().is_empty() { "not set" } else { self.cfg.rtmp_url.trim() }))).wrap());
             theme::kv(ui, p, "Stream key", self.masked_key());
             if ui.add(theme::toggle_button(p, "Output settings…", false)).clicked() {
                 *open_settings = true;

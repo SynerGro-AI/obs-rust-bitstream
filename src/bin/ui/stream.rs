@@ -1,5 +1,5 @@
 //! Stream mode: bitstream inspector over the real `bitstream::Reader`,
-//! plus a clearly simulated output (live / record / reconnect) panel.
+//! The real ffmpeg record / live output card lives in `output.rs`.
 
 use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
@@ -7,7 +7,7 @@ use egui_phosphor::regular as ic;
 use crate::{resolve_asset, ToastKind, Toasts};
 use eframe::egui::{self, Color32, Rounding, Stroke, Vec2};
 use obs_rust_bitstream::stream_inspect::{sample_stream, to_binary, CounterMode, StreamInspector};
-use obs_rust_bitstream::Reconnect;
+use obs_rust_bitstream::ui_canvas::Raster;
 
 pub const WIDTHS: [u32; 7] = [1, 2, 3, 4, 5, 8, 16];
 const RUN_LIMIT: usize = 4096;
@@ -18,10 +18,6 @@ pub struct StreamState {
     pub path: String,
     pub width: u32,
     follow: bool,
-    pub live_since: Option<f64>,
-    pub rec_since: Option<f64>,
-    pub reconnect: Reconnect,
-    reconnect_due: Option<f64>,
 }
 
 impl StreamState {
@@ -37,10 +33,6 @@ impl StreamState {
             path: "out.h264".to_string(),
             width: 8,
             follow: true,
-            live_since: None,
-            rec_since: None,
-            reconnect: Reconnect::new(),
-            reconnect_due: None,
         }
     }
 
@@ -78,7 +70,7 @@ impl StreamState {
     }
 
     /// Execute a stream command. `None` = not a stream command.
-    pub fn apply(&mut self, cmd: &AppCommand, now: f64) -> Option<Result<String, String>> {
+    pub fn apply(&mut self, cmd: &AppCommand) -> Option<Result<String, String>> {
         Some(match cmd {
             AppCommand::RunReader { width, reads, wrap } => {
                 if let Some(w) = width {
@@ -111,49 +103,47 @@ impl StreamState {
                 self.follow = true;
                 Ok("reader reset to byte 0".into())
             }
-            AppCommand::SetStreaming { live } => {
-                if *live == self.live_since.is_some() {
-                    return Some(Ok(format!("already {}", if *live { "live" } else { "offline" })));
-                }
-                self.live_since = if *live { Some(now) } else { None };
-                if !*live {
-                    self.reconnect_due = None;
-                }
-                Ok(if *live { "went live (simulated output)".into() } else { "stream ended".into() })
-            }
-            AppCommand::SetRecording { recording } => {
-                if *recording == self.rec_since.is_some() {
-                    return Some(Ok(format!("already {}", if *recording { "recording" } else { "stopped" })));
-                }
-                self.rec_since = if *recording { Some(now) } else { None };
-                Ok(if *recording { "recording started (simulated output)".into() } else { "recording stopped".into() })
-            }
             _ => return None,
         })
     }
 
     pub fn context(&self) -> String {
         let (b, bit) = self.insp.cursor();
-        format!("Stream: source {} ({} bytes), read width {}, counter {}, cursor {}.{}, {} reads, live {}, recording {}", self.source, self.insp.data().len(), self.width, self.insp.mode().label(), b, bit, self.insp.records().len(), self.live_since.is_some(), self.rec_since.is_some())
+        format!("Stream: source {} ({} bytes), read width {}, counter {}, cursor {}.{}, {} reads", self.source, self.insp.data().len(), self.width, self.insp.mode().label(), b, bit, self.insp.records().len())
     }
 
-    pub fn tick(&mut self, now: f64, toasts: &mut Toasts) {
-        if let Some(due) = self.reconnect_due {
-            if now >= due {
-                self.reconnect_due = None;
-                self.reconnect.success();
-                toasts.push(ToastKind::Success, "Simulated reconnect succeeded.");
+    /// The bit view as an image (for recording / streaming Stream mode):
+    /// 16 bytes per row, each bit a 4×4 cell; bytes already read are dimmed.
+    pub fn bit_raster(&self) -> Raster {
+        let data = self.insp.data();
+        let rows = data.len().div_ceil(16).clamp(1, 64);
+        let (w, h) = (16 * 8 * 4, rows * 4);
+        let mut r = Raster::filled(w as u32, h as u32, [16, 16, 20, 255]);
+        let (cur, _) = self.insp.cursor();
+        for (i, b) in data.iter().take(rows * 16).enumerate() {
+            for bit in 0..8 {
+                let on = b >> (7 - bit) & 1 == 1;
+                let c: [u8; 4] = match (on, i < cur) {
+                    (true, false) => [214, 180, 92, 255],
+                    (true, true) => [120, 104, 64, 255],
+                    (false, false) => [44, 46, 54, 255],
+                    (false, true) => [30, 31, 36, 255],
+                };
+                let (x0, y0) = (((i % 16) * 8 + bit) * 4, (i / 16) * 4);
+                for y in y0..y0 + 3 {
+                    for x in x0..x0 + 3 {
+                        let k = (y * w + x) * 4;
+                        r.data[k..k + 4].copy_from_slice(&c);
+                    }
+                }
             }
         }
-    }
-
-    pub fn reconnecting(&self) -> bool {
-        self.reconnect_due.is_some()
+        r
     }
 
     // ---- panels -------------------------------------------------------
 
-    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, now: f64, toasts: &mut Toasts, bus: &mut Vec<AppCommand>) {
+    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts) {
         theme::card(ui, p, "Source", |ui| {
             ui.label(egui::RichText::new(&self.source).color(p.text).strong());
             ui.label(theme::muted(p, &format!("{} bytes", self.insp.data().len())));
@@ -169,39 +159,6 @@ impl StreamState {
                 }
             });
             ui.label(theme::muted(p, "Try out.h264, out.avbn or out.obsr from the repo root."));
-        });
-
-        theme::card(ui, p, "Output · simulated", |ui| {
-            ui.label(theme::muted(p, "No encoder or RTMP output is connected. These controls only drive the status UI."));
-            ui.add_space(SP_XS);
-            let live = self.live_since.is_some();
-            let t = if live { format!("{}  End stream", ic::STOP) } else { format!("{}  Go live", ic::BROADCAST) };
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &t, live)).clicked() {
-                bus.push(AppCommand::SetStreaming { live: !live });
-            }
-            let rec = self.rec_since.is_some();
-            let t = if rec { format!("{}  Stop recording", ic::STOP) } else { format!("{}  Record", ic::RECORD) };
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &t, rec)).clicked() {
-                bus.push(AppCommand::SetRecording { recording: !rec });
-            }
-            ui.add_space(SP_XS);
-            let can_drop = live && !self.reconnecting();
-            if ui.add_enabled(can_drop, theme::toggle_button(p, "Simulate dropped connection", false)).clicked() {
-                if self.reconnect.start() {
-                    let wait = self.reconnect.wait_ms() as f64 / 1000.0;
-                    self.reconnect_due = Some(now + wait);
-                    toasts.push(ToastKind::Warn, &format!("Connection dropped. Retrying in {:.1}s (attempt {}).", wait, self.reconnect.attempts()));
-                } else {
-                    self.live_since = None;
-                    toasts.push(ToastKind::Error, "Reconnect limit reached. Stream ended.");
-                }
-            }
-            theme::kv(ui, p, "Retry delay", format!("{} s", self.reconnect.retry_sec()));
-            theme::kv(ui, p, "Max attempts", format!("{}", self.reconnect.retry_max()));
-            if let Some(due) = self.reconnect_due {
-                theme::kv(ui, p, "Reconnecting in", format!("{:.1} s", (due - now).max(0.0)));
-                ui.ctx().request_repaint();
-            }
         });
     }
 

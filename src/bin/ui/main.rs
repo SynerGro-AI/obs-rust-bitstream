@@ -16,6 +16,7 @@ mod commands;
 mod composite;
 mod llm;
 mod maya;
+mod output;
 mod paint;
 mod prefs;
 mod scene;
@@ -202,8 +203,8 @@ pub struct Snapshot {
     comp_layers: Vec<composite::CompLayer>,
     comp_sel: usize,
     anim_frames: Vec<Raster>,
-    live: Option<f64>,
-    rec: Option<f64>,
+    live: bool,
+    rec: bool,
 }
 
 /// 3D scene state for the general undo history.
@@ -290,6 +291,7 @@ pub struct App {
     pub native_frame: bool,
     pub toasts: Toasts,
     pub stream: stream::StreamState,
+    pub output: output::Output,
     pub paint: paint::PaintState,
     pub scene: scene::SceneState,
     pub anim: animate::AnimState,
@@ -343,6 +345,7 @@ impl App {
             shelf_tab: 0,
             native_frame: true,
             stream: stream::StreamState::new(),
+            output: output::Output::load(),
             paint,
             scene: scene::SceneState::new(),
             anim: animate::AnimState::new(),
@@ -419,7 +422,7 @@ impl App {
             None => "not configured (no key)".into(),
         };
         format!(
-            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
+            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
             self.mode.label(),
             if self.dark { "dark" } else { "light" },
             self.show_tools,
@@ -432,6 +435,7 @@ impl App {
             self.anim.context(),
             self.comp.context(),
             self.stream.context(),
+            self.output.context(),
             vid
         )
     }
@@ -445,8 +449,8 @@ impl App {
             comp_layers: self.comp.layers.clone(),
             comp_sel: self.comp.selected,
             anim_frames: self.anim.frames.clone(),
-            live: self.stream.live_since,
-            rec: self.stream.rec_since,
+            live: self.output.is_live(),
+            rec: self.output.is_recording(),
         }
     }
 
@@ -458,15 +462,22 @@ impl App {
         self.comp.layers = s.comp_layers;
         self.comp.selected = s.comp_sel;
         self.anim.restore(s.anim_frames);
-        self.stream.live_since = s.live;
-        self.stream.rec_since = s.rec;
+        // undoing an AI batch that started output really stops it
+        if !s.live && self.output.is_live() {
+            let _ = self.output.stop_live();
+        }
+        if !s.rec && self.output.is_recording() {
+            if let Err(e) = self.output.stop_record() {
+                self.toasts.push(ToastKind::Error, &e);
+            }
+        }
     }
 
     /// The single entry point for every action in the app.
     pub fn dispatch(&mut self, cmd: &AppCommand, origin: Origin) -> Result<String, String> {
         let now = self.now();
         let recorded = self.record_history(cmd, now);
-        let r = self.dispatch_inner(cmd, now);
+        let r = self.dispatch_inner(cmd);
         match (recorded, &r) {
             (Some(Mode::Scene), Err(_)) => self.scene_hist.cancel(),
             (Some(Mode::Composite), Err(_)) => self.comp_hist.cancel(),
@@ -530,7 +541,7 @@ impl App {
         self.comp.selected = s.selected.min(self.comp.layers.len().saturating_sub(1));
     }
 
-    fn dispatch_inner(&mut self, cmd: &AppCommand, now: f64) -> Result<String, String> {
+    fn dispatch_inner(&mut self, cmd: &AppCommand) -> Result<String, String> {
         use AppCommand as C;
         let r: Result<String, String> = match cmd {
             C::SwitchMode { mode } => match Mode::parse(mode) {
@@ -623,12 +634,43 @@ impl App {
                 self.dock_tab = 1;
                 self.video.stitch(clips.clone())
             }
-            C::RunReader { .. } | C::ResetReader | C::SetStreaming { .. } | C::SetRecording { .. } => {
-                if matches!(cmd, C::RunReader { .. } | C::ResetReader) {
-                    self.mode = Mode::Stream;
-                }
-                self.stream.apply(cmd, now).unwrap_or(Err("unsupported".into()))
+            C::RunReader { .. } | C::ResetReader => {
+                self.mode = Mode::Stream;
+                self.stream.apply(cmd).unwrap_or(Err("unsupported".into()))
             }
+            C::SetStreaming { live } => {
+                if *live {
+                    self.output.start_live()
+                } else {
+                    self.output.stop_live()
+                }
+            }
+            C::SetRecording { recording } => {
+                if *recording {
+                    self.output.start_record(None)
+                } else {
+                    self.output.stop_record()
+                }
+            }
+            C::RetryStream => self.output.retry(),
+            C::SetOutputSource { source } => match output::Source::parse(source) {
+                Some(s) if s != self.output.cfg.source && (self.output.is_live() || self.output.is_recording()) => Err("stop recording and streaming before switching the source".into()),
+                Some(s) => {
+                    self.output.cfg.source = s;
+                    self.output.save_config().map(|_| format!("output source: {}", s.label()))
+                }
+                None => Err(format!("unknown source '{}' (canvas, screen)", source)),
+            },
+            C::SetStreamTarget { url } => {
+                let u = url.trim();
+                if !u.is_empty() && !(u.starts_with("rtmp://") || u.starts_with("rtmps://")) {
+                    Err(format!("'{}' is not an rtmp:// or rtmps:// URL", u))
+                } else {
+                    self.output.cfg.rtmp_url = u.to_string();
+                    self.output.save_config().map(|_| if u.is_empty() { "RTMP URL cleared".to_string() } else { format!("RTMP URL set to {}", u) })
+                }
+            }
+            C::SetStreamKey { key } => self.output.set_key(key, true),
             C::SceneAdd { .. }
             | C::SceneSelect { .. }
             | C::SceneGizmo { .. }
@@ -672,7 +714,7 @@ impl App {
                         AppCommand::SetBrush { hardness: Some(h), .. } => self.assistant.prefs.param_chosen("paint.brush_hardness", h.clamp(0.0, 1.0)),
                         _ => {}
                     }
-                    if matches!(cmd, AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. } | AppCommand::VideoGenerate { .. } | AppCommand::GenerateImage { .. } | AppCommand::VideoExtend { .. } | AppCommand::VideoStitch { .. } | AppCommand::SetStreaming { .. } | AppCommand::SetRecording { .. } | AppCommand::Crop { .. } | AppCommand::ApplyFilter { .. }) {
+                    if matches!(cmd, AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. } | AppCommand::VideoGenerate { .. } | AppCommand::GenerateImage { .. } | AppCommand::VideoExtend { .. } | AppCommand::VideoStitch { .. } | AppCommand::SetStreaming { .. } | AppCommand::SetRecording { .. } | AppCommand::RetryStream | AppCommand::SetStreamKey { .. } | AppCommand::SetStreamTarget { .. } | AppCommand::SetOutputSource { .. } | AppCommand::Crop { .. } | AppCommand::ApplyFilter { .. }) {
                         let mut s = t.clone();
                         if let Some(c) = s.get_mut(0..1) {
                             c.make_ascii_uppercase();
@@ -983,7 +1025,6 @@ impl App {
 
     fn status_bar(&mut self, ctx: &egui::Context) {
         let p = self.pal;
-        let now = self.now();
         egui::TopBottomPanel::bottom("status")
             .exact_height(26.0)
             .frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, 3.0)).stroke(Stroke::new(1.0_f32, p.line)))
@@ -1004,32 +1045,41 @@ impl App {
                         }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let live = self.stream.live_since.is_some();
-                        let rec = self.stream.rec_since.is_some();
-                        if theme::icon_button(ui, &p, ic::GEAR, "Output settings (Stream mode)", false).clicked() {
-                            self.bus.push(AppCommand::SwitchMode { mode: "stream".into() });
+                        let st = self.output.status();
+                        let live = self.output.is_live();
+                        let rec = self.output.is_recording();
+                        if theme::icon_button(ui, &p, ic::GEAR, "Output settings", false).clicked() {
+                            self.show_settings = true;
                         }
                         if (live || rec) && theme::icon_button(ui, &p, ic::STOP, "Stop streaming and recording", false).clicked() {
                             self.bus.push(AppCommand::SetStreaming { live: false });
                             self.bus.push(AppCommand::SetRecording { recording: false });
                         }
-                        let rec_t = match self.stream.rec_since {
-                            Some(s) => format!("REC {}", format_clock((now - s) as u64)),
+                        if live || rec {
+                            if let Some(e) = &st.error {
+                                let short: String = e.chars().take(48).collect();
+                                ui.label(egui::RichText::new(format!("{} {}", ic::WARNING, short)).size(11.5).color(p.danger)).on_hover_text(e.as_str());
+                            }
+                            ui.label(egui::RichText::new(format!("{:.0} fps · {:.0} kb/s · {} dropped", st.fps, st.kbps, st.dropped)).size(11.5).color(p.text));
+                            theme::vdivider(ui, &p, 14.0);
+                        }
+                        let rec_t = match st.recording {
+                            Some(t) => format!("REC {}", format_clock(t as u64)),
                             None => "REC off".into(),
                         };
                         let r = ui.add(egui::Label::new(egui::RichText::new(&rec_t).size(11.5).color(if rec { p.danger } else { p.muted })).sense(egui::Sense::click()));
-                        if r.on_hover_text("Click to toggle recording (simulated output)").clicked() {
+                        if r.on_hover_text("Click to start / stop recording (ffmpeg → MP4)").clicked() {
                             self.bus.push(AppCommand::SetRecording { recording: !rec });
                         }
-                        let (dot, txt) = if self.stream.reconnecting() {
-                            (p.warn, "Reconnecting".to_string())
-                        } else if let Some(s) = self.stream.live_since {
-                            (p.success, format!("Live {}", format_clock((now - s) as u64)))
+                        let (dot, txt) = if let Some(r) = st.reconnect_in {
+                            (p.warn, format!("Reconnecting in {:.0}s", r.ceil()))
+                        } else if let Some(t) = st.live {
+                            (p.success, format!("Live {}", format_clock(t as u64)))
                         } else {
                             (p.muted, "Offline".to_string())
                         };
-                        let r = ui.add(egui::Label::new(egui::RichText::new(&txt).size(11.5).color(if live { p.success } else { p.muted })).sense(egui::Sense::click()));
-                        if r.on_hover_text("Click to go live / end (simulated: no encoder is connected)").clicked() {
+                        let r = ui.add(egui::Label::new(egui::RichText::new(&txt).size(11.5).color(if live { dot } else { p.muted })).sense(egui::Sense::click()));
+                        if r.on_hover_text("Click to go live / end (ffmpeg → RTMP)").clicked() {
                             self.bus.push(AppCommand::SetStreaming { live: !live });
                         }
                         let (dr, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
@@ -1038,9 +1088,6 @@ impl App {
                         ui.label(egui::RichText::new(ic::BROADCAST).size(13.0).color(p.accent));
                         theme::vdivider(ui, &p, 14.0);
                         ui.label(egui::RichText::new(format!("Online learning: {} updates", self.assistant.prefs.bank.updates)).size(11.5).color(p.muted));
-                        if live || rec {
-                            ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-                        }
                     });
                 });
             });
@@ -1086,6 +1133,12 @@ impl App {
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Grok Imagine"));
             theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
+            ui.add_space(SP_SM);
+            if self.output.settings_ui(ui, &p, &mut self.bus) {
+                if let Err(e) = self.output.save_config() {
+                    self.toasts.push(ToastKind::Error, &format!("Couldn't save output settings: {}", e));
+                }
+            }
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Panels"));
             ui.horizontal_wrapped(|ui| {
@@ -1148,13 +1201,49 @@ impl App {
         }
     }
 
+    /// Hand the active mode's composite to the ffmpeg frame pump.
+    fn feed_output(&mut self, ctx: &egui::Context) {
+        if !self.output.wants_frames() {
+            if self.output.is_live() || self.output.is_recording() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(250));
+            }
+            return;
+        }
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(1.0 / self.output.cfg.fps.max(1) as f64));
+        if !self.output.frame_due() {
+            return;
+        }
+        let frame: Option<std::sync::Arc<Raster>> = match self.mode {
+            Mode::Paint => Some(std::sync::Arc::new(self.paint.flattened())),
+            Mode::Composite => Some(std::sync::Arc::new(self.comp.frame(self.comp.clock.time))),
+            Mode::Scene => self.scene.frame.clone(),
+            Mode::Animate => self.anim.frames.get(self.anim.current()).map(|r| {
+                let mut out = Raster::filled(r.width, r.height, [250, 248, 242, 255]);
+                for (d, s) in out.data.chunks_exact_mut(4).zip(r.data.chunks_exact(4)) {
+                    let a = s[3] as u32;
+                    for c in 0..3 {
+                        d[c] = ((s[c] as u32 * a + d[c] as u32 * (255 - a)) / 255) as u8;
+                    }
+                }
+                std::sync::Arc::new(out)
+            }),
+            Mode::Stream => Some(std::sync::Arc::new(self.stream.bit_raster())),
+        };
+        if let Some(f) = frame {
+            self.output.push_frame(f);
+        }
+    }
+
     /// One frame of UI. Separate from eframe so tests can drive it.
     pub fn frame(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
         let dt = self.last_time.map(|t| (now - t) as f32).unwrap_or(0.0).clamp(0.0, 0.1);
         self.last_time = Some(now);
         self.toasts.now = now;
-        self.stream.tick(now, &mut self.toasts);
+        for (k, m) in self.output.tick() {
+            self.toasts.push(k, &m);
+        }
+        self.feed_output(ctx);
         self.scene.tick(dt);
         if self.anim.clock.tick(dt) | self.comp.clock.tick(dt) {
             ctx.request_repaint();
@@ -1251,7 +1340,10 @@ impl App {
                 Mode::Paint => self.paint.tools(ui, &p, &mut self.bus),
                 m => {
                     egui::Frame::none().inner_margin(egui::Margin::same(SP_MD)).show(ui, |ui| match m {
-                        Mode::Stream => self.stream.tools(ui, &p, now, &mut self.toasts, &mut self.bus),
+                        Mode::Stream => {
+                            self.stream.tools(ui, &p, &mut self.toasts);
+                            self.output.panel(ui, &p, &mut self.bus, &mut self.show_settings);
+                        }
                         Mode::Scene => self.scene.tools(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.tools(ui, &p),
                         Mode::Composite => self.comp.tools(ui, &p, &mut self.bus),
@@ -1340,7 +1432,11 @@ mod tests {
 
     fn app_with(ctx: &egui::Context, provider: Option<Arc<dyn llm::LlmProvider>>) -> App {
         let a = assistant_panel::AssistantPanel::with_provider(provider, prefs::Prefs::ephemeral());
-        App::with(ctx, a, videogen::VideoGenPanel::unconfigured())
+        let mut app = App::with(ctx, a, videogen::VideoGenPanel::unconfigured());
+        // never touch the user's saved output settings or stream key
+        let dir = std::env::temp_dir().join(format!("seraphina_app_rec_{}", std::process::id()));
+        app.output = output::Output::new(output::OutputConfig { record_dir: dir.to_string_lossy().into_owned(), width: 320, height: 180, ..Default::default() }, String::new());
+        app
     }
 
     fn call(name: &str, args: &str) -> ToolCall {
@@ -1449,12 +1545,32 @@ mod tests {
         assert!(app.dispatch(&AppCommand::RunReader { width: Some(7), reads: Some(1), wrap: None }, Origin::User).is_err());
         app.dispatch(&AppCommand::ResetReader, Origin::User).unwrap();
         assert_eq!(app.stream.insp.cursor(), (0, 0));
-        app.dispatch(&AppCommand::SetStreaming { live: true }, Origin::User).unwrap();
-        app.dispatch(&AppCommand::SetRecording { recording: true }, Origin::User).unwrap();
-        assert!(app.stream.live_since.is_some() && app.stream.rec_since.is_some());
-        run(&mut app, &ctx, 2, 0.0);
-        app.dispatch(&AppCommand::SetStreaming { live: false }, Origin::User).unwrap();
-        assert!(app.stream.live_since.is_none());
+        // live needs an RTMP URL: a clear error, nothing started
+        let e = app.dispatch(&AppCommand::SetStreaming { live: true }, Origin::User).unwrap_err();
+        assert!(e.contains("RTMP URL"), "{}", e);
+        assert!(app.dispatch(&AppCommand::SetStreamTarget { url: "http://x".into() }, Origin::User).is_err());
+        assert!(!app.output.is_live());
+        if output::find_ffmpeg().is_err() {
+            assert!(app.dispatch(&AppCommand::SetRecording { recording: true }, Origin::User).unwrap_err().contains("ffmpeg was not found"));
+            return;
+        }
+        // real recording of the Stream-mode bit view through the bus
+        app.mode = Mode::Stream;
+        let msg = app.dispatch(&AppCommand::SetRecording { recording: true }, Origin::User).unwrap();
+        assert!(msg.contains("recording 320×180"), "{}", msg);
+        assert!(app.output.is_recording());
+        let t0 = std::time::Instant::now();
+        while t0.elapsed() < std::time::Duration::from_millis(1500) {
+            run(&mut app, &ctx, 1, 0.0);
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        assert!(app.output.status().recording.unwrap() >= 1.4);
+        assert!(app.dispatch(&AppCommand::SetOutputSource { source: "screen".into() }, Origin::User).is_err(), "can't switch source mid-recording");
+        let msg = app.dispatch(&AppCommand::SetRecording { recording: false }, Origin::User).unwrap();
+        assert!(msg.contains("saved"), "{}", msg);
+        let path = app.output.last_record.clone().unwrap();
+        assert!(std::fs::metadata(&path).unwrap().len() > 1000);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
@@ -1792,13 +1908,17 @@ mod tests {
         app.assistant.input = "go live".into();
         app.assistant.want_send = true;
         wait_idle(&mut app, &ctx, 10);
-        assert!(app.stream.live_since.is_none(), "mercy gate must hold irreversible actions");
+        assert!(!app.output.is_live(), "mercy gate must hold irreversible actions");
+        assert!(!app.log.iter().any(|(_, n, _)| n == "set_streaming"));
         let lines = action_lines(&app);
         let k = lines.iter().position(|(_, l)| l.status == LineStatus::NeedsUser).unwrap();
         let (batch, l) = lines[k].clone();
         app.assistant.requests.push(PanelRequest::Run { cmd: l.cmd.unwrap(), batch, line: k });
         run(&mut app, &ctx, 1, 0.0);
-        assert!(app.stream.live_since.is_some());
+        // the approved command reached the real output (no RTMP URL configured in tests)
+        let (_, n, r) = app.log.last().unwrap();
+        assert_eq!(n, "set_streaming");
+        assert!(r.as_ref().unwrap_err().contains("RTMP URL"), "{:?}", r);
     }
 
     /// Live: real xAI tool calling through the bus. Skips without a key.

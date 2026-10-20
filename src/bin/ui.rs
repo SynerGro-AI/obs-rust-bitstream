@@ -188,7 +188,7 @@ impl eframe::App for TuxedoApp {
         // Top bar stays in the central area
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("◆ TUXEDO EDIT").color(gold).size(16.0));
+                ui.label(egui::RichText::new("◆ TUXEDO EDIT").color(gold).size(14.0));
                 ui.label(egui::RichText::new("Professional Creative Suite").color(muted).size(10.0));
                 ui.separator();
                 for (m, label) in [
@@ -248,28 +248,61 @@ impl eframe::App for TuxedoApp {
             .exact_width(220.0)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                // Left: tool catalog
+                ui.spacing_mut().item_spacing.y = 1.0;
                 egui::ScrollArea::vertical().id_salt("left").show(ui, |ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(180.0);
-                    ui.label(egui::RichText::new("◆ PHOTOSHOP").color(gold));
-                    for group in PsToolbar::groups() {
-                        ui.label(egui::RichText::new(group.label().to_uppercase()).color(gold));
-                        for tool in PsToolbar::in_group(*group) {
-                            let text = format!("  {}  {}", tool.name, tool.hotkey);
-                            let color = if self.tool == tool.name { gold } else { fg };
-                            if ui.button(egui::RichText::new(text).color(color)).clicked() {
-                                self.tool = tool.name.to_string();
+                    match self.mode {
+                        Mode::Photoshop => {
+                            ui.label(egui::RichText::new("◆ PHOTOSHOP").color(gold).size(12.0));
+                            for group in PsToolbar::groups() {
+                                ui.collapsing(egui::RichText::new(group.label().to_uppercase()).color(gold), |ui| {
+                                    for tool in PsToolbar::in_group(*group) {
+                                        let text = format!("{}  {}", tool.name, tool.hotkey);
+                                        let color = if self.tool == tool.name { gold } else { fg };
+                                        if ui.selectable_label(self.tool == tool.name, egui::RichText::new(text).color(color)).clicked() {
+                                            self.tool = tool.name.to_string();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        Mode::Maya => {
+                            ui.label(egui::RichText::new("◆ MAYA").color(gold).size(12.0));
+                            for shelf in MayaShelves::shelves() {
+                                ui.collapsing(egui::RichText::new(shelf.label().to_uppercase()).color(gold), |ui| {
+                                    for btn in MayaShelves::on_shelf(*shelf) {
+                                        let color = if self.tool == btn.name { gold } else { fg };
+                                        if ui.selectable_label(self.tool == btn.name, egui::RichText::new(btn.name).color(color)).clicked() {
+                                            self.tool = btn.name.to_string();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        Mode::AfterEffects => {
+                            ui.label(egui::RichText::new("◆ AFTER EFFECTS").color(gold).size(12.0));
+                            for name in ["Razor", "Slip", "Slide", "Trim", "Rate Stretch"] {
+                                if ui.selectable_label(self.tool == name, egui::RichText::new(name).color(if self.tool == name { gold } else { fg })).clicked() {
+                                    self.tool = name.to_string();
+                                }
+                            }
+                        }
+                        Mode::Obs => {
+                            ui.label(egui::RichText::new("◆ OBS").color(gold).size(12.0));
+                            for name in ["Stream", "Record", "Virtual Cam", "Sources"] {
+                                if ui.selectable_label(self.tool == name, egui::RichText::new(name).color(if self.tool == name { gold } else { fg })).clicked() {
+                                    self.tool = name.to_string();
+                                }
+                            }
+                        }
+                        Mode::ToonBoom => {
+                            ui.label(egui::RichText::new("◆ TOONBOOM").color(gold).size(12.0));
+                            for name in ["Brush", "Eraser", "Onion", "Exposure"] {
+                                if ui.selectable_label(self.tool == name, egui::RichText::new(name).color(if self.tool == name { gold } else { fg })).clicked() {
+                                    self.tool = name.to_string();
+                                }
                             }
                         }
                     }
-                });
-                });
-
-                ui.separator();
-
-
                 });
             });
 
@@ -278,7 +311,7 @@ impl eframe::App for TuxedoApp {
             .exact_width(280.0)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.spacing_mut().item_spacing.y = 1.0;
                 // Right: mode-specific panel
                 egui::ScrollArea::vertical().id_salt("right").show(ui, |ui| {
                 ui.vertical(|ui| {

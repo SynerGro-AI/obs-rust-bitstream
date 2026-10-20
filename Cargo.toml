@@ -42,3 +42,8 @@ avfoundation = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-av-foundation", 
 audio = ["dep:cpal"]
 windows = ["dep:windows"]
 
+
+[[bin]]
+name = "ui"
+path = "src/bin/ui.rs"
+required-features = ["ui"]

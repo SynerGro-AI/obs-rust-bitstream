@@ -182,7 +182,7 @@ mod tests {
     fn per_layer_channel() {
         let mut d = Psd::new(4, 4);
         d.add_layer("a", true, 200);
-        let path = std::env::temp_dir().join("ch.psd");
+        let path = std::env::temp_dir().join("ch_per_layer.psd");
         d.save(&path).unwrap();
         let data = fs::read(&path).unwrap();
         let count = data.iter().filter(|&&b| b == 200).count();
@@ -208,7 +208,7 @@ mod tests {
         let mut d = Psd::new(10, 10);
         d.add_layer("a", true, 200);
         d.add_layer("b", true, 100);
-        let path = std::env::temp_dir().join("ch.psd");
+        let path = std::env::temp_dir().join("ch_bytes.psd");
         d.save(&path).unwrap();
         let data = fs::read(&path).unwrap();
         assert_eq!(&data[0..4], b"8BPS");
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn magic() {
         let d = Psd::new(100, 100);
-        let path = env::temp_dir().join("test.psd");
+        let path = env::temp_dir().join("magic.psd");
         d.save(&path).unwrap();
         let data = fs::read(&path).unwrap();
         assert_eq!(&data[0..4], b"8BPS");
@@ -231,7 +231,7 @@ mod tests {
         let mut d = Psd::new(5760, 3240);
         d.add_layer("Mountain Spire", true, 255);
         d.add_layer("Mist Overlay", false, 128);
-        let path = env::temp_dir().join("test.psd");
+        let path = env::temp_dir().join("round_trip.psd");
         d.save(&path).unwrap();
         let loaded = Psd::load(&path).unwrap();
         assert_eq!(loaded.width, 5760);

@@ -196,7 +196,7 @@ mod tests {
         assert!(!e.original());
         assert_eq!(e.require_original(), Err(ExportError::CopyIsNotOriginal));
         assert!(e.protection().contains("not an original render"));
-        assert!(e.keep_protection("stripped").is_err());
+        assert!(e.clone().keep_protection("stripped").is_err());
         assert!(e.keep_protection(PHOTO_PROTECTION).is_ok());
     }
 }

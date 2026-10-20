@@ -16,11 +16,11 @@ Linux and macOS.
 
 | Mode | What is real today | Stubbed / not built yet |
 |------|--------------------|-------------------------|
-| **Paint** | Layers with thumbnails, groups, 8 blend modes, opacity/fill, visibility, masks (density, feather); move, marquee, lasso, quick select (edge-aware), crop, healing, clone stamp, brush, eraser, gradient, dodge, burn, pen (stroke / to selection), type, hand, zoom, eyedropper; undo/redo; PNG export; PSD layer-structure save | PSD pixel data is not decoded (header + layer list only) |
-| **Composite** | Keyframed per-layer opacity with linear interpolation, blend modes, scrubbable timeline, playback | No effects stack, no render-to-file |
-| **3D** | Wireframe viewport (orbit/dolly), cube meshes with extrude and bevel, Select/Move/Rotate/Scale gizmos (Q/W/E/R), outliner, transforms, keyframed Y channel, joints | No materials or renderer. Shelf items such as Edge Loop, Multi-Cut, Bridge, Boolean, IK, skinning, FX and Render are disabled with a "Coming soon" tooltip |
+| **Paint** | Layers with thumbnails, groups, 8 blend modes, opacity/fill, visibility, masks (density, feather); move, marquee, lasso, quick select (edge-aware), crop, healing, clone stamp, brush, eraser, gradient, dodge, burn (spacing-based, no build-up while paused), pen (stroke / to selection), type, hand, zoom, eyedropper; undo/redo; PNG export; **PSD open/save with real per-layer pixels** (8-bit RGB, RLE/raw; visibility, opacity, blend, groups honoured; masks baked into alpha on save) | PSD: no 16-bit, PSB, ZIP-compressed channels, adjustment layers or editable masks on load |
+| **Composite** | Keyframed per-layer opacity with linear interpolation, blend modes, scrubbable timeline, playback, undo/redo (opacity drags coalesce into one step); recordable via Record / Go live | No effects stack |
+| **3D** | Software rasterizer: z-buffered flat/Lambert shading, Shaded / Wireframe / Shaded+wire (keys 5/4/6), selection highlight; orbit/dolly; cube, plane, cylinder, joint, light, camera; extrude, bevel, **Edge Loop, Multi-Cut, Bridge, Boolean union/difference/intersection (BSP, watertight after T-junction repair), Quad Draw**; Select/Move/Rotate/Scale (Q/W/E/R); outliner; keyframed Y; general undo/redo (drags coalesce) | No materials/textures, no smooth shading, no IK/skinning/FX/render-to-file (still "Coming soon") |
 | **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
-| **Stream** | Bitstream inspector driving the real `bitstream::Reader` (1–16-bit reads, No-wrap `usize` vs Wrap `u8` counter, hex view, read log). The status bar shows Live/REC timers | Go live / Record / reconnect are **simulated**: there is no encoder or RTMP output |
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas or screen source, status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Audio device capture (pulse/dshow) is wired but untested |
 | **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Offline without a key: it answers with built-in tips and says so |
 | **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
 
@@ -66,6 +66,28 @@ Linux and macOS.
 | `SERAPHINA_NATIVE_FRAME` | unset | Use the OS title bar instead of the custom one |
 | `SERAPHINA_MODE` / `SERAPHINA_LIGHT` | Paint / dark | Start mode and theme |
 
+### Recording and streaming (ffmpeg)
+
+Record and Go live run `ffmpeg` as a subprocess. The active mode's canvas is
+letterboxed to the output size (default 1280×720, 30 fps) and piped as raw RGBA
+to ffmpeg's stdin; a tick that can't be written in time counts as a dropped
+frame. Alternatively ffmpeg grabs the screen (x11grab / gdigrab). Encoding is
+libx264 (veryfast, zerolatency) + AAC (silent track by default); recordings are
+MP4, live output is FLV over RTMP. `-progress` output drives the status bar.
+A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
+10 attempts); *Retry now* reconnects immediately.
+
+* ffmpeg lookup: `SERAPHINA_FFMPEG`, next to the exe (or `./ffmpeg/bin/`), then
+  `PATH`. Missing ffmpeg gives a clear error with download links.
+* Settings ▸ Output: RTMP URL, stream key, size, fps, bitrate, audio, record
+  folder, reconnect. Saved in `~/.seraphina/studio/output.json`; the key lives
+  alone in `~/.seraphina/studio/stream_key` (0600 on Unix), is shown masked,
+  is scrubbed from ffmpeg error text and never reaches the AI context or logs.
+  `set_stream_key` is UI-only (no AI tool).
+* All of it goes through the AppCommand bus (`set_recording`, `set_streaming`,
+  `retry_stream`, `set_output_source`, `set_stream_target`); starting output
+  from Seraphina needs the user's approval.
+
 ### Run on Windows (recommended)
 
 1. Install Rust with [rustup](https://rustup.rs) (`rustup-init.exe`). Keep the default
@@ -80,7 +102,8 @@ Linux and macOS.
    cargo run --release --features ui --bin ui
    ```
 
-The release build is `target\release\ui.exe`. It looks for `assets\` and the
+For Record / Go live put `ffmpeg.exe` next to the exe or on PATH (see
+`packaging/windows/README.txt`). The release build is `target\release\ui.exe`. It looks for `assets\` and the
 sample streams (`out.h264`, `out.obsr`) in the working directory, next to the
 exe, or up to four folders above it. Copy them alongside the exe to ship it.
 Release builds on Windows use the GUI subsystem, so no console window opens.
@@ -112,6 +135,14 @@ cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
 cargo test                         # library (1700+ tests)
 cargo test --features ui --bin ui  # UI, command bus, AI agent (mock provider), headless
 ```
+
+With `ffmpeg`/`ffprobe` installed, `output::tests` records 5 s to MP4 and checks
+it with ffprobe; with mediamtx at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) it
+also streams to a local RTMP server, confirms receipt with ffprobe, kills the
+server and checks the reconnect. With the Seraphina.AGI CLI on PATH
+(`pip install seraphina-agi`), `real_cli_intents_end_to_end` runs
+remember / recall / triad / help / version (and a live `plan-grok` when a key
+is set).
 
 With `XAI_API_KEY` set, the same command also runs two live smoke tests:
 * `live_xai_tool_calling_smoke` asks Seraphina to "set Mist Overlay opacity

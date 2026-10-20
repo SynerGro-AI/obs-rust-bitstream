@@ -25,7 +25,7 @@ the repo, in `/workspace/obs-ui-shots-v2/ft/`.
 | 16 | Composite scrub to 4.00 s interpolates Gold Grade opacity (45 %) | PASS |
 | 17 | Animate: draw on frame 1, frame 2 shows onion skin | PASS |
 | 18 | Stream: Step, ×8, Run (4105 reads, 32840 bits) | PASS |
-| 19 | Go live + Record → status bar "Live 00:00:04", "REC 00:00:04"; stop → Offline / REC off | PASS (simulated output) |
+| 19 | Go live + Record → status bar "Live 00:00:04", "REC 00:00:04"; stop → Offline / REC off | PASS (v2: simulated output; real ffmpeg output since v3, see below) |
 | 20 | Options bar does not overlap zoom/undo at narrow widths (wraps) | PASS after fix |
 | 21 | Theme toggle dark ↔ light | PASS |
 | 22 | Settings / Account / Shortcuts windows open; Esc closes them | PASS after fix (Esc only closed Shortcuts) |
@@ -33,3 +33,28 @@ the repo, in `/workspace/obs-ui-shots-v2/ft/`.
 | 24 | One-click Undo on the action card restores 20 % and Paint mode, strikes the lines, learning +4 | PASS |
 | 25 | Grok Imagine panel shows "Configured" with a key; Generate video / Image → layer buttons present | PASS (the GUI generate button was not clicked, to avoid a second charge; the provider was live-tested from `cargo test`) |
 | 26 | Wrap counter toggle from the counter segment | NOT VERIFIED IN GUI (the click missed; covered by unit test `stream_commands_and_status`) |
+
+## v3 (2026-10-20, MDT): real output, 3D tools, PSD pixels, Wine
+
+Release build on Xvfb (software GL), screenshots in `/workspace/obs-ui-shots-v3/`.
+
+| # | Check | Result |
+|---|-------|--------|
+| 27 | 3D viewport renders z-buffered flat shading; selected mesh tinted (`3d_shaded.png`) | PASS |
+| 28 | Create Cylinder, set y 0.9 / scale 0.6, select cube, shelf **Difference** → blind hole, inspector "Closed: yes" (`3d_drill_placed.png`, `3d_boolean_difference.png`) | PASS (first try showed "Closed: no"; fixed with T-junction repair) |
+| 29 | Ctrl+Z undoes the boolean (cube + cylinder back) (`3d_undo_boolean.png`) | PASS |
+| 30 | Key 6 Shaded+wire, key 4 Wireframe (`3d_shaded_wire.png`, `3d_wireframe.png`) | PASS |
+| 31 | Edge Loop tool: click a cube edge → loop inserted, 12 verts / 10 faces, closed (`3d_edge_loop.png`) | PASS |
+| 32 | Go live from the status bar → mediamtx logs "publishing … 2 tracks (H264, MPEG-4 Audio)"; status "Live 00:00:04 · 31 fps · 421 kb/s · 3 dropped" (`live_status_tmp.png`) | PASS |
+| 33 | Record + live at once while the 3D timeline plays; external ffprobe of the RTMP URL: h264 1280×720 + aac; frame grabbed from RTMP shows the 3D viewport (`status_bar_rec_live_zoom.png`, `rtmp_received_frame.png`) | PASS (status-bar labels are small; two clicks missed and one hit the wrong label) |
+| 34 | Stream panel "Drop connection (test)" kills ffmpeg → toast "Reconnecting in 2.0s (attempt 1/10)", status bar "Reconnecting in 2s"; mediamtx shows republish 2 s later (`stream_reconnecting.png`) | PASS |
+| 35 | Stop both → recording `recordings/Seraphina_2026-10-20_22-28-46Z.mp4`, 143.9 s, 1280×720 h264 + aac; no ffmpeg left running | PASS |
+| 36 | Stream key shown masked "•••••••• (12 characters)" in the panel (`stream_mode_output_panel.png`) | PASS |
+| 37 | `ui assets/mountain_spire.psd` opens 7 layers + Environment group with real pixels (`psd_real_pixels.png`) | PASS |
+| 38 | Windows exe under Wine 10: starts, all five modes render (`wine_startup.png`, `wine_composite.png`, `wine_3d.png`, `wine_animate.png`, `wine_stream.png`) | PASS after fix: widgets used egui's light style because Wine reports a light system theme (theme now pinned) |
+| 39 | Windows exe under Wine without ffmpeg: clear "ffmpeg not found" + help text (`wine_stream.png`) | PASS |
+| 40 | Windows exe under Wine with Windows ffmpeg.exe: Record + Go live, RTMP verified by ffprobe, 28.9 s MP4 h264+aac (`wine_recording_streaming.png`, `wine_recordings/`) | PASS after fix: `-thread_queue_size` is rejected as an input option by current ffmpeg |
+| 41 | Windows test binary under Wine: `output::tests` 5 passed + RTMP test skipped (no mediamtx); MP4 `record_test_5s_windows_wine.mp4` | PASS |
+
+Wine is a proxy for Windows, not real Windows. The CI `windows-latest` job
+builds and runs the UI tests on real Windows, but this branch has not been pushed, so that job hasn't run.

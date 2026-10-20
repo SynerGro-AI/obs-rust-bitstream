@@ -30,7 +30,9 @@ use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerSta
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1600.0, 1000.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_maximized(true)
+            .with_inner_size([1600.0, 1000.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -182,10 +184,9 @@ impl eframe::App for TuxedoApp {
             ctx.set_visuals(egui::Visuals::light());
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
 
-            // Top bar
+        // Top bar stays in the central area
+        egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("◆ TUXEDO EDIT").color(gold).size(16.0));
                 ui.label(egui::RichText::new("Professional Creative Suite").color(muted).size(10.0));
@@ -240,10 +241,14 @@ impl eframe::App for TuxedoApp {
                     }
                 }
             });
+        });
 
-            ui.separator();
-
-            ui.horizontal(|ui| {
+        // Left tools — reserved width
+        egui::SidePanel::left("tools")
+            .exact_width(220.0)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
                 // Left: tool catalog
                 egui::ScrollArea::vertical().id_salt("left").show(ui, |ui| {
                 ui.vertical(|ui| {
@@ -264,166 +269,16 @@ impl eframe::App for TuxedoApp {
 
                 ui.separator();
 
-                // Center: canvas
-                ui.vertical(|ui| {
-                    // Canvas with real pixels
-                    if self.thumbs.is_empty() {
-                        for layer in &self.pixel_stack.layers {
-                            if let Ok(img) = image::open(resolve_asset(&layer.path)) {
-                                let small = img.resize(32, 32, image::imageops::FilterType::Nearest);
-                                let rgba = small.to_rgba8();
-                                let size = [rgba.width() as usize, rgba.height() as usize];
-                                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                                self.thumbs.push(Some(ctx.load_texture(&layer.name, color, egui::TextureOptions::LINEAR)));
-                            } else {
-                                self.thumbs.push(None);
-                            }
-                        }
-                    }
-                    if self.canvas_texture.is_none() || self.last_action == "recomposite" {
-                        let paths: Vec<_> = self.pixel_stack.visible().iter().map(|l| l.path.clone()).collect();
-                        if let Some(first) = paths.first() {
-                            if let Ok(base) = image::open(resolve_asset(first)) {
-                                let mut rgba = base.to_rgba8();
-                                for path in paths.iter().skip(1) {
-                                    if let Ok(over) = image::open(resolve_asset(path)) {
-                                        let over_rgba = over.to_rgba8();
-                                        for (i, p) in rgba.pixels_mut().enumerate() {
-                                            if let Some(op) = over_rgba.pixels().nth(i) {
-                                                for c in 0..3 {
-                                                    let a = p[c] as f32 / 255.0;
-                                                    let b = op[c] as f32 / 255.0;
-                                                    let mixed = match self.blend.as_str() {
-                                                        "Multiply" => a * b,
-                                                        "Screen" => 1.0 - (1.0 - a) * (1.0 - b),
-                                                        "Overlay" => if a < 0.5 { 2.0 * a * b } else { 1.0 - 2.0 * (1.0 - a) * (1.0 - b) },
-                                                        _ => (a + b) / 2.0,
-                                                    };
-                                                    let feathered = mixed * (1.0 - self.feather / 100.0).max(0.5);
-                                                    let scaled = (feathered * self.density / 100.0 * 255.0) as u8;
-                                                    p[c] = scaled;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                let size = [rgba.width() as usize, rgba.height() as usize];
-                                if !self.burned.is_empty() {
-                                    let count = self.burned.len().min(50);
-                                    for (i, p) in rgba.pixels_mut().enumerate().take(count * 20).step_by(20) {
-                                        p[0] = 201; p[1] = 168; p[2] = 76;
-                                    }
-                                }
-                                if self.filter == "Levels" {
-                                    let lift = WeightBridge::read_or(&self.weights, "filter.levels", 1.2);
-                                    for p in rgba.pixels_mut() {
-                                        p[0] = ((p[0] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
-                                        p[1] = ((p[1] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
-                                        p[2] = ((p[2] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
-                                    }
-                                } else if self.filter == "Curves" {
-                                    for p in rgba.pixels_mut() {
-                                        for c in 0..3 {
-                                            let v = p[c] as f32 / 255.0;
-                                            p[c] = (v * v * 255.0) as u8;
-                                        }
-                                    }
-                                } else if self.filter == "Gaussian" {
-                                    for p in rgba.pixels_mut() {
-                                        let avg = (p[0] as u16 + p[1] as u16 + p[2] as u16) / 3;
-                                        p[0] = avg as u8; p[1] = avg as u8; p[2] = avg as u8;
-                                    }
-                                }
-                                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
-                                self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
-                            }
-                        }
-                        self.last_action.clear();
-                    }
-                    if let Some(tex) = &self.canvas_texture {
-                        let size = tex.size_vec2();
-                        let aspect = size.y / size.x;
-                        let w = ui.available_width().min(600.0);
-                        let h = w * aspect;
-                        let factor = {
-                            let vis = self.pixel_stack.visible();
-                            if vis.is_empty() { 0.0 } else { vis.len() as f32 / self.pixel_stack.layers.len() as f32 }
-                        };
-                        ui.image((tex.id(), egui::vec2(w, h)));
-                        if factor < 1.0 {
-                            let alpha = ((1.0 - factor) * 200.0) as u8;
-                            ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, alpha));
-                        }
-                        let origin = ui.min_rect().min;
-                        for (sx, sy, kind, layer) in &self.strokes {
-                            if layer != &self.selected_layer { continue; }
-                            let p = origin + egui::vec2(*sx as f32, *sy as f32);
-                            let color = match *kind {
-                                "select" => egui::Color32::from_rgb(100, 150, 255),
-                                "crop" => egui::Color32::from_rgb(255, 200, 100),
-                                "heal" => egui::Color32::from_rgb(100, 255, 150),
-                                _ => gold,
-                            };
-                            ui.painter().circle_filled(p, 4.0, color);
-                        }
-                        let resp = ui.interact(ui.min_rect(), ui.id().with("canvas"), egui::Sense::click_and_drag());
-                        if resp.clicked() || resp.dragged() {
-                            if let Some(pos) = resp.interact_pointer_pos() {
-                                let rel = pos - ui.min_rect().min;
-                                let x = (rel.x.max(0.0) as u32).min(w as u32);
-                                let y = (rel.y.max(0.0) as u32).min(h as u32);
-                                let action = ToolDispatch::dispatch(&self.tool, x, y);
-                                self.last_action = format!("{:?}", action);
-                                match action {
-                                    obs_rust_bitstream::CanvasAction::Paint { .. } => {
-                                        self.strokes.push((x, y, "paint", self.selected_layer.clone()));
-                                        self.burned.push((self.selected_layer.clone(), 201, 168, 76));
-                                        let size_w = WeightBridge::read_or(&self.weights, "brush.size", self.brush_size);
-                                        let hard_w = WeightBridge::read_or(&self.weights, "brush.hardness", self.brush_hard / 100.0);
-                                        let dab = (size_w * hard_w / self.brush_space.max(1.0)) as usize;
-                                        for i in 0..dab.max(1) {
-                                            let falloff = 1.0 - (i as f32 / dab.max(1) as f32) * (1.0 - self.brush_hard / 100.0);
-                                            let flow = self.brush_flow / 100.0;
-                                            let v = (201.0 * falloff * flow) as u8;
-                                            self.burned.push((self.selected_layer.clone(), v, (168.0 * falloff * flow) as u8, (76.0 * falloff * flow) as u8));
-                                        }
-                                        self.last_action = "recomposite".to_string();
-                                        self.canvas_texture = None;
-                                    }
-                                    obs_rust_bitstream::CanvasAction::Select { .. } => self.strokes.push((x, y, "select", self.selected_layer.clone())),
-                                    obs_rust_bitstream::CanvasAction::Crop { .. } => self.strokes.push((x, y, "crop", self.selected_layer.clone())),
-                                    obs_rust_bitstream::CanvasAction::Heal { .. } => self.strokes.push((x, y, "heal", self.selected_layer.clone())),
-                                    _ => {}
-                                }
-                            }
-                        }
-                    } else {
-                        ui.label(egui::RichText::new("No image — place assets/ next to the binary or run from the repo root").color(muted));
-                    }
 
-                    ui.separator();
-                    // Maya shelf
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("MAYA").color(gold));
-                        for shelf in MayaShelves::shelves() {
-                            let active = self.maya_shelf == *shelf;
-                            let color = if active { gold } else { fg };
-                            if ui.button(egui::RichText::new(shelf.label()).color(color)).clicked() {
-                                self.maya_shelf = *shelf;
-                            }
-                        }
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        for btn in MayaShelves::on_shelf(self.maya_shelf) {
-                            if ui.button(egui::RichText::new(btn.name).color(fg)).clicked() {
-                                self.tool = btn.name.to_string();
-                            }
-                        }
-                    });
                 });
+            });
 
-                ui.separator();
-
+        // Right layers / properties — reserved width
+        egui::SidePanel::right("layers")
+            .exact_width(280.0)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.spacing_mut().item_spacing.y = 2.0;
                 // Right: mode-specific panel
                 egui::ScrollArea::vertical().id_salt("right").show(ui, |ui| {
                 ui.vertical(|ui| {
@@ -660,9 +515,176 @@ impl eframe::App for TuxedoApp {
                 });
             });
 
-            ui.separator();
+        // Center canvas + Maya shelf
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
+                // Center: canvas
+                ui.vertical(|ui| {
+                    // Canvas with real pixels
+                    if self.thumbs.is_empty() {
+                        for layer in &self.pixel_stack.layers {
+                            if let Ok(img) = image::open(resolve_asset(&layer.path)) {
+                                let small = img.resize(32, 32, image::imageops::FilterType::Nearest);
+                                let rgba = small.to_rgba8();
+                                let size = [rgba.width() as usize, rgba.height() as usize];
+                                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                                self.thumbs.push(Some(ctx.load_texture(&layer.name, color, egui::TextureOptions::LINEAR)));
+                            } else {
+                                self.thumbs.push(None);
+                            }
+                        }
+                    }
+                    if self.canvas_texture.is_none() || self.last_action == "recomposite" {
+                        let paths: Vec<_> = self.pixel_stack.visible().iter().map(|l| l.path.clone()).collect();
+                        if let Some(first) = paths.first() {
+                            if let Ok(base) = image::open(resolve_asset(first)) {
+                                let mut rgba = base.to_rgba8();
+                                for path in paths.iter().skip(1) {
+                                    if let Ok(over) = image::open(resolve_asset(path)) {
+                                        let over_rgba = over.to_rgba8();
+                                        for (i, p) in rgba.pixels_mut().enumerate() {
+                                            if let Some(op) = over_rgba.pixels().nth(i) {
+                                                for c in 0..3 {
+                                                    let a = p[c] as f32 / 255.0;
+                                                    let b = op[c] as f32 / 255.0;
+                                                    let mixed = match self.blend.as_str() {
+                                                        "Multiply" => a * b,
+                                                        "Screen" => 1.0 - (1.0 - a) * (1.0 - b),
+                                                        "Overlay" => if a < 0.5 { 2.0 * a * b } else { 1.0 - 2.0 * (1.0 - a) * (1.0 - b) },
+                                                        _ => (a + b) / 2.0,
+                                                    };
+                                                    let feathered = mixed * (1.0 - self.feather / 100.0).max(0.5);
+                                                    let scaled = (feathered * self.density / 100.0 * 255.0) as u8;
+                                                    p[c] = scaled;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                let size = [rgba.width() as usize, rgba.height() as usize];
+                                if !self.burned.is_empty() {
+                                    let count = self.burned.len().min(50);
+                                    for (i, p) in rgba.pixels_mut().enumerate().take(count * 20).step_by(20) {
+                                        p[0] = 201; p[1] = 168; p[2] = 76;
+                                    }
+                                }
+                                if self.filter == "Levels" {
+                                    let lift = WeightBridge::read_or(&self.weights, "filter.levels", 1.2);
+                                    for p in rgba.pixels_mut() {
+                                        p[0] = ((p[0] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
+                                        p[1] = ((p[1] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
+                                        p[2] = ((p[2] as f32 - 10.0).max(0.0) * lift).min(255.0) as u8;
+                                    }
+                                } else if self.filter == "Curves" {
+                                    for p in rgba.pixels_mut() {
+                                        for c in 0..3 {
+                                            let v = p[c] as f32 / 255.0;
+                                            p[c] = (v * v * 255.0) as u8;
+                                        }
+                                    }
+                                } else if self.filter == "Gaussian" {
+                                    for p in rgba.pixels_mut() {
+                                        let avg = (p[0] as u16 + p[1] as u16 + p[2] as u16) / 3;
+                                        p[0] = avg as u8; p[1] = avg as u8; p[2] = avg as u8;
+                                    }
+                                }
+                                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                                self.canvas_texture = Some(ctx.load_texture("canvas", color, egui::TextureOptions::LINEAR));
+                            }
+                        }
+                        self.last_action.clear();
+                    }
+                    if let Some(tex) = &self.canvas_texture {
+                        let size = tex.size_vec2();
+                        let aspect = size.y / size.x;
+                        let w = ui.available_width().min(600.0);
+                        let h = w * aspect;
+                        let factor = {
+                            let vis = self.pixel_stack.visible();
+                            if vis.is_empty() { 0.0 } else { vis.len() as f32 / self.pixel_stack.layers.len() as f32 }
+                        };
+                        ui.image((tex.id(), egui::vec2(w, h)));
+                        if factor < 1.0 {
+                            let alpha = ((1.0 - factor) * 200.0) as u8;
+                            ui.painter().rect_filled(ui.min_rect(), 0.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, alpha));
+                        }
+                        let origin = ui.min_rect().min;
+                        for (sx, sy, kind, layer) in &self.strokes {
+                            if layer != &self.selected_layer { continue; }
+                            let p = origin + egui::vec2(*sx as f32, *sy as f32);
+                            let color = match *kind {
+                                "select" => egui::Color32::from_rgb(100, 150, 255),
+                                "crop" => egui::Color32::from_rgb(255, 200, 100),
+                                "heal" => egui::Color32::from_rgb(100, 255, 150),
+                                _ => gold,
+                            };
+                            ui.painter().circle_filled(p, 4.0, color);
+                        }
+                        let resp = ui.interact(ui.min_rect(), ui.id().with("canvas"), egui::Sense::click_and_drag());
+                        if resp.clicked() || resp.dragged() {
+                            if let Some(pos) = resp.interact_pointer_pos() {
+                                let rel = pos - ui.min_rect().min;
+                                let x = (rel.x.max(0.0) as u32).min(w as u32);
+                                let y = (rel.y.max(0.0) as u32).min(h as u32);
+                                let action = ToolDispatch::dispatch(&self.tool, x, y);
+                                self.last_action = format!("{:?}", action);
+                                match action {
+                                    obs_rust_bitstream::CanvasAction::Paint { .. } => {
+                                        self.strokes.push((x, y, "paint", self.selected_layer.clone()));
+                                        self.burned.push((self.selected_layer.clone(), 201, 168, 76));
+                                        let size_w = WeightBridge::read_or(&self.weights, "brush.size", self.brush_size);
+                                        let hard_w = WeightBridge::read_or(&self.weights, "brush.hardness", self.brush_hard / 100.0);
+                                        let dab = (size_w * hard_w / self.brush_space.max(1.0)) as usize;
+                                        for i in 0..dab.max(1) {
+                                            let falloff = 1.0 - (i as f32 / dab.max(1) as f32) * (1.0 - self.brush_hard / 100.0);
+                                            let flow = self.brush_flow / 100.0;
+                                            let v = (201.0 * falloff * flow) as u8;
+                                            self.burned.push((self.selected_layer.clone(), v, (168.0 * falloff * flow) as u8, (76.0 * falloff * flow) as u8));
+                                        }
+                                        self.last_action = "recomposite".to_string();
+                                        self.canvas_texture = None;
+                                    }
+                                    obs_rust_bitstream::CanvasAction::Select { .. } => self.strokes.push((x, y, "select", self.selected_layer.clone())),
+                                    obs_rust_bitstream::CanvasAction::Crop { .. } => self.strokes.push((x, y, "crop", self.selected_layer.clone())),
+                                    obs_rust_bitstream::CanvasAction::Heal { .. } => self.strokes.push((x, y, "heal", self.selected_layer.clone())),
+                                    _ => {}
+                                }
+                            }
+                        }
+                    } else {
+                        ui.label(egui::RichText::new("No image — place assets/ next to the binary or run from the repo root").color(muted));
+                    }
 
-            // Bottom status
+                    ui.separator();
+                    // Maya shelf
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("MAYA").color(gold));
+                        for shelf in MayaShelves::shelves() {
+                            let active = self.maya_shelf == *shelf;
+                            let color = if active { gold } else { fg };
+                            if ui.button(egui::RichText::new(shelf.label()).color(color)).clicked() {
+                                self.maya_shelf = *shelf;
+                            }
+                        }
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        for btn in MayaShelves::on_shelf(self.maya_shelf) {
+                            if ui.button(egui::RichText::new(btn.name).color(fg)).clicked() {
+                                self.tool = btn.name.to_string();
+                            }
+                        }
+                    });
+                });
+
+                ui.separator();
+
+
+            // Gold frame
+            let frame = ui.max_rect();
+            ui.painter().rect_stroke(frame.shrink(4.0), 0.0, egui::Stroke::new(1.0, gold));
+
+            ui.separator();
+            // Status
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(format!("Tool: {}  B", self.tool)).color(fg));
                 if !self.last_action.is_empty() {

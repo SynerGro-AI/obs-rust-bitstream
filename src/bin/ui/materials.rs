@@ -60,6 +60,36 @@ impl MatLib {
     }
 }
 
+/// Physical behaviour of a mesh with no material: a generic plastic-like
+/// solid (1000 kg/m³, c 1500 J/(kg·K), no phase change in range).
+pub fn default_env() -> obs_rust_bitstream::material_env::EnvMeta {
+    use obs_rust_bitstream::material_env::{EnvMeta, Flammability, Reactivity};
+    EnvMeta {
+        molar_mass: 100.0,
+        density: Some(1000.0),
+        density_liquid: None,
+        melting_k: None,
+        boiling_k: None,
+        sublimes: false,
+        specific_heat: Some(1500.0),
+        thermal_conductivity: Some(0.2),
+        latent_fusion: None,
+        latent_vaporization: None,
+        electrical_resistivity: None,
+        youngs_gpa: None,
+        emissivity: 0.9,
+        restitution: 0.5,
+        friction_static: 0.5,
+        friction_kinetic: 0.4,
+        flammability: Flammability::NonFlammable,
+        reactivity: Reactivity::Inert,
+        oxidiser: false,
+        radioactive: false,
+        half_life_s: None,
+        notes: vec!["unassigned material: generic 1000 kg/m³ solid"],
+    }
+}
+
 pub fn surface_of(p: &Pbr) -> Surface {
     Surface { base: p.base_color, metalness: p.metalness, roughness: p.roughness, ior: p.ior }
 }

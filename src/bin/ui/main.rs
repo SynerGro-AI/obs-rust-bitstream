@@ -132,6 +132,23 @@ impl Toasts {
 
 // ---- app ----------------------------------------------------------------
 
+/// World bounding-box centre of an object's mesh (its position if it has none).
+fn a_center(o: &scene::Obj) -> [f32; 3] {
+    match o.world_mesh().filter(|m| !m.verts.is_empty()) {
+        Some(m) => {
+            let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+            for v in &m.verts {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(v[k]);
+                    hi[k] = hi[k].max(v[k]);
+                }
+            }
+            [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, (lo[2] + hi[2]) * 0.5]
+        }
+        None => o.pos,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Paint,
@@ -481,6 +498,9 @@ impl App {
         self.comp.layers = s.comp_layers;
         self.comp.selected = s.comp_sel;
         self.scene.assign = s.scene_assign;
+        self.scene.arena = None;
+        self.scene.arena_playing = false;
+        self.scene.arena_start = None;
         self.materials.restore(s.mats);
         self.anim.restore(s.anim_frames);
         // undoing an AI batch that started output really stops it
@@ -516,6 +536,8 @@ impl App {
             C::SceneTransform { object, translate, rotate_y, scale } => Some((Mode::Scene, format!("xf:{}:{}{}{}", target(object), translate.is_some() as u8, rotate_y.is_some() as u8, scale.is_some() as u8))),
             C::SceneAdd { .. } | C::SceneExtrude { .. } | C::SceneBevel { .. } | C::SceneDelete { .. } | C::SceneEdgeLoop { .. } | C::SceneMultiCut { .. } | C::SceneBridge { .. } | C::SceneBoolean { .. } | C::SceneQuadDraw { .. } => Some((Mode::Scene, format!("!{}", cmd.name()))),
             C::MaterialAssign { .. } => Some((Mode::Scene, "!material_assign".into())),
+            // starting a simulation is one undo step (back to the pre-sim scene)
+            C::ArenaPlay { .. } | C::ArenaStep { .. } if self.scene.arena.is_none() => Some((Mode::Scene, "!arena_start".into())),
             C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => Some((Mode::Materials, format!("!{}", cmd.name()))),
             C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Scene => Some((Mode::Scene, format!("!{}", cmd.name()))),
             C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Composite => Some((Mode::Composite, format!("!{}", cmd.name()))),
@@ -551,6 +573,10 @@ impl App {
     fn set_scene_snap(&mut self, s: SceneSnap) {
         self.scene.objs = s.objs;
         self.scene.assign = s.assign;
+        // undo ends any running simulation (its start state is what's restored)
+        self.scene.arena = None;
+        self.scene.arena_playing = false;
+        self.scene.arena_start = None;
         let n = self.scene.objs.len();
         self.scene.selected = s.selected.filter(|i| *i < n);
         self.scene.prev_selected = s.prev.filter(|i| *i < n);
@@ -739,6 +765,107 @@ impl App {
                     },
                     Err(e) => Err(e),
                 }
+            }
+            C::ArenaPlay { playing } => {
+                self.mode = Mode::Scene;
+                let want = playing.unwrap_or(!self.scene.arena_playing);
+                if want && self.scene.arena.is_none() {
+                    if let Err(e) = self.arena_build() {
+                        return Err(e);
+                    }
+                }
+                self.scene.arena_playing = want && self.scene.arena.is_some();
+                Ok(if self.scene.arena_playing { format!("arena playing ({})", self.scene.arena_env.name) } else { "arena paused".into() })
+            }
+            C::ArenaStep { steps } => {
+                self.mode = Mode::Scene;
+                let n = steps.unwrap_or(4).clamp(1, 240 * 600);
+                if self.scene.arena.is_none() {
+                    self.arena_build()?;
+                }
+                self.scene.arena_playing = false;
+                if let Some(a) = &mut self.scene.arena {
+                    for _ in 0..n {
+                        a.step();
+                    }
+                }
+                self.arena_write_back();
+                Ok(format!("stepped {} × 1/240 s (t = {:.3} s)", n, self.scene.arena.as_ref().map(|a| a.time).unwrap_or(0.0)))
+            }
+            C::ArenaReset => {
+                self.mode = Mode::Scene;
+                self.scene.arena_playing = false;
+                self.scene.arena = None;
+                match self.scene.arena_start.take() {
+                    Some(objs) => {
+                        self.scene.objs = objs;
+                        Ok("arena reset".into())
+                    }
+                    None => Ok("arena already reset".into()),
+                }
+            }
+            C::ArenaEnv { preset, gravity, air_density, temperature_c, pressure_kpa, wind } => {
+                self.mode = Mode::Scene;
+                let mut e = match preset {
+                    Some(k) => obs_rust_bitstream::arena::Environment::preset(k).ok_or_else(|| format!("unknown environment '{}' (earth, moon, mars, vacuum, space, custom)", k))?,
+                    None => self.scene.arena_env.clone(),
+                };
+                let custom = gravity.is_some() || air_density.is_some() || temperature_c.is_some() || pressure_kpa.is_some() || wind.is_some();
+                if let Some(g) = gravity {
+                    e.gravity = g.clamp(0.0, 1000.0);
+                }
+                if let Some(r) = air_density {
+                    e.air_density = r.clamp(0.0, 100.0);
+                }
+                if let Some(t) = temperature_c {
+                    e.temperature = (t + 273.15).max(0.0);
+                }
+                if let Some(pk) = pressure_kpa {
+                    e.pressure = (*pk as f64 * 1000.0).max(0.0);
+                }
+                if let Some(w) = wind {
+                    e.wind = *w;
+                }
+                if custom && preset.is_none() && !e.name.ends_with("(custom)") {
+                    e.name = format!("{} (custom)", e.name);
+                }
+                self.scene.arena_env = e.clone();
+                if let Some(a) = &mut self.scene.arena {
+                    a.env = e.clone();
+                }
+                Ok(format!("environment {}: g {:.3} m/s², air {:.3} kg/m³, {:.1} kPa, {:.1} °C", e.name, e.gravity, e.air_density, e.pressure / 1000.0, e.temperature - 273.15))
+            }
+            C::ArenaBody { object, temperature_c, heater_w, fixed, velocity } => {
+                self.mode = Mode::Scene;
+                let name = self.scene.check_mesh_target(object.as_deref())?;
+                let pr = self.scene.phys.entry(name.clone()).or_default();
+                if let Some(t) = temperature_c {
+                    pr.temp = Some((t + 273.15).max(0.0));
+                }
+                if let Some(h) = heater_w {
+                    pr.heater = *h;
+                }
+                if let Some(f) = fixed {
+                    pr.fixed = *f;
+                }
+                if let Some(v) = velocity {
+                    pr.vel = *v;
+                }
+                let pr = *pr;
+                let pressure = self.scene.arena_env.pressure;
+                if let Some(b) = self.scene.arena.as_mut().and_then(|a| a.body_mut(&name)) {
+                    if let Some(t) = pr.temp.filter(|_| temperature_c.is_some()) {
+                        b.temp = t;
+                        b.phase = b.env.phase_at(t, pressure);
+                        b.latent = 0.0;
+                    }
+                    b.heater = pr.heater;
+                    b.fixed = pr.fixed;
+                    if velocity.is_some() {
+                        b.vel = pr.vel;
+                    }
+                }
+                Ok(format!("{}: start {:.1} °C, heater {:.0} W{}", name, pr.temp.map(|t| t - 273.15).unwrap_or(self.scene.arena_env.temperature - 273.15), pr.heater, if pr.fixed { ", pinned" } else { "" }))
             }
             C::MaterialsSelect { .. } | C::MaterialsSearch { .. } | C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => {
                 self.mode = Mode::Materials;
@@ -1292,6 +1419,76 @@ impl App {
         }
     }
 
+    /// Turn every visible mesh into a rigid body with its material's properties.
+    fn arena_build(&mut self) -> Result<(), String> {
+        use obs_rust_bitstream::arena::{Arena, Body};
+        let env = self.scene.arena_env.clone();
+        let mut a = Arena::new(env.clone());
+        for o in self.scene.objs.iter().filter(|o| o.visible) {
+            let Some(m) = o.world_mesh() else { continue };
+            if m.verts.is_empty() {
+                continue;
+            }
+            let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+            for v in &m.verts {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(v[k]);
+                    hi[k] = hi[k].max(v[k]);
+                }
+            }
+            let mut half = [0.0f32; 3];
+            let mut c = [0.0f32; 3];
+            for k in 0..3 {
+                half[k] = ((hi[k] - lo[k]) * 0.5).max(0.005);
+                c[k] = (hi[k] + lo[k]) * 0.5;
+            }
+            let vol = if m.is_closed() { Some(m.volume().abs()).filter(|v| *v > 1e-9) } else { None };
+            let (mat, menv) = match self.scene.assign.material_of(&o.name).ok().and_then(|n| self.materials.lib.profiles.get(n).map(|p| (n.to_string(), p.env.clone()))) {
+                Some(x) => x,
+                None => ("unassigned".to_string(), materials::default_env()),
+            };
+            let pr = self.scene.phys.get(&o.name).copied().unwrap_or_default();
+            let mut b = Body::new(&o.name, &mat, menv, half, c, vol, pr.temp.unwrap_or(env.temperature), env.pressure);
+            b.heater = pr.heater;
+            // open meshes (planes) are static floors
+            b.fixed = pr.fixed || !m.is_closed();
+            b.vel = pr.vel;
+            a.add(b);
+        }
+        if a.bodies.is_empty() {
+            return Err("nothing to simulate: add a visible mesh".into());
+        }
+        self.scene.arena_start = Some(self.scene.objs.clone());
+        self.scene.arena = Some(a);
+        Ok(())
+    }
+
+    /// Copy body positions / shapes back onto the scene objects.
+    fn arena_write_back(&mut self) {
+        let (Some(a), Some(start)) = (&self.scene.arena, &self.scene.arena_start) else { return };
+        for b in &a.bodies {
+            let (Some(o), Some(o0)) = (self.scene.objs.iter_mut().find(|o| o.name == b.name), start.iter().find(|o| o.name == b.name)) else { continue };
+            // offset of the object origin from its bounding-box centre at the start
+            let c0 = a_center(o0);
+            let off = [o0.pos[0] - c0[0], o0.pos[1] - c0[1], o0.pos[2] - c0[2]];
+            let sq = [b.half[0] / b.half0[0].max(1e-6), b.half[1] / b.half0[1].max(1e-6), b.half[2] / b.half0[2].max(1e-6)];
+            o.squash = [o0.squash[0] * sq[0], o0.squash[1] * sq[1], o0.squash[2] * sq[2]];
+            o.pos = [b.pos[0] + off[0] * sq[0], b.pos[1] + off[1] * sq[1], b.pos[2] + off[2] * sq[2]];
+            o.visible = o0.visible && !b.vaporised;
+        }
+    }
+
+    fn tick_arena(&mut self, dt: f32) {
+        if !self.scene.arena_playing {
+            return;
+        }
+        if let Some(a) = &mut self.scene.arena {
+            a.advance(dt);
+        }
+        self.arena_write_back();
+        self.ctx.request_repaint();
+    }
+
     /// The 3D viewport draws with the library's current PBR values.
     fn sync_scene_materials(&mut self) {
         if self.scene.surfaces.len() != self.materials.lib.profiles.len() || self.materials.lib.profiles.iter().any(|(k, pr)| self.scene.surfaces.get(k) != Some(&materials::surface_of(&pr.pbr))) {
@@ -1337,6 +1534,7 @@ impl App {
 
         let p = self.pal;
         self.sync_scene_materials();
+        self.tick_arena(dt);
         self.header(ctx);
         self.status_bar(ctx);
 
@@ -1602,6 +1800,70 @@ mod tests {
         // Materials mode renders with the inspector and builder populated
         app.dispatch(&AppCommand::MaterialsPreset { preset: "gold".into() }, Origin::User).unwrap();
         run(&mut app, &ctx, 3, 10.0);
+    }
+
+    #[test]
+    fn arena_drops_the_copper_cube_on_the_moon_and_melts_ice() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        run(&mut app, &ctx, 2, 0.0);
+        // Seraphina: "drop the copper cube from 3 m on the Moon"
+        app.run_tool_calls(vec![
+            call("material_assign", r#"{"object":"cube1","material":"copper"}"#),
+            call("scene_transform", r#"{"object":"cube1","translate":[0,2.5,0]}"#),
+            call("arena_env", r#"{"preset":"moon"}"#),
+            call("arena_step", r#"{"steps":1}"#),
+        ]);
+        let lines = action_lines(&app);
+        assert!(lines.iter().all(|(_, l)| l.status == LineStatus::Done), "{:?}", lines.iter().map(|l| &l.1.text).collect::<Vec<_>>());
+        let a = app.scene.arena.as_ref().unwrap();
+        let b = a.body("cube1").unwrap();
+        assert_eq!(b.material, "Copper");
+        assert!((b.mass - 8960.0).abs() < 2.0, "1 m³ of copper: {}", b.mass);
+        assert!((a.env.gravity - 1.62).abs() < 1e-6);
+        // fall 2.5 m on the Moon: t = sqrt(2h/g) = 1.757 s
+        let t_land = (2.0 * 2.5f32 / 1.62).sqrt();
+        let steps = (t_land / obs_rust_bitstream::arena::DT) as u32 - 4;
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(steps) }, Origin::User).unwrap();
+        assert!(app.scene.objs[0].pos[1] > 0.5, "still falling just before t_land");
+        // it bounces (copper e = 0.55); bounces take long in lunar gravity
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240) }, Origin::User).unwrap();
+        assert!(app.scene.arena.as_ref().unwrap().body("cube1").unwrap().vel[1] != 0.0 || app.scene.objs[0].pos[1] > 0.51);
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240 * 15) }, Origin::User).unwrap();
+        let y = app.scene.objs[0].pos[1];
+        assert!((y - 0.5).abs() < 0.02, "landed on the ground: {}", y);
+        // play advances with real frame time
+        app.dispatch(&AppCommand::ArenaPlay { playing: Some(true) }, Origin::User).unwrap();
+        let t0 = app.scene.arena.as_ref().unwrap().time;
+        run(&mut app, &ctx, 10, 20.0);
+        assert!(app.scene.arena.as_ref().unwrap().time > t0 + 0.2);
+        // reset puts it back where it was before the simulation
+        app.dispatch(&AppCommand::ArenaReset, Origin::User).unwrap();
+        assert!(app.scene.arena.is_none());
+        assert!((app.scene.objs[0].pos[1] - 3.0).abs() < 1e-4, "{}", app.scene.objs[0].pos[1]);
+        // undo of a simulation start goes back to the pre-sim scene
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240) }, Origin::User).unwrap();
+        assert!(app.scene.objs[0].pos[1] < 3.0);
+        app.mode = Mode::Scene;
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.scene.arena.is_none() && (app.scene.objs[0].pos[1] - 3.0).abs() < 1e-4);
+        // ice melts with a heater: a 10 cm ice cube on Earth
+        app.dispatch(&AppCommand::ArenaEnv { preset: Some("earth".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::SceneAdd { kind: "cube".into() }, Origin::User).unwrap();
+        let ice = app.scene.objs[app.scene.selected.unwrap()].name.clone();
+        app.dispatch(&AppCommand::SceneTransform { object: Some(ice.clone()), translate: Some([3.0, 0.0, 0.0]), rotate_y: None, scale: Some(0.1) }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::MaterialAssign { object: Some(ice.clone()), material: "ice".into() }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaBody { object: Some(ice.clone()), temperature_c: Some(-10.0), heater_w: Some(5000.0), fixed: None, velocity: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240 * 120) }, Origin::User).unwrap();
+        let b = app.scene.arena.as_ref().unwrap().body(&ice).unwrap().clone();
+        assert_eq!(b.phase, obs_rust_bitstream::material_env::Phase::Liquid, "{:?} {} K", b.phase, b.temp);
+        let o = app.scene.objs.iter().find(|o| o.name == ice).unwrap();
+        assert!(o.squash[1] < 0.5 && o.squash[0] > 1.5, "puddle: {:?}", o.squash);
+        assert!(app.scene.arena.as_ref().unwrap().events.log.iter().any(|(_, e)| e.contains("solid → liquid")));
+        assert!(app.app_context().contains("Physics arena"));
+        // errors
+        assert!(app.dispatch(&AppCommand::ArenaEnv { preset: Some("jupiter".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).is_err());
+        assert!(app.dispatch(&AppCommand::ArenaBody { object: Some("key_light".into()), temperature_c: None, heater_w: Some(1.0), fixed: None, velocity: None }, Origin::User).is_err());
     }
 
     #[test]

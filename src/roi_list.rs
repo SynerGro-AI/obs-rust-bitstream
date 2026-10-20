@@ -5,7 +5,9 @@
 //!
 //! Differential: a caps with ROI keeps more regions.
 
-use crate::encoder_caps::{EncoderCaps, CAP_ROI};
+use crate::encoder_caps::EncoderCaps;
+#[cfg(test)]
+use crate::encoder_caps::CAP_ROI;
 use crate::encoder_roi::EncoderRoi;
 use crate::roi_accept::RoiAccept;
 

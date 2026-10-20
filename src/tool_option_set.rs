@@ -7,7 +7,9 @@
 //!
 //! Differential: a larger size reads as a larger value.
 
-use crate::active_tool::{ActiveTool, ToolSource};
+use crate::active_tool::ActiveTool;
+#[cfg(test)]
+use crate::active_tool::ToolSource;
 use crate::tool_options::ToolOptions;
 use std::collections::HashMap;
 

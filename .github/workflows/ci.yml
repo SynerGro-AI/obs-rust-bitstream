@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, ui-polish ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -12,4 +13,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      # ffmpeg + a local RTMP server so the record (ffprobe) and
+      # stream/reconnect tests run instead of skipping.
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg gcc-mingw-w64-x86-64
+      - name: mediamtx
+        run: |
+          mkdir -p "$HOME/opt/mediamtx"
+          curl -fsSL https://github.com/bluenviron/mediamtx/releases/download/v1.9.3/mediamtx_v1.9.3_linux_amd64.tar.gz | tar -xz -C "$HOME/opt/mediamtx"
       - run: cargo test --verbose
+      # UI tests run headless against egui::Context; no display needed.
+      - run: cargo test --features ui --bin ui
+      # The Windows build used for the release zip (mingw cross-compile).
+      - run: cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
+
+  windows-ui:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --features ui --bin ui
+      # ffmpeg-dependent tests skip with a message when ffmpeg isn't on PATH;
+      # the mediamtx RTMP test is Linux-only.
+      - run: cargo test --features ui --bin ui
+      - run: copy target\release\ui.exe SeraphinaStudio.exe
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seraphina-studio-windows
+          path: |
+            SeraphinaStudio.exe
+            packaging/windows/README.txt
+            assets/
+            out.h264
+            out.avbn
+            out.obsr

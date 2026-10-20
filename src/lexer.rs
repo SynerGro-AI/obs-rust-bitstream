@@ -8,6 +8,7 @@
 //! Differential: token sequence matches a reference classification
 //! of the same input.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

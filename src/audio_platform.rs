@@ -7,7 +7,7 @@
 //!
 //! Differential: synthetic produces samples; platform errors.
 
-use crate::audio_capture::{AudioCapture, AudioSamples, SyntheticAudio};
+use crate::audio_capture::{AudioCapture, SyntheticAudio};
 
 /// Open the default microphone for this platform.
 /// On Linux this attempts ALSA. On Windows this attempts WASAPI.

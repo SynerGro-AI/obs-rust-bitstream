@@ -6,6 +6,7 @@
 //!
 //! Differential: distance and normal match the set values.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 use crate::vec3::Vec3;
 

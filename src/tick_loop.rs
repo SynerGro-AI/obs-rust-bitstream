@@ -8,7 +8,6 @@
 
 use crate::audio_source_list::AudioSourceList;
 use crate::capture::Capture;
-use crate::capture_tick::CaptureTick;
 use crate::h264_codec::H264Codec;
 use crate::output_info::OutputInfo;
 use crate::tick_status::TickStatus;

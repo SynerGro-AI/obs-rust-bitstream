@@ -8,6 +8,7 @@
 //! Differential: push / insert / erase sequences produce the same
 //! logical content as a reference Vec.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug, Default)]

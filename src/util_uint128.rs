@@ -5,6 +5,7 @@
 //!
 //! Differential: our results match a direct u128 calculation.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

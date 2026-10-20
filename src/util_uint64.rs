@@ -8,6 +8,7 @@
 //! Differential: safe result equals the mathematical (num * mul) / div
 //! whenever the product fits in u128.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 /// Exact (num * mul) / div using 128-bit intermediate.

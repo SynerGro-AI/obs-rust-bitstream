@@ -6,6 +6,7 @@
 //!
 //! Differential: written bytes equal read bytes.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Debug, Default)]

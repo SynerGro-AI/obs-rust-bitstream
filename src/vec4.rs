@@ -6,6 +6,7 @@
 //!
 //! Differential: add and dot match the mathematical definitions.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

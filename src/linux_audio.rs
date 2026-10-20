@@ -66,7 +66,7 @@ impl LinuxAudio {
 
     /// Open a named ALSA device.
     /// Returns a clear error if /dev/snd is missing.
-    pub fn open_device(device: &str, rate: u32, channels: u16) -> Result<Self, String> {
+    pub fn open_device(_device: &str, rate: u32, channels: u16) -> Result<Self, String> {
         if rate == 0 || channels == 0 {
             return Err("rate and channels must be non-zero".to_string());
         }

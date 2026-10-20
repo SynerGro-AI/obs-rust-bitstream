@@ -14,8 +14,11 @@ use crate::capture::Capture;
 use crate::compositor::Compositor;
 use crate::h264_codec::H264Codec;
 use crate::live_weights::LiveWeights;
-use crate::output_info::{OutputInfo, OUTPUT_AV};
+use crate::output_info::OutputInfo;
+#[cfg(test)]
+use crate::output_info::OUTPUT_AV;
 use crate::pixel_canvas::PixelCanvas;
+#[cfg(test)]
 use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

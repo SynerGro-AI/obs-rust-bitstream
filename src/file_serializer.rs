@@ -9,6 +9,7 @@
 
 use std::fs;
 use std::path::Path;
+#[cfg(test)]
 use crate::diff::assert_equal;
 use crate::serializer::{MemSerializer, Serializer};
 

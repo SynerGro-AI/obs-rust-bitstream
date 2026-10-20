@@ -7,6 +7,7 @@
 //!
 //! Differential: plane sizes match the mathematical 4:2:0 / 4:2:2 rules.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 /// Bytes required for a Y plane of the given width and height.

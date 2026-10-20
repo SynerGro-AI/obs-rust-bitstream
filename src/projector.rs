@@ -9,6 +9,7 @@
 use crate::camera::Camera;
 use crate::matrix4::Matrix4;
 use crate::render_item::RenderItem;
+#[cfg(test)]
 use crate::vec3::Vec3;
 use crate::vec4::Vec4;
 

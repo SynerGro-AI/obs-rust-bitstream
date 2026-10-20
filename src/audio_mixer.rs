@@ -5,6 +5,7 @@
 //!
 //! Differential: sum of identical buffers is 2x.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 /// Apply a linear gain to every sample (f32).

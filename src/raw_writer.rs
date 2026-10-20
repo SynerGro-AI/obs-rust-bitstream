@@ -6,7 +6,7 @@
 //! Differential: write + read-back matches the source frames.
 
 use crate::frame_sequence::{FrameSequence, SequenceError};
-use std::io::{self, Write};
+use std::io::Write;
 
 pub const MAGIC: &[u8; 4] = b"OBSR";
 

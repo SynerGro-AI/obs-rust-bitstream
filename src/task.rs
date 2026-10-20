@@ -7,6 +7,7 @@
 //!
 //! Differential: tasks execute in the order they were queued.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 type Task = Box<dyn FnOnce() + Send>;
@@ -46,7 +47,7 @@ impl TaskQueue {
 
     /// Run the next task if any.
     pub fn run_one(&mut self) -> bool {
-        if let Some(task) = self.tasks.first() {
+        if let Some(_task) = self.tasks.first() {
             // Can't easily pop and call without ownership issues;
             // use swap_remove or just drain one.
             let task = self.tasks.remove(0);

@@ -137,7 +137,7 @@ mod tests {
     fn differential() {
         let mut p = FramePacer::new(0.0);
         assert!(p.ready());
-        let mut limited = FramePacer::new(1000.0);
+        let limited = FramePacer::new(1000.0);
         // first call is always ready because last was just set
         // but elapsed is tiny, so may be false. Just check target.
         assert_eq!(limited.target(), 1000.0);

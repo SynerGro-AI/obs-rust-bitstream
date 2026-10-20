@@ -6,6 +6,7 @@
 //!
 //! Differential: round-trip of finite values is close.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 /// Convert f32 to IEEE-754 half (f16) bits.

@@ -65,10 +65,10 @@ mod tests {
     #[test]
     fn differential() {
         let mut c = Constraint::new(ConstraintKind::Aim);
-        let (dx, dy) = c.aim(0.0, 0.0, 2.0, 0.0);
+        let (dx, _dy) = c.aim(0.0, 0.0, 2.0, 0.0);
         assert_eq!(dx, 2.0);
-        let mut p = Constraint::new(ConstraintKind::Parent);
-        let (x, y) = p.parent(0.0, 0.0, 4.0, 0.0);
+        let p = Constraint::new(ConstraintKind::Parent);
+        let (x, _y) = p.parent(0.0, 0.0, 4.0, 0.0);
         assert_eq!(x, 4.0);
         let mut w = LiveWeights::new();
         w.set("constraint.aim", 0.5).unwrap();

@@ -5,6 +5,7 @@
 //!
 //! Differential: durations match the mathematical 1e9 / rate.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 /// Nanoseconds per audio sample at the given sample rate.

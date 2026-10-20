@@ -1,0 +1,1198 @@
+//! Real recording and live streaming through an `ffmpeg` subprocess.
+//!
+//! * Canvas source: the active mode's composite is letterboxed to the output
+//!   size and piped as raw RGBA frames to ffmpeg's stdin at a fixed rate. A
+//!   tick that cannot be written in time is counted as a dropped frame.
+//! * Screen source: ffmpeg grabs the desktop itself (x11grab / gdigrab).
+//! * Encode: libx264 (veryfast, zerolatency, yuv420p) + AAC (silent track or a
+//!   capture device). Record writes MP4, live pushes FLV to RTMP.
+//! * `-progress pipe:1` is parsed for fps / bitrate / encoded time / drops.
+//! * Live sessions that die are restarted with exponential backoff
+//!   (`obs_rust_bitstream::Reconnect`).
+//!
+//! The stream key lives in its own file (0600 on Unix), is never put in the
+//! AI context, logs or error text (ffmpeg output is scrubbed), and the UI only
+//! shows it masked unless the user asks to reveal it.
+
+use crate::prefs::seraphina_home;
+use crate::ToastKind;
+use obs_rust_bitstream::ui_canvas::Raster;
+use obs_rust_bitstream::Reconnect;
+use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Source {
+    Canvas,
+    Screen,
+}
+
+impl Source {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_lowercase().as_str() {
+            "canvas" | "composite" | "app" => Some(Source::Canvas),
+            "screen" | "desktop" | "display" => Some(Source::Screen),
+            _ => None,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Source::Canvas => "Canvas",
+            Source::Screen => "Screen",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Audio {
+    None,
+    Silent,
+    Device,
+}
+
+impl Audio {
+    pub fn label(self) -> &'static str {
+        match self {
+            Audio::None => "No audio",
+            Audio::Silent => "Silent AAC track",
+            Audio::Device => "Capture device",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct OutputConfig {
+    /// e.g. `rtmp://live.twitch.tv/app` (the key is stored separately).
+    pub rtmp_url: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub video_kbps: u32,
+    pub audio_kbps: u32,
+    pub audio: Audio,
+    /// PulseAudio source (Linux) or DirectShow device name (Windows).
+    pub audio_device: String,
+    pub source: Source,
+    pub record_dir: String,
+    pub retry_sec: u32,
+    pub retry_max: u32,
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
+            rtmp_url: String::new(),
+            width: 1280,
+            height: 720,
+            fps: 30,
+            video_kbps: 4500,
+            audio_kbps: 160,
+            audio: Audio::Silent,
+            audio_device: String::new(),
+            source: Source::Canvas,
+            record_dir: studio_dir().join("recordings").to_string_lossy().into_owned(),
+            retry_sec: 2,
+            retry_max: 10,
+        }
+    }
+}
+
+pub fn studio_dir() -> PathBuf {
+    seraphina_home().join("studio")
+}
+
+impl OutputConfig {
+    pub fn path() -> PathBuf {
+        studio_dir().join("output.json")
+    }
+    pub fn load() -> Self {
+        std::fs::read_to_string(Self::path()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    }
+    pub fn save(&self) -> Result<(), String> {
+        std::fs::create_dir_all(studio_dir()).map_err(|e| e.to_string())?;
+        let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(Self::path(), s).map_err(|e| e.to_string())
+    }
+    /// Even dimensions (yuv420p), sane bounds.
+    pub fn size(&self) -> (u32, u32) {
+        let e = |v: u32| (v.clamp(64, 3840) / 2) * 2;
+        (e(self.width), e(self.height))
+    }
+}
+
+pub fn key_path() -> PathBuf {
+    studio_dir().join("stream_key")
+}
+
+pub fn load_key() -> String {
+    std::fs::read_to_string(key_path()).map(|s| s.trim().to_string()).unwrap_or_default()
+}
+
+pub fn save_key(key: &str) -> Result<(), String> {
+    std::fs::create_dir_all(studio_dir()).map_err(|e| e.to_string())?;
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let mut f = o.open(key_path()).map_err(|e| e.to_string())?;
+    f.write_all(key.trim().as_bytes()).map_err(|e| e.to_string())
+}
+
+/// What the UI shows instead of the key.
+pub fn mask(key: &str) -> String {
+    if key.is_empty() {
+        "not set".into()
+    } else {
+        format!("{} ({} characters)", "•".repeat(8), key.chars().count())
+    }
+}
+
+fn no_window(_cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        _cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+}
+
+const EXE: &str = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+
+pub const FFMPEG_HELP: &str = "ffmpeg was not found. Put ffmpeg next to SeraphinaStudio (ffmpeg.exe in the same folder on Windows), add it to PATH, or set SERAPHINA_FFMPEG to its full path. Windows builds: https://www.gyan.dev/ffmpeg/builds/ or https://github.com/BtbN/FFmpeg-Builds/releases ; Linux: your package manager (apt install ffmpeg).";
+
+/// Candidate locations, in priority order: `SERAPHINA_FFMPEG`, next to the
+/// executable (and `./ffmpeg/bin/`), then every `PATH` entry.
+pub fn ffmpeg_candidates() -> Vec<PathBuf> {
+    let mut v = Vec::new();
+    if let Ok(p) = std::env::var("SERAPHINA_FFMPEG") {
+        if !p.trim().is_empty() {
+            v.push(PathBuf::from(p.trim()));
+        }
+    }
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        v.push(dir.join(EXE));
+        v.push(dir.join("ffmpeg").join("bin").join(EXE));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        for d in std::env::split_paths(&path) {
+            v.push(d.join(EXE));
+        }
+    }
+    v
+}
+
+/// Find a working ffmpeg (it must answer `-version`).
+pub fn find_ffmpeg() -> Result<PathBuf, String> {
+    find_ffmpeg_in(ffmpeg_candidates())
+}
+
+pub fn find_ffmpeg_in(candidates: Vec<PathBuf>) -> Result<PathBuf, String> {
+    for c in candidates {
+        if !c.is_file() {
+            continue;
+        }
+        let mut cmd = Command::new(&c);
+        cmd.arg("-version").stdin(Stdio::null()).stderr(Stdio::null());
+        no_window(&mut cmd);
+        if let Ok(o) = cmd.output() {
+            if o.status.success() && String::from_utf8_lossy(&o.stdout).starts_with("ffmpeg version") {
+                return Ok(c);
+            }
+        }
+    }
+    Err(FFMPEG_HELP.into())
+}
+
+/// `ffprobe` sitting next to a given ffmpeg (falls back to PATH lookup).
+#[cfg(test)]
+pub fn ffprobe_near(ffmpeg: &Path) -> PathBuf {
+    let name = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
+    let p = ffmpeg.with_file_name(name);
+    if p.is_file() {
+        p
+    } else {
+        PathBuf::from(name)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Kind {
+    Record,
+    Live,
+}
+
+/// Join an RTMP base URL and a stream key.
+pub fn rtmp_target(url: &str, key: &str) -> String {
+    let u = url.trim().trim_end_matches('/');
+    if key.trim().is_empty() {
+        u.to_string()
+    } else {
+        format!("{}/{}", u, key.trim())
+    }
+}
+
+/// Full ffmpeg argument list for a session.
+pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
+    let (w, h) = cfg.size();
+    let fps = cfg.fps.clamp(1, 120);
+    let mut a: Vec<String> = ["-hide_banner", "-loglevel", "warning", "-nostats", "-progress", "pipe:1"].iter().map(|s| s.to_string()).collect();
+    let mut push = |xs: &[&str]| a.extend(xs.iter().map(|s| s.to_string()));
+    match cfg.source {
+        Source::Canvas => {
+            push(&["-f", "rawvideo", "-pix_fmt", "rgba", "-s", &format!("{}x{}", w, h), "-framerate", &fps.to_string(), "-i", "pipe:0"]);
+        }
+        Source::Screen => {
+            if cfg!(windows) {
+                push(&["-f", "gdigrab", "-framerate", &fps.to_string(), "-draw_mouse", "1", "-i", "desktop"]);
+            } else {
+                let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into());
+                push(&["-f", "x11grab", "-framerate", &fps.to_string(), "-draw_mouse", "1", "-i", &display]);
+            }
+        }
+    }
+    let has_audio = cfg.audio != Audio::None;
+    match cfg.audio {
+        Audio::None => {}
+        Audio::Silent => push(&["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]),
+        Audio::Device => {
+            if cfg!(windows) {
+                push(&["-f", "dshow", "-i", &format!("audio={}", cfg.audio_device)]);
+            } else {
+                let dev = if cfg.audio_device.trim().is_empty() { "default" } else { cfg.audio_device.trim() };
+                push(&["-f", "pulse", "-i", dev]);
+            }
+        }
+    }
+    push(&["-map", "0:v"]);
+    if has_audio {
+        push(&["-map", "1:a"]);
+    }
+    if cfg.source == Source::Screen {
+        push(&["-vf", &format!("scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2", w = w, h = h)]);
+    }
+    let kb = cfg.video_kbps.clamp(200, 50_000);
+    push(&["-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-pix_fmt", "yuv420p", "-b:v", &format!("{}k", kb), "-maxrate", &format!("{}k", kb), "-bufsize", &format!("{}k", kb * 2), "-g", &(fps * 2).to_string()]);
+    if has_audio {
+        push(&["-c:a", "aac", "-b:a", &format!("{}k", cfg.audio_kbps.clamp(32, 512)), "-ar", "48000"]);
+        if cfg.source == Source::Canvas {
+            push(&["-shortest"]);
+        }
+    }
+    match kind {
+        Kind::Record => push(&["-movflags", "+faststart", "-f", "mp4", "-y", target]),
+        Kind::Live => push(&["-f", "flv", target]),
+    }
+    a
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Stats {
+    /// Frames written into ffmpeg's stdin.
+    pub frames_in: u64,
+    /// Ticks skipped because the pipe/encoder was behind.
+    pub dropped: u64,
+    /// ffmpeg's own counters.
+    pub enc_frames: u64,
+    pub ffmpeg_drops: u64,
+    pub fps: f32,
+    pub kbps: f32,
+    pub out_time: f64,
+    pub total_bytes: u64,
+    pub last_error: Option<String>,
+    pub ended: bool,
+}
+
+fn parse_progress(line: &str, s: &mut Stats) {
+    let Some((k, v)) = line.split_once('=') else { return };
+    let v = v.trim();
+    match k.trim() {
+        "frame" => s.enc_frames = v.parse().unwrap_or(s.enc_frames),
+        "fps" => s.fps = v.parse().unwrap_or(s.fps),
+        "bitrate" => s.kbps = v.trim_end_matches("kbits/s").trim().parse().unwrap_or(s.kbps),
+        "drop_frames" => s.ffmpeg_drops = v.parse().unwrap_or(s.ffmpeg_drops),
+        "total_size" => s.total_bytes = v.parse().unwrap_or(s.total_bytes),
+        "out_time_us" | "out_time_ms" => {
+            if let Ok(us) = v.parse::<i64>() {
+                s.out_time = us.max(0) as f64 / 1e6;
+            }
+        }
+        "progress" if v == "end" => s.ended = true,
+        _ => {}
+    }
+}
+
+/// Scale `src` into a `w`×`h` black frame (aspect kept, nearest sampling,
+/// alpha composited over black).
+pub fn letterbox(src: Option<&Raster>, w: u32, h: u32) -> Vec<u8> {
+    let mut out = vec![0u8; (w * h * 4) as usize];
+    for px in out.chunks_exact_mut(4) {
+        px[3] = 255;
+    }
+    let Some(r) = src.filter(|r| r.width > 0 && r.height > 0) else { return out };
+    let s = (w as f32 / r.width as f32).min(h as f32 / r.height as f32);
+    let (dw, dh) = (((r.width as f32 * s) as u32).clamp(1, w), ((r.height as f32 * s) as u32).clamp(1, h));
+    let (ox, oy) = ((w - dw) / 2, (h - dh) / 2);
+    let xs: Vec<usize> = (0..dw).map(|x| ((x as u64 * r.width as u64 / dw as u64) as usize).min(r.width as usize - 1)).collect();
+    for y in 0..dh {
+        let sy = ((y as u64 * r.height as u64 / dh as u64) as usize).min(r.height as usize - 1);
+        let srow = &r.data[sy * r.width as usize * 4..(sy + 1) * r.width as usize * 4];
+        let drow = &mut out[((oy + y) * w + ox) as usize * 4..((oy + y) * w + ox + dw) as usize * 4];
+        for (d, &sx) in drow.chunks_exact_mut(4).zip(&xs) {
+            let p = &srow[sx * 4..sx * 4 + 4];
+            let a = p[3] as u16;
+            d[0] = (p[0] as u16 * a / 255) as u8;
+            d[1] = (p[1] as u16 * a / 255) as u8;
+            d[2] = (p[2] as u16 * a / 255) as u8;
+        }
+    }
+    out
+}
+
+pub type FrameSlot = Arc<Mutex<Option<Arc<Raster>>>>;
+
+/// One running ffmpeg process.
+pub struct Session {
+    pub kind: Kind,
+    /// File path, or the RTMP URL with the key masked.
+    pub target_label: String,
+    pub path: Option<PathBuf>,
+    pub started: Instant,
+    child: Child,
+    stats: Arc<Mutex<Stats>>,
+    stop: Arc<AtomicBool>,
+    writer: Option<JoinHandle<()>>,
+    finished: bool,
+}
+
+fn scrub(line: &str, secret: &str) -> String {
+    if secret.len() >= 2 {
+        line.replace(secret, "****")
+    } else {
+        line.to_string()
+    }
+}
+
+impl Session {
+    pub fn spawn(ffmpeg: &Path, cfg: &OutputConfig, kind: Kind, target: &str, secret: &str, frames: FrameSlot) -> Result<Session, String> {
+        let args = build_args(cfg, kind, target);
+        let mut cmd = Command::new(ffmpeg);
+        cmd.args(&args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        no_window(&mut cmd);
+        let mut child = cmd.spawn().map_err(|e| format!("could not start ffmpeg ({}): {}", ffmpeg.display(), e))?;
+        let stats = Arc::new(Mutex::new(Stats::default()));
+        let stop = Arc::new(AtomicBool::new(false));
+        if let Some(out) = child.stdout.take() {
+            let st = stats.clone();
+            std::thread::spawn(move || {
+                for line in BufReader::new(out).lines().map_while(Result::ok) {
+                    if let Ok(mut s) = st.lock() {
+                        parse_progress(&line, &mut s);
+                    }
+                }
+            });
+        }
+        if let Some(err) = child.stderr.take() {
+            let st = stats.clone();
+            let secret = secret.to_string();
+            std::thread::spawn(move || {
+                for line in BufReader::new(err).lines().map_while(Result::ok) {
+                    let l = scrub(line.trim(), &secret);
+                    let lower = l.to_lowercase();
+                    let bad = ["error", "failed", "refused", "invalid", "could not", "cannot", "no such", "broken pipe", "timed out", "unable"];
+                    if bad.iter().any(|b| lower.contains(b)) {
+                        if let Ok(mut s) = st.lock() {
+                            s.last_error = Some(l.chars().take(240).collect());
+                        }
+                    }
+                }
+            });
+        }
+        let mut stdin = child.stdin.take().ok_or("ffmpeg stdin unavailable")?;
+        let (w, h) = cfg.size();
+        let fps = cfg.fps.clamp(1, 120) as f64;
+        let source = cfg.source;
+        let (st, stp) = (stats.clone(), stop.clone());
+        let writer = std::thread::spawn(move || {
+            if source == Source::Screen {
+                while !stp.load(Ordering::Relaxed) {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                let _ = stdin.write_all(b"q\n");
+                return;
+            }
+            let period = Duration::from_secs_f64(1.0 / fps);
+            let mut next = Instant::now();
+            let mut cache: Option<(usize, Vec<u8>)> = None;
+            let black = letterbox(None, w, h);
+            while !stp.load(Ordering::Relaxed) {
+                let now = Instant::now();
+                if now < next {
+                    std::thread::sleep(next - now);
+                } else {
+                    let missed = ((now - next).as_secs_f64() / period.as_secs_f64()) as u32;
+                    if missed > 0 {
+                        if let Ok(mut s) = st.lock() {
+                            s.dropped += missed as u64;
+                        }
+                        next += period * missed;
+                    }
+                }
+                let frame = frames.lock().ok().and_then(|f| f.clone());
+                let buf: &[u8] = match &frame {
+                    Some(f) => {
+                        let id = Arc::as_ptr(f) as usize;
+                        if cache.as_ref().map(|c| c.0) != Some(id) {
+                            cache = Some((id, letterbox(Some(f), w, h)));
+                        }
+                        &cache.as_ref().map(|c| &c.1).unwrap_or(&black)[..]
+                    }
+                    None => &black,
+                };
+                if stdin.write_all(buf).is_err() {
+                    if let Ok(mut s) = st.lock() {
+                        if s.last_error.is_none() {
+                            s.last_error = Some("ffmpeg stopped accepting frames".into());
+                        }
+                    }
+                    break;
+                }
+                if let Ok(mut s) = st.lock() {
+                    s.frames_in += 1;
+                }
+                next += period;
+            }
+            // dropping stdin = EOF: ffmpeg flushes and finalises the file
+        });
+        let target_label = match kind {
+            Kind::Record => target.to_string(),
+            Kind::Live => scrub(target, secret),
+        };
+        Ok(Session { kind, target_label, path: (kind == Kind::Record).then(|| PathBuf::from(target)), started: Instant::now(), child, stats, stop, writer: Some(writer), finished: false })
+    }
+
+    pub fn stats(&self) -> Stats {
+        self.stats.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    pub fn elapsed(&self) -> f64 {
+        self.started.elapsed().as_secs_f64()
+    }
+
+    /// `Some(success)` once ffmpeg has exited.
+    pub fn exited(&mut self) -> Option<bool> {
+        match self.child.try_wait() {
+            Ok(Some(st)) => {
+                self.finished = true;
+                Some(st.success())
+            }
+            Ok(None) => None,
+            Err(_) => Some(false),
+        }
+    }
+
+    /// Graceful stop: end the frame pipe (or send `q`), wait for ffmpeg to
+    /// finalise, kill it only after `timeout`.
+    pub fn stop(&mut self, timeout: Duration) -> Result<(), String> {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(w) = self.writer.take() {
+            let _ = w.join();
+        }
+        let t0 = Instant::now();
+        loop {
+            if let Some(ok) = self.exited() {
+                return if ok { Ok(()) } else { Err(self.stats().last_error.unwrap_or_else(|| "ffmpeg exited with an error".into())) };
+            }
+            if t0.elapsed() > timeout {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                self.finished = true;
+                return Err("ffmpeg did not finish in time and was killed".into());
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+
+    /// Hard kill (the test "drop connection" button).
+    pub fn kill(&mut self) {
+        let _ = self.child.kill();
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        if !self.finished {
+            let _ = self.stop(Duration::from_secs(5));
+        }
+    }
+}
+
+/// Status-bar summary.
+#[derive(Clone, Debug, Default)]
+pub struct Status {
+    pub recording: Option<f64>,
+    pub live: Option<f64>,
+    pub reconnect_in: Option<f64>,
+    pub fps: f32,
+    pub kbps: f32,
+    pub dropped: u64,
+    pub error: Option<String>,
+}
+
+/// Owns the configuration, the stream key and the record/live sessions.
+pub struct Output {
+    pub cfg: OutputConfig,
+    key: String,
+    ffmpeg: Option<PathBuf>,
+    pub ffmpeg_error: Option<String>,
+    pub rec: Option<Session>,
+    pub live: Option<Session>,
+    live_since: Option<Instant>,
+    pub reconnect: Reconnect,
+    reconnect_at: Option<Instant>,
+    pub live_error: Option<String>,
+    pub rec_error: Option<String>,
+    pub last_record: Option<PathBuf>,
+    frames: FrameSlot,
+    last_push: Option<Instant>,
+    events: Vec<(ToastKind, String)>,
+    /// UI only: show the key in clear text.
+    pub reveal_key: bool,
+    pub key_edit: String,
+}
+
+impl Output {
+    pub fn new(cfg: OutputConfig, key: String) -> Self {
+        let mut reconnect = Reconnect::new();
+        reconnect.set_settings(cfg.retry_max, cfg.retry_sec);
+        Self { cfg, key, ffmpeg: None, ffmpeg_error: None, rec: None, live: None, live_since: None, reconnect, reconnect_at: None, live_error: None, rec_error: None, last_record: None, frames: Arc::new(Mutex::new(None)), last_push: None, events: Vec::new(), reveal_key: false, key_edit: String::new() }
+    }
+
+    pub fn load() -> Self {
+        Self::new(OutputConfig::load(), load_key())
+    }
+
+    pub fn key_is_set(&self) -> bool {
+        !self.key.is_empty()
+    }
+
+    pub fn masked_key(&self) -> String {
+        mask(&self.key)
+    }
+
+    /// Only for the Settings "reveal" toggle.
+    pub fn key_for_reveal(&self) -> &str {
+        &self.key
+    }
+
+    pub fn set_key(&mut self, key: &str, persist: bool) -> Result<String, String> {
+        self.key = key.trim().to_string();
+        if persist {
+            save_key(&self.key)?;
+        }
+        Ok(if self.key.is_empty() { "stream key cleared".into() } else { format!("stream key saved ({} characters, stored locally)", self.key.chars().count()) })
+    }
+
+    pub fn save_config(&mut self) -> Result<(), String> {
+        self.reconnect.set_settings(self.cfg.retry_max, self.cfg.retry_sec);
+        self.cfg.save()
+    }
+
+    pub fn ffmpeg(&mut self) -> Result<PathBuf, String> {
+        if let Some(p) = &self.ffmpeg {
+            return Ok(p.clone());
+        }
+        match find_ffmpeg() {
+            Ok(p) => {
+                self.ffmpeg = Some(p.clone());
+                self.ffmpeg_error = None;
+                Ok(p)
+            }
+            Err(e) => {
+                self.ffmpeg_error = Some(e.clone());
+                Err(e)
+            }
+        }
+    }
+
+    pub fn is_recording(&self) -> bool {
+        self.rec.is_some()
+    }
+
+    /// Live or trying to reconnect.
+    pub fn is_live(&self) -> bool {
+        self.live.is_some() || self.reconnect_at.is_some()
+    }
+
+    pub fn wants_frames(&self) -> bool {
+        self.cfg.source == Source::Canvas && (self.rec.is_some() || self.live.is_some())
+    }
+
+    /// True when it's time for the app to render and hand over a new frame.
+    pub fn frame_due(&self) -> bool {
+        self.wants_frames() && self.last_push.map(|t| t.elapsed().as_secs_f64() >= 1.0 / self.cfg.fps.max(1) as f64).unwrap_or(true)
+    }
+
+    pub fn push_frame(&mut self, r: Arc<Raster>) {
+        self.last_push = Some(Instant::now());
+        if let Ok(mut f) = self.frames.lock() {
+            *f = Some(r);
+        }
+    }
+
+    fn default_record_path(&self) -> PathBuf {
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        PathBuf::from(&self.cfg.record_dir).join(format!("Seraphina_{}.mp4", utc_stamp(secs)))
+    }
+
+    pub fn start_record(&mut self, path: Option<PathBuf>) -> Result<String, String> {
+        if self.rec.is_some() {
+            return Ok("already recording".into());
+        }
+        let ff = self.ffmpeg()?;
+        let path = path.unwrap_or_else(|| self.default_record_path());
+        if let Some(d) = path.parent() {
+            std::fs::create_dir_all(d).map_err(|e| format!("can't create {}: {}", d.display(), e))?;
+        }
+        let s = Session::spawn(&ff, &self.cfg, Kind::Record, &path.to_string_lossy(), "", self.frames.clone())?;
+        self.rec = Some(s);
+        self.rec_error = None;
+        let (w, h) = self.cfg.size();
+        Ok(format!("recording {}×{} @ {} fps ({}, {}) to {}", w, h, self.cfg.fps, self.cfg.source.label(), self.cfg.audio.label(), path.display()))
+    }
+
+    pub fn stop_record(&mut self) -> Result<String, String> {
+        let Some(mut s) = self.rec.take() else { return Ok("already stopped".into()) };
+        let r = s.stop(Duration::from_secs(15));
+        let path = s.path.clone().unwrap_or_default();
+        let secs = s.elapsed();
+        drop(s);
+        self.last_record = Some(path.clone());
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        match r {
+            Ok(()) if size > 0 => Ok(format!("saved {:.1}s recording to {} ({:.1} MB)", secs, path.display(), size as f64 / 1e6)),
+            Ok(()) => Err(format!("ffmpeg finished but {} is empty", path.display())),
+            Err(e) => Err(format!("recording failed: {}", e)),
+        }
+    }
+
+    fn spawn_live(&mut self) -> Result<(), String> {
+        let ff = self.ffmpeg()?;
+        let target = rtmp_target(&self.cfg.rtmp_url, &self.key);
+        let s = Session::spawn(&ff, &self.cfg, Kind::Live, &target, &self.key, self.frames.clone())?;
+        self.live = Some(s);
+        Ok(())
+    }
+
+    pub fn start_live(&mut self) -> Result<String, String> {
+        if self.is_live() {
+            return Ok("already live".into());
+        }
+        let url = self.cfg.rtmp_url.trim();
+        if url.is_empty() {
+            return Err("set an RTMP URL (and stream key) in Settings ▸ Output first".into());
+        }
+        if !(url.starts_with("rtmp://") || url.starts_with("rtmps://")) {
+            return Err(format!("'{}' is not an rtmp:// or rtmps:// URL", url));
+        }
+        self.reconnect.set_settings(self.cfg.retry_max, self.cfg.retry_sec);
+        self.reconnect.success();
+        self.live_error = None;
+        self.spawn_live()?;
+        self.live_since = Some(Instant::now());
+        Ok(format!("live to {} (key {})", self.cfg.rtmp_url.trim(), if self.key_is_set() { "set" } else { "not set" }))
+    }
+
+    pub fn stop_live(&mut self) -> Result<String, String> {
+        self.reconnect_at = None;
+        self.reconnect.success();
+        self.live_since = None;
+        match self.live.take() {
+            Some(mut s) => {
+                let _ = s.stop(Duration::from_secs(5));
+                Ok("stream ended".into())
+            }
+            None => Ok("already offline".into()),
+        }
+    }
+
+    /// Retry now: reconnect immediately if a reconnect is pending or the
+    /// stream gave up; restart the stream if it is up but unhealthy.
+    pub fn retry(&mut self) -> Result<String, String> {
+        if self.live.is_some() && self.reconnect_at.is_none() {
+            let healthy = self.live.as_ref().map(|s| s.stats().out_time > 0.0).unwrap_or(false);
+            if healthy {
+                return Ok("stream is connected; nothing to retry".into());
+            }
+            if let Some(mut s) = self.live.take() {
+                s.kill();
+            }
+        } else if self.live.is_none() && self.reconnect_at.is_none() && self.live_error.is_none() {
+            return Err("not live; use Go live".into());
+        }
+        self.reconnect_at = None;
+        self.reconnect.success();
+        self.live_error = None;
+        self.spawn_live()?;
+        self.live_since.get_or_insert_with(Instant::now);
+        Ok("reconnecting now".into())
+    }
+
+    /// Kill the live ffmpeg process to exercise reconnect.
+    pub fn drop_connection(&mut self) -> bool {
+        match self.live.as_mut() {
+            Some(s) => {
+                s.kill();
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn schedule_reconnect(&mut self, why: String) {
+        if self.reconnect.start() {
+            let wait = self.reconnect.wait_ms();
+            self.reconnect_at = Some(Instant::now() + Duration::from_millis(wait));
+            self.events.push((ToastKind::Warn, format!("Stream dropped ({}). Reconnecting in {:.1}s (attempt {}/{}).", why, wait as f64 / 1000.0, self.reconnect.attempts(), self.reconnect.retry_max())));
+        } else {
+            self.reconnect_at = None;
+            self.live_since = None;
+            self.live_error = Some(why.clone());
+            self.events.push((ToastKind::Error, format!("Stream ended after {} reconnect attempts: {}", self.reconnect.retry_max(), why)));
+        }
+    }
+
+    /// Poll the processes; drive reconnects. Returns toasts to show.
+    pub fn tick(&mut self) -> Vec<(ToastKind, String)> {
+        if let Some(s) = self.rec.as_mut() {
+            if let Some(ok) = s.exited() {
+                let err = s.stats().last_error.unwrap_or_else(|| if ok { "ffmpeg ended".into() } else { "ffmpeg exited with an error".into() });
+                self.last_record = s.path.clone();
+                self.rec = None;
+                self.rec_error = Some(err.clone());
+                self.events.push((ToastKind::Error, format!("Recording stopped: {}", err)));
+            }
+        }
+        let mut dead = None;
+        if let Some(s) = self.live.as_mut() {
+            if s.exited().is_some() {
+                dead = Some(s.stats().last_error.unwrap_or_else(|| "connection closed".into()));
+            } else if self.reconnect.attempts() > 0 && s.stats().out_time > 2.0 {
+                self.reconnect.success();
+                self.events.push((ToastKind::Success, "Stream reconnected.".into()));
+            }
+        }
+        if let Some(why) = dead {
+            self.live = None;
+            self.schedule_reconnect(why);
+        }
+        if let Some(at) = self.reconnect_at {
+            if Instant::now() >= at {
+                self.reconnect_at = None;
+                if let Err(e) = self.spawn_live() {
+                    self.schedule_reconnect(e);
+                }
+            }
+        }
+        std::mem::take(&mut self.events)
+    }
+
+    pub fn status(&self) -> Status {
+        let mut st = Status { recording: self.rec.as_ref().map(|s| s.elapsed()), live: self.live_since.map(|t| t.elapsed().as_secs_f64()), reconnect_in: self.reconnect_at.map(|t| t.saturating_duration_since(Instant::now()).as_secs_f64()), ..Default::default() };
+        for s in self.live.iter().chain(self.rec.iter()) {
+            let x = s.stats();
+            st.fps = st.fps.max(x.fps);
+            st.kbps += x.kbps;
+            st.dropped += x.dropped + x.ffmpeg_drops;
+            if st.error.is_none() {
+                st.error = x.last_error;
+            }
+        }
+        if st.error.is_none() {
+            st.error = self.live_error.clone().or_else(|| self.rec_error.clone());
+        }
+        st
+    }
+
+    /// Safe for the AI context: never includes the key.
+    pub fn context(&self) -> String {
+        let st = self.status();
+        format!(
+            "Output: ffmpeg {}, source {}, {}x{} @ {} fps, audio {}; recording {}; live {}; RTMP URL {}, stream key {}",
+            if self.ffmpeg.is_some() { "found" } else if self.ffmpeg_error.is_some() { "missing" } else { "not checked" },
+            self.cfg.source.label(),
+            self.cfg.size().0,
+            self.cfg.size().1,
+            self.cfg.fps,
+            self.cfg.audio.label(),
+            st.recording.map(|t| format!("yes ({:.0}s)", t)).unwrap_or_else(|| "no".into()),
+            if st.reconnect_in.is_some() { "reconnecting".to_string() } else { st.live.map(|t| format!("yes ({:.0}s)", t)).unwrap_or_else(|| "no".into()) },
+            if self.cfg.rtmp_url.trim().is_empty() { "not set".to_string() } else { self.cfg.rtmp_url.trim().to_string() },
+            if self.key_is_set() { "set (hidden)" } else { "not set" }
+        )
+    }
+}
+
+/// `YYYY-MM-DD_HH-MM-SSZ` (UTC) without a date library.
+pub fn utc_stamp(secs: u64) -> String {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // civil_from_days (Howard Hinnant)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}Z", y, m, d, rem / 3600, rem / 60 % 60, rem % 60)
+}
+
+// ---- UI ---------------------------------------------------------------------
+
+use crate::commands::AppCommand;
+use crate::theme::{self, Palette, SP_XS};
+use eframe::egui;
+use egui_phosphor::regular as ic;
+
+fn clock(t: f64) -> String {
+    obs_rust_bitstream::ui_canvas::format_clock(t.max(0.0) as u64)
+}
+
+impl Output {
+    /// Stream-mode card: real controls and live stats.
+    pub fn panel(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>, open_settings: &mut bool) {
+        let ff = self.ffmpeg();
+        theme::card(ui, p, "Output · ffmpeg", |ui| {
+            match &ff {
+                Ok(path) => {
+                    theme::kv(ui, p, "ffmpeg", format!("{}  found", ic::CHECK_CIRCLE));
+                    ui.label(theme::muted(p, &path.display().to_string()));
+                }
+                Err(e) => {
+                    ui.label(egui::RichText::new("ffmpeg not found").color(p.danger).strong());
+                    ui.add(egui::Label::new(theme::muted(p, e)).wrap());
+                }
+            }
+            if let Some(i) = theme::segmented(ui, p, "out-src", &["Canvas", "Screen"], if self.cfg.source == Source::Canvas { 0 } else { 1 }, 90.0) {
+                bus.push(AppCommand::SetOutputSource { source: if i == 0 { "canvas" } else { "screen" }.into() });
+            }
+            let (w, h) = self.cfg.size();
+            ui.label(theme::muted(p, &format!("{}×{} @ {} fps · {} kb/s · {}", w, h, self.cfg.fps, self.cfg.video_kbps, self.cfg.audio.label())));
+            ui.add_space(SP_XS);
+            let live = self.is_live();
+            let t = if live { format!("{}  End stream", ic::STOP) } else { format!("{}  Go live", ic::BROADCAST) };
+            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &t, live)).clicked() {
+                bus.push(AppCommand::SetStreaming { live: !live });
+            }
+            let rec = self.is_recording();
+            let t = if rec { format!("{}  Stop recording", ic::STOP) } else { format!("{}  Record", ic::RECORD) };
+            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &t, rec)).clicked() {
+                bus.push(AppCommand::SetRecording { recording: !rec });
+            }
+            let st = self.status();
+            if let Some(t) = st.recording {
+                theme::kv(ui, p, "Recording", clock(t));
+            }
+            if let Some(t) = st.live {
+                theme::kv(ui, p, "Live", clock(t));
+            }
+            if st.recording.is_some() || st.live.is_some() {
+                theme::kv(ui, p, "Encoder", format!("{:.0} fps · {:.0} kb/s", st.fps, st.kbps));
+                theme::kv(ui, p, "Dropped frames", format!("{}", st.dropped));
+                ui.ctx().request_repaint_after(Duration::from_millis(250));
+            }
+            if let Some(r) = st.reconnect_in {
+                theme::kv(ui, p, "Reconnecting in", format!("{:.1} s (attempt {}/{})", r, self.reconnect.attempts(), self.reconnect.retry_max()));
+            }
+            if let Some(e) = &st.error {
+                ui.add(egui::Label::new(egui::RichText::new(e).size(11.0).color(p.danger)).wrap());
+            }
+            ui.horizontal_wrapped(|ui| {
+                if ui.add_enabled(self.is_live() || self.live_error.is_some(), theme::toggle_button(p, "Retry now", false)).clicked() {
+                    bus.push(AppCommand::RetryStream);
+                }
+                if ui.add_enabled(self.live.is_some(), theme::toggle_button(p, "Drop connection (test)", false)).on_hover_text("Kills the ffmpeg process to exercise reconnect").clicked() {
+                    self.drop_connection();
+                }
+            });
+            if let Some(path) = &self.last_record {
+                ui.label(theme::muted(p, &format!("Last recording: {}", path.display())));
+            }
+            ui.add(egui::Label::new(theme::muted(p, &format!("RTMP URL: {}", if self.cfg.rtmp_url.trim().is_empty() { "not set" } else { self.cfg.rtmp_url.trim() }))).wrap());
+            theme::kv(ui, p, "Stream key", self.masked_key());
+            if ui.add(theme::toggle_button(p, "Output settings…", false)).clicked() {
+                *open_settings = true;
+            }
+        });
+    }
+
+    /// Settings window section. Returns true when the config changed.
+    pub fn settings_ui(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) -> bool {
+        let before = self.cfg.clone();
+        ui.label(theme::section(p, "Output (ffmpeg)"));
+        match &self.ffmpeg {
+            Some(f) => theme::kv(ui, p, "ffmpeg", f.display().to_string()),
+            None => {
+                ui.add(egui::Label::new(egui::RichText::new(self.ffmpeg_error.clone().unwrap_or_else(|| FFMPEG_HELP.into())).size(11.0).color(p.muted)).wrap());
+            }
+        }
+        let mut url = self.cfg.rtmp_url.clone();
+        ui.horizontal(|ui| {
+            ui.label(theme::muted(p, "RTMP URL"));
+            let r = ui.add(egui::TextEdit::singleline(&mut url).hint_text("rtmp://live.example.com/app").desired_width(260.0));
+            if r.lost_focus() && url != self.cfg.rtmp_url {
+                bus.push(AppCommand::SetStreamTarget { url: url.clone() });
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(theme::muted(p, "Stream key"));
+            let hint = self.masked_key();
+            ui.add(egui::TextEdit::singleline(&mut self.key_edit).password(!self.reveal_key).hint_text(hint).desired_width(170.0));
+            if ui.add_enabled(!self.key_edit.trim().is_empty(), theme::toggle_button(p, "Save", false)).clicked() {
+                bus.push(AppCommand::SetStreamKey { key: std::mem::take(&mut self.key_edit) });
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut self.reveal_key, "Show key");
+            if self.reveal_key && self.key_is_set() {
+                ui.label(egui::RichText::new(self.key_for_reveal()).monospace().size(11.0).color(p.text));
+            } else {
+                ui.label(theme::muted(p, &self.masked_key()));
+            }
+        });
+        egui::Grid::new("out-grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+            ui.label(theme::muted(p, "Size"));
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut self.cfg.width).range(64..=3840).suffix(" w"));
+                ui.add(egui::DragValue::new(&mut self.cfg.height).range(64..=2160).suffix(" h"));
+            });
+            ui.end_row();
+            ui.label(theme::muted(p, "Frame rate"));
+            ui.add(egui::DragValue::new(&mut self.cfg.fps).range(1..=60).suffix(" fps"));
+            ui.end_row();
+            ui.label(theme::muted(p, "Video bitrate"));
+            ui.add(egui::DragValue::new(&mut self.cfg.video_kbps).range(200..=20000).speed(50.0).suffix(" kb/s"));
+            ui.end_row();
+            ui.label(theme::muted(p, "Audio"));
+            egui::ComboBox::from_id_salt("out-audio").selected_text(self.cfg.audio.label()).show_ui(ui, |ui| {
+                for a in [Audio::None, Audio::Silent, Audio::Device] {
+                    ui.selectable_value(&mut self.cfg.audio, a, a.label());
+                }
+            });
+            ui.end_row();
+            if self.cfg.audio == Audio::Device {
+                ui.label(theme::muted(p, if cfg!(windows) { "DirectShow device" } else { "Pulse source" }));
+                ui.add(egui::TextEdit::singleline(&mut self.cfg.audio_device).hint_text(if cfg!(windows) { "Microphone (Realtek Audio)" } else { "default" }));
+                ui.end_row();
+            }
+            ui.label(theme::muted(p, "Record folder"));
+            ui.add(egui::TextEdit::singleline(&mut self.cfg.record_dir).desired_width(240.0));
+            ui.end_row();
+            ui.label(theme::muted(p, "Reconnect"));
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut self.cfg.retry_sec).range(1..=60).suffix(" s"));
+                ui.add(egui::DragValue::new(&mut self.cfg.retry_max).range(1..=50).suffix(" tries"));
+            });
+            ui.end_row();
+        });
+        ui.label(theme::muted(p, "The key is stored only in ~/.seraphina/studio/stream_key and is never shown to Seraphina or written to logs."));
+        self.cfg != before
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn args_cover_record_live_audio_and_screen() {
+        let mut c = OutputConfig { width: 641, height: 359, ..Default::default() };
+        let a = build_args(&c, Kind::Record, "/tmp/x.mp4").join(" ");
+        assert!(a.contains("-f rawvideo -pix_fmt rgba -s 640x358 -framerate 30 -i pipe:0"), "{}", a);
+        // ffmpeg master (2026) made thread_queue_size muxer-only; as an input option it aborts startup
+        assert!(!a.contains("thread_queue_size"));
+        assert!(a.contains("anullsrc") && a.contains("-c:a aac") && a.contains("-shortest"));
+        assert!(a.contains("-c:v libx264") && a.contains("yuv420p") && a.ends_with("-movflags +faststart -f mp4 -y /tmp/x.mp4"));
+        c.audio = Audio::None;
+        c.source = Source::Screen;
+        let a = build_args(&c, Kind::Live, "rtmp://h/app/k").join(" ");
+        assert!(a.contains(if cfg!(windows) { "gdigrab" } else { "x11grab" }));
+        assert!(!a.contains("-c:a") && !a.contains("1:a") && a.contains("scale=640:358"));
+        assert!(a.ends_with("-f flv rtmp://h/app/k"));
+        assert_eq!(rtmp_target("rtmp://h/app/", " k "), "rtmp://h/app/k");
+        assert_eq!(rtmp_target("rtmp://h/app", ""), "rtmp://h/app");
+    }
+
+    #[test]
+    fn key_is_masked_scrubbed_and_never_in_context() {
+        let mut o = Output::new(OutputConfig { rtmp_url: "rtmp://example/live".into(), ..Default::default() }, String::new());
+        o.set_key("live_123456_secretkey", false).unwrap();
+        assert!(!o.masked_key().contains("secret") && o.masked_key().contains("21 characters"));
+        assert!(!o.context().contains("secret") && o.context().contains("set (hidden)"));
+        assert_eq!(scrub("Error opening rtmp://example/live/live_123456_secretkey", "live_123456_secretkey"), "Error opening rtmp://example/live/****");
+        assert!(!o.set_key("abc", false).unwrap().contains("abc"));
+    }
+
+    #[test]
+    fn progress_parsing_and_letterbox() {
+        let mut s = Stats::default();
+        for l in ["frame=150", "fps=30.01", "bitrate=1234.5kbits/s", "out_time_us=5000000", "drop_frames=2", "progress=end"] {
+            parse_progress(l, &mut s);
+        }
+        assert_eq!((s.enc_frames, s.ffmpeg_drops), (150, 2));
+        assert!((s.fps - 30.01).abs() < 1e-3 && (s.kbps - 1234.5).abs() < 1e-3 && (s.out_time - 5.0).abs() < 1e-9 && s.ended);
+        let r = Raster::filled(100, 50, [200, 100, 50, 255]);
+        let b = letterbox(Some(&r), 40, 40);
+        assert_eq!(&b[(20 * 40 + 20) * 4..(20 * 40 + 20) * 4 + 4], &[200, 100, 50, 255]);
+        assert_eq!(&b[0..4], &[0, 0, 0, 255], "letterbox bars are black");
+        assert_eq!(utc_stamp(1_792_540_800), "2026-10-21_00-00-00Z");
+    }
+
+    #[test]
+    fn missing_ffmpeg_is_a_clear_error() {
+        let e = find_ffmpeg_in(vec![PathBuf::from("/nonexistent/ffmpeg"), PathBuf::from("/etc/hostname")]).unwrap_err();
+        assert!(e.contains("ffmpeg was not found") && e.contains("SERAPHINA_FFMPEG"), "{}", e);
+        let mut o = Output::new(OutputConfig::default(), String::new());
+        assert!(o.start_live().unwrap_err().contains("RTMP URL"));
+        o.cfg.rtmp_url = "http://nope".into();
+        assert!(o.start_live().unwrap_err().contains("rtmp://"));
+    }
+
+    fn probe(ffmpeg: &Path, target: &str) -> Option<String> {
+        let o = Command::new(ffprobe_near(ffmpeg)).args(["-v", "error", "-rw_timeout", "8000000", "-show_entries", "stream=codec_name,codec_type,width,height:format=duration", "-of", "default=nw=1", target]).output().ok()?;
+        Some(String::from_utf8_lossy(&o.stdout).into_owned() + &String::from_utf8_lossy(&o.stderr))
+    }
+
+    fn moving_frame(i: u32) -> Arc<Raster> {
+        let mut r = Raster::filled(320, 180, [20, 24, 40, 255]);
+        let x0 = (i * 4) % 280;
+        for y in 60..120 {
+            for x in x0..x0 + 40 {
+                let k = ((y * 320 + x) * 4) as usize;
+                r.data[k..k + 4].copy_from_slice(&[214, 180, 92, 255]);
+            }
+        }
+        Arc::new(r)
+    }
+
+    /// Records 5 s from the frame pipe and verifies the file with ffprobe.
+    /// Set `RECORD_TEST_OUT` to keep a copy of the MP4.
+    #[test]
+    fn records_five_seconds_to_mp4_verified_by_ffprobe() {
+        let Ok(ff) = find_ffmpeg() else {
+            eprintln!("skipped: ffmpeg not installed");
+            return;
+        };
+        let cfg = OutputConfig { width: 640, height: 360, fps: 30, video_kbps: 1500, ..Default::default() };
+        let mut o = Output::new(cfg, String::new());
+        let path = std::env::temp_dir().join(format!("seraphina_rec_test_{}.mp4", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        o.start_record(Some(path.clone())).unwrap();
+        let t0 = Instant::now();
+        let mut i = 0;
+        while t0.elapsed() < Duration::from_secs(5) {
+            o.push_frame(moving_frame(i));
+            i += 1;
+            assert!(o.tick().is_empty());
+            std::thread::sleep(Duration::from_millis(33));
+        }
+        let st = o.status();
+        assert!(st.recording.unwrap() >= 5.0);
+        let msg = o.stop_record().unwrap();
+        assert!(msg.contains("saved"), "{}", msg);
+        let p = probe(&ff, &path.to_string_lossy()).unwrap();
+        assert!(p.contains("codec_name=h264") && p.contains("codec_name=aac"), "{}", p);
+        assert!(p.contains("width=640") && p.contains("height=360"), "{}", p);
+        let dur: f64 = p.lines().find_map(|l| l.strip_prefix("duration=")).and_then(|d| d.parse().ok()).unwrap();
+        assert!((4.5..=5.8).contains(&dur), "duration {} ({})", dur, p);
+        if let Ok(out) = std::env::var("RECORD_TEST_OUT") {
+            std::fs::copy(&path, out).unwrap();
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    fn mediamtx_bin() -> Option<PathBuf> {
+        let c = std::env::var_os("MEDIAMTX").map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join("opt/mediamtx/mediamtx")))?;
+        c.is_file().then_some(c)
+    }
+
+    fn start_mediamtx(bin: &Path, port: u16) -> Child {
+        let dir = std::env::temp_dir().join(format!("mtx_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let yml = dir.join("mediamtx.yml");
+        std::fs::write(&yml, format!("logLevel: warn\napi: no\nmetrics: no\npprof: no\nplayback: no\nrtsp: no\nhls: no\nwebrtc: no\nsrt: no\nrtmp: yes\nrtmpAddress: 127.0.0.1:{}\npaths:\n  all_others:\n", port)).unwrap();
+        let c = Command::new(bin).arg(&yml).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+        std::thread::sleep(Duration::from_millis(800));
+        c
+    }
+
+    /// Streams to a local mediamtx RTMP server, confirms receipt with
+    /// ffprobe, then kills the server and checks that the app reconnects
+    /// with backoff once it is back.
+    #[test]
+    fn streams_to_local_rtmp_and_reconnects_with_backoff() {
+        let (Ok(ff), Some(mtx)) = (find_ffmpeg(), mediamtx_bin()) else {
+            eprintln!("skipped: needs ffmpeg and mediamtx");
+            return;
+        };
+        let port = 19350 + (std::process::id() % 500) as u16;
+        let mut server = start_mediamtx(&mtx, port);
+        let cfg = OutputConfig { rtmp_url: format!("rtmp://127.0.0.1:{}/live", port), width: 640, height: 360, fps: 30, video_kbps: 1200, retry_sec: 1, retry_max: 8, ..Default::default() };
+        let mut o = Output::new(cfg, String::new());
+        o.set_key("studio_test_key", false).unwrap();
+        o.push_frame(moving_frame(0));
+        o.start_live().unwrap();
+        let feed = |o: &mut Output, secs: f64, events: &mut Vec<(ToastKind, String)>| {
+            let t0 = Instant::now();
+            let mut i = 0;
+            while t0.elapsed().as_secs_f64() < secs {
+                o.push_frame(moving_frame(i));
+                i += 1;
+                events.extend(o.tick());
+                std::thread::sleep(Duration::from_millis(33));
+            }
+        };
+        let mut ev = Vec::new();
+        feed(&mut o, 3.0, &mut ev);
+        let url = format!("rtmp://127.0.0.1:{}/live/studio_test_key", port);
+        let p = probe(&ff, &url).unwrap();
+        assert!(p.contains("codec_name=h264") && p.contains("width=640"), "server did not receive the stream: {}", p);
+        assert!(o.status().kbps > 0.0 && o.status().fps > 0.0, "{:?}", o.status());
+
+        // drop the server: ffmpeg dies, a reconnect is scheduled with backoff
+        let _ = server.kill();
+        let _ = server.wait();
+        feed(&mut o, 4.0, &mut ev);
+        assert!(ev.iter().any(|(k, m)| *k == ToastKind::Warn && m.contains("Reconnecting in")), "{:?}", ev);
+        assert!(o.reconnect.attempts() >= 1 && o.is_live());
+        assert!(ev.iter().all(|(_, m)| !m.contains("studio_test_key")), "key leaked into a message");
+
+        // bring it back: the next attempt connects and the counter resets
+        let mut server = start_mediamtx(&mtx, port);
+        let t0 = Instant::now();
+        while o.reconnect.attempts() > 0 && t0.elapsed() < Duration::from_secs(25) {
+            feed(&mut o, 0.5, &mut ev);
+        }
+        assert_eq!(o.reconnect.attempts(), 0, "did not reconnect: {:?}", ev);
+        assert!(ev.iter().any(|(k, m)| *k == ToastKind::Success && m.contains("reconnected")));
+        let p = probe(&ff, &url).unwrap();
+        assert!(p.contains("codec_name=h264"), "after reconnect: {}", p);
+        o.stop_live().unwrap();
+        assert!(!o.is_live());
+        let _ = server.kill();
+        let _ = server.wait();
+    }
+}

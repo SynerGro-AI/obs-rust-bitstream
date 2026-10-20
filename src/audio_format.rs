@@ -6,6 +6,7 @@
 //!
 //! Differential: sizes match the mathematical channel * bytes * frames.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -7,6 +7,175 @@ Goal: beat the ~800 scripts already finished upstream by using ~10% of the API a
 
 Reusable patterns + differential helper + AI scaffold for automated assistance.
 
+## Desktop app: Seraphina Studio
+
+A single egui/eframe window with five workspaces, a gold-on-black theme (plus
+a light theme), a custom title bar, collapsible tool sections, a Maya-style
+shelf and a live status bar. Windows is the primary target; it also runs on
+Linux and macOS.
+
+| Mode | What is real today | Stubbed / not built yet |
+|------|--------------------|-------------------------|
+| **Paint** | Layers with thumbnails, groups, 8 blend modes, opacity/fill, visibility, masks (density, feather); move, marquee, lasso, quick select (edge-aware), crop, healing, clone stamp, brush, eraser, gradient, dodge, burn (spacing-based, no build-up while paused), pen (stroke / to selection), type, hand, zoom, eyedropper; undo/redo; PNG export; **PSD open/save with real per-layer pixels** (8-bit RGB, RLE/raw; visibility, opacity, blend, groups honoured; masks baked into alpha on save) | PSD: no 16-bit, PSB, ZIP-compressed channels, adjustment layers or editable masks on load |
+| **Composite** | Keyframed per-layer opacity with linear interpolation, blend modes, scrubbable timeline, playback, undo/redo (opacity drags coalesce into one step); recordable via Record / Go live | No effects stack |
+| **3D** | Software rasterizer: z-buffered flat/Lambert shading, Shaded / Wireframe / Shaded+wire (keys 5/4/6), selection highlight; orbit/dolly; cube, plane, cylinder, joint, light, camera; extrude, bevel, **Edge Loop, Multi-Cut, Bridge, Boolean union/difference/intersection (BSP, watertight after T-junction repair), Quad Draw**; Select/Move/Rotate/Scale (Q/W/E/R); outliner; keyframed Y; general undo/redo (drags coalesce) | No materials/textures, no smooth shading, no IK/skinning/FX/render-to-file (still "Coming soon") |
+| **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas or screen source, status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Audio device capture (pulse/dshow) is wired but untested |
+| **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Offline without a key: it answers with built-in tips and says so |
+| **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
+
+### How the AI is wired in
+
+* **One command bus.** Every button, shortcut, drag and AI action becomes an
+  `AppCommand` (`src/bin/ui/commands.rs`) and goes through `App::dispatch`.
+  The AI can therefore do anything the UI can, and nothing else.
+* **Tool calling.** The 64 commands are exposed as JSON-schema tools to an
+  OpenAI-compatible chat API. Calls run through a Triad gate:
+  * the call must parse;
+  * file I/O (open, save PSD, export PNG), billed generation (video, image,
+    extend, stitch), going live and starting a recording need the user to
+    press **Run** on the action card;
+  * dispatch must succeed, and failures are reported back to the model.
+* **Undo.** Each AI turn snapshots the document state, and **Undo** on the
+  action card reverts the whole batch.
+* **Live learning.** A local `MercyLearningHeart`-style EMA store
+  (α = 0.382) is updated incrementally from:
+  * your tool and parameter choices;
+  * 👍/👎 ratings;
+  * AI actions you keep or undo. A batch counts as kept once you send your
+    next message.
+
+  A summary is injected into the system prompt. The status bar shows
+  "Online learning: N updates". It is stored in
+  `~/.seraphina/studio/mercy_bank.json`.
+* **Seraphina.AGI CLI bridge.** If `seraphina` (`pip install seraphina-agi`)
+  is on PATH, or set via `SERAPHINA_CLI`, its native intents (`remember …`,
+  `recall`, `triad …`, `help`, `version`) are forwarded to it. Recent
+  `recall` notes are added to the prompt.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `XAI_API_KEY` (or `SERAPHINA_GROK_API_KEY`) | none | Enables the LLM and Grok Imagine. Never committed; read from the environment only |
+| `SERAPHINA_MODEL` / `SERAPHINA_GROK_MODEL` | `grok-4.7` | Chat model |
+| `SERAPHINA_BASE_URL` / `SERAPHINA_GROK_ENDPOINT` | `https://api.x.ai/v1` | Any OpenAI-compatible server (a local server works without a key) |
+| `SERAPHINA_NO_STREAM` | unset | Disable SSE streaming |
+| `SERAPHINA_VIDEO_MODEL` / `SERAPHINA_VIDEO_RESOLUTION` | `grok-imagine-video-1.5` / `480p` | Video generation |
+| `SERAPHINA_IMAGE_MODEL` | `grok-imagine-image-2.0` | Image generation |
+| `SERAPHINA_CLI` | `seraphina` | Seraphina.AGI CLI program |
+| `SERAPHINA_STUDIO_PREFS` / `SERAPHINA_HOME` | `~/.seraphina` | Learning store location |
+| `SERAPHINA_NATIVE_FRAME` | unset | Use the OS title bar instead of the custom one |
+| `SERAPHINA_MODE` / `SERAPHINA_LIGHT` | Paint / dark | Start mode and theme |
+
+### Recording and streaming (ffmpeg)
+
+Record and Go live run `ffmpeg` as a subprocess. The active mode's canvas is
+letterboxed to the output size (default 1280×720, 30 fps) and piped as raw RGBA
+to ffmpeg's stdin; a tick that can't be written in time counts as a dropped
+frame. Alternatively ffmpeg grabs the screen (x11grab / gdigrab). Encoding is
+libx264 (veryfast, zerolatency) + AAC (silent track by default); recordings are
+MP4, live output is FLV over RTMP. `-progress` output drives the status bar.
+A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
+10 attempts); *Retry now* reconnects immediately.
+
+* ffmpeg lookup: `SERAPHINA_FFMPEG`, next to the exe (or `./ffmpeg/bin/`), then
+  `PATH`. Missing ffmpeg gives a clear error with download links.
+* Settings ▸ Output: RTMP URL, stream key, size, fps, bitrate, audio, record
+  folder, reconnect. Saved in `~/.seraphina/studio/output.json`; the key lives
+  alone in `~/.seraphina/studio/stream_key` (0600 on Unix), is shown masked,
+  is scrubbed from ffmpeg error text and never reaches the AI context or logs.
+  `set_stream_key` is UI-only (no AI tool).
+* All of it goes through the AppCommand bus (`set_recording`, `set_streaming`,
+  `retry_stream`, `set_output_source`, `set_stream_target`); starting output
+  from Seraphina needs the user's approval.
+
+### Run on Windows (recommended)
+
+1. Install Rust with [rustup](https://rustup.rs) (`rustup-init.exe`). Keep the default
+   **MSVC** toolchain (`stable-x86_64-pc-windows-msvc`). If prompted, install the
+   Visual Studio Build Tools workload “Desktop development with C++”.
+2. In PowerShell:
+
+   ```powershell
+   git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
+   cd obs-rust-bitstream
+   $env:XAI_API_KEY = "<your key>"   # optional, enables Seraphina + Grok Imagine
+   cargo run --release --features ui --bin ui
+   ```
+
+For Record / Go live put `ffmpeg.exe` next to the exe or on PATH (see
+`packaging/windows/README.txt`). The release build is `target\release\ui.exe`. It looks for `assets\` and the
+sample streams (`out.h264`, `out.obsr`) in the working directory, next to the
+exe, or up to four folders above it. Copy them alongside the exe to ship it.
+Release builds on Windows use the GUI subsystem, so no console window opens.
+
+Optional: `--features "ui windows"` also builds the Media Foundation camera
+capture code.
+
+### Run on Linux / macOS
+
+```bash
+cargo run --release --features ui --bin ui
+```
+
+Linux needs an X11 or Wayland session with OpenGL. On minimal installs:
+`sudo apt install libxkbcommon-x11-0 libgl1 libegl1`.
+
+### Cross-compile a Windows .exe from Linux
+
+```bash
+sudo apt install mingw-w64
+rustup target add x86_64-pc-windows-gnu
+cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
+# -> target/x86_64-pc-windows-gnu/release/ui.exe
+```
+
+### Tests
+
+```bash
+cargo test                         # library (1700+ tests)
+cargo test --features ui --bin ui  # UI, command bus, AI agent (mock provider), headless
+```
+
+With `ffmpeg`/`ffprobe` installed, `output::tests` records 5 s to MP4 and checks
+it with ffprobe; with mediamtx at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) it
+also streams to a local RTMP server, confirms receipt with ffprobe, kills the
+server and checks the reconnect. With the Seraphina.AGI CLI on PATH
+(`pip install seraphina-agi`), `real_cli_intents_end_to_end` runs
+remember / recall / triad / help / version (and a live `plan-grok` when a key
+is set).
+
+With `XAI_API_KEY` set, the same command also runs two live smoke tests:
+* `live_xai_tool_calling_smoke` asks Seraphina to "set Mist Overlay opacity
+  to 55% and switch to Composite" and checks that both commands ran through
+  the bus.
+* `live_xai_smoke_test_if_key_present`.
+
+The billed Grok Imagine test is ignored by default. It makes a 1 s 480p clip
+plus one image:
+
+```bash
+SERAPHINA_LIVE_OUT=/tmp cargo test --features ui --bin ui live_imagine -- --ignored
+```
+
+### Shortcuts
+
+`Ctrl+1…5` switch mode · `F1` shortcut sheet · `Esc` closes windows · `Ctrl+.` toggle Seraphina ·
+Paint: `V M L W C J S B E G O`/`Shift+O` `P T H Z I` tools, `Ctrl+Z` / `Ctrl+Shift+Z`, `Ctrl+0` fit ·
+3D: `Q W E R` gizmos · Animate / 3D / Composite: `Space` play.
+
+## CI: Grok PR review
+
+`.github/workflows/grok-review.yml` runs on every pull request. It installs
+the Grok CLI from `https://x.ai/cli/install.sh` and asks it to review the PR
+for bugs. The job has `contents: read` and `pull-requests: write`
+permissions so it can post the review.
+
+**Required setup:** add the repository secret **`XAI_API_KEY`** under
+GitHub → Settings → Secrets and variables → Actions → New repository
+secret. Without it the review step fails. GitHub does not pass secrets to
+workflows triggered from forks, so pull requests from forks skip the
+authenticated review.
+
 ## Foundation modules (live)
 
 | Module | What it does | Notes |
@@ -400,13 +569,6 @@ Outputs: `out.avbn`, `status.txt`, `report.txt`, `stamped.avbn`.
 
 ## Windows release
 
-On a Windows machine (or with the mingw toolchain):
-
-```bash
-rustup target add x86_64-pc-windows-gnu
-cargo build --release --features ui --target x86_64-pc-windows-gnu --bin ui
-```
-
-The binary is `target/x86_64-pc-windows-gnu/release/ui.exe`.
-Dark mode is on by default; the top-bar button switches to light.
+See [Desktop app: Seraphina Studio](#desktop-app-seraphina-studio) above.
+Note: `dist/obs-rust-ui` is a stale Linux prebuilt of an older “Tuxedo Edit” UI revision. It does not match the current source; rebuild instead.
 

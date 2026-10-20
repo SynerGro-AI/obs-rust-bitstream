@@ -8,6 +8,7 @@
 
 use crate::blend::Blend;
 use crate::photo_layers::LayerStack;
+#[cfg(test)]
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
 

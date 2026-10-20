@@ -6,7 +6,6 @@
 //! Differential: set local position + world position round-trips.
 
 use crate::matrix4::Matrix4;
-use crate::vec3::Vec3;
 use crate::vec4::Vec4;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -6,6 +6,7 @@
 //!
 //! Differential: known fourccs map to the expected format.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

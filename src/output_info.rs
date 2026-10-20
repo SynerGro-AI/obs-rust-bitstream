@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn differential() {
         let mut a = OutputInfo::new("a", "A", OUTPUT_VIDEO).unwrap();
-        let mut b = OutputInfo::new("b", "B", OUTPUT_AUDIO).unwrap();
+        let b = OutputInfo::new("b", "B", OUTPUT_AUDIO).unwrap();
         a.start();
         assert!(a.is_running());
         assert!(!b.is_running());

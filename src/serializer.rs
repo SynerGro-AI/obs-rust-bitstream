@@ -7,6 +7,7 @@
 //!
 //! Differential: write then read round-trips the same bytes.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 pub trait Serializer {

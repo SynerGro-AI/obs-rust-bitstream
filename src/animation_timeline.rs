@@ -8,8 +8,6 @@
 
 use crate::ai::AiAssistant;
 use crate::bone::Bone;
-use crate::matrix4::Matrix4;
-use crate::vec4::Vec4;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TimelineError {

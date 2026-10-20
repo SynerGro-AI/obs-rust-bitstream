@@ -5,7 +5,6 @@
 //! Differential: 30 frames at 30 fps resampled to
 //! 15 fps yields about 15 frames.
 
-use crate::frame_sequence::FrameSequence;
 use crate::fps_control::RateError;
 use crate::timed_sequence::TimedSequence;
 

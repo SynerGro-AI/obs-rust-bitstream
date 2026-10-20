@@ -196,7 +196,7 @@ mod tests {
             let _ = listener.accept();
         });
         let mut a = Reconnect::new();
-        let mut b = Reconnect::new();
+        let b = Reconnect::new();
         let sa = RtmpSocket::send("127.0.0.1", port, &payload(1), &mut a);
         // Second connect may fail because the listener accepted once.
         // The first must succeed and report bytes.

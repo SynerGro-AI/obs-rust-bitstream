@@ -8,6 +8,7 @@
 //!
 //! Differential: token kinds match a reference classification.
 
+#[cfg(test)]
 use crate::diff::assert_equal;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

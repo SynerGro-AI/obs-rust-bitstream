@@ -52,7 +52,7 @@ impl WeightLink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vec3::Vec3;
+    
 
     #[test]
     fn differential() {

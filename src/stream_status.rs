@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn differential() {
-        let mut a = ProgramStream::new();
+        let a = ProgramStream::new();
         let mut b = ProgramStream::new();
         b.start("youtube").unwrap();
         let svc = ServiceStatus {

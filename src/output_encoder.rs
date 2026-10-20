@@ -8,7 +8,7 @@
 //! Differential: setting a video encoder changes the name.
 
 use crate::encoder_context::{EncoderContext, EncoderType};
-use crate::output_info::{OutputInfo, OUTPUT_ENCODED};
+use crate::output_info::OutputInfo;
 
 /// Matching OBS MAX_OUTPUT_AUDIO_ENCODERS.
 pub const MAX_OUTPUT_AUDIO_ENCODERS: usize = 6;
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn set_video() {
-        let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV | OUTPUT_ENCODED).unwrap();
+        let out = OutputInfo::new("rec", "Recording", OUTPUT_AV | OUTPUT_ENCODED).unwrap();
         let mut oe = OutputEncoder::new();
         let enc = EncoderContext::new("h264", "obs_x264", EncoderType::Video).unwrap();
         oe.set_video(&out, enc).unwrap();
@@ -122,7 +122,7 @@ mod tests {
     fn differential() {
         let out = OutputInfo::new("rec", "Recording", OUTPUT_AV | OUTPUT_ENCODED).unwrap();
         let mut a = OutputEncoder::new();
-        let mut b = OutputEncoder::new();
+        let b = OutputEncoder::new();
         a.set_video(&out, EncoderContext::new("h264", "obs_x264", EncoderType::Video).unwrap()).unwrap();
         assert!(a.video().is_some());
         assert!(b.video().is_none());

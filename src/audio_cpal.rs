@@ -7,7 +7,7 @@
 //!
 //! Differential: a known buffer converts to the expected length.
 
-use crate::audio_capture::{AudioCapture, AudioSamples};
+use crate::audio_capture::AudioCapture;
 
 #[cfg(feature = "audio")]
 mod imp {

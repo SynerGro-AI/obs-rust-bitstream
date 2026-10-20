@@ -7,6 +7,8 @@
 
 use eframe::egui;
 
+const FALLBACK_JPG: &[u8] = include_bytes!("../../assets/mountain_spire.jpg");
+
 fn resolve_asset(path: &str) -> std::path::PathBuf {
     let p = std::path::Path::new(path);
     if p.exists() {
@@ -228,18 +230,12 @@ impl eframe::App for TuxedoApp {
                     ui.set_width(180.0);
                     ui.label(egui::RichText::new("◆ PHOTOSHOP").color(gold));
                     for group in PsToolbar::groups() {
-                        let open = self.expanded == Some(*group);
-                        let label = format!("{} {}", if open { "▼" } else { "▶" }, group.label().to_uppercase());
-                        if ui.button(egui::RichText::new(label).color(gold)).clicked() {
-                            self.expanded = if open { None } else { Some(*group) };
-                        }
-                        if open {
-                            for tool in PsToolbar::in_group(*group) {
-                                let text = format!("  {}  {}", tool.name, tool.hotkey);
-                                let color = if self.tool == tool.name { gold } else { fg };
-                                if ui.button(egui::RichText::new(text).color(color)).clicked() {
-                                    self.tool = tool.name.to_string();
-                                }
+                        ui.label(egui::RichText::new(group.label().to_uppercase()).color(gold));
+                        for tool in PsToolbar::in_group(*group) {
+                            let text = format!("  {}  {}", tool.name, tool.hotkey);
+                            let color = if self.tool == tool.name { gold } else { fg };
+                            if ui.button(egui::RichText::new(text).color(color)).clicked() {
+                                self.tool = tool.name.to_string();
                             }
                         }
                     }
@@ -267,7 +263,9 @@ impl eframe::App for TuxedoApp {
                     if self.canvas_texture.is_none() || self.last_action == "recomposite" {
                         let paths: Vec<_> = self.pixel_stack.visible().iter().map(|l| l.path.clone()).collect();
                         if let Some(first) = paths.first() {
-                            if let Ok(base) = image::open(resolve_asset(first)) {
+                            let base = image::open(resolve_asset(first))
+                                .or_else(|_| image::load_from_memory(FALLBACK_JPG));
+                            if let Ok(base) = base {
                                 let mut rgba = base.to_rgba8();
                                 for path in paths.iter().skip(1) {
                                     if let Ok(over) = image::open(resolve_asset(path)) {
@@ -415,34 +413,24 @@ impl eframe::App for TuxedoApp {
                     match self.mode {
                         Mode::Photoshop => {
                             ui.label(egui::RichText::new("◆ LAYERS").color(gold));
-                            if let Some(doc) = &self.doc {
-                                ui.label(egui::RichText::new(format!("mountain_spire  {}×{}", doc.width, doc.height)).color(muted));
-                                let layer_info: Vec<(String, bool, u8)> = doc.layers.iter().map(|l| (l.name.clone(), l.visible, l.opacity)).collect();
-                                for (name, visible, opacity) in layer_info {
-                                    let eye = if visible { "◉" } else { "○" };
-                                    let color = if self.selected_layer == name { gold } else { fg };
-                                    ui.horizontal(|ui| {
-                                        if ui.button(egui::RichText::new(eye).color(color)).clicked() {
-                                            if let Some(doc) = &mut self.doc {
-                                                doc.toggle(&name);
-                                            }
-                                            self.pixel_stack.toggle(&name);
-                                            self.last_action = "recomposite".to_string();
-                                            self.canvas_texture = None;
-                                        }
+                            let layer_names: Vec<(String, bool)> = self.pixel_stack.layers.iter().map(|l| (l.name.clone(), l.visible)).collect();
+                            for (i, (name, visible)) in layer_names.iter().enumerate() {
+                                let eye = if *visible { "◉" } else { "○" };
+                                let color = if self.selected_layer == *name { gold } else { fg };
+                                ui.horizontal(|ui| {
+                                    if ui.button(egui::RichText::new(eye).color(color)).clicked() {
+                                        self.pixel_stack.toggle(name);
+                                        self.last_action = "recomposite".to_string();
+                                        self.canvas_texture = None;
+                                    }
+                                    if let Some(Some(tex)) = self.thumbs.get(i) {
                                         let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-                                        if let Some(Some(tex)) = self.thumbs.get(0) {
-                                            ui.painter().image(tex.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
-                                        } else {
-                                            ui.painter().rect_filled(rect, 2.0, gold);
-                                        }
-                                        if ui.button(egui::RichText::new(format!("{}  {}", name, opacity)).color(color)).clicked() {
-                                            self.selected_layer = name.clone();
-                                        }
-                                    });
-                                }
-                            } else {
-                                ui.label(egui::RichText::new("No document").color(muted));
+                                        ui.painter().image(tex.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+                                    }
+                                    if ui.button(egui::RichText::new(name).color(color)).clicked() {
+                                        self.selected_layer = name.clone();
+                                    }
+                                });
                             }
                             ui.separator();
                             ui.label(egui::RichText::new("◆ MASKS").color(gold));

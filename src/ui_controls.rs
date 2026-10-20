@@ -62,7 +62,7 @@ impl UiMenu {
 
     pub fn items(&self) -> &'static [&'static str] {
         match self {
-            UiMenu::File => &["New", "Open", "Save", "Settings", "Exit"],
+            UiMenu::File => &["New", "Open", "Open Recent", "Save", "Settings", "Exit"],
             UiMenu::Edit => &["Undo", "Redo", "Copy", "Paste"],
             UiMenu::View => &["Fullscreen", "Studio Mode", "Stats"],
             UiMenu::Tools => &["Auto-Configuration", "Scripts"],

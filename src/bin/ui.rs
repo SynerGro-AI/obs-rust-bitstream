@@ -87,6 +87,7 @@ struct TuxedoApp {
     brush_flow: f32,
     filter: String,
     file_path: String,
+    recent: Vec<String>,
     weights: LiveWeights,
     dark: bool,
 }
@@ -150,6 +151,10 @@ impl Default for TuxedoApp {
             brush_flow: 100.0,
             filter: "None".to_string(),
             file_path: "assets/mountain_spire.psd".to_string(),
+            recent: vec![
+                "assets/mountain_spire.psd".to_string(),
+                "assets/mountain_spire.jpg".to_string(),
+            ],
             weights: {
                 let mut w = LiveWeights::new();
                 w.merge_lessons(&[
@@ -209,8 +214,25 @@ impl eframe::App for TuxedoApp {
                     if let Some(doc) = Psd::load(std::path::Path::new(&self.file_path)) {
                         self.doc = Some(doc);
                         self.last_action = format!("Opened {}", self.file_path);
+                        if !self.recent.contains(&self.file_path) {
+                            self.recent.insert(0, self.file_path.clone());
+                        }
                     }
                 }
+                ui.menu_button(egui::RichText::new("Open Recent").color(fg), |ui| {
+                    for path in self.recent.clone() {
+                        if ui.button(&path).clicked() {
+                            self.file_path = path.clone();
+                            if path.ends_with(".psd") {
+                                if let Some(doc) = Psd::load(std::path::Path::new(&path)) {
+                                    self.doc = Some(doc);
+                                }
+                            }
+                            self.last_action = format!("Opened {}", path);
+                            ui.close_menu();
+                        }
+                    }
+                });
                 if ui.button(egui::RichText::new("Save").color(fg)).clicked() {
                     if let Some(doc) = &self.doc {
                         let _ = doc.save(std::path::Path::new(&self.file_path));

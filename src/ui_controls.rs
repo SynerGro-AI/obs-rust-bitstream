@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(UiControls::menus().len(), 5);
         assert!(UiControls::menu_line().contains("File"));
         assert!(UiControls::menu_line().contains("Help"));
-        assert_eq!(UiMenu::File.items().len(), 5);
+        assert_eq!(UiMenu::File.items().len(), 6);
     }
 
     #[test]

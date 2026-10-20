@@ -2,25 +2,36 @@
 //!
 //! cargo run --release --features ui --bin ui
 //!
-//! Modes: Stream (real bitstream inspector), Paint (layered raster
-//! editor), 3D (layout preview), Animate (frame-by-frame), Composite
-//! (keyframed layers). The Seraphina panel talks to an
-//! `AssistantBackend`; the shipped one is an offline stub.
+//! Every button, shortcut and AI tool call goes through one typed
+//! command bus (`commands::AppCommand`, dispatched by `App::dispatch`).
+//! Seraphina (assistant_panel) drives the same bus through an LLM
+//! provider (xAI by default), the Seraphina.AGI CLI for memory, or a
+//! labelled offline stub.
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod animate;
 mod assistant_panel;
+mod commands;
 mod composite;
+mod llm;
+mod maya;
 mod paint;
+mod prefs;
 mod scene;
 mod stream;
+mod text_raster;
 mod theme;
 mod timeline;
+mod videogen;
 
-use eframe::egui::{self, Color32, Key, Rounding, Vec2};
-use obs_rust_bitstream::assistant::{LearningEvent, WorkspaceContext};
-use obs_rust_bitstream::ui_canvas::format_clock;
+use assistant_panel::{ActionLine, LineStatus, PanelRequest};
+use commands::{parse_tool_call, AppCommand, Origin};
+use eframe::egui::{self, Color32, Key, Rounding, Stroke, Vec2};
+use egui_phosphor::regular as ic;
+use obs_rust_bitstream::assistant::WorkspaceContext;
+use obs_rust_bitstream::ui_canvas::{format_clock, Raster};
+use std::collections::HashMap;
 use theme::{Palette, SP_LG, SP_MD, SP_SM, SP_XS};
 
 /// Find a bundled file: as given, next to the exe, or one/two/three levels up.
@@ -121,15 +132,16 @@ impl Toasts {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
-    Stream,
     Paint,
+    Composite,
     Scene,
     Animate,
-    Composite,
+    Stream,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 5] = [Mode::Stream, Mode::Paint, Mode::Scene, Mode::Animate, Mode::Composite];
+    /// Header order, as in the mockup.
+    pub const ALL: [Mode; 5] = [Mode::Paint, Mode::Composite, Mode::Scene, Mode::Animate, Mode::Stream];
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -141,24 +153,76 @@ impl Mode {
         }
     }
 
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Mode::Stream => ic::BROADCAST,
+            Mode::Paint => ic::PAINT_BRUSH,
+            Mode::Scene => ic::CUBE,
+            Mode::Animate => ic::FILM_STRIP,
+            Mode::Composite => ic::STACK,
+        }
+    }
+
+    pub fn style(&self) -> (&'static str, &'static str) {
+        match self {
+            Mode::Stream => ("OBS", "OBS-style streaming and bitstream inspection"),
+            Mode::Paint => ("Ps", "Photoshop-style raster editing"),
+            Mode::Scene => ("Ma", "Maya-style 3D layout"),
+            Mode::Animate => ("Tb", "Toon Boom-style frame-by-frame animation"),
+            Mode::Composite => ("Ae", "After Effects-style keyframed compositing"),
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Mode> {
+        match s.trim().to_lowercase().as_str() {
+            "stream" | "obs" => Some(Mode::Stream),
+            "paint" | "photoshop" => Some(Mode::Paint),
+            "3d" | "scene" | "maya" => Some(Mode::Scene),
+            "animate" | "animation" => Some(Mode::Animate),
+            "composite" | "compositing" => Some(Mode::Composite),
+            _ => None,
+        }
+    }
+
     fn has_timeline(&self) -> bool {
         matches!(self, Mode::Scene | Mode::Animate | Mode::Composite)
     }
 
-    fn index(&self) -> usize {
-        Mode::ALL.iter().position(|m| m == self).unwrap_or(0)
+    fn has_shelf(&self) -> bool {
+        matches!(self, Mode::Paint | Mode::Scene)
     }
 }
 
+/// State captured before an AI batch so one click can undo all of it.
+pub struct Snapshot {
+    mode: Mode,
+    paint: paint::PaintDoc,
+    scene_objs: Vec<scene::Obj>,
+    scene_sel: Option<usize>,
+    comp_layers: Vec<composite::CompLayer>,
+    comp_sel: usize,
+    anim_frames: Vec<Raster>,
+    live: Option<f64>,
+    rec: Option<f64>,
+}
+
 pub struct App {
+    pub ctx: egui::Context,
     pub dark: bool,
     pub pal: Palette,
     pub mode: Mode,
     pub show_tools: bool,
     pub show_inspector: bool,
     pub show_timeline: bool,
+    pub show_shelf: bool,
     pub show_assistant: bool,
     pub show_shortcuts: bool,
+    pub show_settings: bool,
+    pub show_account: bool,
+    /// 0 = Seraphina, 1 = Grok Imagine.
+    pub dock_tab: usize,
+    pub shelf_tab: usize,
+    pub native_frame: bool,
     pub toasts: Toasts,
     pub stream: stream::StreamState,
     pub paint: paint::PaintState,
@@ -166,59 +230,384 @@ pub struct App {
     pub anim: animate::AnimState,
     pub comp: composite::CompState,
     pub assistant: assistant_panel::AssistantPanel,
+    pub video: videogen::VideoGenPanel,
+    pub bus: Vec<AppCommand>,
+    pub log: Vec<(Origin, String, Result<String, String>)>,
+    snapshots: HashMap<u64, Snapshot>,
+    sel_ov: paint::SelOverlay,
     last_time: Option<f64>,
+}
+
+pub fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+    // Hack carries geometric glyphs (◆ ● →) the UI font lacks.
+    if let Some(f) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+        f.push("Hack".to_owned());
+    }
+    ctx.set_fonts(fonts);
 }
 
 impl App {
     pub fn new(ctx: &egui::Context) -> Self {
+        Self::with(ctx, assistant_panel::AssistantPanel::new(prefs::Prefs::load(prefs::default_path())), videogen::VideoGenPanel::new())
+    }
+
+    pub fn with(ctx: &egui::Context, assistant: assistant_panel::AssistantPanel, video: videogen::VideoGenPanel) -> Self {
         let pal = Palette::dark();
-        let mut fonts = egui::FontDefinitions::default();
-        // Hack carries geometric glyphs (◆ ● ◉ ↶ ↷ →) the UI font lacks.
-        if let Some(f) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
-            f.push("Hack".to_owned());
-        }
-        ctx.set_fonts(fonts);
+        install_fonts(ctx);
         theme::apply(ctx, &pal);
         let mut toasts = Toasts::default();
         let paint = paint::PaintState::new(&mut toasts);
         Self {
+            ctx: ctx.clone(),
             dark: true,
             pal,
-            mode: Mode::Stream,
+            mode: Mode::Paint,
             show_tools: true,
             show_inspector: true,
             show_timeline: true,
+            show_shelf: true,
             show_assistant: true,
             show_shortcuts: false,
+            show_settings: false,
+            show_account: false,
+            dock_tab: 0,
+            shelf_tab: 0,
+            native_frame: true,
             stream: stream::StreamState::new(),
             paint,
             scene: scene::SceneState::new(),
             anim: animate::AnimState::new(),
             comp: composite::CompState::new(),
-            assistant: assistant_panel::AssistantPanel::new(),
+            assistant,
+            video,
+            bus: Vec::new(),
+            log: Vec::new(),
+            snapshots: HashMap::new(),
+            sel_ov: paint::SelOverlay::default(),
             toasts,
             last_time: None,
         }
     }
 
-    pub fn set_dark(&mut self, ctx: &egui::Context, dark: bool) {
+    pub fn set_dark(&mut self, dark: bool) {
         self.dark = dark;
         self.pal = Palette::for_mode(dark);
-        theme::apply(ctx, &self.pal);
+        theme::apply(&self.ctx, &self.pal);
+    }
+
+    fn now(&self) -> f64 {
+        self.toasts.now
     }
 
     pub fn current_tool(&self) -> String {
         match self.mode {
             Mode::Stream => format!("Read {} bit{}", self.stream.width, if self.stream.width == 1 { "" } else { "s" }),
             Mode::Paint => self.paint.tool.label().to_string(),
-            Mode::Scene => "Orbit".to_string(),
+            Mode::Scene => format!("{} Tool", self.scene.gizmo.label()),
             Mode::Animate => if self.anim.erase { "Eraser" } else { "Pencil" }.to_string(),
             Mode::Composite => "Keyframe".to_string(),
         }
     }
 
+    pub fn zoom_label(&self) -> String {
+        match self.mode {
+            Mode::Paint => format!("{:.1}%", self.paint.zoom * 100.0),
+            Mode::Scene => format!("dolly {:.1}", self.scene.dist),
+            _ => "Fit".into(),
+        }
+    }
+
+    pub fn resolution_label(&self) -> String {
+        match self.mode {
+            Mode::Paint => format!("{} × {} px", self.paint.width(), self.paint.height()),
+            Mode::Animate => format!("{} × {} px", animate::W, animate::H),
+            Mode::Composite => format!("{} × {} px", composite::PW, composite::PH),
+            Mode::Scene => "Viewport".into(),
+            Mode::Stream => format!("{} bytes", self.stream.insp.data().len()),
+        }
+    }
+
+    pub fn document_label(&self) -> String {
+        match self.mode {
+            Mode::Paint => format!("{}.psd", self.paint.doc_name),
+            Mode::Stream => self.stream.source.clone(),
+            Mode::Scene => "Untitled scene".into(),
+            Mode::Animate => format!("{} frames", self.anim.frames.len()),
+            Mode::Composite => "Comp 1".into(),
+        }
+    }
+
     fn workspace_ctx(&self) -> WorkspaceContext {
         WorkspaceContext { mode: self.mode.label().to_string(), tool: self.current_tool(), detail: String::new() }
+    }
+
+    /// State description for Seraphina's system prompt.
+    pub fn app_context(&self) -> String {
+        let vid = match &self.video.provider {
+            Some(_) => format!("configured, {} clips", self.video.clips.len()),
+            None => "not configured (no key)".into(),
+        };
+        format!(
+            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
+            self.mode.label(),
+            if self.dark { "dark" } else { "light" },
+            self.show_tools,
+            self.show_inspector,
+            self.show_timeline,
+            self.show_shelf,
+            self.show_assistant,
+            self.paint.context(),
+            self.scene.context(),
+            self.anim.context(),
+            self.comp.context(),
+            self.stream.context(),
+            vid
+        )
+    }
+
+    fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            mode: self.mode,
+            paint: self.paint.doc.clone(),
+            scene_objs: self.scene.objs.clone(),
+            scene_sel: self.scene.selected,
+            comp_layers: self.comp.layers.clone(),
+            comp_sel: self.comp.selected,
+            anim_frames: self.anim.frames.clone(),
+            live: self.stream.live_since,
+            rec: self.stream.rec_since,
+        }
+    }
+
+    fn restore(&mut self, s: Snapshot) {
+        self.mode = s.mode;
+        self.paint.set_doc(s.paint);
+        self.scene.objs = s.scene_objs;
+        self.scene.selected = s.scene_sel;
+        self.comp.layers = s.comp_layers;
+        self.comp.selected = s.comp_sel;
+        self.anim.restore(s.anim_frames);
+        self.stream.live_since = s.live;
+        self.stream.rec_since = s.rec;
+    }
+
+    /// The single entry point for every action in the app.
+    pub fn dispatch(&mut self, cmd: &AppCommand, origin: Origin) -> Result<String, String> {
+        use AppCommand as C;
+        let now = self.now();
+        let r: Result<String, String> = match cmd {
+            C::SwitchMode { mode } => match Mode::parse(mode) {
+                Some(m) => {
+                    self.mode = m;
+                    Ok(format!("switched to {}", m.label()))
+                }
+                None => Err(format!("unknown mode '{}'", mode)),
+            },
+            C::SetTheme { dark } => {
+                self.set_dark(*dark);
+                Ok(format!("{} theme", if *dark { "dark" } else { "light" }))
+            }
+            C::TogglePanel { panel, visible } => {
+                let key = panel.trim().to_lowercase();
+                if matches!(key.as_str(), "videogen" | "video") {
+                    self.dock_tab = 1;
+                }
+                let slot = match key.as_str() {
+                    "tools" => Some(&mut self.show_tools),
+                    "inspector" | "layers" => Some(&mut self.show_inspector),
+                    "timeline" => Some(&mut self.show_timeline),
+                    "shelf" => Some(&mut self.show_shelf),
+                    "assistant" | "seraphina" | "videogen" | "video" => Some(&mut self.show_assistant),
+                    "shortcuts" => Some(&mut self.show_shortcuts),
+                    _ => None,
+                };
+                match slot {
+                    Some(s) => {
+                        *s = visible.unwrap_or(!*s);
+                        Ok(format!("{} panel {}", panel, if *s { "shown" } else { "hidden" }))
+                    }
+                    None => Err(format!("unknown panel '{}'", panel)),
+                }
+            }
+            C::Undo | C::Redo => match self.mode {
+                Mode::Paint => self.paint.apply(cmd).unwrap_or(Err("unsupported".into())),
+                Mode::Animate => {
+                    if matches!(cmd, C::Undo) {
+                        self.anim.undo()
+                    } else {
+                        self.anim.redo()
+                    }
+                    Ok(cmd.name())
+                }
+                m => Err(format!("{} mode has no undo history yet; use Undo on Seraphina's action card", m.label())),
+            },
+            C::OpenFile { path } => {
+                self.mode = Mode::Paint;
+                self.paint.open(path)
+            }
+            C::VideoGenerate { prompt, duration } => {
+                self.show_assistant = true;
+                self.dock_tab = 1;
+                self.video.generate(prompt, *duration)
+            }
+            C::VideoExtend { clip, prompt } => {
+                self.show_assistant = true;
+                self.dock_tab = 1;
+                self.video.extend(*clip, prompt)
+            }
+            C::GenerateImage { prompt } => {
+                self.show_assistant = true;
+                self.dock_tab = 1;
+                self.video.generate_image(prompt)
+            }
+            C::VideoStitch { clips } => {
+                self.dock_tab = 1;
+                self.video.stitch(clips.clone())
+            }
+            C::RunReader { .. } | C::ResetReader | C::SetStreaming { .. } | C::SetRecording { .. } => {
+                if matches!(cmd, C::RunReader { .. } | C::ResetReader) {
+                    self.mode = Mode::Stream;
+                }
+                self.stream.apply(cmd, now).unwrap_or(Err("unsupported".into()))
+            }
+            C::SceneAdd { .. } | C::SceneSelect { .. } | C::SceneGizmo { .. } | C::SceneTransform { .. } | C::SceneExtrude { .. } | C::SceneBevel { .. } | C::SceneDelete { .. } => {
+                self.mode = Mode::Scene;
+                self.scene.apply(cmd, &mut self.toasts).unwrap_or(Err("unsupported".into()))
+            }
+            C::TimelinePlay { .. } | C::TimelineScrub { .. } | C::SetKeyframe | C::DeleteKeyframe => match self.mode {
+                Mode::Scene => self.scene.apply(cmd, &mut self.toasts),
+                Mode::Animate => self.anim.apply(cmd, &mut self.toasts),
+                Mode::Composite => self.comp.apply(cmd),
+                m => Some(Err(format!("{} mode has no timeline; switch to 3D, Animate or Composite first", m.label()))),
+            }
+            .unwrap_or(Err("unsupported".into())),
+            C::SelectLayer { .. } | C::SetLayerOpacity { .. } | C::SetLayerBlend { .. } | C::SetLayerVisibility { .. } if self.mode == Mode::Composite => self.comp.apply(cmd).unwrap_or(Err("unsupported".into())),
+            _ => match self.paint.apply(cmd) {
+                Some(r) => r,
+                None => Err(format!("{} isn't handled", cmd.name())),
+            },
+        };
+        self.finish(cmd, origin, r)
+    }
+
+    fn finish(&mut self, cmd: &AppCommand, origin: Origin, r: Result<String, String>) -> Result<String, String> {
+        if origin == Origin::User {
+            match &r {
+                Ok(t) => {
+                    match cmd {
+                        AppCommand::SelectTool { tool } => self.assistant.prefs.tool_used("Paint", tool),
+                        AppCommand::SceneGizmo { mode } => self.assistant.prefs.tool_used("3D", mode),
+                        AppCommand::SetBrush { size: Some(s), .. } => self.assistant.prefs.param_chosen("paint.brush_size", (*s / 200.0).clamp(0.0, 1.0)),
+                        AppCommand::SetBrush { hardness: Some(h), .. } => self.assistant.prefs.param_chosen("paint.brush_hardness", h.clamp(0.0, 1.0)),
+                        _ => {}
+                    }
+                    if matches!(cmd, AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. } | AppCommand::VideoGenerate { .. } | AppCommand::GenerateImage { .. } | AppCommand::VideoExtend { .. } | AppCommand::VideoStitch { .. } | AppCommand::SetStreaming { .. } | AppCommand::SetRecording { .. } | AppCommand::Crop { .. } | AppCommand::ApplyFilter { .. }) {
+                        let mut s = t.clone();
+                        if let Some(c) = s.get_mut(0..1) {
+                            c.make_ascii_uppercase();
+                        }
+                        self.toasts.push(ToastKind::Success, &s);
+                    }
+                }
+                Err(e) => self.toasts.push(ToastKind::Error, e),
+            }
+        }
+        self.log.push((origin, cmd.name(), r.clone()));
+        if self.log.len() > 200 {
+            let _ = self.log.remove(0);
+        }
+        r
+    }
+
+    /// Run everything the UI queued this frame.
+    pub fn process_bus(&mut self) {
+        let cmds = std::mem::take(&mut self.bus);
+        for c in cmds {
+            let _ = self.dispatch(&c, Origin::User);
+        }
+    }
+
+    /// Execute Seraphina's tool calls through the Triad gate.
+    pub fn run_tool_calls(&mut self, calls: Vec<llm::ToolCall>) {
+        let batch = self.assistant.alloc_batch();
+        let snap = self.snapshot();
+        let mut lines = Vec::new();
+        let mut results = Vec::new();
+        for c in calls {
+            // geometric wheel: the call must parse into a known command
+            let cmd = match parse_tool_call(&c.name, &c.arguments) {
+                Ok(cmd) => cmd,
+                Err(e) => {
+                    lines.push(ActionLine { status: LineStatus::Rejected, text: format!("Seraphina tried {}: {}", c.name, e), cmd: None, ran: false });
+                    results.push((c.id, format!("error: {}", e)));
+                    continue;
+                }
+            };
+            // mercy wheel: irreversible or external actions wait for the user
+            if cmd.needs_user() {
+                lines.push(ActionLine { status: LineStatus::NeedsUser, text: format!("Seraphina wants to run {} ({})", cmd.name(), c.arguments.chars().take(80).collect::<String>()), cmd: Some(cmd), ran: false });
+                results.push((c.id, "blocked: needs the user's approval; they now see a Run button".into()));
+                continue;
+            }
+            // verification wheel: dispatch must succeed against real state
+            match self.dispatch(&cmd, Origin::Seraphina) {
+                Ok(t) => {
+                    lines.push(ActionLine { status: LineStatus::Done, text: format!("Seraphina: {}", t), cmd: Some(cmd), ran: true });
+                    results.push((c.id, format!("ok: {}", t)));
+                }
+                Err(e) => {
+                    lines.push(ActionLine { status: LineStatus::Rejected, text: format!("Seraphina tried {}: {}", cmd.name(), e), cmd: Some(cmd), ran: false });
+                    results.push((c.id, format!("error: {}", e)));
+                }
+            }
+        }
+        if lines.iter().any(|l| l.status == LineStatus::Done && l.cmd.as_ref().map(|c| c.mutates()).unwrap_or(false)) {
+            self.snapshots.insert(batch, snap);
+        }
+        let ctx = self.app_context();
+        self.assistant.submit_results(batch, lines, results, &ctx);
+    }
+
+    pub fn undo_batch(&mut self, batch: u64) -> bool {
+        let found = match self.snapshots.remove(&batch) {
+            Some(s) => {
+                self.restore(s);
+                self.toasts.push(ToastKind::Info, "Undid Seraphina's actions.");
+                true
+            }
+            None => false,
+        };
+        self.assistant.mark_undone(batch);
+        found
+    }
+
+    fn handle_panel_requests(&mut self) {
+        for r in std::mem::take(&mut self.assistant.requests) {
+            match r {
+                PanelRequest::UndoBatch(b) => {
+                    self.undo_batch(b);
+                }
+                PanelRequest::Run { cmd, batch, line } => {
+                    let res = self.dispatch(&cmd, Origin::User);
+                    self.assistant.mark_ran(batch, line, res);
+                }
+            }
+        }
+    }
+
+    pub fn pump_assistant(&mut self) {
+        if self.assistant.want_send {
+            let ctx = self.app_context();
+            let w = self.workspace_ctx();
+            self.assistant.start(&ctx, &w);
+        }
+        self.assistant.poll();
+        if let Some(calls) = self.assistant.take_tool_calls() {
+            self.run_tool_calls(calls);
+        }
+        self.handle_panel_requests();
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -227,49 +616,72 @@ impl App {
         }
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
-        for (k, m) in [(Key::Num1, Mode::Stream), (Key::Num2, Mode::Paint), (Key::Num3, Mode::Scene), (Key::Num4, Mode::Animate), (Key::Num5, Mode::Composite)] {
+        let mut out = Vec::new();
+        for (k, m) in [(Key::Num1, Mode::Paint), (Key::Num2, Mode::Composite), (Key::Num3, Mode::Scene), (Key::Num4, Mode::Animate), (Key::Num5, Mode::Stream)] {
             if cmd && pressed(k) {
-                self.mode = m;
+                out.push(AppCommand::SwitchMode { mode: m.label().into() });
             }
         }
-        if pressed(Key::F1) || pressed(Key::Questionmark) {
+        if pressed(Key::F1) {
             self.show_shortcuts = !self.show_shortcuts;
         }
         if cmd && pressed(Key::Period) {
-            self.show_assistant = !self.show_assistant;
+            out.push(AppCommand::TogglePanel { panel: "assistant".into(), visible: None });
         }
-        if pressed(Key::Escape) && self.show_shortcuts {
+        if pressed(Key::Escape) && (self.show_shortcuts || self.show_settings || self.show_account) {
             self.show_shortcuts = false;
+            self.show_settings = false;
+            self.show_account = false;
+        }
+        if cmd && pressed(Key::Z) {
+            out.push(if shift { AppCommand::Redo } else { AppCommand::Undo });
+        } else if cmd && pressed(Key::Y) {
+            out.push(AppCommand::Redo);
+        }
+        if self.mode.has_timeline() && !cmd {
+            if pressed(Key::Space) {
+                out.push(AppCommand::TimelinePlay { playing: None });
+            }
+            if pressed(Key::K) {
+                out.push(AppCommand::SetKeyframe);
+            }
         }
         match self.mode {
             Mode::Stream => {
                 if pressed(Key::Enter) || pressed(Key::ArrowRight) {
-                    self.stream.step(1);
+                    out.push(AppCommand::RunReader { width: None, reads: Some(1), wrap: None });
                 }
                 if pressed(Key::R) && !cmd {
-                    self.stream.insp.reset();
+                    out.push(AppCommand::ResetReader);
                 }
             }
             Mode::Paint => {
-                if cmd && pressed(Key::Z) {
-                    if shift { self.paint.redo() } else { self.paint.undo() }
-                } else if cmd && pressed(Key::Y) {
-                    self.paint.redo();
-                } else if cmd && pressed(Key::Num0) {
-                    self.paint.fit();
+                if cmd && pressed(Key::Num0) {
+                    out.push(AppCommand::Zoom { percent: None, fit: Some(true) });
                 } else if cmd && (pressed(Key::Plus) || pressed(Key::Equals)) {
                     self.paint.zoom_by(true);
                 } else if cmd && pressed(Key::Minus) {
                     self.paint.zoom_by(false);
+                } else if cmd && pressed(Key::D) {
+                    out.push(AppCommand::Deselect);
+                } else if cmd && pressed(Key::A) {
+                    out.push(AppCommand::SelectAll);
                 } else if !cmd {
                     for t in paint::Tool::ALL {
-                        if pressed(t.key()) && self.paint.tool != t {
-                            self.paint.tool = t;
-                            self.assistant.observe(LearningEvent::ToolUsed { mode: "Paint".into(), tool: t.label().into() });
+                        if t == paint::Tool::Burn || !pressed(t.key()) {
+                            continue;
+                        }
+                        let t = if t == paint::Tool::Dodge && shift { paint::Tool::Burn } else { t };
+                        if self.paint.tool != t {
+                            out.push(AppCommand::SelectTool { tool: t.id().into() });
                         }
                     }
-                    if pressed(Key::Enter) && self.paint.crop.is_some() {
-                        self.paint.apply_crop(&mut self.toasts);
+                    if pressed(Key::Enter) {
+                        if let Some(c) = self.paint.crop {
+                            out.push(AppCommand::Crop { x: c.x as f32, y: c.y as f32, w: c.w as f32, h: c.h as f32 });
+                        } else if !self.paint.pen.is_empty() {
+                            out.push(AppCommand::PenStroke);
+                        }
                     }
                     if pressed(Key::Escape) {
                         self.paint.crop = None;
@@ -277,19 +689,13 @@ impl App {
                 }
             }
             Mode::Animate => {
-                if cmd && pressed(Key::Z) {
-                    if shift { self.anim.redo() } else { self.anim.undo() }
-                } else if !cmd {
-                    if pressed(Key::Space) {
-                        self.anim.clock.toggle();
-                    }
+                if !cmd {
+                    let c = self.anim.current();
                     if pressed(Key::Comma) {
-                        let c = self.anim.current();
-                        self.anim.goto(c.saturating_sub(1));
+                        out.push(AppCommand::TimelineScrub { time: (c.saturating_sub(1) as f32 + 0.01) / self.anim.fps });
                     }
                     if pressed(Key::Period) {
-                        let c = self.anim.current();
-                        self.anim.goto(c + 1);
+                        out.push(AppCommand::TimelineScrub { time: ((c + 1).min(self.anim.frames.len() - 1) as f32 + 0.01) / self.anim.fps });
                     }
                     if pressed(Key::B) {
                         self.anim.erase = false;
@@ -300,104 +706,160 @@ impl App {
                 }
             }
             Mode::Scene => {
-                if pressed(Key::Space) {
-                    self.scene.clock.toggle();
-                }
                 if pressed(Key::Delete) || pressed(Key::Backspace) {
-                    self.scene.delete_selected();
+                    out.push(AppCommand::SceneDelete { object: None });
+                }
+                if !cmd {
+                    for (k, g) in [(Key::Q, "select"), (Key::W, "move"), (Key::E, "rotate"), (Key::R, "scale")] {
+                        if pressed(k) {
+                            out.push(AppCommand::SceneGizmo { mode: g.into() });
+                        }
+                    }
                 }
             }
-            Mode::Composite => {
-                if pressed(Key::Space) {
-                    self.comp.clock.toggle();
-                }
-            }
+            Mode::Composite => {}
         }
+        self.bus.extend(out);
     }
 
-    fn top_bar(&mut self, ctx: &egui::Context) {
+    // ---- chrome -----------------------------------------------------------
+
+    fn header(&mut self, ctx: &egui::Context) {
         let p = self.pal;
-        egui::TopBottomPanel::top("top")
-            .frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, SP_SM)).stroke(egui::Stroke::new(1.0_f32, p.border)))
+        egui::TopBottomPanel::top("header")
+            .exact_height(58.0)
+            .frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, 0.0)).stroke(Stroke::new(1.0_f32, p.line)))
             .show(ctx, |ui| {
                 let full = ui.max_rect();
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("◆").size(16.0).color(p.accent));
-                    ui.label(egui::RichText::new("Seraphina Studio").size(15.0).strong().color(p.text));
+                if !self.native_frame {
+                    let bg = ui.interact(full, egui::Id::new("titlebar"), egui::Sense::click_and_drag());
+                    if bg.drag_started() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                    }
+                    if bg.double_clicked() {
+                        let m = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!m));
+                    }
+                }
+                ui.horizontal_centered(|ui| {
+                    let (gr, _) = ui.allocate_exact_size(Vec2::new(34.0, 38.0), egui::Sense::hover());
+                    theme::gem(ui.painter(), gr, &p);
+                    ui.add_space(SP_XS);
+                    ui.vertical(|ui| {
+                        ui.add_space(10.0);
+                        ui.label(egui::RichText::new("Seraphina Studio").size(17.0).strong().color(p.accent));
+                        ui.label(egui::RichText::new("Professional Creative Suite").size(10.5).color(p.muted));
+                    });
+                    ui.add_space(SP_LG);
+                    let tab_w = ((full.width() - 660.0) / 5.0).clamp(96.0, 150.0);
+                    for (i, m) in Mode::ALL.iter().enumerate() {
+                        let (badge, tip) = m.style();
+                        let r = theme::mode_tab(ui, &p, m.icon(), m.label(), self.mode == *m, tab_w).on_hover_text(format!("{} · {}  (Ctrl+{})", tip, badge, i + 1));
+                        if r.clicked() {
+                            self.bus.push(AppCommand::SwitchMode { mode: m.label().into() });
+                        }
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(theme::toggle_button(&p, "?", self.show_shortcuts)).on_hover_text("Keyboard shortcuts  (F1)").clicked() {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        if !self.native_frame {
+                            if theme::icon_button_sized(ui, &p, ic::X, "Close", false, 30.0, 16.0).clicked() {
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            }
+                            let max = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
+                            if theme::icon_button_sized(ui, &p, if max { ic::CORNERS_IN } else { ic::SQUARE }, if max { "Restore" } else { "Maximise" }, false, 30.0, 15.0).clicked() {
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+                            }
+                            if theme::icon_button_sized(ui, &p, ic::MINUS, "Minimise", false, 30.0, 16.0).clicked() {
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                            }
+                            theme::vdivider(ui, &p, 26.0);
+                        }
+                        if theme::icon_button_sized(ui, &p, ic::USER_CIRCLE, "Account (local profile)", self.show_account, 30.0, 19.0).clicked() {
+                            self.show_account = !self.show_account;
+                        }
+                        if theme::icon_button_sized(ui, &p, ic::GEAR_SIX, "Settings", self.show_settings, 30.0, 17.0).clicked() {
+                            self.show_settings = !self.show_settings;
+                        }
+                        if theme::icon_button_sized(ui, &p, ic::KEYBOARD, "Keyboard shortcuts  (F1)", self.show_shortcuts, 30.0, 17.0).clicked() {
                             self.show_shortcuts = !self.show_shortcuts;
                         }
-                        let theme_label = if self.dark { "☀  Light" } else { "🌙  Dark" };
-                        if ui.add(theme::toggle_button(&p, theme_label, false)).on_hover_text("Switch appearance").clicked() {
-                            let d = !self.dark;
-                            self.set_dark(ui.ctx(), d);
+                        let (ti, tt) = if self.dark { (ic::SUN, "Light theme") } else { (ic::MOON, "Dark theme") };
+                        if theme::icon_button_sized(ui, &p, ti, tt, false, 30.0, 17.0).clicked() {
+                            self.bus.push(AppCommand::SetTheme { dark: !self.dark });
                         }
-                        ui.add_space(SP_SM);
-                        if ui.add(theme::toggle_button(&p, "✨ Seraphina", self.show_assistant)).on_hover_text("Assistant panel  (Ctrl+.)").clicked() {
-                            self.show_assistant = !self.show_assistant;
+                        let vg = self.show_assistant && self.dock_tab == 1;
+                        if theme::icon_button_sized(ui, &p, ic::FILM_REEL, "Grok Imagine video", vg, 30.0, 17.0).clicked() {
+                            self.show_assistant = !vg;
+                            self.dock_tab = 1;
                         }
-                        if self.mode.has_timeline() && ui.add(theme::toggle_button(&p, "Timeline", self.show_timeline)).clicked() {
-                            self.show_timeline = !self.show_timeline;
-                        }
-                        if ui.add(theme::toggle_button(&p, "Inspector", self.show_inspector)).clicked() {
-                            self.show_inspector = !self.show_inspector;
-                        }
-                        if ui.add(theme::toggle_button(&p, "Tools", self.show_tools)).clicked() {
-                            self.show_tools = !self.show_tools;
+                        let sr = self.show_assistant && self.dock_tab == 0;
+                        if theme::icon_button_sized(ui, &p, ic::SPARKLE, "Seraphina  (Ctrl+.)", sr, 30.0, 17.0).clicked() {
+                            self.show_assistant = !sr;
+                            self.dock_tab = 0;
                         }
                     });
                 });
-                // centred segmented mode switcher
-                let seg_w = 92.0;
-                let w = seg_w * Mode::ALL.len() as f32 + 4.0;
-                let rect = egui::Rect::from_center_size(egui::pos2(full.center().x, full.center().y), Vec2::new(w, 28.0));
-                let labels: Vec<&str> = Mode::ALL.iter().map(|m| m.label()).collect();
-                let idx = self.mode.index();
-                let picked = ui.allocate_new_ui(egui::UiBuilder::new().max_rect(rect), |ui| theme::segmented(ui, &p, "modes", &labels, idx, seg_w)).inner;
-                if let Some(i) = picked {
-                    self.mode = Mode::ALL[i];
-                }
             });
     }
 
     fn status_bar(&mut self, ctx: &egui::Context) {
         let p = self.pal;
-        let now = self.toasts.now;
+        let now = self.now();
         egui::TopBottomPanel::bottom("status")
-            .exact_height(28.0)
-            .frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, 4.0)).stroke(egui::Stroke::new(1.0_f32, p.border)))
+            .exact_height(26.0)
+            .frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, 3.0)).stroke(Stroke::new(1.0_f32, p.line)))
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
-                    ui.label(egui::RichText::new(self.mode.label()).size(12.0).strong().color(p.text));
-                    ui.label(egui::RichText::new("·").color(p.muted));
-                    ui.label(egui::RichText::new(self.current_tool()).size(12.0).color(p.muted));
-                    let detail = match self.mode {
-                        Mode::Stream => {
-                            let (b, bit) = self.stream.insp.cursor();
-                            format!("{}  ·  byte {}.{} of {}", self.stream.insp.mode().label(), b, bit, self.stream.insp.data().len())
-                        }
-                        Mode::Paint => {
-                            let pos = self.paint.cursor_px.map(|(x, y)| format!("{}, {} px", x, y)).unwrap_or_else(|| "—".into());
-                            format!("{} × {}  ·  {:.0}%  ·  {}", self.paint.width, self.paint.height, self.paint.zoom * 100.0, pos)
-                        }
-                        Mode::Scene => format!("{} objects  ·  {:.2}s", self.scene.objs.len(), self.scene.clock.time),
-                        Mode::Animate => format!("frame {} / {}  ·  {} fps", self.anim.current() + 1, self.anim.frames.len(), self.anim.fps),
-                        Mode::Composite => format!("{} layers  ·  {:.2}s", self.comp.layers.len(), self.comp.clock.time),
+                    let item = |ui: &mut egui::Ui, k: &str, v: String| {
+                        ui.label(egui::RichText::new(k).size(11.5).color(p.muted));
+                        ui.label(egui::RichText::new(v).size(11.5).color(p.text));
+                        theme::vdivider(ui, &p, 14.0);
                     };
-                    ui.label(egui::RichText::new("·").color(p.muted));
-                    ui.label(egui::RichText::new(detail).size(12.0).monospace().color(p.muted));
+                    item(ui, "Tool:", self.current_tool());
+                    item(ui, "Zoom:", self.zoom_label());
+                    item(ui, "Resolution:", self.resolution_label());
+                    item(ui, "Document:", self.document_label());
+                    if self.mode == Mode::Paint {
+                        if let Some((x, y)) = self.paint.cursor_px {
+                            item(ui, "Cursor:", format!("{}, {}", x, y));
+                        }
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let (c, t) = if self.assistant.backend.is_connected() { (p.success, "Assistant connected") } else { (p.muted, "Assistant offline") };
-                        theme::pill(ui, &p, c, t);
-                        if let Some(s) = self.stream.rec_since {
-                            theme::pill(ui, &p, p.danger, &format!("REC {}", format_clock((now - s) as u64)));
+                        let live = self.stream.live_since.is_some();
+                        let rec = self.stream.rec_since.is_some();
+                        if theme::icon_button(ui, &p, ic::GEAR, "Output settings (Stream mode)", false).clicked() {
+                            self.bus.push(AppCommand::SwitchMode { mode: "stream".into() });
                         }
-                        if let Some(s) = self.stream.live_since {
-                            let (c, t) = if self.stream.reconnecting() { (p.warn, "RECONNECTING".to_string()) } else { (p.success, format!("LIVE {}", format_clock((now - s) as u64))) };
-                            theme::pill(ui, &p, c, &t).on_hover_text("Simulated — no output is connected");
+                        if (live || rec) && theme::icon_button(ui, &p, ic::STOP, "Stop streaming and recording", false).clicked() {
+                            self.bus.push(AppCommand::SetStreaming { live: false });
+                            self.bus.push(AppCommand::SetRecording { recording: false });
                         }
-                        if self.stream.live_since.is_some() || self.stream.rec_since.is_some() {
+                        let rec_t = match self.stream.rec_since {
+                            Some(s) => format!("REC {}", format_clock((now - s) as u64)),
+                            None => "REC off".into(),
+                        };
+                        let r = ui.add(egui::Label::new(egui::RichText::new(&rec_t).size(11.5).color(if rec { p.danger } else { p.muted })).sense(egui::Sense::click()));
+                        if r.on_hover_text("Click to toggle recording (simulated output)").clicked() {
+                            self.bus.push(AppCommand::SetRecording { recording: !rec });
+                        }
+                        let (dot, txt) = if self.stream.reconnecting() {
+                            (p.warn, "Reconnecting".to_string())
+                        } else if let Some(s) = self.stream.live_since {
+                            (p.success, format!("Live {}", format_clock((now - s) as u64)))
+                        } else {
+                            (p.muted, "Offline".to_string())
+                        };
+                        let r = ui.add(egui::Label::new(egui::RichText::new(&txt).size(11.5).color(if live { p.success } else { p.muted })).sense(egui::Sense::click()));
+                        if r.on_hover_text("Click to go live / end (simulated: no encoder is connected)").clicked() {
+                            self.bus.push(AppCommand::SetStreaming { live: !live });
+                        }
+                        let (dr, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
+                        ui.painter().circle_filled(dr.center(), 4.0, dot);
+                        ui.label(egui::RichText::new("Streaming:").size(11.5).color(p.muted));
+                        ui.label(egui::RichText::new(ic::BROADCAST).size(13.0).color(p.accent));
+                        theme::vdivider(ui, &p, 14.0);
+                        ui.label(egui::RichText::new(format!("Online learning: {} updates", self.assistant.prefs.bank.updates)).size(11.5).color(p.muted));
+                        if live || rec {
                             ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
                         }
                     });
@@ -405,16 +867,16 @@ impl App {
             });
     }
 
-    fn shortcuts(&mut self, ctx: &egui::Context) {
+    fn windows(&mut self, ctx: &egui::Context) {
         let p = self.pal;
         let mut open = self.show_shortcuts;
         egui::Window::new("Keyboard shortcuts").open(&mut open).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
             let rows: &[(&str, &[(&str, &str)])] = &[
-                ("Global", &[("Ctrl+1 … 5", "Switch mode"), ("Ctrl+.", "Toggle Seraphina"), ("F1 / ?", "This sheet")]),
+                ("Global", &[("Ctrl+1 … 5", "Paint, Composite, 3D, Animate, Stream"), ("Ctrl+.", "Toggle Seraphina"), ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"), ("F1", "This sheet")]),
+                ("Paint", &[("V M L W C", "Move, Marquee, Lasso, Quick Select, Crop"), ("J S B E G", "Healing, Clone (Alt-click source), Brush, Eraser, Gradient"), ("O / Shift+O", "Dodge / Burn"), ("P T H Z I", "Pen, Type, Hand, Zoom, Eyedropper"), ("Enter / Esc", "Apply crop or stroke the pen path / cancel crop"), ("Ctrl+A / Ctrl+D", "Select all / deselect"), ("Ctrl+0, Ctrl+= / −", "Fit, zoom")]),
+                ("3D", &[("Q W E R", "Select, Move, Rotate, Scale"), ("Alt-drag", "Orbit"), ("Delete", "Delete object")]),
+                ("Timeline modes", &[("Space", "Play / pause"), ("K", "Set key"), (", / .", "Previous / next frame (Animate)")]),
                 ("Stream", &[("Enter / →", "Step one read"), ("R", "Reset reader")]),
-                ("Paint", &[("B E M C I H Z", "Brush, Eraser, Marquee, Crop, Eyedropper, Hand, Zoom"), ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"), ("Ctrl+0", "Fit"), ("Ctrl+= / Ctrl+−", "Zoom"), ("Enter / Esc", "Apply / cancel crop"), ("Middle-drag, scroll", "Pan")]),
-                ("Animate", &[("Space", "Play / pause"), (", / .", "Previous / next frame"), ("B / E", "Pencil / eraser")]),
-                ("3D · Composite", &[("Space", "Play / pause"), ("Delete", "Delete object (3D)")]),
             ];
             for (group, items) in rows {
                 ui.label(theme::section(&p, group));
@@ -429,6 +891,82 @@ impl App {
             }
         });
         self.show_shortcuts = open;
+
+        let mut open = self.show_settings;
+        egui::Window::new("Settings").open(&mut open).collapsible(false).resizable(false).default_width(420.0).anchor(egui::Align2::RIGHT_TOP, Vec2::new(-SP_LG, 64.0)).show(ctx, |ui| {
+            ui.label(theme::section(&p, "Appearance"));
+            if let Some(i) = theme::segmented(ui, &p, "theme-seg", &["Dark", "Light"], if self.dark { 0 } else { 1 }, 80.0) {
+                self.bus.push(AppCommand::SetTheme { dark: i == 0 });
+            }
+            ui.add_space(SP_SM);
+            ui.label(theme::section(&p, "Seraphina"));
+            theme::kv(ui, &p, "Language model", self.assistant.backend_label());
+            theme::kv(ui, &p, "Seraphina.AGI CLI", self.assistant.cli.as_ref().map(|c| c.version.clone()).unwrap_or_else(|| "not found".into()));
+            theme::kv(ui, &p, "Learning updates", format!("{}", self.assistant.prefs.bank.updates));
+            ui.add(egui::Label::new(theme::muted(&p, "Key: XAI_API_KEY (or SERAPHINA_GROK_API_KEY). Endpoint: SERAPHINA_BASE_URL / SERAPHINA_GROK_ENDPOINT. Model: SERAPHINA_MODEL / SERAPHINA_GROK_MODEL (default grok-4.7). Video: SERAPHINA_VIDEO_MODEL (grok-imagine-video-1.5) / SERAPHINA_VIDEO_RESOLUTION; image: SERAPHINA_IMAGE_MODEL. Restart after changing.")).wrap());
+            ui.add_space(SP_SM);
+            ui.label(theme::section(&p, "Grok Imagine"));
+            theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
+            ui.add_space(SP_SM);
+            ui.label(theme::section(&p, "Panels"));
+            ui.horizontal_wrapped(|ui| {
+                for (name, on) in [("tools", self.show_tools), ("inspector", self.show_inspector), ("timeline", self.show_timeline), ("shelf", self.show_shelf)] {
+                    if ui.add(theme::toggle_button(&p, name, on)).clicked() {
+                        self.bus.push(AppCommand::TogglePanel { panel: name.into(), visible: Some(!on) });
+                    }
+                }
+            });
+        });
+        self.show_settings = open;
+
+        let mut open = self.show_account;
+        egui::Window::new("Account").open(&mut open).collapsible(false).resizable(false).default_width(300.0).anchor(egui::Align2::RIGHT_TOP, Vec2::new(-SP_LG, 64.0)).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(ic::USER_CIRCLE).size(30.0).color(p.accent));
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("Local profile").strong().color(p.text));
+                    ui.label(theme::muted(&p, "Not signed in. Accounts aren't implemented."));
+                });
+            });
+            ui.add_space(SP_SM);
+            let path = self.assistant.prefs.path.as_ref().map(|x| x.display().to_string()).unwrap_or_else(|| "in memory".into());
+            ui.add(egui::Label::new(theme::muted(&p, &format!("Preferences stay on this machine: {}", path))).wrap());
+        });
+        self.show_account = open;
+    }
+
+    fn edge_resize(&self, ctx: &egui::Context) {
+        if self.native_frame {
+            return;
+        }
+        let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else { return };
+        let r = ctx.screen_rect();
+        let m = 5.0;
+        let (l, rt, t, b) = (pos.x - r.left() < m, r.right() - pos.x < m, pos.y - r.top() < m, r.bottom() - pos.y < m);
+        use egui::viewport::ResizeDirection as D;
+        let dir = match (l, rt, t, b) {
+            (true, _, true, _) => Some(D::NorthWest),
+            (_, true, true, _) => Some(D::NorthEast),
+            (true, _, _, true) => Some(D::SouthWest),
+            (_, true, _, true) => Some(D::SouthEast),
+            (true, ..) => Some(D::West),
+            (_, true, ..) => Some(D::East),
+            (_, _, true, _) => Some(D::North),
+            (_, _, _, true) => Some(D::South),
+            _ => None,
+        };
+        if let Some(d) = dir {
+            let icon = match d {
+                D::West | D::East => egui::CursorIcon::ResizeHorizontal,
+                D::North | D::South => egui::CursorIcon::ResizeVertical,
+                D::NorthWest | D::SouthEast => egui::CursorIcon::ResizeNwSe,
+                _ => egui::CursorIcon::ResizeNeSw,
+            };
+            ctx.set_cursor_icon(icon);
+            if ctx.input(|i| i.pointer.primary_pressed()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(d));
+            }
+        }
     }
 
     /// One frame of UI. Separate from eframe so tests can drive it.
@@ -439,67 +977,138 @@ impl App {
         self.toasts.now = now;
         self.stream.tick(now, &mut self.toasts);
         self.scene.tick(dt);
-        if self.anim.clock.tick(dt) || self.comp.clock.tick(dt) {
+        if self.anim.clock.tick(dt) | self.comp.clock.tick(dt) {
             ctx.request_repaint();
         }
         if self.scene.clock.playing || self.anim.clock.playing || self.comp.clock.playing {
             ctx.request_repaint();
         }
-        self.assistant.tick(now);
+        if let Some(r) = self.video.take_image() {
+            match r.and_then(|(prompt, bytes)| self.paint.add_image_layer(&format!("Imagine: {}", prompt.chars().take(24).collect::<String>()), &bytes)) {
+                Ok(t) => {
+                    self.mode = Mode::Paint;
+                    self.toasts.push(ToastKind::Success, &t);
+                }
+                Err(e) => self.toasts.push(ToastKind::Error, &format!("Image generation failed: {}", e)),
+            }
+        }
+        if self.video.image_busy() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(300));
+        }
+        if self.video.tick() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        self.pump_assistant();
         self.handle_keys(ctx);
+        self.edge_resize(ctx);
 
         let p = self.pal;
-        self.top_bar(ctx);
+        self.header(ctx);
         self.status_bar(ctx);
 
-        let side = egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::same(SP_MD)).stroke(egui::Stroke::new(1.0_f32, p.border));
+        let side = egui::Frame::none().fill(p.panel).stroke(Stroke::new(1.0_f32, p.line));
+        let padded = side.inner_margin(egui::Margin::same(SP_MD));
         let wctx = self.workspace_ctx();
-        egui::SidePanel::right("assistant").resizable(true).default_width(300.0).width_range(260.0..=480.0).frame(side).show_animated(ctx, self.show_assistant, |ui| {
-            self.assistant.ui(ui, &p, now, &wctx);
-        });
-        egui::SidePanel::left("tools").resizable(true).default_width(210.0).width_range(180.0..=320.0).frame(side).show_animated(ctx, self.show_tools, |ui| {
-            ui.spacing_mut().slider_width = (ui.available_width() - 150.0).max(60.0);
-            egui::ScrollArea::vertical().id_salt("tools-scroll").show(ui, |ui| match self.mode {
-                Mode::Stream => self.stream.tools(ui, &p, now, &mut self.toasts),
-                Mode::Paint => {
-                    if let Some(t) = self.paint.tools(ui, &p, &mut self.toasts) {
-                        self.assistant.observe(LearningEvent::ToolUsed { mode: "Paint".into(), tool: t.label().into() });
-                    }
-                }
-                Mode::Scene => self.scene.tools(ui, &p, &mut self.toasts),
-                Mode::Animate => self.anim.tools(ui, &p),
-                Mode::Composite => self.comp.tools(ui, &p),
+
+        if self.mode.has_shelf() {
+            egui::TopBottomPanel::bottom("shelf").frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, SP_XS)).stroke(Stroke::new(1.0_f32, p.line))).show_animated(ctx, self.show_shelf, |ui| {
+                let active = (self.mode == Mode::Scene).then_some(self.scene.gizmo);
+                maya::shelf(ui, &p, &mut self.shelf_tab, active, &mut self.bus);
             });
-        });
-        egui::SidePanel::right("inspector").resizable(true).default_width(280.0).width_range(240.0..=420.0).frame(side).show_animated(ctx, self.show_inspector, |ui| {
-            ui.spacing_mut().slider_width = (ui.available_width() - 175.0).max(60.0);
-            egui::ScrollArea::vertical().id_salt("inspector-scroll").show(ui, |ui| match self.mode {
-                Mode::Stream => self.stream.inspector(ui, &p),
-                Mode::Paint => self.paint.inspector(ui, &p, &mut self.toasts),
-                Mode::Scene => self.scene.inspector(ui, &p),
-                Mode::Animate => self.anim.inspector(ui, &p, &mut self.toasts),
-                Mode::Composite => self.comp.inspector(ui, &p),
-            });
-        });
+        }
         let show_tl = self.show_timeline && self.mode.has_timeline();
-        egui::TopBottomPanel::bottom("timeline")
-            .resizable(false)
-            .frame(egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::same(SP_MD)).stroke(egui::Stroke::new(1.0_f32, p.border)))
-            .show_animated(ctx, show_tl, |ui| match self.mode {
-                Mode::Scene => self.scene.timeline(ui, &p),
-                Mode::Animate => self.anim.timeline(ui, &p, &mut self.toasts),
-                Mode::Composite => self.comp.timeline(ui, &p),
-                _ => {}
+        egui::TopBottomPanel::bottom("timeline").resizable(false).frame(padded).show_animated(ctx, show_tl, |ui| match self.mode {
+            Mode::Scene => self.scene.timeline(ui, &p, &mut self.bus),
+            Mode::Animate => self.anim.timeline(ui, &p, &mut self.toasts, &mut self.bus),
+            Mode::Composite => self.comp.timeline(ui, &p, &mut self.bus),
+            _ => {}
+        });
+
+        egui::SidePanel::right("dock").resizable(true).default_width(330.0).width_range(280.0..=520.0).frame(padded).show_animated(ctx, self.show_assistant, |ui| {
+            ui.horizontal(|ui| {
+                if let Some(i) = theme::segmented(ui, &p, "dock-tabs", &["Seraphina", "Grok Imagine"], self.dock_tab, 110.0) {
+                    self.dock_tab = i;
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if theme::icon_button(ui, &p, ic::X, "Hide panel  (Ctrl+.)", false).clicked() {
+                        self.bus.push(AppCommand::TogglePanel { panel: "assistant".into(), visible: Some(false) });
+                    }
+                });
             });
+            ui.add_space(SP_SM);
+            if self.dock_tab == 0 {
+                self.assistant.ui(ui, &p, &wctx, now);
+            } else {
+                self.video.ui(ui, &p, &mut self.bus);
+            }
+        });
+        egui::SidePanel::right("inspector").resizable(true).default_width(300.0).width_range(250.0..=440.0).frame(side).show_animated(ctx, self.show_inspector, |ui| {
+            ui.spacing_mut().slider_width = (ui.available_width() - 150.0).max(60.0);
+            egui::ScrollArea::vertical().id_salt("inspector-scroll").show(ui, |ui| match self.mode {
+                Mode::Paint => self.paint.inspector(ui, &p, &mut self.bus),
+                m => {
+                    egui::Frame::none().inner_margin(egui::Margin::same(SP_MD)).show(ui, |ui| match m {
+                        Mode::Stream => self.stream.inspector(ui, &p),
+                        Mode::Scene => self.scene.inspector(ui, &p, &mut self.bus),
+                        Mode::Animate => self.anim.inspector(ui, &p, &mut self.toasts, &mut self.bus),
+                        Mode::Composite => self.comp.inspector(ui, &p, &mut self.bus),
+                        Mode::Paint => {}
+                    });
+                }
+            });
+        });
+        egui::SidePanel::left("tools").resizable(true).default_width(220.0).width_range(190.0..=320.0).frame(side).show_animated(ctx, self.show_tools, |ui| {
+            let (badge, tip) = self.mode.style();
+            egui::Frame::none().fill(p.surface).inner_margin(egui::Margin::symmetric(SP_SM, 6.0)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(self.mode.icon()).size(15.0).color(p.accent));
+                    ui.label(egui::RichText::new(format!("{} TOOLS", self.mode.label().to_uppercase())).size(12.0).strong().color(p.text));
+                    theme::badge(ui, &p, badge).on_hover_text(tip);
+                });
+            });
+            ui.spacing_mut().slider_width = (ui.available_width() - 130.0).max(60.0);
+            egui::ScrollArea::vertical().id_salt("tools-scroll").show(ui, |ui| match self.mode {
+                Mode::Paint => self.paint.tools(ui, &p, &mut self.bus),
+                m => {
+                    egui::Frame::none().inner_margin(egui::Margin::same(SP_MD)).show(ui, |ui| match m {
+                        Mode::Stream => self.stream.tools(ui, &p, now, &mut self.toasts, &mut self.bus),
+                        Mode::Scene => self.scene.tools(ui, &p, &mut self.bus),
+                        Mode::Animate => self.anim.tools(ui, &p),
+                        Mode::Composite => self.comp.tools(ui, &p, &mut self.bus),
+                        Mode::Paint => {}
+                    });
+                }
+            });
+        });
         egui::CentralPanel::default().frame(egui::Frame::none().fill(p.bg)).show(ctx, |ui| match self.mode {
-            Mode::Stream => self.stream.center(ui, &p, &mut self.toasts),
-            Mode::Paint => self.paint.center(ui, &p, &mut self.toasts),
+            Mode::Stream => self.stream.center(ui, &p, &mut self.bus),
+            Mode::Paint => {
+                egui::Frame::none().fill(p.panel).inner_margin(egui::Margin::symmetric(SP_MD, 5.0)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    self.paint.options_bar(ui, &p, &mut self.bus);
+                });
+                egui::Frame::none().fill(p.bg).inner_margin(egui::Margin { left: SP_SM, right: SP_SM, top: 4.0, bottom: 0.0 }).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        egui::Frame::none().fill(p.surface).stroke(Stroke::new(1.0_f32, p.line)).rounding(Rounding { nw: 4.0, ne: 4.0, sw: 0.0, se: 0.0 }).inner_margin(egui::Margin::symmetric(SP_MD, 4.0)).show(ui, |ui| {
+                            ui.label(egui::RichText::new(format!("{}.psd @ {:.1}% (RGB/8)", self.paint.doc_name, self.paint.zoom * 100.0)).size(11.5).color(p.text));
+                        });
+                    });
+                });
+                self.paint.center(ui, &p, &mut self.bus, &mut self.toasts, &mut self.sel_ov);
+            }
             Mode::Scene => self.scene.center(ui, &p),
             Mode::Animate => self.anim.center(ui, &p),
             Mode::Composite => self.comp.center(ui, &p),
         });
-        self.shortcuts(ctx);
+        self.windows(ctx);
         self.toasts.show(ctx, &p);
+        // everything the UI queued this frame runs now, through the bus
+        let had = !self.bus.is_empty();
+        self.process_bus();
+        if had || !self.assistant.requests.is_empty() || self.assistant.want_send {
+            ctx.request_repaint();
+        }
     }
 }
 
@@ -512,8 +1121,9 @@ impl eframe::App for App {
 fn main() -> eframe::Result<()> {
     let start_mode = std::env::var("SERAPHINA_MODE").ok();
     let start_light = std::env::var("SERAPHINA_LIGHT").is_ok();
+    let native = std::env::var("SERAPHINA_NATIVE_FRAME").is_ok();
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("Seraphina Studio").with_inner_size([1440.0, 900.0]).with_min_inner_size([1080.0, 680.0]),
+        viewport: egui::ViewportBuilder::default().with_title("Seraphina Studio").with_inner_size([1600.0, 940.0]).with_min_inner_size([1180.0, 700.0]).with_decorations(native),
         ..Default::default()
     };
     eframe::run_native(
@@ -521,13 +1131,12 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(move |cc| {
             let mut app = App::new(&cc.egui_ctx);
-            if let Some(m) = start_mode.as_deref() {
-                if let Some(mode) = Mode::ALL.iter().find(|x| x.label().eq_ignore_ascii_case(m)) {
-                    app.mode = *mode;
-                }
+            app.native_frame = native;
+            if let Some(m) = start_mode.as_deref().and_then(Mode::parse) {
+                app.mode = m;
             }
             if start_light {
-                app.set_dark(&cc.egui_ctx, false);
+                app.set_dark(false);
             }
             Ok(Box::new(app))
         }),
@@ -537,13 +1146,11 @@ fn main() -> eframe::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::{LlmReply, MockProvider, ToolCall};
+    use std::sync::Arc;
 
     fn input(t: f64) -> egui::RawInput {
-        egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1440.0, 900.0))),
-            time: Some(t),
-            ..Default::default()
-        }
+        egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(1600.0, 940.0))), time: Some(t), ..Default::default() }
     }
 
     fn run(app: &mut App, ctx: &egui::Context, frames: usize, t0: f64) {
@@ -552,135 +1159,322 @@ mod tests {
         }
     }
 
+    fn app_with(ctx: &egui::Context, provider: Option<Arc<dyn llm::LlmProvider>>) -> App {
+        let a = assistant_panel::AssistantPanel::with_provider(provider, prefs::Prefs::ephemeral());
+        App::with(ctx, a, videogen::VideoGenPanel::unconfigured())
+    }
+
+    fn call(name: &str, args: &str) -> ToolCall {
+        ToolCall { id: format!("call_{}", name), name: name.into(), arguments: args.into() }
+    }
+
+    fn wait_idle(app: &mut App, ctx: &egui::Context, secs: u64) {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+        while std::time::Instant::now() < end {
+            run(app, ctx, 1, 0.0);
+            if !app.assistant.is_busy() && !app.assistant.want_send {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("assistant never finished");
+    }
+
+    fn action_lines(app: &App) -> Vec<(u64, ActionLine)> {
+        app.assistant
+            .items
+            .iter()
+            .filter_map(|i| match &i.kind {
+                assistant_panel::ItemKind::Actions { batch, lines, .. } => Some(lines.iter().map(|l| (*batch, l.clone())).collect::<Vec<_>>()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
     #[test]
     fn every_mode_renders_dark_and_light() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
+        let mut app = app_with(&ctx, None);
         for dark in [true, false] {
-            app.set_dark(&ctx, dark);
+            app.set_dark(dark);
             for m in Mode::ALL {
                 app.mode = m;
-                run(&mut app, &ctx, 3, 0.0);
+                for tab in 0..2 {
+                    app.dock_tab = tab;
+                    run(&mut app, &ctx, 2, 0.0);
+                }
             }
         }
     }
 
     #[test]
-    fn panels_can_all_hide() {
+    fn panels_and_windows_can_toggle() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        app.show_tools = false;
-        app.show_inspector = false;
-        app.show_assistant = false;
-        app.show_timeline = false;
+        let mut app = app_with(&ctx, None);
         app.show_shortcuts = true;
+        app.show_settings = true;
+        app.show_account = true;
+        run(&mut app, &ctx, 2, 0.0);
+        for panel in ["tools", "inspector", "timeline", "shelf", "assistant"] {
+            assert!(app.dispatch(&AppCommand::TogglePanel { panel: panel.into(), visible: Some(false) }, Origin::User).is_ok());
+        }
+        assert!(!app.show_tools && !app.show_inspector && !app.show_timeline && !app.show_shelf && !app.show_assistant);
         for m in Mode::ALL {
             app.mode = m;
             run(&mut app, &ctx, 2, 0.0);
         }
+        assert!(app.dispatch(&AppCommand::TogglePanel { panel: "nope".into(), visible: None }, Origin::User).is_err());
     }
 
     #[test]
-    fn stream_step_and_wrap() {
+    fn mode_and_theme_go_through_the_bus() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        app.stream.load_sample(&mut app.toasts);
-        app.stream.width = 8;
-        app.stream.step(3);
-        assert_eq!(app.stream.insp.cursor(), (3, 0));
-        app.stream.insp.set_mode(obs_rust_bitstream::stream_inspect::CounterMode::Wrap);
-        app.stream.step(256);
-        assert_eq!(app.stream.insp.cursor().0, 0);
-        run(&mut app, &ctx, 2, 0.0);
-    }
-
-    #[test]
-    fn stream_open_missing_file_is_error_not_panic() {
-        let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        app.stream.path = "definitely/missing.bin".into();
-        app.stream.open(&mut app.toasts);
+        let mut app = app_with(&ctx, None);
+        app.bus.push(AppCommand::SwitchMode { mode: "3d".into() });
+        app.bus.push(AppCommand::SetTheme { dark: false });
+        app.process_bus();
+        assert_eq!(app.mode, Mode::Scene);
+        assert!(!app.dark);
+        assert!(app.dispatch(&AppCommand::SwitchMode { mode: "photoshop".into() }, Origin::User).is_ok());
+        assert_eq!(app.mode, Mode::Paint);
+        assert!(app.dispatch(&AppCommand::SwitchMode { mode: "xyz".into() }, Origin::User).is_err());
         assert!(app.toasts.items.iter().any(|t| t.kind == ToastKind::Error));
     }
 
     #[test]
-    fn paint_stroke_undo_redo() {
+    fn user_tool_choice_updates_learning() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        let paint_i = app.paint.layers.len() - 1;
-        app.paint.begin_stroke();
-        app.paint.paint_to((50.0, 50.0));
-        app.paint.paint_to((120.0, 60.0));
-        assert!(app.paint.layers[paint_i].raster.data.chunks_exact(4).any(|p| p[3] > 0));
-        app.paint.undo();
-        assert!(app.paint.layers[paint_i].raster.data.chunks_exact(4).all(|p| p[3] == 0));
-        app.paint.redo();
-        assert!(app.paint.layers[paint_i].raster.data.chunks_exact(4).any(|p| p[3] > 0));
+        let mut app = app_with(&ctx, None);
+        let n = app.assistant.prefs.bank.updates;
+        app.dispatch(&AppCommand::SelectTool { tool: "lasso".into() }, Origin::User).unwrap();
+        assert_eq!(app.paint.tool, paint::Tool::Lasso);
+        assert_eq!(app.assistant.prefs.bank.updates, n + 1);
+        app.dispatch(&AppCommand::SelectTool { tool: "brush".into() }, Origin::Seraphina).unwrap();
+        assert_eq!(app.assistant.prefs.bank.updates, n + 1);
+    }
+
+    #[test]
+    fn stream_commands_and_status() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.stream.load_sample(&mut app.toasts);
+        app.dispatch(&AppCommand::RunReader { width: Some(8), reads: Some(3), wrap: Some(false) }, Origin::User).unwrap();
+        assert_eq!(app.stream.insp.cursor(), (3, 0));
+        // same counter mode: no reset, reads continue
+        app.dispatch(&AppCommand::RunReader { width: None, reads: Some(2), wrap: Some(false) }, Origin::User).unwrap();
+        assert_eq!(app.stream.insp.cursor(), (5, 0));
+        // switching to the u8 counter restarts; 256 byte reads wrap to 0
+        app.dispatch(&AppCommand::RunReader { width: None, reads: Some(256), wrap: Some(true) }, Origin::User).unwrap();
+        assert_eq!(app.stream.insp.cursor().0, 0);
+        assert!(app.dispatch(&AppCommand::RunReader { width: Some(7), reads: Some(1), wrap: None }, Origin::User).is_err());
+        app.dispatch(&AppCommand::ResetReader, Origin::User).unwrap();
+        assert_eq!(app.stream.insp.cursor(), (0, 0));
+        app.dispatch(&AppCommand::SetStreaming { live: true }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::SetRecording { recording: true }, Origin::User).unwrap();
+        assert!(app.stream.live_since.is_some() && app.stream.rec_since.is_some());
+        run(&mut app, &ctx, 2, 0.0);
+        app.dispatch(&AppCommand::SetStreaming { live: false }, Origin::User).unwrap();
+        assert!(app.stream.live_since.is_none());
+    }
+
+    #[test]
+    fn open_missing_file_is_error_not_panic() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.stream.path = "definitely/missing.bin".into();
+        app.stream.open(&mut app.toasts);
+        assert!(app.toasts.items.iter().any(|t| t.kind == ToastKind::Error));
+        assert!(app.dispatch(&AppCommand::OpenFile { path: "definitely/missing.png".into() }, Origin::User).is_err());
+    }
+
+    #[test]
+    fn paint_layer_commands_and_undo() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let n = app.paint.doc.layers.len();
+        app.dispatch(&AppCommand::AddLayer { name: Some("Test".into()) }, Origin::User).unwrap();
+        assert_eq!(app.paint.doc.layers.len(), n + 1);
+        app.dispatch(&AppCommand::SetLayerOpacity { layer: Some("Mist Overlay".into()), opacity: 55.0 }, Origin::User).unwrap();
+        let i = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        assert!((app.paint.doc.layers[i].opacity - 0.55).abs() < 1e-4);
+        app.dispatch(&AppCommand::SetLayerVisibility { layer: Some("Mist Overlay".into()), visible: false }, Origin::User).unwrap();
+        assert!(!app.paint.doc.layers[i].visible);
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.paint.doc.layers[i].visible);
+        app.dispatch(&AppCommand::SelectLayer { layer: "Paint".into() }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::BrushStroke { points: vec![[100.0, 100.0], [300.0, 140.0]] }, Origin::User).unwrap();
+        let pi = app.paint.find_layer(Some("Paint")).unwrap();
+        assert!(app.paint.doc.layers[pi].raster.data.chunks_exact(4).any(|p| p[3] > 0));
         app.mode = Mode::Paint;
         run(&mut app, &ctx, 2, 0.0);
     }
 
     #[test]
-    fn paint_crop_changes_size() {
+    fn scene_commands() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        app.paint.crop = Some(obs_rust_bitstream::ui_canvas::PixelRect { x: 10, y: 10, w: 100, h: 50 });
-        app.paint.apply_crop(&mut app.toasts);
-        assert_eq!((app.paint.width, app.paint.height), (100, 50));
-        assert!(app.paint.layers.iter().all(|l| l.raster.width == 100 && l.raster.height == 50));
-        app.mode = Mode::Paint;
+        let mut app = app_with(&ctx, None);
+        app.dispatch(&AppCommand::SceneAdd { kind: "cube".into() }, Origin::User).unwrap();
+        assert_eq!(app.mode, Mode::Scene);
+        let i = app.scene.selected.unwrap();
+        let f0 = app.scene.objs[i].mesh.as_ref().unwrap().faces;
+        app.dispatch(&AppCommand::SceneExtrude { distance: Some(0.5) }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::SceneBevel { amount: Some(0.2) }, Origin::User).unwrap();
+        let m = app.scene.objs[i].mesh.as_ref().unwrap();
+        assert_eq!(m.faces, f0 + 8);
+        assert_eq!(m.verts.len(), 16);
+        app.dispatch(&AppCommand::SceneGizmo { mode: "rotate".into() }, Origin::User).unwrap();
+        assert_eq!(app.current_tool(), "Rotate Tool");
+        app.dispatch(&AppCommand::SceneTransform { object: None, translate: Some([1.0, 0.0, 0.0]), rotate_y: Some(45.0), scale: Some(2.0) }, Origin::User).unwrap();
+        assert_eq!(app.scene.objs[i].scale, 2.0);
+        app.dispatch(&AppCommand::SetKeyframe, Origin::User).unwrap();
+        assert_eq!(app.scene.objs[i].track_y.keys().len(), 1);
+        app.dispatch(&AppCommand::SceneDelete { object: None }, Origin::User).unwrap();
         run(&mut app, &ctx, 2, 0.0);
     }
 
     #[test]
-    fn animate_frames() {
+    fn scene_keys_drive_position() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        let n = app.anim.frames.len();
-        app.anim.add_frame(&mut app.toasts);
-        assert_eq!(app.anim.frames.len(), n + 1);
-        app.anim.draw_to((10.0, 10.0));
-        app.anim.delete(&mut app.toasts);
-        assert_eq!(app.anim.frames.len(), n);
-        app.anim.clock.toggle();
+        let mut app = app_with(&ctx, None);
+        app.scene.clock.time = 1.5;
+        app.scene.tick(0.0);
+        assert!((app.scene.objs[0].pos[1] - 1.6).abs() < 1e-3);
+    }
+
+    #[test]
+    fn timeline_commands_per_mode() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Paint;
+        assert!(app.dispatch(&AppCommand::TimelineScrub { time: 1.0 }, Origin::User).is_err());
+        app.mode = Mode::Composite;
+        app.dispatch(&AppCommand::TimelineScrub { time: 4.0 }, Origin::User).unwrap();
+        assert_eq!(app.comp.clock.time, 4.0);
+        app.dispatch(&AppCommand::SetLayerOpacity { layer: Some("Mist Overlay".into()), opacity: 30.0 }, Origin::User).unwrap();
+        let i = app.comp.find(Some("Mist Overlay")).unwrap();
+        assert!((app.comp.opacity_at(i, 4.0) - 0.3).abs() < 1e-4);
+        app.dispatch(&AppCommand::TimelinePlay { playing: Some(true) }, Origin::User).unwrap();
+        assert!(app.comp.clock.playing);
         app.mode = Mode::Animate;
-        run(&mut app, &ctx, 5, 0.0);
+        let n = app.anim.frames.len();
+        app.dispatch(&AppCommand::SetKeyframe, Origin::User).unwrap();
+        assert_eq!(app.anim.frames.len(), n + 1);
+        app.dispatch(&AppCommand::DeleteKeyframe, Origin::User).unwrap();
+        assert_eq!(app.anim.frames.len(), n);
+        app.dispatch(&AppCommand::TimelineScrub { time: 0.5 }, Origin::User).unwrap();
+        assert_eq!(app.anim.current(), 6);
+        run(&mut app, &ctx, 3, 0.0);
     }
 
     #[test]
     fn composite_animates_opacity() {
-        let app_ctx = egui::Context::default();
-        let app = App::new(&app_ctx);
+        let ctx = egui::Context::default();
+        let app = app_with(&ctx, None);
         let last = app.comp.layers.len() - 1;
         assert!(app.comp.opacity_at(last, 0.0) < app.comp.opacity_at(last, 4.0));
         assert_ne!(app.comp.frame(0.0).data, app.comp.frame(4.0).data);
     }
 
     #[test]
-    fn assistant_round_trip_and_learning() {
+    fn offline_assistant_is_labelled() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
+        let mut app = app_with(&ctx, None);
         app.assistant.input = "how do I use this?".into();
-        let w = app.workspace_ctx();
-        app.assistant.send(0.0, &w);
-        assert!(app.assistant.is_typing());
-        app.assistant.tick(5.0);
-        assert!(!app.assistant.is_typing());
-        assert!(app.assistant.history.last().map(|m| m.text.contains("No model is connected")).unwrap_or(false));
-        app.assistant.observe(LearningEvent::Feedback { helpful: true });
-        assert_eq!(app.assistant.learner.weights.get("assistant.helpfulness").ok(), Some(0.1));
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 1, 0.0);
+        let last = app.assistant.items.last().unwrap();
+        assert!(last.text.contains("Offline: no language model is configured"));
+        assert_eq!(app.assistant.backend_label(), "Offline stub");
     }
 
     #[test]
-    fn scene_keys_drive_position() {
+    fn ai_tool_calls_run_through_bus_and_undo_in_one_click() {
         let ctx = egui::Context::default();
-        let mut app = App::new(&ctx);
-        app.scene.clock.time = 1.5;
-        app.scene.tick(0.0);
-        assert!((app.scene.objs[0].pos[1] - 1.6).abs() < 1e-3);
-        app.scene.delete_selected();
-        app.mode = Mode::Scene;
-        run(&mut app, &ctx, 2, 0.0);
+        let replies = vec![
+            LlmReply { content: "Done: the mist is softer and the sky is hidden.".into(), tool_calls: vec![] },
+            LlmReply {
+                content: String::new(),
+                tool_calls: vec![
+                    call("set_layer_opacity", r#"{"layer":"Mist Overlay","opacity":55}"#),
+                    call("set_layer_visibility", r#"{"layer":"Sky Gradient","visible":false}"#),
+                    call("export_png", "{}"),
+                    call("no_such_tool", "{}"),
+                ],
+            },
+        ];
+        let mock = Arc::new(MockProvider::new(replies));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        let sky = app.paint.find_layer(Some("Sky Gradient")).unwrap();
+        let before = app.paint.doc.layers[mist].opacity;
+        app.assistant.input = "soften the mist and hide the sky".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!((app.paint.doc.layers[mist].opacity - 0.55).abs() < 1e-4);
+        assert!(!app.paint.doc.layers[sky].visible);
+        let lines = action_lines(&app);
+        let batch = lines[0].0;
+        assert!(lines.iter().any(|(_, l)| l.status == LineStatus::Done && l.text.contains("Seraphina: set Mist Overlay opacity 55%")), "{:?}", lines);
+        assert!(lines.iter().any(|(_, l)| l.status == LineStatus::NeedsUser));
+        assert!(lines.iter().any(|(_, l)| l.status == LineStatus::Rejected));
+        {
+            let seen = mock.seen.lock().unwrap();
+            assert_eq!(seen.len(), 2);
+            assert!(seen[1].iter().any(|m| m.role == "tool" && m.content.starts_with("ok: ")));
+            assert!(seen[1].iter().any(|m| m.role == "tool" && m.content.starts_with("blocked: ")));
+            assert!(seen[0][0].content.contains("Current app state"));
+        }
+        assert!(app.assistant.items.iter().any(|i| i.text.contains("the mist is softer")));
+        let updates = app.assistant.prefs.bank.updates;
+        assert!(app.undo_batch(batch));
+        assert!((app.paint.doc.layers[mist].opacity - before).abs() < 1e-4);
+        assert!(app.paint.doc.layers[sky].visible);
+        // two undone actions × (per-command + overall acceptance) EMA keys
+        assert_eq!(app.assistant.prefs.bank.updates, updates + 4);
+        assert!(app.assistant.prefs.summary().contains("set_layer_opacity"));
+    }
+
+    #[test]
+    fn approved_command_runs_from_card() {
+        let ctx = egui::Context::default();
+        let replies = vec![LlmReply { content: "Press Run to go live.".into(), tool_calls: vec![] }, LlmReply { content: String::new(), tool_calls: vec![call("set_streaming", r#"{"live":true}"#)] }];
+        let mut app = app_with(&ctx, Some(Arc::new(MockProvider::new(replies))));
+        app.assistant.input = "go live".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(app.stream.live_since.is_none(), "mercy gate must hold irreversible actions");
+        let lines = action_lines(&app);
+        let k = lines.iter().position(|(_, l)| l.status == LineStatus::NeedsUser).unwrap();
+        let (batch, l) = lines[k].clone();
+        app.assistant.requests.push(PanelRequest::Run { cmd: l.cmd.unwrap(), batch, line: k });
+        run(&mut app, &ctx, 1, 0.0);
+        assert!(app.stream.live_since.is_some());
+    }
+
+    /// Live: real xAI tool calling through the bus. Skips without a key.
+    #[test]
+    fn live_xai_tool_calling_smoke() {
+        let Some(p) = llm::OpenAiCompat::from_env() else {
+            eprintln!("SKIPPED live_xai_tool_calling_smoke: no XAI_API_KEY");
+            return;
+        };
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, Some(Arc::new(p)));
+        app.assistant.input = "Set Mist Overlay opacity to 55% and switch to Composite mode.".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 180);
+        let lines = action_lines(&app);
+        for (_, l) in &lines {
+            eprintln!("LIVE action: {:?} {}", l.status, l.text);
+        }
+        for it in &app.assistant.items {
+            eprintln!("LIVE chat: {}", it.text.replace('\n', " "));
+        }
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        assert!((app.paint.doc.layers[mist].opacity - 0.55).abs() < 0.011, "opacity {}", app.paint.doc.layers[mist].opacity);
+        assert_eq!(app.mode, Mode::Composite);
+        assert!(app.log.iter().any(|(o, n, r)| *o == Origin::Seraphina && n == "set_layer_opacity" && r.is_ok()));
     }
 
     #[test]

@@ -129,10 +129,23 @@ pub enum BlendMode {
     Multiply,
     Screen,
     Overlay,
+    Darken,
+    Lighten,
+    SoftLight,
+    Difference,
 }
 
 impl BlendMode {
-    pub const ALL: [BlendMode; 4] = [BlendMode::Normal, BlendMode::Multiply, BlendMode::Screen, BlendMode::Overlay];
+    pub const ALL: [BlendMode; 8] = [
+        BlendMode::Normal,
+        BlendMode::Multiply,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::SoftLight,
+        BlendMode::Difference,
+    ];
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -140,6 +153,10 @@ impl BlendMode {
             BlendMode::Multiply => "Multiply",
             BlendMode::Screen => "Screen",
             BlendMode::Overlay => "Overlay",
+            BlendMode::Darken => "Darken",
+            BlendMode::Lighten => "Lighten",
+            BlendMode::SoftLight => "Soft Light",
+            BlendMode::Difference => "Difference",
         }
     }
 
@@ -156,6 +173,10 @@ impl BlendMode {
                     1.0 - 2.0 * (1.0 - base) * (1.0 - top)
                 }
             }
+            BlendMode::Darken => base.min(top),
+            BlendMode::Lighten => base.max(top),
+            BlendMode::SoftLight => (1.0 - 2.0 * top) * base * base + 2.0 * top * base,
+            BlendMode::Difference => (base - top).abs(),
         }
     }
 }
@@ -442,6 +463,11 @@ impl<T: Clone> History<T> {
         self.redo.clear();
     }
 
+    /// Most recent undo state, without popping it.
+    pub fn peek(&self) -> Option<&T> {
+        self.undo.last()
+    }
+
     pub fn undo(&mut self, current: T) -> Option<T> {
         let prev = self.undo.pop()?;
         self.redo.push(current);
@@ -614,7 +640,7 @@ mod tests {
             seen.push(b.data[0]);
         }
         seen.dedup();
-        assert_eq!(seen.len(), 4);
+        assert_eq!(seen.len(), BlendMode::ALL.len());
     }
 
     #[test]

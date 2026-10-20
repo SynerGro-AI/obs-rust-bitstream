@@ -1,6 +1,8 @@
 //! Shared transport + keyframe ruler.
 
+use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_SM};
+use egui_phosphor::regular as ic;
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
 use obs_rust_bitstream::ui_canvas::{format_clock, KeyTrack};
 
@@ -42,20 +44,41 @@ impl Clock {
     }
 }
 
+/// Apply transport commands to a clock. `None` = not a transport command.
+pub fn apply(clock: &mut Clock, cmd: &AppCommand) -> Option<Result<String, String>> {
+    match cmd {
+        AppCommand::TimelinePlay { playing } => {
+            let want = playing.unwrap_or(!clock.playing);
+            if want != clock.playing {
+                clock.toggle();
+            }
+            Some(Ok(if clock.playing { "playing".into() } else { format!("paused at {:.2}s", clock.time) }))
+        }
+        AppCommand::TimelineScrub { time } => {
+            if !time.is_finite() {
+                return Some(Err("time must be a number".into()));
+            }
+            clock.time = time.clamp(0.0, clock.duration);
+            Some(Ok(format!("playhead at {:.2}s", clock.time)))
+        }
+        _ => None,
+    }
+}
+
 /// Play/pause, jump to start/end, loop toggle and the time readout.
-pub fn transport(ui: &mut egui::Ui, p: &Palette, clock: &mut Clock) {
-    if ui.add(theme::toggle_button(p, "⏮", false)).on_hover_text("Go to start").clicked() {
-        clock.time = 0.0;
+pub fn transport(ui: &mut egui::Ui, p: &Palette, clock: &mut Clock, bus: &mut Vec<AppCommand>) {
+    if theme::icon_button(ui, p, ic::SKIP_BACK, "Go to start", false).clicked() {
+        bus.push(AppCommand::TimelineScrub { time: 0.0 });
     }
-    let label = if clock.playing { "⏸  Pause" } else { "▶  Play" };
-    if ui.add(theme::primary_button(p, label)).on_hover_text("Play / pause  (Space)").clicked() {
-        clock.toggle();
+    let label = if clock.playing { format!("{}  Pause", ic::PAUSE) } else { format!("{}  Play", ic::PLAY) };
+    if ui.add(theme::primary_button(p, &label)).on_hover_text("Play / pause  (Space)").clicked() {
+        bus.push(AppCommand::TimelinePlay { playing: Some(!clock.playing) });
     }
-    if ui.add(theme::toggle_button(p, "⏭", false)).on_hover_text("Go to end").clicked() {
-        clock.time = clock.duration;
-        clock.playing = false;
+    if theme::icon_button(ui, p, ic::SKIP_FORWARD, "Go to end", false).clicked() {
+        bus.push(AppCommand::TimelinePlay { playing: Some(false) });
+        bus.push(AppCommand::TimelineScrub { time: clock.duration });
     }
-    if ui.add(theme::toggle_button(p, "🔁", clock.looping)).on_hover_text("Loop playback").clicked() {
+    if theme::icon_button(ui, p, ic::REPEAT, "Loop playback", clock.looping).clicked() {
         clock.looping = !clock.looping;
     }
     let frac = clock.time.fract();

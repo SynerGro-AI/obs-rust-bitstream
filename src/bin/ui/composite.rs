@@ -1,6 +1,8 @@
 //! Composite mode: layers with keyframed opacity over time.
 
-use crate::theme::{self, Palette, R_MD, R_SM, SP_MD, SP_SM, SP_XS};
+use crate::commands::AppCommand;
+use crate::theme::{self, Palette, R_MD, R_SM, SP_SM, SP_XS};
+use egui_phosphor::regular as ic;
 use crate::timeline::{self, Clock, Track};
 use crate::resolve_asset;
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
@@ -9,6 +11,7 @@ use obs_rust_bitstream::ui_canvas::{composite, format_clock, BlendMode, ImageLay
 pub const PW: u32 = 584;
 pub const PH: u32 = 392;
 
+#[derive(Clone)]
 pub struct CompLayer {
     pub layer: ImageLayer,
     pub opacity: KeyTrack,
@@ -70,6 +73,74 @@ impl CompState {
         composite(&ls, PW, PH, [0, 0, 0])
     }
 
+    /// Layer by name or 1-based index from the top; `None` = selected.
+    pub fn find(&self, key: Option<&str>) -> Result<usize, String> {
+        let n = self.layers.len();
+        let Some(k) = key.map(|k| k.trim()).filter(|k| !k.is_empty()) else {
+            return Ok(self.selected.min(n.saturating_sub(1)));
+        };
+        if let Ok(i) = k.parse::<usize>() {
+            return if i >= 1 && i <= n { Ok(n - i) } else { Err(format!("layer index {} out of range 1-{}", i, n)) };
+        }
+        let lk = k.to_lowercase();
+        self.layers
+            .iter()
+            .position(|l| l.layer.name.to_lowercase() == lk)
+            .or_else(|| self.layers.iter().position(|l| l.layer.name.to_lowercase().contains(&lk)))
+            .ok_or_else(|| format!("no composite layer named '{}' (layers: {})", k, self.layers.iter().rev().map(|l| l.layer.name.as_str()).collect::<Vec<_>>().join(", ")))
+    }
+
+    /// Execute a Composite command. `None` = not handled here.
+    pub fn apply(&mut self, cmd: &AppCommand) -> Option<Result<String, String>> {
+        use AppCommand as C;
+        let t = self.clock.time;
+        Some(match cmd {
+            C::SelectLayer { layer } => self.find(Some(layer)).map(|i| {
+                self.selected = i;
+                format!("selected {}", self.layers[i].layer.name)
+            }),
+            C::SetLayerOpacity { layer, opacity } => self.find(layer.as_deref()).map(|i| {
+                let v = (opacity / 100.0).clamp(0.0, 1.0);
+                let l = &mut self.layers[i];
+                if l.opacity.is_empty() {
+                    l.layer.opacity = v;
+                    format!("set {} opacity {:.0}%", l.layer.name, v * 100.0)
+                } else {
+                    l.opacity.set(t, v);
+                    format!("keyed {} opacity {:.0}% at {:.2}s", l.layer.name, v * 100.0, t)
+                }
+            }),
+            C::SetLayerBlend { layer, mode } => self.find(layer.as_deref()).and_then(|i| {
+                let m = BlendMode::ALL.iter().copied().find(|b| b.label().eq_ignore_ascii_case(mode.trim()) || b.label().replace(' ', "_").eq_ignore_ascii_case(mode.trim())).ok_or_else(|| format!("unknown blend mode '{}'", mode))?;
+                self.layers[i].layer.blend = m;
+                Ok(format!("set {} blend to {}", self.layers[i].layer.name, m.label()))
+            }),
+            C::SetLayerVisibility { layer, visible } => self.find(layer.as_deref()).map(|i| {
+                self.layers[i].layer.visible = *visible;
+                format!("{} {}", if *visible { "showed" } else { "hid" }, self.layers[i].layer.name)
+            }),
+            C::SetKeyframe => self.find(None).map(|i| {
+                let v = self.opacity_at(i, t);
+                self.layers[i].opacity.set(t, v);
+                format!("keyed {} opacity {:.0}% at {:.2}s", self.layers[i].layer.name, v * 100.0, t)
+            }),
+            C::DeleteKeyframe => self.find(None).and_then(|i| {
+                if self.layers[i].opacity.remove_near(t, 0.08) { Ok(format!("deleted {} key at {:.2}s", self.layers[i].layer.name, t)) } else { Err(format!("no key on {} near {:.2}s", self.layers[i].layer.name, t)) }
+            }),
+            C::TimelinePlay { .. } | C::TimelineScrub { .. } => return timeline::apply(&mut self.clock, cmd),
+            _ => return None,
+        })
+    }
+
+    pub fn context(&self) -> String {
+        let t = self.clock.time;
+        let ls: Vec<String> = (0..self.layers.len()).rev().map(|i| {
+            let l = &self.layers[i];
+            format!("{}{} ({}, opacity {:.0}% now, {} keys{})", if i == self.selected { "*" } else { "" }, l.layer.name, l.layer.blend.label(), self.opacity_at(i, t) * 100.0, l.opacity.keys().len(), if l.layer.visible { "" } else { ", hidden" })
+        }).collect();
+        format!("Composite: playhead {:.2}s of {:.1}s, playing {}, layers top→bottom (* = selected): {}", t, self.clock.duration, self.clock.playing, ls.join("; "))
+    }
+
     fn refresh(&mut self, ctx: &egui::Context) {
         let t = self.clock.time;
         let ops: Vec<f32> = (0..self.layers.len()).map(|i| self.opacity_at(i, t)).collect();
@@ -88,18 +159,18 @@ impl CompState {
         self.last = Some(key);
     }
 
-    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette) {
+    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Layers", |ui| {
             for i in (0..self.layers.len()).rev() {
                 let on = i == self.selected;
-                let l = &mut self.layers[i];
+                let l = &self.layers[i];
                 egui::Frame::none().fill(if on { p.accent_soft() } else { Color32::TRANSPARENT }).rounding(Rounding::same(R_SM + 1.0)).inner_margin(egui::Margin::symmetric(SP_XS, 1.0)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        if ui.add(egui::Button::new(egui::RichText::new(if l.layer.visible { "👁" } else { "–" }).color(p.muted)).frame(false)).clicked() {
-                            l.layer.visible = !l.layer.visible;
+                        if theme::icon_button(ui, p, if l.layer.visible { ic::EYE } else { ic::EYE_SLASH }, "Show / hide", false).clicked() {
+                            bus.push(AppCommand::SetLayerVisibility { layer: Some(l.layer.name.clone()), visible: !l.layer.visible });
                         }
                         if ui.add(egui::Button::new(egui::RichText::new(&l.layer.name).color(if on { p.accent } else { p.text })).frame(false)).clicked() {
-                            self.selected = i;
+                            bus.push(AppCommand::SelectLayer { layer: l.layer.name.clone() });
                         }
                     });
                 });
@@ -132,25 +203,25 @@ impl CompState {
         painter.text(r.left_top() + Vec2::new(0.0, -SP_SM), egui::Align2::LEFT_BOTTOM, tc, egui::FontId::monospace(11.5), p.muted);
     }
 
-    pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette) {
+    pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         let t = self.clock.time;
         let i = self.selected.min(self.layers.len() - 1);
         let cur = self.opacity_at(i, t);
         theme::card(ui, p, "Layer", |ui| {
-            let l = &mut self.layers[i];
-            ui.label(egui::RichText::new(&l.layer.name).strong().color(p.text));
+            let l = &self.layers[i];
+            let name = l.layer.name.clone();
+            ui.label(egui::RichText::new(&name).strong().color(p.text));
             let mut pct = cur * 100.0;
             let resp = ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix("%").text("Opacity"));
             if resp.changed() {
-                if l.opacity.is_empty() {
-                    l.layer.opacity = pct / 100.0;
-                } else {
-                    l.opacity.set(t, pct / 100.0);
-                }
+                bus.push(AppCommand::SetLayerOpacity { layer: Some(name.clone()), opacity: pct });
             }
-            egui::ComboBox::from_label("Blend").selected_text(l.layer.blend.label()).show_ui(ui, |ui| {
+            let mut blend = l.layer.blend;
+            egui::ComboBox::from_label("Blend").selected_text(blend.label()).show_ui(ui, |ui| {
                 for m in BlendMode::ALL {
-                    ui.selectable_value(&mut l.layer.blend, m, m.label());
+                    if ui.selectable_value(&mut blend, m, m.label()).clicked() {
+                        bus.push(AppCommand::SetLayerBlend { layer: Some(name.clone()), mode: m.label().into() });
+                    }
                 }
             });
             if !l.opacity.is_empty() {
@@ -158,14 +229,14 @@ impl CompState {
             }
         });
         theme::card(ui, p, "Keyframes", |ui| {
-            let l = &mut self.layers[i];
+            let l = &self.layers[i];
             ui.horizontal(|ui| {
-                if ui.add(theme::primary_button(p, "◆ Add key")).clicked() {
-                    l.opacity.set(t, cur);
+                if ui.add(theme::primary_button(p, &format!("{} Add key", ic::DIAMOND))).on_hover_text("Key opacity at the playhead  (K)").clicked() {
+                    bus.push(AppCommand::SetKeyframe);
                 }
                 let near = l.opacity.has_key_near(t, 0.08);
                 if ui.add_enabled(near, theme::toggle_button(p, "Delete key", false)).clicked() {
-                    l.opacity.remove_near(t, 0.08);
+                    bus.push(AppCommand::DeleteKeyframe);
                 }
             });
             if l.opacity.is_empty() {
@@ -174,7 +245,7 @@ impl CompState {
             let mut jump = None;
             for (kt, kv) in l.opacity.keys() {
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new(format!("◆  {:.2}s", kt)).monospace().color(p.text)).frame(false)).on_hover_text("Jump to key").clicked() {
+                    if ui.add(egui::Button::new(egui::RichText::new(format!("{}  {:.2}s", ic::DIAMOND, kt)).monospace().color(p.text)).frame(false)).on_hover_text("Jump to key").clicked() {
                         jump = Some(*kt);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -183,14 +254,14 @@ impl CompState {
                 });
             }
             if let Some(kt) = jump {
-                self.clock.time = kt;
-                self.clock.playing = false;
+                bus.push(AppCommand::TimelinePlay { playing: Some(false) });
+                bus.push(AppCommand::TimelineScrub { time: kt });
             }
         });
     }
 
-    pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette) {
-        ui.horizontal(|ui| timeline::transport(ui, p, &mut self.clock));
+    pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
+        ui.horizontal(|ui| timeline::transport(ui, p, &mut self.clock, bus));
         ui.add_space(SP_XS);
         let tracks: Vec<Track> = self.layers.iter().enumerate().rev().map(|(i, l)| Track { label: &l.layer.name, keys: &l.opacity, selected: i == self.selected }).collect();
         let n = self.layers.len();
@@ -198,6 +269,5 @@ impl CompState {
         if let Some(k) = out.picked_track {
             self.selected = n - 1 - k;
         }
-        let _ = SP_MD;
     }
 }

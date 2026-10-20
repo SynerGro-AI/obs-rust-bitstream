@@ -9,21 +9,62 @@ Reusable patterns + differential helper + AI scaffold for automated assistance.
 
 ## Desktop app: Seraphina Studio
 
-A single egui/eframe window that hosts five workspaces. Windows is the
-primary target; it also runs on Linux and macOS.
+A single egui/eframe window with five workspaces, a gold-on-black theme (plus
+a light theme), a custom title bar, collapsible tool sections, a Maya-style
+shelf and a live status bar. Windows is the primary target; it also runs on
+Linux and macOS.
 
-| Mode | What is real today | What is stubbed / not built yet |
-|------|--------------------|---------------------------------|
-| **Stream** | Bitstream inspector driving the real `bitstream::Reader` (step 1–16 bits, No-wrap `usize` vs Wrap `u8` counter, hex view, read log) | Go live / Record / reconnect are **simulated** status only — no encoder or RTMP output |
-| **Paint** | Layer compositing (Normal/Multiply/Screen/Overlay, opacity), brush & eraser, marquee clipping, crop, eyedropper, filters, zoom/pan, undo/redo, PNG export, PSD layer-structure save | PSD pixel data is not decoded (header + layer list only); no healing/clone/text tools |
-| **3D** | Wireframe layout viewport (orbit/dolly/select), outliner, transforms, keyframed Y channel, joints mirrored into `JointHierarchy` | No meshes, materials, renderer, IK or file import |
-| **Animate** | Frame-by-frame drawing, onion skin, add/duplicate/delete frames, playback, undo | No export, no layers per frame |
-| **Composite** | Keyframed per-layer opacity with linear interpolation, blend modes, scrubbing timeline | No effects stack or render-to-file |
-| **Seraphina panel** | Chat UI over the `AssistantBackend` trait; 👍/👎 and tool use feed `OnlineLearner`, which nudges `LiveWeights` by small bounded steps | The shipped backend is an **offline stub** that answers with built-in tips. No model is called and nothing is trained |
+| Mode | What is real today | Stubbed / not built yet |
+|------|--------------------|-------------------------|
+| **Paint** | Layers with thumbnails, groups, 8 blend modes, opacity/fill, visibility, masks (density, feather); move, marquee, lasso, quick select (edge-aware), crop, healing, clone stamp, brush, eraser, gradient, dodge, burn, pen (stroke / to selection), type, hand, zoom, eyedropper; undo/redo; PNG export; PSD layer-structure save | PSD pixel data is not decoded (header + layer list only) |
+| **Composite** | Keyframed per-layer opacity with linear interpolation, blend modes, scrubbable timeline, playback | No effects stack, no render-to-file |
+| **3D** | Wireframe viewport (orbit/dolly), cube meshes with extrude and bevel, Select/Move/Rotate/Scale gizmos (Q/W/E/R), outliner, transforms, keyframed Y channel, joints | No materials or renderer. Shelf items such as Edge Loop, Multi-Cut, Bridge, Boolean, IK, skinning, FX and Render are disabled with a "Coming soon" tooltip |
+| **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader` (1–16-bit reads, No-wrap `usize` vs Wrap `u8` counter, hex view, read log). The status bar shows Live/REC timers | Go live / Record / reconnect are **simulated**: there is no encoder or RTMP output |
+| **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Offline without a key: it answers with built-in tips and says so |
+| **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
 
-To connect a real model, implement `assistant::AssistantBackend` and set
-`AssistantPanel::backend`. To change how weights learn, implement
-`assistant::OnlineLearner`.
+### How the AI is wired in
+
+* **One command bus.** Every button, shortcut, drag and AI action becomes an
+  `AppCommand` (`src/bin/ui/commands.rs`) and goes through `App::dispatch`.
+  The AI can therefore do anything the UI can, and nothing else.
+* **Tool calling.** The 64 commands are exposed as JSON-schema tools to an
+  OpenAI-compatible chat API. Calls run through a Triad gate:
+  * the call must parse;
+  * file I/O (open, save PSD, export PNG), billed generation (video, image,
+    extend, stitch), going live and starting a recording need the user to
+    press **Run** on the action card;
+  * dispatch must succeed, and failures are reported back to the model.
+* **Undo.** Each AI turn snapshots the document state, and **Undo** on the
+  action card reverts the whole batch.
+* **Live learning.** A local `MercyLearningHeart`-style EMA store
+  (α = 0.382) is updated incrementally from:
+  * your tool and parameter choices;
+  * 👍/👎 ratings;
+  * AI actions you keep or undo. A batch counts as kept once you send your
+    next message.
+
+  A summary is injected into the system prompt. The status bar shows
+  "Online learning: N updates". It is stored in
+  `~/.seraphina/studio/mercy_bank.json`.
+* **Seraphina.AGI CLI bridge.** If `seraphina` (`pip install seraphina-agi`)
+  is on PATH, or set via `SERAPHINA_CLI`, its native intents (`remember …`,
+  `recall`, `triad …`, `help`, `version`) are forwarded to it. Recent
+  `recall` notes are added to the prompt.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `XAI_API_KEY` (or `SERAPHINA_GROK_API_KEY`) | none | Enables the LLM and Grok Imagine. Never committed; read from the environment only |
+| `SERAPHINA_MODEL` / `SERAPHINA_GROK_MODEL` | `grok-4.7` | Chat model |
+| `SERAPHINA_BASE_URL` / `SERAPHINA_GROK_ENDPOINT` | `https://api.x.ai/v1` | Any OpenAI-compatible server (a local server works without a key) |
+| `SERAPHINA_NO_STREAM` | unset | Disable SSE streaming |
+| `SERAPHINA_VIDEO_MODEL` / `SERAPHINA_VIDEO_RESOLUTION` | `grok-imagine-video-1.5` / `480p` | Video generation |
+| `SERAPHINA_IMAGE_MODEL` | `grok-imagine-image-2.0` | Image generation |
+| `SERAPHINA_CLI` | `seraphina` | Seraphina.AGI CLI program |
+| `SERAPHINA_STUDIO_PREFS` / `SERAPHINA_HOME` | `~/.seraphina` | Learning store location |
+| `SERAPHINA_NATIVE_FRAME` | unset | Use the OS title bar instead of the custom one |
+| `SERAPHINA_MODE` / `SERAPHINA_LIGHT` | Paint / dark | Start mode and theme |
 
 ### Run on Windows (recommended)
 
@@ -35,6 +76,7 @@ To connect a real model, implement `assistant::AssistantBackend` and set
    ```powershell
    git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
    cd obs-rust-bitstream
+   $env:XAI_API_KEY = "<your key>"   # optional, enables Seraphina + Grok Imagine
    cargo run --release --features ui --bin ui
    ```
 
@@ -67,15 +109,28 @@ cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
 ### Tests
 
 ```bash
-cargo test                       # library (1700+ tests)
-cargo test --features ui --bin ui  # UI smoke tests, headless
+cargo test                         # library (1700+ tests)
+cargo test --features ui --bin ui  # UI, command bus, AI agent (mock provider), headless
+```
+
+With `XAI_API_KEY` set, the same command also runs two live smoke tests:
+* `live_xai_tool_calling_smoke` asks Seraphina to "set Mist Overlay opacity
+  to 55% and switch to Composite" and checks that both commands ran through
+  the bus.
+* `live_xai_smoke_test_if_key_present`.
+
+The billed Grok Imagine test is ignored by default. It makes a 1 s 480p clip
+plus one image:
+
+```bash
+SERAPHINA_LIVE_OUT=/tmp cargo test --features ui --bin ui live_imagine -- --ignored
 ```
 
 ### Shortcuts
 
-`Ctrl+1…5` switch mode · `F1` / `?` shortcut sheet · `Ctrl+.` toggle Seraphina ·
-Paint: `B E M C I H Z` tools, `Ctrl+Z` / `Ctrl+Shift+Z`, `Ctrl+0` fit ·
-Animate / 3D / Composite: `Space` play.
+`Ctrl+1…5` switch mode · `F1` shortcut sheet · `Esc` closes windows · `Ctrl+.` toggle Seraphina ·
+Paint: `V M L W C J S B E G O`/`Shift+O` `P T H Z I` tools, `Ctrl+Z` / `Ctrl+Shift+Z`, `Ctrl+0` fit ·
+3D: `Q W E R` gizmos · Animate / 3D / Composite: `Space` play.
 
 ## CI: Grok PR review
 

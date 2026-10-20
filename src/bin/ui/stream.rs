@@ -1,7 +1,9 @@
 //! Stream mode: bitstream inspector over the real `bitstream::Reader`,
 //! plus a clearly simulated output (live / record / reconnect) panel.
 
+use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
+use egui_phosphor::regular as ic;
 use crate::{resolve_asset, ToastKind, Toasts};
 use eframe::egui::{self, Color32, Rounding, Stroke, Vec2};
 use obs_rust_bitstream::stream_inspect::{sample_stream, to_binary, CounterMode, StreamInspector};
@@ -75,14 +77,64 @@ impl StreamState {
         self.follow = true;
     }
 
-    pub fn run(&mut self, toasts: &mut Toasts) {
-        let n = self.insp.run(self.width, RUN_LIMIT);
-        self.follow = true;
-        if self.insp.exhausted() {
-            toasts.push(ToastKind::Info, &format!("Reached the end after {} reads.", n));
-        } else {
-            toasts.push(ToastKind::Info, &format!("Stopped after {} reads (limit per run).", n));
-        }
+    /// Execute a stream command. `None` = not a stream command.
+    pub fn apply(&mut self, cmd: &AppCommand, now: f64) -> Option<Result<String, String>> {
+        Some(match cmd {
+            AppCommand::RunReader { width, reads, wrap } => {
+                if let Some(w) = width {
+                    if !WIDTHS.contains(w) {
+                        return Some(Err(format!("width must be one of {:?}", WIDTHS)));
+                    }
+                    self.width = *w;
+                }
+                if let Some(wr) = wrap {
+                    let m = if *wr { CounterMode::Wrap } else { CounterMode::Safe };
+                    if m != self.insp.mode() {
+                        self.insp.set_mode(m);
+                    }
+                }
+                let before = self.insp.records().len();
+                match reads {
+                    Some(n) => self.step((*n).clamp(1, RUN_LIMIT)),
+                    None => {
+                        self.insp.run(self.width, RUN_LIMIT);
+                        self.follow = true;
+                    }
+                }
+                let n = self.insp.records().len() - before;
+                let (b, bit) = self.insp.cursor();
+                let last = self.insp.records().last().map(|r| format!(", last value 0x{:X}", r.value)).unwrap_or_default();
+                Ok(format!("read {} × {} bits ({}), cursor {}.{}{}{}", n, self.width, self.insp.mode().label(), b, bit, last, if self.insp.exhausted() { ", end of buffer" } else { "" }))
+            }
+            AppCommand::ResetReader => {
+                self.insp.reset();
+                self.follow = true;
+                Ok("reader reset to byte 0".into())
+            }
+            AppCommand::SetStreaming { live } => {
+                if *live == self.live_since.is_some() {
+                    return Some(Ok(format!("already {}", if *live { "live" } else { "offline" })));
+                }
+                self.live_since = if *live { Some(now) } else { None };
+                if !*live {
+                    self.reconnect_due = None;
+                }
+                Ok(if *live { "went live (simulated output)".into() } else { "stream ended".into() })
+            }
+            AppCommand::SetRecording { recording } => {
+                if *recording == self.rec_since.is_some() {
+                    return Some(Ok(format!("already {}", if *recording { "recording" } else { "stopped" })));
+                }
+                self.rec_since = if *recording { Some(now) } else { None };
+                Ok(if *recording { "recording started (simulated output)".into() } else { "recording stopped".into() })
+            }
+            _ => return None,
+        })
+    }
+
+    pub fn context(&self) -> String {
+        let (b, bit) = self.insp.cursor();
+        format!("Stream: source {} ({} bytes), read width {}, counter {}, cursor {}.{}, {} reads, live {}, recording {}", self.source, self.insp.data().len(), self.width, self.insp.mode().label(), b, bit, self.insp.records().len(), self.live_since.is_some(), self.rec_since.is_some())
     }
 
     pub fn tick(&mut self, now: f64, toasts: &mut Toasts) {
@@ -101,7 +153,7 @@ impl StreamState {
 
     // ---- panels -------------------------------------------------------
 
-    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, now: f64, toasts: &mut Toasts) {
+    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, now: f64, toasts: &mut Toasts, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Source", |ui| {
             ui.label(egui::RichText::new(&self.source).color(p.text).strong());
             ui.label(theme::muted(p, &format!("{} bytes", self.insp.data().len())));
@@ -123,14 +175,14 @@ impl StreamState {
             ui.label(theme::muted(p, "No encoder or RTMP output is connected. These controls only drive the status UI."));
             ui.add_space(SP_XS);
             let live = self.live_since.is_some();
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, if live { "■  End stream" } else { "●  Go live" }, live)).clicked() {
-                self.live_since = if live { None } else { Some(now) };
-                toasts.push(ToastKind::Info, if live { "Stream ended (simulated)." } else { "Live (simulated)." });
+            let t = if live { format!("{}  End stream", ic::STOP) } else { format!("{}  Go live", ic::BROADCAST) };
+            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &t, live)).clicked() {
+                bus.push(AppCommand::SetStreaming { live: !live });
             }
             let rec = self.rec_since.is_some();
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, if rec { "■  Stop recording" } else { "⏺  Record" }, rec)).clicked() {
-                self.rec_since = if rec { None } else { Some(now) };
-                toasts.push(ToastKind::Info, if rec { "Recording stopped (simulated)." } else { "Recording (simulated)." });
+            let t = if rec { format!("{}  Stop recording", ic::STOP) } else { format!("{}  Record", ic::RECORD) };
+            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &t, rec)).clicked() {
+                bus.push(AppCommand::SetRecording { recording: !rec });
             }
             ui.add_space(SP_XS);
             let can_drop = live && !self.reconnecting();
@@ -153,7 +205,7 @@ impl StreamState {
         });
     }
 
-    pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts) {
+    pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         // Toolbar
         egui::Frame::none().inner_margin(egui::Margin::symmetric(SP_MD, SP_SM)).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -171,18 +223,17 @@ impl StreamState {
                     }
                 }
                 ui.add_space(SP_MD);
-                if ui.add(theme::primary_button(p, "Step")).on_hover_text("Read once  (Enter / →)").clicked() {
-                    self.step(1);
+                if ui.add(theme::primary_button(p, &format!("{} Step", ic::CARET_RIGHT))).on_hover_text("Read once  (Enter / →)").clicked() {
+                    bus.push(AppCommand::RunReader { width: None, reads: Some(1), wrap: None });
                 }
                 if ui.add(theme::toggle_button(p, "×8", false)).on_hover_text("Read eight times").clicked() {
-                    self.step(8);
+                    bus.push(AppCommand::RunReader { width: None, reads: Some(8), wrap: None });
                 }
-                if ui.add(theme::toggle_button(p, "Run", false)).on_hover_text("Read until the end (max 4096 reads)").clicked() {
-                    self.run(toasts);
+                if ui.add(theme::toggle_button(p, &format!("{} Run", ic::FAST_FORWARD), false)).on_hover_text("Read until the end (max 4096 reads)").clicked() {
+                    bus.push(AppCommand::RunReader { width: None, reads: None, wrap: None });
                 }
-                if ui.add(theme::toggle_button(p, "Reset", false)).on_hover_text("Back to byte 0  (R)").clicked() {
-                    self.insp.reset();
-                    self.follow = true;
+                if ui.add(theme::toggle_button(p, &format!("{} Reset", ic::ARROW_COUNTER_CLOCKWISE), false)).on_hover_text("Back to byte 0  (R)").clicked() {
+                    bus.push(AppCommand::ResetReader);
                 }
             });
         });
@@ -224,7 +275,7 @@ impl StreamState {
         ui.separator();
 
         if data_len == 0 {
-            theme::empty_state(ui, p, "📄", "No data", "Open a file or load the sample to start stepping.");
+            theme::empty_state(ui, p, ic::FILE, "No data", "Open a file or load the sample to start stepping.");
             return;
         }
 

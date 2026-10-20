@@ -79,14 +79,14 @@ impl AssistantBackend for OfflineBackend {
         }
         let tip = match ctx.mode.as_str() {
             "Stream" => "Stream mode steps the real bitstream reader. Pick a read width, press Step, and compare No-wrap with Wrap past byte 255.",
-            "Paint" => "Paint mode: B brush, E eraser, M marquee (clips painting), C crop, I eyedropper, H hand, Z zoom. Ctrl+Z undoes.",
-            "3D" => "3D mode is a layout preview: drag to orbit, edit transforms in the inspector. There is no renderer behind it yet.",
+            "Paint" => "Paint mode: V move, M marquee, L lasso, W quick select, C crop, J healing, S clone (Alt-click source), B brush, E eraser, G gradient, O dodge / Shift+O burn, P pen, T type, H hand, Z zoom, I eyedropper. Ctrl+Z undoes.",
+            "3D" => "3D mode: pick Select/Move/Rotate/Scale on the shelf and drag in the viewport (Alt-drag orbits). Extrude and Bevel edit the selected cube's top face. Wireframe only; there is no renderer yet.",
             "Animate" => "Animate mode draws frame by frame. Turn on onion skin to see neighbouring frames; Space plays.",
             "Composite" => "Composite mode keys layer opacity over time. Move the playhead, set opacity, press Add Key.",
             _ => "Pick a mode at the top to get started.",
         };
         Ok(format!(
-            "No model is connected, so this is a built-in tip rather than a real answer.\n\n{}\n\nTo connect a model, implement AssistantBackend (src/assistant.rs) and pass it to the app.",
+            "Offline: no language model is configured, so this is a built-in tip rather than a real answer.\n\n{}\n\nSet XAI_API_KEY (or SERAPHINA_BASE_URL for another OpenAI-compatible server) and restart to let Seraphina act on the app.",
             tip
         ))
     }
@@ -163,7 +163,7 @@ mod tests {
         let mut b = OfflineBackend;
         assert!(!b.is_connected());
         let r = b.respond(&[ChatMessage::new(Role::User, "help")], &ctx("Stream")).unwrap_or_default();
-        assert!(r.contains("No model is connected"));
+        assert!(r.contains("no language model is configured"));
         assert!(r.contains("bitstream"));
     }
 

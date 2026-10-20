@@ -1,5 +1,6 @@
 //! Animate mode: frame-by-frame drawing with onion skin.
 
+use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::Clock;
 use crate::{ToastKind, Toasts};
@@ -73,13 +74,47 @@ impl AnimState {
         self.history.push(self.frames.clone());
     }
 
-    fn restore(&mut self, frames: Vec<Raster>) {
+    pub fn restore(&mut self, frames: Vec<Raster>) {
         let n = frames.len();
         self.frames = frames;
         self.ink = self.frames.iter().map(|f| f.data.chunks_exact(4).any(|p| p[3] > 0)).collect();
         self.texs = vec![None; n];
         self.dirty = vec![true; n];
         self.resize_clock();
+    }
+
+    /// Execute an Animate command. `None` = not handled here.
+    pub fn apply(&mut self, cmd: &AppCommand, toasts: &mut Toasts) -> Option<Result<String, String>> {
+        match cmd {
+            AppCommand::SetKeyframe => {
+                if self.frames.len() >= MAX_FRAMES {
+                    return Some(Err(format!("frame limit reached ({})", MAX_FRAMES)));
+                }
+                self.duplicate(toasts);
+                Some(Ok(format!("new key drawing at frame {} of {}", self.current() + 1, self.frames.len())))
+            }
+            AppCommand::DeleteKeyframe => {
+                if self.frames.len() <= 1 {
+                    return Some(Err("an animation needs at least one frame".into()));
+                }
+                let cur = self.current();
+                self.delete(toasts);
+                Some(Ok(format!("deleted frame {}, {} left", cur + 1, self.frames.len())))
+            }
+            AppCommand::TimelineScrub { time } => {
+                let r = crate::timeline::apply(&mut self.clock, cmd);
+                if time.is_finite() {
+                    return Some(Ok(format!("frame {} of {}", self.current() + 1, self.frames.len())));
+                }
+                r
+            }
+            AppCommand::TimelinePlay { .. } => crate::timeline::apply(&mut self.clock, cmd),
+            _ => None,
+        }
+    }
+
+    pub fn context(&self) -> String {
+        format!("Animate: {} frames at {} fps, current frame {}, onion skin {}, drawn frames {}", self.frames.len(), self.fps, self.current() + 1, self.onion, self.ink.iter().filter(|x| **x).count())
     }
 
     pub fn undo(&mut self) {
@@ -184,10 +219,10 @@ impl AnimState {
 
     pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette) {
         theme::card(ui, p, "Tools", |ui| {
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, "✏   Pencil", !self.erase)).on_hover_text("B").clicked() {
+            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &format!("{}   Pencil", egui_phosphor::regular::PENCIL_SIMPLE), !self.erase)).on_hover_text("B").clicked() {
                 self.erase = false;
             }
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, "◻   Eraser", self.erase)).on_hover_text("E").clicked() {
+            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &format!("{}   Eraser", egui_phosphor::regular::ERASER), self.erase)).on_hover_text("E").clicked() {
                 self.erase = true;
             }
         });
@@ -256,7 +291,7 @@ impl AnimState {
         }
     }
 
-    pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts) {
+    pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Sequence", |ui| {
             theme::kv(ui, p, "Frame", format!("{} of {}", self.current() + 1, self.frames.len()));
             theme::kv(ui, p, "Canvas", format!("{} × {}", W, H));
@@ -271,14 +306,14 @@ impl AnimState {
                 if ui.add(theme::toggle_button(p, "+ New", false)).clicked() {
                     self.add_frame(toasts);
                 }
-                if ui.add(theme::toggle_button(p, "Duplicate", false)).clicked() {
-                    self.duplicate(toasts);
+                if ui.add(theme::toggle_button(p, "Duplicate", false)).on_hover_text("New key drawing from this frame  (K)").clicked() {
+                    bus.push(AppCommand::SetKeyframe);
                 }
                 if ui.add(theme::toggle_button(p, "Clear", false)).clicked() {
                     self.clear();
                 }
                 if ui.add_enabled(self.frames.len() > 1, theme::toggle_button(p, "Delete", false)).clicked() {
-                    self.delete(toasts);
+                    bus.push(AppCommand::DeleteKeyframe);
                 }
             });
             ui.add_space(SP_XS);
@@ -286,9 +321,9 @@ impl AnimState {
         });
     }
 
-    pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts) {
+    pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts, bus: &mut Vec<AppCommand>) {
         ui.horizontal(|ui| {
-            crate::timeline::transport(ui, p, &mut self.clock);
+            crate::timeline::transport(ui, p, &mut self.clock, bus);
             ui.add_space(SP_MD);
             if ui.add(theme::toggle_button(p, "+ Frame", false)).clicked() {
                 self.add_frame(toasts);
@@ -319,7 +354,8 @@ impl AnimState {
                     }
                 }
                 if let Some(i) = go {
-                    self.goto(i);
+                    bus.push(AppCommand::TimelinePlay { playing: Some(false) });
+                    bus.push(AppCommand::TimelineScrub { time: (i as f32 + 0.01) / self.fps });
                 }
             });
         });

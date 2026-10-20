@@ -183,7 +183,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "zoom", description: "Set Paint zoom.", params: obj(json!({ "percent": n("5-1600"), "fit": b("fit to window") }), &[]) },
         ToolSpec { name: "pan", description: "Pan the Paint view in screen points.", params: obj(json!({ "dx": n("dx"), "dy": n("dy") }), &["dx", "dy"]) },
         ToolSpec { name: "open_file", description: "Open an image as a new layer, or read a PSD header (user approval required).", params: obj(json!({ "path": s("file path") }), &["path"]) },
-        ToolSpec { name: "save_psd", description: "Save the layer structure as <name>_edit.psd (user approval required).", params: obj(json!({}), &[]) },
+        ToolSpec { name: "save_psd", description: "Save the document as a layered PSD with pixels, <name>_edit.psd (user approval required).", params: obj(json!({}), &[]) },
         ToolSpec { name: "export_png", description: "Export a flattened PNG (user approval required).", params: obj(json!({}), &[]) },
         ToolSpec { name: "scene_add", description: "Add a 3D object.", params: obj(json!({ "kind": { "type": "string", "enum": ["cube", "joint", "light", "camera"] } }), &["kind"]) },
         ToolSpec { name: "scene_select", description: "Select a 3D object by name.", params: obj(json!({ "object": s("object name") }), &["object"]) },

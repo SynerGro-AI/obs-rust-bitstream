@@ -985,6 +985,8 @@ pub use phshp::Phshp;
 pub use psd::Psd;
 pub mod ui_canvas;
 pub mod paint_engine;
+pub mod mesh3d;
+pub mod psd_pixels;
 pub mod stream_inspect;
 pub mod assistant;
 pub use tool_dispatch::{ToolDispatch, CanvasAction};

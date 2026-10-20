@@ -527,6 +527,21 @@ pub fn dab_points(b: &Brush, from: (f32, f32), to: (f32, f32)) -> Vec<(f32, f32)
     }).collect()
 }
 
+/// Dabs every `spacing` pixels along `from → to`, where `from` is the last
+/// dab placed. Returns the new dabs; a pointer that hasn't moved a full
+/// spacing yet (or is paused) yields none, so tools don't build up in place.
+pub fn spaced_dab_points(b: &Brush, from: (f32, f32), to: (f32, f32)) -> Vec<(f32, f32)> {
+    let step = (b.size * b.spacing.clamp(0.05, 2.0)).max(1.0);
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let dist = (dx * dx + dy * dy).sqrt();
+    let n = (dist / step + 1e-4).floor() as usize;
+    if n == 0 {
+        return Vec::new();
+    }
+    let (ux, uy) = (dx / dist, dy / dist);
+    (1..=n.min(100_000)).map(|k| (from.0 + ux * step * k as f32, from.1 + uy * step * k as f32)).collect()
+}
+
 /// Dodge (lighten) or burn (darken) under the brush. Alpha untouched.
 pub fn tone_dab(r: &mut Raster, b: &Brush, cx: f32, cy: f32, exposure: f32, dodge: bool, sel: Option<&Selection>) {
     let (x0, y0, x1, y1) = dab_bounds(r, cx, cy, b.size / 2.0);
@@ -866,6 +881,16 @@ mod tests {
         let u = union_rect(a, b).unwrap_or(PixelRect { x: 0, y: 0, w: 0, h: 0 });
         assert!(u.x <= 3 && u.x + u.w >= 52);
         assert_eq!(thumbnail(&Raster::new(400, 200), 40).width, 40);
+    }
+
+    #[test]
+    fn spaced_dabs_ignore_pauses_and_keep_spacing() {
+        let b = Brush { size: 20.0, spacing: 0.25, ..Brush::default() };
+        assert!(spaced_dab_points(&b, (10.0, 10.0), (10.0, 10.0)).is_empty());
+        assert!(spaced_dab_points(&b, (10.0, 10.0), (13.0, 10.0)).is_empty());
+        let d = spaced_dab_points(&b, (0.0, 0.0), (17.5, 0.0));
+        assert_eq!(d.len(), 3);
+        assert!((d[2].0 - 15.0).abs() < 1e-4);
     }
 
     #[test]

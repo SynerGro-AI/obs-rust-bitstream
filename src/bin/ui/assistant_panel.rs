@@ -117,6 +117,12 @@ impl AssistantPanel {
         }
     }
 
+    /// Use this CLI (or none) and stop waiting for auto-detection.
+    pub fn set_cli(&mut self, cli: Option<SeraphinaCli>) {
+        self.cli = cli;
+        self.cli_rx = None;
+    }
+
     pub fn is_busy(&self) -> bool {
         self.rx.is_some() || self.pending_calls.is_some()
     }

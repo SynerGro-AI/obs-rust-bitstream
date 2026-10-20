@@ -240,11 +240,16 @@ impl LlmProvider for OpenAiCompat {
 pub struct SeraphinaCli {
     pub program: String,
     pub version: String,
+    /// Overrides SERAPHINA_HOME for the child (tests use a temp dir).
+    pub home: Option<std::path::PathBuf>,
 }
 
-fn run_cli(program: &str, args: &[&str]) -> Result<String, String> {
+fn run_cli(program: &str, args: &[&str], home: Option<&std::path::Path>) -> Result<String, String> {
     let mut cmd = std::process::Command::new(program);
     cmd.args(args).stdin(std::process::Stdio::null());
+    if let Some(h) = home {
+        cmd.env("SERAPHINA_HOME", h);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -263,27 +268,45 @@ impl SeraphinaCli {
     /// Probe `SERAPHINA_CLI` or `seraphina` on PATH. Blocking.
     pub fn detect() -> Option<Self> {
         let program = env("SERAPHINA_CLI").unwrap_or_else(|| "seraphina".into());
-        let v = run_cli(&program, &["--version"]).ok()?;
-        v.to_lowercase().contains("seraphina").then(|| Self { program, version: v.trim().to_string() })
+        let v = run_cli(&program, &["--version"], None).ok()?;
+        v.to_lowercase().contains("seraphina").then(|| Self { program, version: v.trim().to_string(), home: None })
     }
 
-    /// Intents we forward: memory, Triad, help, version. Everything else
-    /// (glyph builds, agent creation) is left to the user's own shell.
+    /// Intents forwarded to the CLI, matching its own grammar
+    /// (`seraphina/cli.py`): `remember <text>`, `recall [query]`,
+    /// `triad <message>`, `plan-grok <message>` (live xAI call, needs
+    /// XAI_API_KEY), `help` and `version`. Glyph builds and agent creation
+    /// are left to the user's own shell.
     pub fn is_native_intent(text: &str) -> bool {
         let t = text.trim().to_lowercase();
-        ["remember ", "recall", "triad ", "help", "version"].iter().any(|k| t == k.trim() || t.starts_with(k))
+        let with_arg = |k: &str| t.strip_prefix(k).map(|r| r.starts_with(' ') && !r.trim().is_empty()).unwrap_or(false);
+        t == "help" || t == "version" || t == "recall" || with_arg("recall") || with_arg("remember") || with_arg("triad") || with_arg("plan-grok")
     }
 
     pub fn intent(&self, text: &str) -> Result<String, String> {
         if !Self::is_native_intent(text) {
-            return Err("only remember / recall / triad / help / version are forwarded".into());
+            return Err("only remember <text> / recall [query] / triad <message> / plan-grok <message> / help / version are forwarded".into());
         }
-        run_cli(&self.program, &["-c", text.trim()])
+        run_cli(&self.program, &["-c", text.trim()], self.home.as_deref())
+    }
+
+    /// Notes from `recall` output, without the CLI's leading timestamps.
+    pub fn parse_recall(out: &str) -> Vec<String> {
+        out.lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with('('))
+            .map(|l| {
+                let first = l.split_whitespace().next().unwrap_or("");
+                let stamped = first.len() >= 19 && first.as_bytes().get(4) == Some(&b'-') && first.contains('T');
+                if stamped { l[first.len()..].trim().to_string() } else { l.to_string() }
+            })
+            .filter(|l| !l.is_empty())
+            .collect()
     }
 
     /// Up to `n` recent memory notes for the system prompt.
     pub fn recall(&self, n: usize) -> Vec<String> {
-        self.intent("recall").map(|s| s.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty() && !l.starts_with('(')).collect::<Vec<_>>()).map(|v| v[v.len().saturating_sub(n)..].to_vec()).unwrap_or_default()
+        self.intent("recall").map(|s| Self::parse_recall(&s)).map(|v| v[v.len().saturating_sub(n)..].to_vec()).unwrap_or_default()
     }
 }
 
@@ -419,9 +442,53 @@ mod tests {
     fn cli_whitelist() {
         assert!(SeraphinaCli::is_native_intent("remember the gold is #DEB04C"));
         assert!(SeraphinaCli::is_native_intent("recall"));
+        assert!(SeraphinaCli::is_native_intent("recall gold"));
         assert!(SeraphinaCli::is_native_intent("triad hello"));
+        assert!(SeraphinaCli::is_native_intent("plan-grok a vignette"));
+        assert!(SeraphinaCli::is_native_intent("Version"));
+        assert!(!SeraphinaCli::is_native_intent("triad"), "the CLI rejects a bare triad");
+        assert!(!SeraphinaCli::is_native_intent("remember"));
+        assert!(!SeraphinaCli::is_native_intent("recallx"));
         assert!(!SeraphinaCli::is_native_intent("build glyph 179"));
         assert!(!SeraphinaCli::is_native_intent("create-agent"));
+    }
+
+    #[test]
+    fn recall_output_drops_timestamps() {
+        let out = "  2026-10-20T15:53:39-06:00  the studio test note: gold theme\n  2026-10-20T16:01:02-06:00  second\n";
+        assert_eq!(SeraphinaCli::parse_recall(out), vec!["the studio test note: gold theme", "second"]);
+        assert!(SeraphinaCli::parse_recall("  (no memory yet)").is_empty());
+    }
+
+    /// End to end against the real `seraphina` CLI when it is installed
+    /// (skipped otherwise). Uses a temp SERAPHINA_HOME. `plan-grok` runs
+    /// live only when an xAI key is in the environment.
+    #[test]
+    fn real_cli_intents_end_to_end() {
+        let Some(mut cli) = SeraphinaCli::detect() else {
+            eprintln!("real_cli_intents_end_to_end: skipped (seraphina not on PATH)");
+            return;
+        };
+        let home = std::env::temp_dir().join(format!("seraphina_cli_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        cli.home = Some(home.clone());
+        assert!(cli.version.starts_with("seraphina "), "{}", cli.version);
+        assert!(cli.intent("version").unwrap().contains(cli.version.trim_start_matches("seraphina ").trim()));
+        assert!(cli.intent("help").unwrap().contains("remember <text>"));
+        assert!(cli.recall(5).is_empty());
+        assert!(cli.intent("remember studio note: gold on black").unwrap().contains("remembered"));
+        cli.intent("remember second note").unwrap();
+        assert_eq!(cli.recall(5), vec!["studio note: gold on black", "second note"]);
+        assert!(cli.intent("recall gold").unwrap().contains("gold on black"));
+        let t = cli.intent("triad keep the layers tidy").unwrap();
+        assert!(t.contains("consensus:") && t.contains("response:"), "{}", t);
+        assert!(cli.intent("build glyph 179").is_err());
+        if std::env::var("XAI_API_KEY").or_else(|_| std::env::var("SERAPHINA_GROK_API_KEY")).map(|k| !k.trim().is_empty()).unwrap_or(false) {
+            let p = cli.intent("plan-grok three steps to add a gold vignette").unwrap();
+            eprintln!("LIVE plan-grok: {}", p.lines().take(4).collect::<Vec<_>>().join(" | "));
+            assert!(p.contains("grok plan"), "{}", p);
+        }
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// Live smoke test: runs only when XAI_API_KEY / SERAPHINA_GROK_API_KEY is set.

@@ -12,10 +12,11 @@ use crate::{resolve_asset, ToastKind, Toasts};
 use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::paint_engine::{
-    blur_mask, clone_dab, composite_into, dab_points, dab_rect, gradient_fill, heal_dab, paint_dab, thumbnail, tone_dab, union_rect, LayerGroup, LayerMask,
-    PaintLayer, Selection, TextSpec,
+    blur_mask, clone_dab, composite_into, dab_rect, gradient_fill, heal_dab, paint_dab, thumbnail, tone_dab, union_rect, LayerGroup, LayerMask,
+    PaintLayer, Selection, TextSpec, spaced_dab_points,
 };
 use obs_rust_bitstream::ui_canvas::{save_target, zoom_step, BlendMode, Brush, Filter, History, PixelRect, Raster, ViewTransform};
+use obs_rust_bitstream::psd_pixels::{LayerKind, PsdLayerPixels, PsdPixels};
 use obs_rust_bitstream::Psd;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -200,6 +201,33 @@ impl Tool {
     }
 }
 
+pub fn blend_key(b: BlendMode) -> [u8; 4] {
+    *match b {
+        BlendMode::Normal => b"norm",
+        BlendMode::Multiply => b"mul ",
+        BlendMode::Screen => b"scrn",
+        BlendMode::Overlay => b"over",
+        BlendMode::Darken => b"dark",
+        BlendMode::Lighten => b"lite",
+        BlendMode::SoftLight => b"sLit",
+        BlendMode::Difference => b"diff",
+    }
+}
+
+pub fn blend_from_key(k: &[u8; 4]) -> Option<BlendMode> {
+    Some(match k {
+        b"norm" | b"pass" => BlendMode::Normal,
+        b"mul " => BlendMode::Multiply,
+        b"scrn" => BlendMode::Screen,
+        b"over" => BlendMode::Overlay,
+        b"dark" => BlendMode::Darken,
+        b"lite" => BlendMode::Lighten,
+        b"sLit" => BlendMode::SoftLight,
+        b"diff" => BlendMode::Difference,
+        _ => return None,
+    })
+}
+
 // ---- document ---------------------------------------------------------------
 
 /// Everything undo restores.
@@ -262,7 +290,8 @@ pub struct PaintState {
     thumbs: HashMap<u32, (u64, egui::TextureHandle)>,
     pub cursor_px: Option<(u32, u32)>,
     pub path: String,
-    pub psd: Option<Psd>,
+    /// Summary of the last PSD opened or saved.
+    pub psd: Option<String>,
     pub doc_name: String,
     pub text_draft: Option<TextDraft>,
     pub sections_open: [bool; 8],
@@ -438,7 +467,7 @@ impl PaintState {
                 m.prepare();
             }
         }
-        let psd = Psd::load(&resolve_asset("assets/mountain_spire.psd"));
+        let psd = None;
         let mut s = Self {
             doc,
             history: History::new(40),
@@ -674,13 +703,13 @@ impl PaintState {
             return;
         }
         let pts = match self.last_dab {
-            Some(from) => dab_points(&self.brush, from, pt),
+            Some(from) => spaced_dab_points(&self.brush, from, pt),
             None => vec![pt],
         };
         for p in pts {
             self.dab_at(i, p);
+            self.last_dab = Some(p);
         }
-        self.last_dab = Some(pt);
     }
 
     fn stroke_points(&mut self, pts: &[(f32, f32)]) -> Result<(), String> {
@@ -815,10 +844,7 @@ impl PaintState {
         }
         self.path = path.clone();
         if lower.ends_with(".psd") {
-            let d = Psd::load(&resolve_asset(&path)).ok_or_else(|| format!("{} isn't a readable PSD", path))?;
-            let msg = format!("read PSD header: {} × {}, {} layers (pixel data isn't decoded yet)", d.width, d.height, d.layers.len());
-            self.psd = Some(d);
-            return Ok(msg);
+            return self.open_psd(&path);
         }
         let r = load_raster(&path).map_err(|e| format!("couldn't open {}: {}", path, e))?;
         self.checkpoint();
@@ -846,14 +872,128 @@ impl PaintState {
         Ok(format!("added layer “{}”", name))
     }
 
-    pub fn save_psd(&mut self) -> Result<String, String> {
-        let mut d = Psd::new(self.doc.width, self.doc.height);
-        for l in &self.doc.layers {
-            d.add_layer(&l.name, l.visible, (l.opacity * 255.0).round() as u8);
+    /// Decode a layered PSD (pixels, opacity, visibility, blend, groups) into the document.
+    pub fn open_psd(&mut self, path: &str) -> Result<String, String> {
+        let file = resolve_asset(path);
+        let d = match PsdPixels::load(&file) {
+            Ok(d) => d,
+            Err(e) => {
+                if let Some(old) = Psd::load(&file) {
+                    return Err(format!("{} only holds a layer list ({} layers, no pixel data) from an older Seraphina Studio; re-save it from the app", path, old.layers.len()));
+                }
+                return Err(format!("couldn't read {}: {}", path, e));
+            }
+        };
+        let (w, h) = (d.width, d.height);
+        let mut doc = PaintDoc { layers: Vec::new(), groups: Vec::new(), width: w, height: h, selection: None, selected: 0, next_id: 0 };
+        let mut stack: Vec<u32> = Vec::new();
+        let mut unsupported = 0;
+        for l in &d.layers {
+            match l.kind {
+                LayerKind::GroupEnd => {
+                    let gid = doc.alloc_id();
+                    doc.groups.push(LayerGroup { id: gid, name: "Group".into(), visible: true, collapsed: false });
+                    stack.push(gid);
+                }
+                LayerKind::GroupFolder { open } => {
+                    if let Some(gid) = stack.pop() {
+                        if let Some(g) = doc.groups.iter_mut().find(|g| g.id == gid) {
+                            g.name = l.name.clone();
+                            g.visible = l.visible;
+                            g.collapsed = !open;
+                        }
+                    }
+                }
+                LayerKind::Pixels => {
+                    let r = Raster::from_rgba(w, h, l.to_canvas(w, h)).ok_or("layer size mismatch")?;
+                    let id = doc.alloc_id();
+                    let mut pl = PaintLayer::new(id, &l.name, r);
+                    pl.visible = l.visible;
+                    pl.opacity = l.opacity as f32 / 255.0;
+                    pl.blend = blend_from_key(&l.blend).unwrap_or_else(|| {
+                        unsupported += 1;
+                        BlendMode::Normal
+                    });
+                    pl.group = stack.last().copied();
+                    doc.layers.push(pl);
+                }
+            }
         }
+        if doc.layers.is_empty() {
+            let merged = d.merged.clone().ok_or("PSD has neither layers nor a merged image")?;
+            let id = doc.alloc_id();
+            doc.layers.push(PaintLayer::new(id, "Background", Raster::from_rgba(w, h, merged).ok_or("merged image size mismatch")?));
+        }
+        doc.selected = doc.layers.len() - 1;
+        self.checkpoint();
+        self.doc = doc;
+        self.doc_name = std::path::Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or("document").trim_end_matches("_edit").to_string();
+        self.crop = None;
+        self.pen.clear();
+        self.clone_anchor = None;
+        self.clone_offset = None;
+        self.thumbs.clear();
+        self.fit_pending = true;
+        self.mark_all();
+        let n = self.doc.layers.len();
+        let summary = format!("{} × {}, {} layers, {} groups", w, h, n, self.doc.groups.len());
+        self.psd = Some(summary.clone());
+        Ok(format!("opened {} ({}{})", path, summary, if unsupported > 0 { format!("; {} unsupported blend modes shown as Normal", unsupported) } else { String::new() }))
+    }
+
+    /// The document as a layered PSD: pixels per layer (masks baked into
+    /// alpha, fill folded into opacity), groups and the merged composite.
+    pub fn to_psd(&self) -> PsdPixels {
+        let (w, h) = (self.doc.width, self.doc.height);
+        let mut layers = Vec::new();
+        let mut prev: Option<u32> = None;
+        let folder = |gid: u32| {
+            let g = self.doc.groups.iter().find(|g| g.id == gid);
+            PsdLayerPixels::group_folder(g.map(|g| g.name.as_str()).unwrap_or("Group"), g.map(|g| g.visible).unwrap_or(true), !g.map(|g| g.collapsed).unwrap_or(false))
+        };
+        for l in &self.doc.layers {
+            if l.group != prev {
+                if let Some(g) = prev {
+                    layers.push(folder(g));
+                }
+                if l.group.is_some() {
+                    layers.push(PsdLayerPixels::group_end());
+                }
+                prev = l.group;
+            }
+            let mut rgba = l.raster.data.clone();
+            if let Some(m) = &l.mask {
+                let mut m = m.clone();
+                m.prepare();
+                let (ox, oy) = l.offset;
+                for y in 0..l.raster.height {
+                    for x in 0..l.raster.width {
+                        let (dx, dy) = (x as i32 + ox, y as i32 + oy);
+                        let k = if dx >= 0 && dy >= 0 && (dx as u32) < w && (dy as u32) < h { m.factor(dx as u32, dy as u32) } else { 0.0 };
+                        let i = ((y * l.raster.width + x) * 4 + 3) as usize;
+                        rgba[i] = (rgba[i] as f32 * k).round() as u8;
+                    }
+                }
+            }
+            let mut pl = PsdLayerPixels::from_canvas(&l.name, l.raster.width, l.raster.height, &rgba, l.offset);
+            pl.visible = l.visible;
+            pl.opacity = (l.opacity.clamp(0.0, 1.0) * l.fill.clamp(0.0, 1.0) * 255.0).round() as u8;
+            pl.blend = blend_key(l.blend);
+            layers.push(pl);
+        }
+        if let Some(g) = prev {
+            layers.push(folder(g));
+        }
+        PsdPixels { width: w, height: h, layers, merged: Some(self.flattened().data) }
+    }
+
+    pub fn save_psd(&mut self) -> Result<String, String> {
+        let d = self.to_psd();
         let target = save_target(&format!("{}.psd", self.doc_name));
         d.save(std::path::Path::new(&target)).map_err(|e| format!("save failed: {}", e))?;
-        Ok(format!("saved layer structure to {}", target))
+        let n = d.layers.iter().filter(|l| l.kind == LayerKind::Pixels).count();
+        self.psd = Some(format!("{} × {}, {} layers saved", d.width, d.height, n));
+        Ok(format!("saved {} ({} layers with pixels)", target, n))
     }
 
     pub fn export_png(&mut self) -> Result<String, String> {
@@ -2305,7 +2445,7 @@ impl PaintState {
         let sel = self.doc.selection.as_ref().and_then(|s| s.bounds()).map(|b| format!("{} × {} at {}, {}", b.w, b.h, b.x, b.y)).unwrap_or_else(|| "None".into());
         theme::prop(ui, p, "Selection:", sel);
         if let Some(d) = &self.psd {
-            theme::prop(ui, p, "PSD header:", format!("{} × {}, {} layers", d.width, d.height, d.layers.len()));
+            theme::prop(ui, p, "PSD:", d.clone());
         }
     }
 }

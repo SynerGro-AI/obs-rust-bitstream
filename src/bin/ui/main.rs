@@ -1152,6 +1152,7 @@ fn main() -> eframe::Result<()> {
 mod tests {
     use super::*;
     use crate::llm::{LlmReply, MockProvider, ToolCall};
+    use obs_rust_bitstream::ui_canvas::BlendMode;
     use std::sync::Arc;
 
     fn input(t: f64) -> egui::RawInput {
@@ -1291,6 +1292,127 @@ mod tests {
         app.stream.open(&mut app.toasts);
         assert!(app.toasts.items.iter().any(|t| t.kind == ToastKind::Error));
         assert!(app.dispatch(&AppCommand::OpenFile { path: "definitely/missing.png".into() }, Origin::User).is_err());
+    }
+
+    /// Rewrites assets/mountain_spire.psd from the built-in sample document.
+    #[test]
+    #[ignore]
+    fn regenerate_sample_psd() {
+        let mut t = Toasts { now: 0.0, items: Vec::new() };
+        let p = paint::PaintState::new(&mut t);
+        p.to_psd().save(std::path::Path::new("assets/mountain_spire.psd")).unwrap();
+    }
+
+    #[test]
+    fn dodge_and_burn_do_not_build_up_while_paused() {
+        for tool in [paint::Tool::Dodge, paint::Tool::Burn] {
+            let mut t = Toasts { now: 0.0, items: Vec::new() };
+            let run = |frames: usize, t: &mut Toasts| {
+                let mut p = paint::PaintState::new(t);
+                p.doc.selected = p.doc.layers.iter().position(|l| l.name == "Mountain Spire").unwrap();
+                p.tool = tool;
+                p.begin_stroke().unwrap();
+                for _ in 0..frames {
+                    p.stroke_to((300.0, 300.0));
+                }
+                // then a real movement still lays dabs at spacing
+                p.stroke_to((340.0, 300.0));
+                p.end_stroke();
+                p.doc.layers[p.doc.selected].raster.data.clone()
+            };
+            let once = run(1, &mut t);
+            let held = run(40, &mut t);
+            assert!(once == held, "{:?} built up while the pointer paused", tool);
+            let orig = paint::PaintState::new(&mut t);
+            let i = orig.doc.layers.iter().position(|l| l.name == "Mountain Spire").unwrap();
+            assert_ne!(orig.doc.layers[i].raster.data, once, "{:?} changed nothing", tool);
+        }
+    }
+
+    /// The chat panel routes CLI intents to the real `seraphina` CLI (skipped if not installed).
+    #[test]
+    fn chat_routes_memory_intents_to_the_real_cli() {
+        let Some(mut cli) = llm::SeraphinaCli::detect() else {
+            eprintln!("skipped: seraphina not on PATH");
+            return;
+        };
+        let home = std::env::temp_dir().join(format!("seraphina_chat_cli_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        cli.home = Some(home.clone());
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.assistant.set_cli(Some(cli));
+        let say = |app: &mut App, text: &str| -> String {
+            app.assistant.input = text.into();
+            app.assistant.want_send = true;
+            for _ in 0..400 {
+                app.pump_assistant();
+                if !app.assistant.is_busy() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            app.assistant.items.last().map(|i| i.text.clone()).unwrap_or_default()
+        };
+        assert!(say(&mut app, "remember Mist Overlay looks best at 55%").contains("remembered"));
+        assert!(say(&mut app, "recall mist").contains("Mist Overlay looks best at 55%"));
+        assert!(say(&mut app, "triad tidy the layer stack").contains("consensus"));
+        assert!(say(&mut app, "version").contains("seraphina"));
+        assert!(say(&mut app, "help").contains("recall [query]"));
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn bundled_psd_decodes_real_pixels() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let msg = app.dispatch(&AppCommand::OpenFile { path: "assets/mountain_spire.psd".into() }, Origin::User).unwrap();
+        assert!(msg.contains("layers"), "{}", msg);
+        let doc = &app.paint.doc;
+        assert!(doc.width > 100 && doc.height > 100);
+        assert!(doc.layers.len() >= 6, "{} layers", doc.layers.len());
+        let find = |n: &str| doc.layers.iter().find(|l| l.name == n).unwrap_or_else(|| panic!("missing layer {}", n));
+        // the photo layer is real, varied pixel data
+        let base = find("Mountain Spire");
+        let colours: std::collections::HashSet<[u8; 3]> = base.raster.data.chunks_exact(4).step_by(7).map(|p| [p[0], p[1], p[2]]).collect();
+        assert!(colours.len() > 2000, "{} colours", colours.len());
+        assert!(base.raster.data.chunks_exact(4).all(|p| p[3] == 255));
+        // properties survive
+        let mist = find("Mist Overlay");
+        assert_eq!(mist.blend, BlendMode::Screen);
+        assert!((mist.opacity - 0.45).abs() < 0.01);
+        assert!(mist.raster.data.chunks_exact(4).take(1000).all(|p| p[3] == 0), "mask baked into alpha at the top");
+        assert_eq!(find("Rock Foreground").blend, BlendMode::Multiply);
+        let env = doc.groups.iter().find(|g| g.name == "Environment").expect("group");
+        assert_eq!(doc.layers.iter().filter(|l| l.group == Some(env.id)).count(), 2);
+        // composite is not blank and matches the file's merged image
+        let flat = app.paint.flattened();
+        let file = obs_rust_bitstream::psd_pixels::PsdPixels::load(&resolve_asset("assets/mountain_spire.psd")).unwrap();
+        let merged = file.merged.unwrap();
+        let diff: f64 = flat.data.iter().zip(&merged).map(|(a, b)| (*a as f64 - *b as f64).abs()).sum::<f64>() / flat.data.len() as f64;
+        assert!(diff < 1.5, "mean diff {}", diff);
+        let mean: f64 = flat.data.iter().map(|v| *v as f64).sum::<f64>() / flat.data.len() as f64;
+        assert!(mean > 40.0, "composite isn't blank ({})", mean);
+        // hiding a layer changes the composite
+        let i = doc.layers.iter().position(|l| l.name == "Mountain Spire").unwrap();
+        app.paint.doc.layers[i].visible = false;
+        assert_ne!(app.paint.flattened().data, flat.data);
+    }
+
+    #[test]
+    fn psd_save_roundtrips_through_open() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let dir = std::env::temp_dir().join(format!("seraphina_psd_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("rt.psd");
+        let before = app.paint.flattened();
+        app.paint.to_psd().save(&path).unwrap();
+        app.dispatch(&AppCommand::OpenFile { path: path.to_string_lossy().into() }, Origin::User).unwrap();
+        let after = app.paint.flattened();
+        let diff: f64 = before.data.iter().zip(&after.data).map(|(a, b)| (*a as f64 - *b as f64).abs()).sum::<f64>() / before.data.len() as f64;
+        assert!(diff < 1.5, "mean diff {}", diff);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -319,6 +319,13 @@ impl eframe::App for TuxedoApp {
                     match self.mode {
                         Mode::Photoshop => {
                             ui.label(egui::RichText::new("◆ LAYERS").color(gold));
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Normal").color(fg));
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(egui::RichText::new("100%").color(muted));
+                                    ui.label(egui::RichText::new("Opacity").color(muted));
+                                });
+                            });
                             let layer_names: Vec<(String, bool)> = self.pixel_stack.layers.iter().map(|l| (l.name.clone(), l.visible)).collect();
                             for (i, (name, visible)) in layer_names.iter().enumerate() {
                                 let eye = if *visible { "◉" } else { "○" };
@@ -371,6 +378,29 @@ impl eframe::App for TuxedoApp {
                                     });
                             });
                             ui.label(egui::RichText::new(format!("Selected: {}", self.selected_layer)).color(fg));
+                            ui.separator();
+                            ui.label(egui::RichText::new("◆ PROPERTIES").color(gold));
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Opacity").color(fg));
+                                ui.add(egui::Slider::new(&mut self.opacity, 0.0..=100.0).suffix("%"));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Fill").color(fg));
+                                ui.add(egui::Slider::new(&mut self.density, 0.0..=100.0).suffix("%"));
+                            });
+                            ui.separator();
+                            ui.label(egui::RichText::new("Canvas").color(muted));
+                            ui.label(egui::RichText::new("Width: 5760 px").color(fg));
+                            ui.label(egui::RichText::new("Height: 3240 px").color(fg));
+                            ui.label(egui::RichText::new("Resolution: 300 ppi").color(fg));
+                            ui.separator();
+                            ui.label(egui::RichText::new("Color Profile").color(muted));
+                            ui.label(egui::RichText::new("Working RGB: Adobe RGB (1998)").color(fg));
+                            ui.separator();
+                            ui.label(egui::RichText::new("Info").color(muted));
+                            ui.label(egui::RichText::new("Bit Depth: 16-bit/Channel").color(fg));
+                            ui.label(egui::RichText::new("Channels: RGB").color(fg));
+                            ui.separator();
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new("Blend").color(fg));
                                 egui::ComboBox::from_id_salt("blend")

@@ -20,10 +20,11 @@ impl ToolDispatch {
     /// Route a tool name and click to an action.
     pub fn dispatch(tool: &str, x: u32, y: u32) -> CanvasAction {
         match tool {
-            "Brush" | "Brush Tool" => CanvasAction::Paint { x, y },
-            "Lasso" | "Rectangular Marquee" => CanvasAction::Select { x, y },
+            "Brush" | "Brush Tool" | "Pen Tool" | "Pen" | "Eraser Tool" | "Eraser" | "Gradient Tool" => CanvasAction::Paint { x, y },
+            "Lasso" | "Lasso Tool" | "Rectangular Marquee" | "Quick Select" => CanvasAction::Select { x, y },
             "Crop" | "Crop Tool" => CanvasAction::Crop { x, y },
-            "Healing Brush" | "Heal" => CanvasAction::Heal { x, y },
+            "Healing Brush" | "Heal" | "Clone Stamp" => CanvasAction::Heal { x, y },
+            "Move Tool" | "Move" | "Hand Tool" | "Hand" | "Zoom Tool" | "Zoom" => CanvasAction::None,
             _ => CanvasAction::None,
         }
     }

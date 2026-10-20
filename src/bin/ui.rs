@@ -256,7 +256,23 @@ impl eframe::App for TuxedoApp {
                             for group in PsToolbar::groups() {
                                 ui.collapsing(egui::RichText::new(group.label().to_uppercase()).color(gold), |ui| {
                                     for tool in PsToolbar::in_group(*group) {
-                                        let text = format!("{}  {}", tool.name, tool.hotkey);
+                                        let icon = match tool.name {
+                                            "Brush Tool" | "Brush" => "🖌",
+                                            "Eraser Tool" | "Eraser" => "◻",
+                                            "Pen Tool" | "Pen" => "🖊",
+                                            "Lasso" | "Lasso Tool" => "◯",
+                                            "Rectangular Marquee" => "▭",
+                                            "Crop Tool" | "Crop" => "✂",
+                                            "Healing Brush" | "Heal" => "✚",
+                                            "Clone Stamp" => "⊕",
+                                            "Move Tool" | "Move" => "✥",
+                                            "Hand Tool" | "Hand" => "✋",
+                                            "Zoom Tool" | "Zoom" => "🔍",
+                                            "Type Tool" | "Type" => "T",
+                                            "Gradient Tool" => "▓",
+                                            _ => "•",
+                                        };
+                                        let text = format!("{}  {}  {}", icon, tool.name, tool.hotkey);
                                         let color = if self.tool == tool.name { gold } else { fg };
                                         if ui.selectable_label(self.tool == tool.name, egui::RichText::new(text).color(color)).clicked() {
                                             self.tool = tool.name.to_string();

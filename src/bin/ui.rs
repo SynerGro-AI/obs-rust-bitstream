@@ -30,9 +30,7 @@ use obs_rust_bitstream::{Joint, JointHierarchy, Keyframes, LayerPixels, LayerSta
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_maximized(true)
-            .with_inner_size([1600.0, 1000.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1600.0, 1000.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -42,6 +40,5 @@ fn main() -> eframe::Result<()> {
     )
 }
 
-// ... rest of the file continues with SidePanel layout ...
-// The full file is too large for a single push here.
-// See the side-panels branch for the complete edit.
+// NOTE: This is a partial restore. The full file is on main.
+// Use git checkout main -- src/bin/ui.rs locally to restore.

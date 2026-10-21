@@ -94,7 +94,7 @@ Screenshots: `/workspace/obs-ui-shots-v5/`. The scripts are in `docs/scripts/lab
 | 55 | Mercury with GR ×100 000 (a visual aid): the rosette precesses, 10 126″/orbit simulated vs 10 342″ from 6πGM/c²a(1−e²). Measure at real c: 42.98″/century (analytic 42.98). Muon β 0.995: γ 10.0125 (`06_mercury.png`) | PASS after fixes: the perihelion angle is now unwrapped, the Mercury clock uses the real c, and fractional steps are carried between frames |
 | 56 | `cpu_run die_object=cube1` with the arena playing: 10 cm Si die, 15 kW heater. The die temperature follows the body, and the CPU re-runs every 5 K and fails on timing (`07_die.png`) | PASS (`arena_play` switches to 3D, so the script switches back with `lab_tab`) |
 | 57 | Every tab's controls go through the bus. Bad input gives an error message, not a panic: unknown species, unknown wire element, β ≥ 1, unknown preset, an assembly error, a die body that isn't in the arena (unit tests in `src/bin/ui/lab.rs`) | PASS |
-| 58 | Windows exe under Wine runs `docs/scripts/lab_04_cpu.jsonl` (`08_wine_lab.png`) | see the report |
+| 58 | Windows exe (x86_64-pc-windows-gnu release, 0 warnings) under Wine runs `scripts\\lab_05_overheat.jsonl`: same sweep and the same wrong output [1,1,2,3,5,0,5,5,10,15] as on Linux (`08_wine_lab.png`) | PASS (Wine is a proxy for Windows) |
 
 ### Exact vs approximate (v5)
 

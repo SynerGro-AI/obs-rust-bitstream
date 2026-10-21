@@ -504,10 +504,21 @@ impl Circuit {
         Ok(())
     }
 
-    /// DC operating point at time `time` (C open, L short).
+    /// DC operating point at time `time` (C open, L short). Capacitor
+    /// voltages and inductor currents are initialised from it, so a
+    /// following transient starts from the operating point (as SPICE does).
     pub fn dc(&mut self) -> Result<(), CircuitError> {
         let t = self.time;
-        self.solve_at(t, None)
+        self.solve_at(t, None)?;
+        let v = self.v.clone();
+        for e in &mut self.elems {
+            match e {
+                Elem::C { a, b, v: vc, .. } => *vc = v[*a] - v[*b],
+                Elem::L { a, b, i, .. } => *i = 1e6 * (v[*a] - v[*b]),
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// One backward-Euler transient step of `h` seconds (with Joule heating).

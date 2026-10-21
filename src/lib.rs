@@ -232,6 +232,7 @@ pub mod material_pbr;
 pub mod arena;
 pub mod chem;
 pub mod circuit;
+pub mod computer;
 pub mod compound;
 pub mod reaction;
 pub mod audio_channel;

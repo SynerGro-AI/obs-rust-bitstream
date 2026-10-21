@@ -233,6 +233,7 @@ pub mod arena;
 pub mod chem;
 pub mod circuit;
 pub mod computer;
+pub mod relativity;
 pub mod compound;
 pub mod reaction;
 pub mod audio_channel;

@@ -1,0 +1,10 @@
+{"cmd":"switch_mode","mode":"3d"}
+{"cmd":"scene_select","object":"cube1"}
+{"cmd":"scene_transform","translate":[0,-0.4,0],"scale":0.1}
+{"cmd":"material_assign","material":"silicon"}
+{"cmd":"arena_body","heater_w":15000}
+{"cmd":"arena_env","preset":"earth"}
+{"cmd":"arena_step","steps":1200}
+{"cmd":"cpu_run","program":"fibonacci","clock_mhz":2000,"die_object":"cube1"}
+{"cmd":"arena_play","playing":true}
+{"cmd":"lab_tab","tab":"computer"}

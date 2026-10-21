@@ -15,6 +15,7 @@ mod assistant_panel;
 mod commands;
 mod composite;
 mod llm;
+mod lab;
 mod materials;
 mod maya;
 mod output;
@@ -325,6 +326,7 @@ pub struct App {
     pub anim: animate::AnimState,
     pub comp: composite::CompState,
     pub materials: materials::MaterialsState,
+    pub lab: lab::LabState,
     pub assistant: assistant_panel::AssistantPanel,
     pub video: videogen::VideoGenPanel,
     pub bus: Vec<AppCommand>,
@@ -382,6 +384,7 @@ impl App {
             anim: animate::AnimState::new(),
             comp: composite::CompState::new(),
             materials: materials::MaterialsState::new(),
+            lab: lab::LabState::new(),
             assistant,
             video,
             bus: Vec::new(),
@@ -472,7 +475,7 @@ impl App {
             self.comp.context(),
             self.stream.context(),
             self.output.context(),
-            self.materials.context(),
+            format!("{} {}", self.materials.context(), self.lab.context()),
             vid
         )
     }
@@ -874,8 +877,17 @@ impl App {
                 }
                 Ok(format!("{}: start {:.1} °C, heater {:.0} W{}", name, pr.temp.map(|t| t - 273.15).unwrap_or(self.scene.arena_env.temperature - 273.15), pr.heater, if pr.fixed { ", pinned" } else { "" }))
             }
+            C::LabTab { .. } | C::ChemReact { .. } | C::CircuitRun { .. } | C::CpuRun { .. } | C::CpuHeatSweep { .. } | C::RelSpeed { .. } | C::NbodyPreset { .. } | C::NbodyPlay { .. } | C::NbodyMeasurePrecession => {
+                self.mode = Mode::Materials;
+                let die = match cmd {
+                    C::CpuRun { die_object: Some(o), .. } if !o.is_empty() => self.arena_temp(o),
+                    _ => None,
+                };
+                self.lab.apply(cmd, die).unwrap_or(Err("unsupported".into()))
+            }
             C::MaterialsSelect { .. } | C::MaterialsSearch { .. } | C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => {
                 self.mode = Mode::Materials;
+                self.lab.tab = 0;
                 self.materials.apply(cmd).unwrap_or(Err("unsupported".into()))
             }
             C::TimelinePlay { .. } | C::TimelineScrub { .. } | C::SetKeyframe | C::DeleteKeyframe => match self.mode {
@@ -1521,6 +1533,28 @@ impl App {
         }
     }
 
+    /// Arena temperature (K) of a body by object name (case-insensitive).
+    fn arena_temp(&self, name: &str) -> Option<f64> {
+        self.scene.arena.as_ref()?.bodies.iter().find(|b| b.name.eq_ignore_ascii_case(name)).map(|b| b.temp)
+    }
+
+    fn tick_lab(&mut self, dt: f32) {
+        if self.lab.tick(dt) && self.mode == Mode::Materials {
+            self.ctx.request_repaint();
+        }
+        if let Some(name) = self.lab.cpu.follow.clone() {
+            if let Some(t) = self.arena_temp(&name) {
+                let was = self.lab.cpu.report.as_ref().map(|r| r.correct);
+                if let Some(msg) = self.lab.follow_die(t) {
+                    let now = self.lab.cpu.report.as_ref().map(|r| r.correct);
+                    if was == Some(true) && now == Some(false) {
+                        self.toasts.push(ToastKind::Error, &format!("CPU on '{}' failed: {}", name, msg));
+                    }
+                }
+            }
+        }
+    }
+
     fn tick_arena(&mut self, dt: f32) {
         if !self.scene.arena_playing {
             return;
@@ -1578,6 +1612,7 @@ impl App {
         let p = self.pal;
         self.sync_scene_materials();
         self.tick_arena(dt);
+        self.tick_lab(dt);
         self.header(ctx);
         self.status_bar(ctx);
 
@@ -1627,6 +1662,7 @@ impl App {
                         Mode::Scene => self.scene.inspector(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.inspector(ui, &p, &mut self.toasts, &mut self.bus),
                         Mode::Composite => self.comp.inspector(ui, &p, &mut self.bus),
+                        Mode::Materials if self.lab.tab > 0 => self.lab.inspector(ui, &p, &mut self.bus),
                         Mode::Materials => {
                             let sel = self.scene.selected.and_then(|i| self.scene.objs.get(i)).filter(|o| o.mesh.is_some()).map(|o| o.name.clone());
                             self.materials.inspector(ui, &p, &mut self.bus, sel.as_deref())
@@ -1658,6 +1694,7 @@ impl App {
                         Mode::Scene => self.scene.tools(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.tools(ui, &p),
                         Mode::Composite => self.comp.tools(ui, &p, &mut self.bus),
+                        Mode::Materials if self.lab.tab > 0 => self.lab.tools(ui, &p, &mut self.bus),
                         Mode::Materials => self.materials.tools(ui, &p, &mut self.bus),
                         Mode::Paint => {}
                     });
@@ -1683,7 +1720,14 @@ impl App {
             Mode::Scene => self.scene.center(ui, &p, &mut self.bus),
             Mode::Animate => self.anim.center(ui, &p),
             Mode::Composite => self.comp.center(ui, &p),
-            Mode::Materials => self.materials.center(ui, &p, &mut self.bus),
+            Mode::Materials => {
+                self.lab.tab_strip(ui, &p, &mut self.bus);
+                if self.lab.tab > 0 {
+                    self.lab.center(ui, &p);
+                } else {
+                    self.materials.center(ui, &p, &mut self.bus);
+                }
+            }
         });
         self.windows(ctx);
         self.toasts.show(ctx, &p);

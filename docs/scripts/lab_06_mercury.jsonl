@@ -1,0 +1,4 @@
+{"cmd":"nbody_preset","preset":"mercury","gr":true,"gr_exaggeration":100000}
+{"cmd":"nbody_measure_precession"}
+{"cmd":"rel_speed","beta":0.995}
+{"cmd":"nbody_play","playing":true,"days_per_second":120}

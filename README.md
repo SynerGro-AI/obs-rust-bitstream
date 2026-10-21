@@ -96,6 +96,56 @@ live) are skipped. Demos live in `docs/scripts/`:
 * `arena_moon.jsonl`: hammer-and-feather on the Moon;
 * `arena_melt.jsonl`: a 1 MW heater melts 30 cm of ice in ~9 s.
 
+
+### Lab, Phase 2: energy, reactions, circuits, a computer, relativity
+
+The Materials workspace has five tabs: **Elements | Reactions | Circuits |
+Computer | Relativity**. Every control pushes an `AppCommand`, and Seraphina
+has the same commands as tools: `lab_tab`, `chem_react`, `circuit_run`,
+`cpu_run`, `cpu_heat_sweep`, `rel_speed`, `nbody_preset`, `nbody_play`,
+`nbody_measure_precession`. These commands run simulations or change the
+view, so they have no undo entries. Demo scripts are in
+`docs/scripts/lab_*.jsonl`; run them with `ui --run <file>`.
+
+- **Energy ledger** (in the 3D Physics Arena card). Stocks: kinetic energy,
+  buoyancy-corrected potential energy, and internal energy (m·c·T plus
+  latent heat). Flows: heater, air/radiation exchange, drag work, impact
+  heat, conduction. The residual (stocks − start − flows) stays below 1e-4
+  of the total. The limit is f32 positions.
+- **Reactions** (`src/chem.rs`). Equations are balanced exactly with
+  rational arithmetic. Data come from CODATA/NIST-JANAF/CRC for 40
+  species. Gas Cp(T) uses the rigid-rotor/harmonic-oscillator model with
+  vibrational frequencies. The stable phase is the one with the lowest G(T).
+  The program computes ΔH, ΔS, ΔG and K. Published global rate laws
+  (Westbrook–Dryer, Marinov H2, first-order N2O5) drive an adiabatic
+  constant-pressure reactor that stops at equilibrium, and the adiabatic
+  flame temperature includes the melting and boiling plateaus.
+- **Circuits** (`src/circuit.rs`). Modified nodal analysis with Newton
+  iteration and backward-Euler transients. Components: R, C, L, V and I
+  sources, a Shockley diode, an EKV MOSFET with temperature effects, wires
+  with R = ρ(T)·L/A from the element's resistivity, Joule heating that can
+  melt a fuse open, and doped silicon (Varshni band gap, n_i,
+  Caughey–Thomas mobility).
+- **Computer** (`src/computer.rs`). CMOS INV/NAND2/NOR2 cells are
+  characterised at transistor level (transfer curve, noise margins, delay
+  into 20 fF, leakage). Those delays drive an event-driven gate-level
+  simulation of a 9-NAND full adder and a 4-bit add/sub ALU (52 gates).
+  On top sit NAND master-slave registers and a 4-bit accumulator CPU with
+  an assembler. The CPU samples the gate-level ALU at each clock edge,
+  so heat or overclocking produce real wrong answers: timing first, then
+  logic levels, then intrinsic silicon. `die_object` ties the die
+  temperature to a body heated in the 3D arena.
+- **Relativity** (`src/relativity.rs`). Special-relativity readouts (γ,
+  time dilation, contraction, energy, Doppler, velocity addition).
+  Newtonian N-body uses symplectic leapfrog, or RK4 with the first
+  post-Newtonian (Schwarzschild) term. Presets: Mercury, inner planets,
+  Earth–Moon, figure-eight, binary. The Mercury run measures 42.98″/century
+  of GR perihelion advance. There are also GPS clock rates and light
+  deflection.
+
+See `docs/UI_FUNCTION_TEST.md` v5 for what is exact and what is
+approximate.
+
 ### How the AI is wired in
 
 * **One command bus.** Every button, shortcut, drag and AI action becomes an

@@ -856,9 +856,13 @@ impl App {
                 }
                 let pr = *pr;
                 let pressure = self.scene.arena_env.pressure;
+                if let Some(a) = self.scene.arena.as_mut() {
+                    // an outside intervention: the energy books restart from here
+                    a.ledger = Default::default();
+                }
                 if let Some(b) = self.scene.arena.as_mut().and_then(|a| a.body_mut(&name)) {
                     if let Some(t) = pr.temp.filter(|_| temperature_c.is_some()) {
-                        b.temp = t;
+                        b.temp = t as f64;
                         b.phase = b.env.phase_at(t, pressure);
                         b.latent = 0.0;
                     }

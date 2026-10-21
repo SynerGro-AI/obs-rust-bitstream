@@ -1,7 +1,9 @@
 //! Physics Arena: rigid bodies under real environmental conditions.
 //!
 //! What is simulated (SI units throughout):
-//! * **Motion**: fixed-timestep (1/240 s) semi-implicit Euler. Gravity,
+//! * **Motion**: fixed timestep (1/240 s); forces are held constant over a
+//!   step and positions advance with the average velocity (exact for
+//!   constant forces, so mechanical energy only changes by drag work). Gravity,
 //!   quadratic aerodynamic drag `F = −½ ρ C_d A |v−w| (v−w)` with wind `w`,
 //!   and Archimedes buoyancy `ρ_air V g`. Translational only: bodies do not
 //!   rotate (no angular momentum or torque).
@@ -98,10 +100,12 @@ pub struct Body {
     pub volume: f32,
     /// kg
     pub mass: f32,
-    pub temp: f32,
+    /// K (f64 so the energy ledger is not swamped by rounding: m·c·T of a
+    /// tonne of iron at 300 K is ~1.4e8 J and f32 would carry ~10 J of noise)
+    pub temp: f64,
     pub phase: Phase,
     /// J banked toward the next phase change (+ melting/boiling, − freezing/condensing).
-    pub latent: f32,
+    pub latent: f64,
     /// W
     pub heater: f32,
     pub fixed: bool,
@@ -125,7 +129,7 @@ impl Body {
             vel: [0.0; 3],
             volume: v,
             mass: rho * v,
-            temp,
+            temp: temp as f64,
             phase,
             latent: 0.0,
             heater: 0.0,
@@ -151,17 +155,90 @@ impl Body {
     }
 
     pub fn kinetic(&self) -> f64 {
-        0.5 * self.mass as f64 * dot(self.vel, self.vel) as f64
+        let v = [self.vel[0] as f64, self.vel[1] as f64, self.vel[2] as f64];
+        0.5 * self.mass as f64 * (v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
     }
 
-    pub fn specific_heat(&self) -> f32 {
-        self.env.specific_heat.unwrap_or(1000.0)
+    pub fn specific_heat(&self) -> f64 {
+        self.env.specific_heat.unwrap_or(1000.0) as f64
+    }
+
+    /// Heat capacity m·c (J/K).
+    pub fn heat_capacity(&self) -> f64 {
+        self.mass.max(1e-9) as f64 * self.specific_heat()
+    }
+
+    /// Latent heat per kg absorbed going solid → `phase` (matches `apply_heat`).
+    fn latent_content_per_kg(&self) -> f64 {
+        let lf = self.env.latent_fusion.unwrap_or(0.0) as f64;
+        let lv = self.env.latent_vaporization.or(self.env.latent_fusion).unwrap_or(0.0) as f64;
+        let direct = self.env.sublimes || self.env.melting_k.is_none();
+        match self.phase {
+            Phase::Solid => 0.0,
+            Phase::Liquid => lf,
+            Phase::Gas if direct => lv,
+            Phase::Gas => lf + self.env.latent_vaporization.unwrap_or(0.0) as f64,
+        }
+    }
+
+    /// Internal (thermal) energy relative to a solid at 0 K with constant c:
+    /// U = m·c·T + m·Σ L (phases passed) + banked latent heat.
+    pub fn internal(&self) -> f64 {
+        self.heat_capacity() * self.temp + self.mass as f64 * self.latent_content_per_kg() + self.latent
+    }
+
+    /// Effective weight factor (m − ρ_air·V): gravity minus buoyancy.
+    fn weight_mass(&self, rho_air: f32) -> f64 {
+        self.mass as f64 - rho_air as f64 * self.volume as f64
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Events {
     pub log: Vec<(f64, String)>,
+}
+
+/// Global energy accounting. Everything that crosses the arena boundary is
+/// a flow; everything inside is a stock (kinetic, potential, internal).
+/// `residual = (stocks now − stocks at start) − (flows in)` must stay ≈ 0.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Ledger {
+    /// J delivered by heaters.
+    pub heater_in: f64,
+    /// J gained from the surroundings by convection + radiation (negative = lost).
+    pub exchange_in: f64,
+    /// J of work done by the air on the bodies (drag; negative = lost to the air,
+    /// positive when wind pushes).
+    pub drag_work: f64,
+    /// J of kinetic energy turned into heat by impacts, friction and slumping
+    /// (internal transfer, informational; per step it can be slightly
+    /// negative while a resting stack settles its penetration).
+    pub dissipated: f64,
+    /// J of heat conducted between touching bodies (internal transfer).
+    pub conducted: f64,
+    /// Stocks (KE + PE + U) when the ledger started.
+    pub start: Option<f64>,
+    /// KE + PE when the ledger started.
+    pub start_mech: f64,
+}
+
+impl Ledger {
+    pub fn flows_in(&self) -> f64 {
+        self.heater_in + self.exchange_in + self.drag_work
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct EnergyTotals {
+    pub kinetic: f64,
+    pub potential: f64,
+    pub internal: f64,
+}
+
+impl EnergyTotals {
+    pub fn total(&self) -> f64 {
+        self.kinetic + self.potential + self.internal
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -172,7 +249,10 @@ pub struct Arena {
     pub ground: bool,
     /// Heat exchange with the environment (convection + radiation).
     pub exchange: bool,
+    /// Heat conduction between touching bodies.
+    pub conduction: bool,
     pub events: Events,
+    pub ledger: Ledger,
     acc: f32,
 }
 
@@ -183,13 +263,17 @@ fn norm(a: [f32; 3]) -> f32 {
     dot(a, a).sqrt()
 }
 
+/// Bodies closer than this (m) along the contact axis conduct heat.
+const TOUCH: f32 = 2e-3;
+
 impl Arena {
     pub fn new(env: Environment) -> Self {
-        Self { env, bodies: Vec::new(), time: 0.0, ground: true, exchange: true, events: Events::default(), acc: 0.0 }
+        Self { env, bodies: Vec::new(), time: 0.0, ground: true, exchange: true, conduction: true, events: Events::default(), ledger: Ledger::default(), acc: 0.0 }
     }
 
     pub fn add(&mut self, b: Body) -> usize {
         self.bodies.push(b);
+        self.ledger.start = None;
         self.bodies.len() - 1
     }
 
@@ -213,43 +297,118 @@ impl Arena {
         n
     }
 
+    /// Kinetic + potential (gravity minus buoyancy, at the centre of mass) +
+    /// internal energy of every body, vaporised ones included (their gas is
+    /// frozen where it left).
+    pub fn energy(&self) -> EnergyTotals {
+        let g = self.env.gravity as f64;
+        let rho = self.env.air_density;
+        let mut t = EnergyTotals::default();
+        for b in &self.bodies {
+            t.kinetic += b.kinetic();
+            t.potential += b.weight_mass(rho) * g * b.pos[1] as f64;
+            t.internal += b.internal();
+        }
+        t
+    }
+
+    /// Kinetic + potential at the moment the ledger started (so the UI can
+    /// show the change in thermal energy on its own).
+    pub fn ledger_start_mech(&self) -> f64 {
+        self.ledger.start_mech
+    }
+
+    fn mechanical(&self) -> f64 {
+        let g = self.env.gravity as f64;
+        let rho = self.env.air_density;
+        self.bodies.iter().map(|b| b.kinetic() + b.weight_mass(rho) * g * b.pos[1] as f64).sum()
+    }
+
+    /// Stocks − start − flows. Zero means energy is conserved.
+    pub fn energy_residual(&self) -> f64 {
+        match self.ledger.start {
+            Some(e0) => self.energy().total() - e0 - self.ledger.flows_in(),
+            None => 0.0,
+        }
+    }
+
     pub fn step(&mut self) {
+        if self.ledger.start.is_none() {
+            self.ledger.start = Some(self.energy().total());
+            self.ledger.start_mech = self.mechanical();
+        }
         let dt = DT;
         let g = self.env.gravity;
         let rho_air = self.env.air_density;
         let wind = self.env.wind;
+        let mut drag_work = 0.0f64;
         for b in self.bodies.iter_mut().filter(|b| !b.fixed && !b.vaporised) {
             let m = b.mass.max(1e-9);
-            let mut f = [0.0, -m * g, 0.0];
-            // buoyancy
-            f[1] += rho_air * b.volume * g;
-            // drag on the velocity relative to the air
+            // gravity + buoyancy
+            let f = [0.0, -m * g + rho_air * b.volume * g, 0.0];
+            // drag on the velocity relative to the air (evaluated at the start of the step)
             let rel = [b.vel[0] - wind[0], b.vel[1] - wind[1], b.vel[2] - wind[2]];
             let sp = norm(rel);
+            let mut fd = [0.0f32; 3];
             if sp > 1e-6 && rho_air > 0.0 {
                 let a = b.area_frontal(rel);
+                // implicit factor keeps the drag from reversing the relative
+                // velocity in one step for very light bodies
                 let k = 0.5 * rho_air * b.drag_cd * a * sp;
+                let damp = 1.0 / (1.0 + k * dt / m);
                 for i in 0..3 {
-                    f[i] -= k * rel[i];
+                    fd[i] = -k * rel[i] * damp;
                 }
             }
+            // constant force over the step, position from the average
+            // velocity: exact for constant forces, so ΔKE + ΔPE = drag work
             for i in 0..3 {
-                b.vel[i] += f[i] / m * dt;
-                b.pos[i] += b.vel[i] * dt;
+                let v0 = b.vel[i];
+                let v1 = v0 + (f[i] + fd[i]) / m * dt;
+                let vavg = 0.5 * (v0 + v1);
+                b.vel[i] = v1;
+                b.pos[i] += vavg * dt;
+                drag_work += fd[i] as f64 * vavg as f64 * dt as f64;
             }
         }
-        self.contacts();
+        self.ledger.drag_work += drag_work;
+        let deposits = self.contacts();
+        for (i, e) in deposits {
+            self.heat_body(i, e);
+        }
         self.thermal(dt);
         self.time += dt as f64;
     }
 
-    fn contacts(&mut self) {
+    /// Put heat into body `i`, crediting the potential energy a melting body
+    /// loses when it slumps (the collapse is dissipated as heat).
+    fn heat_body(&mut self, i: usize, e: f64) {
+        let p = self.env.pressure;
+        let wm = self.bodies[i].weight_mass(self.env.air_density) * self.env.gravity as f64;
+        let time = self.time;
+        let y0 = self.bodies[i].pos[1];
+        apply_heat(&mut self.bodies[i], e, p, time, &mut self.events);
+        let dy = (y0 - self.bodies[i].pos[1]) as f64;
+        if dy > 0.0 && !self.bodies[i].vaporised {
+            let d = wm * dy;
+            self.ledger.dissipated += d;
+            apply_heat(&mut self.bodies[i], d, p, time, &mut self.events);
+        }
+    }
+
+    /// Resolve contacts; returns heat deposits (body, J) for the kinetic
+    /// energy the impulses removed, net of the potential energy the position
+    /// corrections added.
+    fn contacts(&mut self) -> Vec<(usize, f64)> {
         let g = self.env.gravity;
+        let e_before = self.mechanical();
+        let mut touched = vec![false; self.bodies.len()];
         // ground
         if self.ground {
-            for b in self.bodies.iter_mut().filter(|b| !b.fixed && !b.vaporised) {
+            for (idx, b) in self.bodies.iter_mut().enumerate().filter(|(_, b)| !b.fixed && !b.vaporised) {
                 let bottom = b.pos[1] - b.half[1];
                 if bottom < 0.0 {
+                    touched[idx] = true;
                     b.pos[1] -= bottom;
                     if b.vel[1] < 0.0 {
                         let vn = -b.vel[1];
@@ -300,50 +459,101 @@ impl Arena {
                 }
                 let rv = [b.vel[0] - a.vel[0], b.vel[1] - a.vel[1], b.vel[2] - a.vel[2]];
                 let vn = dot(rv, nrm);
-                if vn >= 0.0 {
-                    continue;
-                }
-                let solid = a.phase == Phase::Solid && b.phase == Phase::Solid;
-                let e = if solid { (a.env.restitution * b.env.restitution).sqrt() } else { 0.0 };
-                let e = if -vn < 2.0 * self.env.gravity * DT + 1e-3 { 0.0 } else { e };
-                let jn = -(1.0 + e) * vn / it;
-                for k in 0..3 {
-                    a.vel[k] -= jn * nrm[k] * ia;
-                    b.vel[k] += jn * nrm[k] * ib;
-                }
-                // friction on the tangential relative velocity
-                let rv = [b.vel[0] - a.vel[0], b.vel[1] - a.vel[1], b.vel[2] - a.vel[2]];
-                let vn2 = dot(rv, nrm);
-                let vt = [rv[0] - vn2 * nrm[0], rv[1] - vn2 * nrm[1], rv[2] - vn2 * nrm[2]];
-                let st = norm(vt);
-                if st > 1e-9 {
-                    let mu = (a.env.friction_kinetic * b.env.friction_kinetic).sqrt();
-                    let jt = (st / it).min(mu * jn);
+                if vn < 0.0 {
+                    let solid = a.phase == Phase::Solid && b.phase == Phase::Solid;
+                    let e = if solid { (a.env.restitution * b.env.restitution).sqrt() } else { 0.0 };
+                    let e = if -vn < 2.0 * g * DT + 1e-3 { 0.0 } else { e };
+                    let jn = -(1.0 + e) * vn / it;
                     for k in 0..3 {
-                        a.vel[k] += jt * vt[k] / st * ia;
-                        b.vel[k] -= jt * vt[k] / st * ib;
+                        a.vel[k] -= jn * nrm[k] * ia;
+                        b.vel[k] += jn * nrm[k] * ib;
+                    }
+                    // friction on the tangential relative velocity
+                    let rv = [b.vel[0] - a.vel[0], b.vel[1] - a.vel[1], b.vel[2] - a.vel[2]];
+                    let vn2 = dot(rv, nrm);
+                    let vt = [rv[0] - vn2 * nrm[0], rv[1] - vn2 * nrm[1], rv[2] - vn2 * nrm[2]];
+                    let st = norm(vt);
+                    if st > 1e-9 {
+                        let mu = (a.env.friction_kinetic * b.env.friction_kinetic).sqrt();
+                        let jt = (st / it).min(mu * jn);
+                        for k in 0..3 {
+                            a.vel[k] += jt * vt[k] / st * ia;
+                            b.vel[k] -= jt * vt[k] / st * ib;
+                        }
                     }
                 }
+                touched[i] = true;
+                touched[j] = true;
             }
         }
+        // the mechanical energy the contacts removed becomes heat in the
+        // bodies that touched, shared by heat capacity (equal temperature
+        // rise). It is measured over the whole contact phase, signed: a
+        // resting stack's penetration-and-correction cycle sums to zero
+        // instead of pumping heat between bodies.
+        let heat = e_before - self.mechanical();
+        let c_sum: f64 = self.bodies.iter().zip(&touched).filter(|(_, t)| **t).map(|(b, _)| b.heat_capacity()).sum();
+        let mut deposits = Vec::new();
+        if c_sum > 0.0 && heat != 0.0 {
+            for (i, b) in self.bodies.iter().enumerate().filter(|(i, _)| touched[*i]) {
+                deposits.push((i, heat * b.heat_capacity() / c_sum));
+            }
+            self.ledger.dissipated += heat;
+        }
+        deposits
     }
 
     fn thermal(&mut self, dt: f32) {
         let env_t = self.env.temperature as f64;
-        let h = self.env.convection_h();
-        let p = self.env.pressure;
-        let exchange = self.exchange;
-        let time = self.time;
-        for b in self.bodies.iter_mut().filter(|b| !b.vaporised) {
-            let a = b.surface_area() as f64;
-            let t = b.temp as f64;
-            let mut q = b.heater as f64;
-            if exchange {
-                q += h as f64 * a * (env_t - t);
-                q += b.env.emissivity as f64 * SIGMA * a * (env_t.powi(4) - t.powi(4));
+        let h = self.env.convection_h() as f64;
+        let dt = dt as f64;
+        // conduction between touching bodies: series resistance of the two
+        // half-thicknesses, R = L_a/(k_a A) + L_b/(k_b A), integrated exactly
+        // for the pair (ΔT decays as exp(−t / (R·C_red)))
+        if self.conduction {
+            let n = self.bodies.len();
+            let mut dq = vec![0.0f64; n];
+            for i in 0..n {
+                for j in i + 1..n {
+                    let (a, b) = (&self.bodies[i], &self.bodies[j]);
+                    if a.vaporised || b.vaporised {
+                        continue;
+                    }
+                    let Some((area, la, lb)) = contact_patch(a, b) else { continue };
+                    let (ka, kb) = (a.env.thermal_conductivity.unwrap_or(1.0).max(1e-3) as f64, b.env.thermal_conductivity.unwrap_or(1.0).max(1e-3) as f64);
+                    let r = (la as f64 / ka + lb as f64 / kb) / area as f64;
+                    let (ca, cb) = (a.heat_capacity(), b.heat_capacity());
+                    let cred = ca * cb / (ca + cb);
+                    let dtemp = a.temp - b.temp;
+                    let moved = dtemp * cred * (1.0 - (-dt / (r * cred)).exp());
+                    dq[i] -= moved;
+                    dq[j] += moved;
+                }
             }
-            let e = q * dt as f64; // J this step
-            apply_heat(b, e as f32, p, time, &mut self.events);
+            for (i, q) in dq.into_iter().enumerate() {
+                if q != 0.0 {
+                    self.ledger.conducted += q.abs() * 0.5;
+                    self.heat_body(i, q);
+                }
+            }
+        }
+        for i in 0..self.bodies.len() {
+            let b = &self.bodies[i];
+            if b.vaporised {
+                continue;
+            }
+            let a = b.surface_area() as f64;
+            let t = b.temp;
+            let heater = b.heater as f64 * dt;
+            let mut ex = 0.0;
+            if self.exchange {
+                ex += h * a * (env_t - t);
+                ex += b.env.emissivity as f64 * SIGMA * a * (env_t.powi(4) - t.powi(4));
+            }
+            let ex = ex * dt;
+            self.ledger.heater_in += heater;
+            self.ledger.exchange_in += ex;
+            self.heat_body(i, heater + ex);
         }
     }
 
@@ -354,6 +564,28 @@ impl Arena {
     pub fn total_potential(&self) -> f64 {
         self.bodies.iter().filter(|b| !b.vaporised).map(|b| b.mass as f64 * self.env.gravity as f64 * (b.pos[1] - b.half[1]) as f64).sum()
     }
+}
+
+/// Touching faces of two boxes: (area m², half-thickness of a, of b) along
+/// the contact axis, when they are within `TOUCH` of each other.
+fn contact_patch(a: &Body, b: &Body) -> Option<(f32, f32, f32)> {
+    let mut lap = [0.0f32; 3];
+    let mut gap = [0.0f32; 3];
+    for k in 0..3 {
+        let lo = (a.pos[k] - a.half[k]).max(b.pos[k] - b.half[k]);
+        let hi = (a.pos[k] + a.half[k]).min(b.pos[k] + b.half[k]);
+        lap[k] = hi - lo;
+        gap[k] = -(hi - lo);
+    }
+    if lap.iter().any(|l| *l < -TOUCH) {
+        return None;
+    }
+    // the contact axis is the one with the smallest overlap
+    let ax = (0..3).min_by(|&x, &y| lap[x].partial_cmp(&lap[y]).unwrap()).unwrap();
+    let _ = gap;
+    let (u, v) = ((ax + 1) % 3, (ax + 2) % 3);
+    let area = lap[u].max(0.0) * lap[v].max(0.0);
+    (area > 1e-8).then_some((area, a.half[ax], b.half[ax]))
 }
 
 fn friction(v: &mut [f32; 3], jn: f32, mu_k: f32, _mu_s: f32, _g: f32) {
@@ -367,13 +599,13 @@ fn friction(v: &mut [f32; 3], jn: f32, mu_k: f32, _mu_s: f32, _g: f32) {
 }
 
 /// Put `e` joules into a body, honouring latent heat at phase boundaries.
-pub fn apply_heat(b: &mut Body, mut e: f32, pressure: f64, time: f64, ev: &mut Events) {
-    let cp = b.specific_heat();
-    let m = b.mass.max(1e-9);
-    let melt = if b.env.sublimes { None } else { b.env.melting_k };
-    let boil = b.env.boiling_at(pressure);
+pub fn apply_heat(b: &mut Body, mut e: f64, pressure: f64, time: f64, ev: &mut Events) {
+    let c = b.heat_capacity();
+    let m = b.mass.max(1e-9) as f64;
+    let melt = if b.env.sublimes { None } else { b.env.melting_k.map(|t| t as f64) };
+    let boil = b.env.boiling_at(pressure).map(|t| t as f64);
     let mut guard = 0;
-    while e.abs() > 1e-9 && guard < 8 {
+    while e.abs() > 1e-12 && guard < 8 {
         guard += 1;
         // the next boundary in the direction of heat flow
         let (bound, latent) = match (e > 0.0, b.phase) {
@@ -387,18 +619,20 @@ pub fn apply_heat(b: &mut Body, mut e: f32, pressure: f64, time: f64, ev: &mut E
             _ => (None, None),
         };
         let Some(tb) = bound else {
-            b.temp = (b.temp + e / (m * cp)).max(0.0);
+            // no boundary ahead (a solid cooling toward 0 K is clamped there;
+            // the clamp never triggers at realistic temperatures)
+            b.temp = (b.temp + e / c).max(0.0);
             return;
         };
-        let to_bound = (tb - b.temp) * m * cp; // J to reach the boundary (signed)
+        let to_bound = (tb - b.temp) * c; // J to reach the boundary (signed)
         if (e > 0.0 && e < to_bound) || (e < 0.0 && e > to_bound) {
-            b.temp += e / (m * cp);
+            b.temp += e / c;
             return;
         }
         // reach the boundary, then bank latent heat
         e -= to_bound;
         b.temp = tb;
-        let need = latent.unwrap_or(0.0) * m;
+        let need = latent.unwrap_or(0.0) as f64 * m;
         b.latent += e;
         if b.latent.abs() < need {
             return;
@@ -417,8 +651,9 @@ pub fn apply_heat(b: &mut Body, mut e: f32, pressure: f64, time: f64, ev: &mut E
         };
         on_phase(b, from, time, ev);
         e = spill;
-        // nudge off the boundary so the next loop picks the next boundary
         if b.vaporised {
+            // the gas leaves with its excess heat banked at the boundary
+            b.temp += e / c;
             return;
         }
     }
@@ -671,7 +906,7 @@ mod tests {
             a.step();
         }
         let t1 = a.bodies[0].temp;
-        assert!(t1 < t0 && t1 > env.temperature, "{} → {}", t0, t1);
+        assert!(t1 < t0 && t1 > env.temperature as f64, "{} → {}", t0, t1);
         // exact first step: dT = (h A ΔT + εσA(T∞⁴−T⁴)) dt / (m c)
         let mut a = Arena::new(env.clone());
         a.add(Body::new("hot", "copper", env_of("copper"), [0.05; 3], [0.0, 0.05, 0.0], None, 600.0, env.pressure));
@@ -708,4 +943,111 @@ mod tests {
         assert!((top.pos[1] - 1.5).abs() < 0.02, "rests on the bottom cube: {}", top.pos[1]);
         assert!(top.vel[1].abs() < 0.05);
     }
+
+    /// Largest stock or flow magnitude, for relative residuals.
+    fn scale_of(a: &Arena) -> f64 {
+        let e = a.energy();
+        let l = &a.ledger;
+        [e.kinetic, e.potential.abs(), l.heater_in.abs(), l.exchange_in.abs(), l.drag_work.abs(), l.dissipated].into_iter().fold(1.0, f64::max)
+    }
+
+    #[test]
+    fn energy_is_conserved_through_falls_bounces_stacking_drag_and_melting() {
+        // Earth air (drag + buoyancy + convection + radiation), a bouncing
+        // copper cube landing on an iron one, and a heated ice cube that melts
+        let env = Environment::earth();
+        let mut a = Arena::new(env.clone());
+        a.add(cube("bottom", "iron", 0.5, &env));
+        a.add(cube("top", "copper", 3.0, &env));
+        let mut ice = Body::new("ice", "water", env_of("water"), [0.1; 3], [3.0, 2.0, 0.0], None, 268.15, env.pressure);
+        ice.heater = 300_000.0;
+        a.add(ice);
+        let mut worst = 0.0f64;
+        for _ in 0..240 * 30 {
+            a.step();
+            worst = worst.max(a.energy_residual().abs() / scale_of(&a));
+        }
+        assert!(a.body("ice").unwrap().phase == Phase::Liquid, "the ice melted");
+        assert!(a.ledger.dissipated > 1000.0, "impacts made heat: {}", a.ledger.dissipated);
+        assert!(a.ledger.drag_work < 0.0 && a.ledger.exchange_in != 0.0);
+        // conserved up to f32 position/velocity rounding (m·g·δy with
+        // δy ≈ 1e-7 m per step): ~1e-6 of the largest term
+        assert!(worst < 1e-4, "relative residual {}", worst);
+    }
+
+    #[test]
+    fn impact_heats_the_body_by_g_h_over_c() {
+        // a perfectly inelastic lead-like block dropped 10 m in vacuum: all of
+        // m g h ends up as heat, ΔT = g h / c
+        let env = Environment::vacuum();
+        let mut a = Arena::new(env.clone());
+        a.exchange = false;
+        let mut b = cube("block", "iron", 10.5, &env);
+        b.env.restitution = 0.0;
+        let t0 = b.temp;
+        a.add(b);
+        for _ in 0..240 * 3 {
+            a.step();
+        }
+        let b = &a.bodies[0];
+        let expect = G0 as f64 * 10.0 / b.specific_heat();
+        assert!(b.vel[1].abs() < 1e-3);
+        assert!(((b.temp - t0) - expect).abs() / expect < 1e-3, "ΔT {} vs {}", b.temp - t0, expect);
+        assert!((a.ledger.dissipated - b.mass as f64 * G0 as f64 * 10.0).abs() / a.ledger.dissipated < 1e-3);
+    }
+
+    #[test]
+    fn conduction_between_touching_blocks_matches_the_analytic_exponential() {
+        // two 10 cm copper cubes side by side in deep space, 400 K and 300 K;
+        // ΔT(t) = ΔT₀ exp(−t / (R C_red)), R = (L/k + L/k)/A
+        let env = Environment::space();
+        let mut a = Arena::new(env.clone());
+        a.ground = false;
+        a.exchange = false;
+        let h = 0.05;
+        let mut hot = Body::new("hot", "copper", env_of("copper"), [h; 3], [-h, 0.0, 0.0], None, 400.0, 0.0);
+        let mut cold = Body::new("cold", "copper", env_of("copper"), [h; 3], [h, 0.0, 0.0], None, 300.0, 0.0);
+        hot.fixed = true;
+        cold.fixed = true;
+        a.add(hot);
+        a.add(cold);
+        let k = env_of("copper").thermal_conductivity.unwrap() as f64;
+        let area = (2.0 * h as f64).powi(2);
+        let r = 2.0 * h as f64 / k / area;
+        let c = a.bodies[0].heat_capacity();
+        let tau = r * c / 2.0;
+        let steps = (tau / DT as f64) as usize;
+        for _ in 0..steps {
+            a.step();
+        }
+        let dt_now = a.bodies[0].temp - a.bodies[1].temp;
+        let expect = 100.0 * (-(a.time) / tau).exp();
+        assert!((dt_now - expect).abs() < 1e-6 * 100.0 + 1e-6, "{} vs {}", dt_now, expect);
+        // the mean temperature is unchanged and nothing is lost
+        assert!(((a.bodies[0].temp + a.bodies[1].temp) / 2.0 - 350.0).abs() < 1e-6);
+        assert!(a.energy_residual().abs() < 1e-3, "{}", a.energy_residual());
+        // separated blocks do not conduct
+        a.bodies[1].pos[0] += 0.01;
+        let before = a.bodies[1].temp;
+        a.step();
+        assert_eq!(a.bodies[1].temp, before);
+    }
+
+    #[test]
+    fn hot_block_on_a_cold_block_with_air_balances_its_books() {
+        let env = Environment::earth();
+        let mut a = Arena::new(env.clone());
+        a.add(cube("cold", "iron", 0.5, &env));
+        let mut hot = cube("hot", "aluminum", 1.5, &env);
+        hot.temp = 600.0;
+        a.add(hot);
+        for _ in 0..240 * 60 {
+            a.step();
+        }
+        assert!(a.ledger.conducted > 1e5, "{}", a.ledger.conducted);
+        assert!(a.ledger.exchange_in < 0.0, "it lost heat to the room");
+        let rel = a.energy_residual().abs() / scale_of(&a);
+        assert!(rel < 1e-4, "{}", rel);
+    }
 }
+

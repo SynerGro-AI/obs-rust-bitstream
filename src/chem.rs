@@ -594,12 +594,12 @@ impl Reactor {
 
     /// Total enthalpy (J) of the mixture at its temperature.
     pub fn enthalpy(&self) -> f64 {
-        let h: f64 = self.species.iter().zip(&self.n).map(|(s, n)| n * s.h(self.t)).sum();
+        let h: f64 = self.species.iter().zip(&self.n).map(|(s, n)| n * h_with_latent(s, self.t)).sum();
         h + self.inert * self.n2().map(|s| s.h(self.t)).unwrap_or(0.0)
     }
 
     pub fn heat_capacity(&self) -> f64 {
-        let c: f64 = self.species.iter().zip(&self.n).map(|(s, n)| n * s.cp_at(self.t)).sum();
+        let c: f64 = self.species.iter().zip(&self.n).map(|(s, n)| n * (s.cp_at(self.t) + latent(s, self.t).1)).sum();
         c + self.inert * self.n2().map(|s| s.cp_at(self.t)).unwrap_or(29.124)
     }
 
@@ -658,10 +658,22 @@ impl Reactor {
             *n = (*n + v * dxi).max(0.0);
         }
         self.extent += dxi;
-        // adiabatic temperature first: H(T') = H_before (Newton on Cp(T))
-        for _ in 0..4 {
+        // adiabatic temperature first: H(T') = H_before (Newton on Cp(T),
+        // bisection if Newton has not converged, e.g. at a plateau corner)
+        let tol = 1e-9 * h_before.abs().max(1.0);
+        for _ in 0..8 {
             let c = self.heat_capacity().max(1e-12);
             self.t = (self.t + (h_before - self.enthalpy()) / c).max(1.0);
+        }
+        if (self.enthalpy() - h_before).abs() > tol {
+            let (mut lo, mut hi) = (1.0, 60_000.0);
+            for _ in 0..100 {
+                self.t = 0.5 * (lo + hi);
+                if self.enthalpy() > h_before { hi = self.t } else { lo = self.t }
+                if hi - lo < 1e-9 {
+                    break;
+                }
+            }
         }
         if self.ua > 0.0 {
             let c = self.heat_capacity().max(1e-12);
@@ -687,6 +699,12 @@ impl Reactor {
                 break;
             }
             let limit = self.species.iter().zip(&self.n).zip(&self.nu).filter(|((_, _), v)| (**v < 0.0) == (r > 0.0) && **v != 0.0).map(|((_, n), v)| n / v.abs()).fold(f64::INFINITY, f64::min);
+            // the limiting reactant is effectively gone: finish it in one
+            // step (negative orders would otherwise make the steps Zeno-like)
+            if limit.is_finite() && limit <= 1e-9 * (self.extent.abs() + limit) {
+                self.apply(limit.copysign(r), left);
+                break;
+            }
             let mut h = left;
             if limit.is_finite() {
                 h = h.min((0.02 * limit.max(1e-15) / r.abs()).max(1e-15));
@@ -716,12 +734,11 @@ impl Reactor {
                 let used = h * lo;
                 *self = trial;
                 left -= used;
-                // at equilibrium: hold it (only the wall can move it now)
-                if (self.rate() / r).abs() < 1e-9 {
-                    self.apply(0.0, left);
-                    break;
-                }
-                continue;
+                // the bisection brackets the sign change of the net rate, so
+                // this is equilibrium: hold it for the rest of the step (only
+                // the wall can move it; the next call re-evaluates)
+                self.apply(0.0, left);
+                break;
             }
             *self = trial;
             left -= h;
@@ -764,21 +781,37 @@ pub static TRANSITIONS: &[(&str, f64, f64, Option<(f64, f64)>)] = &[
 
 /// Molar enthalpy including the latent heat of any melting / boiling passed
 /// below `t` (condensed entries only), J/mol.
-pub fn h_with_latent(s: &Species, t: f64) -> f64 {
-    let mut h = s.h(t);
+/// Width (K) over which a latent heat is spread around its transition
+/// temperature, so H(T) stays continuous and monotonic and the reactor's
+/// temperature solve conserves enthalpy exactly through a plateau.
+pub const LATENT_WINDOW: f64 = 5.0;
+
+/// Latent enthalpy (J/mol) absorbed by `s` at `t` and its T-derivative.
+pub fn latent(s: &Species, t: f64) -> (f64, f64) {
+    let mut h = 0.0;
+    let mut dh = 0.0;
     if s.state == State::Solid {
         if let Some((_, tm, hf, boil)) = TRANSITIONS.iter().find(|x| x.0 == s.formula) {
-            if t > *tm {
-                h += hf * 1e3;
-            }
-            if let Some((tb, hv)) = boil {
-                if t > *tb {
-                    h += hv * 1e3;
+            let mut ramp = |t0: f64, l: f64| {
+                let f = ((t - (t0 - LATENT_WINDOW)) / (2.0 * LATENT_WINDOW)).clamp(0.0, 1.0);
+                h += f * l * 1e3;
+                if f > 0.0 && f < 1.0 {
+                    dh += l * 1e3 / (2.0 * LATENT_WINDOW);
                 }
+            };
+            ramp(*tm, *hf);
+            if let Some((tb, hv)) = boil {
+                ramp(*tb, *hv);
             }
         }
     }
-    h
+    (h, dh)
+}
+
+/// Molar enthalpy including the latent heats of melting and boiling of a
+/// condensed species above its transitions.
+pub fn h_with_latent(s: &Species, t: f64) -> f64 {
+    s.h(t) + latent(s, t).0
 }
 
 /// Adiabatic flame / reaction temperature at constant pressure for complete

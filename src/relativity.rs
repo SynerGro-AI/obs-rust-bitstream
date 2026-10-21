@@ -264,8 +264,8 @@ impl NBody {
         if self.trail_every > 0 && self.steps % self.trail_every == 0 {
             for b in &mut self.bodies {
                 b.trail.push(b.pos);
-                if b.trail.len() > 600 {
-                    b.trail.remove(0);
+                if b.trail.len() > TRAIL_MAX {
+                    b.trail.drain(..TRAIL_MAX / 4);
                 }
             }
         }
@@ -334,6 +334,9 @@ fn at_perihelion(gm: f64, a: f64, e: f64, phi: f64) -> ([f64; 3], [f64; 3]) {
     ([rp * phi.cos(), rp * phi.sin(), 0.0], [-vp * phi.sin(), vp * phi.cos(), 0.0])
 }
 
+/// Points kept per trail (the oldest quarter is dropped when full).
+pub const TRAIL_MAX: usize = 4000;
+
 pub const PRESETS: [&str; 5] = ["mercury", "inner", "earth_moon", "figure8", "binary"];
 
 /// Named scenarios. Orbits start at perihelion from mean orbital elements
@@ -346,6 +349,7 @@ pub fn preset(name: &str) -> Option<NBody> {
             nb.add("Sun", GM_SUN, [0.0; 3], [0.0; 3]);
             let (p, v) = at_perihelion(GM_SUN, 0.387_098 * AU, 0.205_630, 0.0);
             nb.add("Mercury", 2.203_2e13, p, v);
+            nb.trail_every = 25; // ~200 points per orbit: a 20-orbit rosette
         }
         "inner" => {
             nb = NBody::new("Inner solar system", 0.05 * DAY);

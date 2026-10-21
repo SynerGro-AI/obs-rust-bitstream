@@ -5,7 +5,7 @@ fn main() {
     let h2 = parse_equation("H2 + O2 -> H2O").unwrap();
     println!("{}  Tad(air) = {:.0} K", h2.display(), adiabatic_temperature(&h2, T0, true).unwrap());
     let th = parse_equation("Fe2O3 + Al -> Al2O3 + Fe").unwrap();
-    println!("{}  Tad = {:.0} K (no melting modelled)", th.display(), adiabatic_temperature(&th, T0, false).unwrap());
+    println!("{}  Tad = {:.0} K (melting + boiling plateaus included)", th.display(), adiabatic_temperature(&th, T0, false).unwrap());
     let mut r = Reactor::new(&e, 1500.0, 101325.0, 1.0, true).unwrap();
     r.advance(0.05);
     println!("CH4/air from 1500 K, 50 ms: conversion {:.4}, T {:.0} K", r.conversion(), r.t);

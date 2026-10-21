@@ -218,6 +218,11 @@ impl Mode {
     }
 }
 
+/// How many AI batches stay undoable. Each snapshot is a full copy of the
+/// documents (Paint plus all Animate frames: tens of MB), so older ones are
+/// dropped instead of growing memory for the whole session.
+pub const MAX_AI_SNAPSHOTS: usize = 10;
+
 /// State captured before an AI batch so one click can undo all of it.
 pub struct Snapshot {
     mode: Mode,
@@ -984,6 +989,11 @@ impl App {
         }
         if lines.iter().any(|l| l.status == LineStatus::Done && l.cmd.as_ref().map(|c| c.mutates()).unwrap_or(false)) {
             self.snapshots.insert(batch, snap);
+            // batch ids increase, so the smallest keys are the oldest
+            while self.snapshots.len() > MAX_AI_SNAPSHOTS {
+                let oldest = *self.snapshots.keys().min().unwrap();
+                self.snapshots.remove(&oldest);
+            }
         }
         let ctx = self.app_context();
         self.assistant.submit_results(batch, lines, results, &ctx);
@@ -996,9 +1006,14 @@ impl App {
                 self.toasts.push(ToastKind::Info, "Undid Seraphina's actions.");
                 true
             }
-            None => false,
+            None => {
+                self.toasts.push(ToastKind::Info, &format!("That Seraphina action is too old to undo (the last {} are kept).", MAX_AI_SNAPSHOTS));
+                false
+            }
         };
-        self.assistant.mark_undone(batch);
+        if found {
+            self.assistant.mark_undone(batch);
+        }
         found
     }
 
@@ -1837,6 +1852,31 @@ mod tests {
             })
             .flatten()
             .collect()
+    }
+
+    #[test]
+    fn ai_undo_snapshots_are_capped() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        run(&mut app, &ctx, 1, 0.0);
+        let layers0 = app.paint.doc.layers.len();
+        let mut batches = Vec::new();
+        for i in 0..100 {
+            app.run_tool_calls(vec![call("add_layer", &format!(r#"{{"name":"ai {}"}}"#, i))]);
+            batches.push(action_lines(&app).last().unwrap().0);
+            assert!(app.snapshots.len() <= MAX_AI_SNAPSHOTS, "memory must stay flat: {} snapshots", app.snapshots.len());
+        }
+        assert_eq!(app.snapshots.len(), MAX_AI_SNAPSHOTS);
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 100);
+        // the oldest batch is gone: undo reports it and changes nothing
+        assert!(!app.undo_batch(batches[0]));
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 100);
+        // the newest is still undoable
+        assert!(app.undo_batch(*batches.last().unwrap()));
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 99);
+        // and so is the 10th newest
+        assert!(app.undo_batch(batches[100 - MAX_AI_SNAPSHOTS]));
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 100 - MAX_AI_SNAPSHOTS);
     }
 
     #[test]

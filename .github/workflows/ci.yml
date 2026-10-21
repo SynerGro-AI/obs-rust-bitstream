@@ -50,6 +50,19 @@ jobs:
             out.avbn
             out.obsr
 
+  audio:
+    # The optional cpal capture backend (--features audio) must keep compiling.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config gcc-mingw-w64-x86-64
+      - run: cargo build --locked --all-targets --features ui,audio
+      - run: cargo test --locked --features audio --lib audio_cpal
+      - run: cargo build --locked --release --features ui,audio --bin ui --target x86_64-pc-windows-gnu
+
   msrv:
     # rust-version in Cargo.toml: the oldest toolchain the locked
     # dependencies (image, icu_*) and this code build on.

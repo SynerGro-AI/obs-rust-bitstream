@@ -22,21 +22,21 @@ jobs:
         run: |
           mkdir -p "$HOME/opt/mediamtx"
           curl -fsSL https://github.com/bluenviron/mediamtx/releases/download/v1.9.3/mediamtx_v1.9.3_linux_amd64.tar.gz | tar -xz -C "$HOME/opt/mediamtx"
-      - run: cargo test --verbose
+      - run: cargo test --locked --verbose
       # UI tests run headless against egui::Context; no display needed.
-      - run: cargo test --features ui --bin ui
+      - run: cargo test --locked --features ui --bin ui
       # The Windows build used for the release zip (mingw cross-compile).
-      - run: cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
+      - run: cargo build --locked --release --features ui --bin ui --target x86_64-pc-windows-gnu
 
   windows-ui:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --features ui --bin ui
+      - run: cargo build --locked --release --features ui --bin ui
       # ffmpeg-dependent tests skip with a message when ffmpeg isn't on PATH;
       # the mediamtx RTMP test is Linux-only.
-      - run: cargo test --features ui --bin ui
+      - run: cargo test --locked --features ui --bin ui
       - run: copy target\release\ui.exe SeraphinaStudio.exe
         shell: cmd
       - uses: actions/upload-artifact@v4
@@ -49,3 +49,12 @@ jobs:
             out.h264
             out.avbn
             out.obsr
+
+  msrv:
+    # rust-version in Cargo.toml: the oldest toolchain the locked
+    # dependencies (image, icu_*) and this code build on.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - run: cargo check --locked --all-targets --features ui

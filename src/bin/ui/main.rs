@@ -1285,7 +1285,7 @@ impl App {
         let mut open = self.show_shortcuts;
         egui::Window::new("Keyboard shortcuts").open(&mut open).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
             let rows: &[(&str, &[(&str, &str)])] = &[
-                ("Global", &[("Ctrl+1 … 5", "Paint, Composite, 3D, Animate, Stream"), ("Ctrl+.", "Toggle Seraphina"), ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"), ("F1", "This sheet")]),
+                ("Global", &[("Ctrl+1 … 6", "Paint, Composite, 3D, Animate, Stream, Materials"), ("Ctrl+.", "Toggle Seraphina"), ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"), ("F1", "This sheet")]),
                 ("Paint", &[("V M L W C", "Move, Marquee, Lasso, Quick Select, Crop"), ("J S B E G", "Healing, Clone (Alt-click source), Brush, Eraser, Gradient"), ("O / Shift+O", "Dodge / Burn"), ("P T H Z I", "Pen, Type, Hand, Zoom, Eyedropper"), ("Enter / Esc", "Apply crop or stroke the pen path / cancel crop"), ("Ctrl+A / Ctrl+D", "Select all / deselect"), ("Ctrl+0, Ctrl+= / −", "Fit, zoom")]),
                 ("3D", &[("Q W E R", "Select, Move, Rotate, Scale"), ("Alt-drag", "Orbit"), ("Delete", "Delete object")]),
                 ("Timeline modes", &[("Space", "Play / pause"), ("K", "Set key"), (", / .", "Previous / next frame (Animate)")]),

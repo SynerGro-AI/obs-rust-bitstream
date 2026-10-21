@@ -58,3 +58,24 @@ Release build on Xvfb (software GL), screenshots in `/workspace/obs-ui-shots-v3/
 
 Wine is a proxy for Windows, not real Windows. The CI `windows-latest` job
 builds and runs the UI tests on real Windows, but this branch has not been pushed, so that job hasn't run.
+
+## v4 (2026-10-20, MDT): Materials Lab and Physics Arena
+
+This was a debug build of branch `materials-lab` on Xvfb (1920×1080,
+software GL), driven by xdotool. Screenshots are in `/workspace/obs-ui-shots-v4/`.
+
+| # | Check | Result |
+|---|-------|--------|
+| 42 | Ctrl+6 or the shelf **Materials** button opens the lab: 18-column table, f-block rows, category colours, hover highlight (`01_periodic_table.png`) | PASS |
+| 43 | Click U → the detail card shows mass, configuration, oxidation states, density, melting/boiling, half-life 4.468 × 10⁹ y (`02_element_detail_uranium.png`) | PASS (long values overflowed the card; they now wrap below the key) |
+| 44 | Real clicks: double-click H, H, O → **Build** → matched to Water, H2O 18.015 g/mol, "charge balanced", "nuclei stable", PBR (IOR 1.333, transmission 0.95) and sim env shown (`03_composition_builder_h2o.png`) | PASS (the inspector grew a few px every frame; fixed the segmented-control width) |
+| 45 | **Assign to 'cube1' in 3D** → the 3D inspector Material card reads Water | PASS |
+| 46 | `--run docs/scripts/materials_scene.jsonl`: copper, gold, glass, iron, graphite, aluminium in 3D (`04_3d_scene_materials.png`) | PASS after two fixes: glass was opaque (alpha blending added), and metals looked flat grey-khaki with only a point light (sky environment added) |
+| 47 | Arena, Moon, 300 steps: cube1 y 3.10 → 1.83 m, t 1.25 s, KE 29 087 J. Check: ½ × 14 187 kg × (1.62 × 1.25)² = 29 088 J (`05_arena_moon_midair.png`) | PASS after fix: cube1 has Y keyframes and the timeline snapped it back every frame. Physics now owns transforms until Reset; regression test added |
+| 48 | Arena melt, Earth, 10 s: log "8.78 s cube2 (Water) solid→liquid at 273.1 K", ice slumped into a puddle, aluminium still solid (`06_arena_ice_melted.png`) | PASS |
+| 49 | Windows exe (x86_64-pc-windows-gnu release) under Wine: `--run scripts\\materials_scene.jsonl` logs all 17 lines, the scene renders with materials and transparent glass; Ctrl+6 opens the lab with the Gold card and a 6-material library (`07_wine_3d_materials.png`, `08_wine_materials_lab.png`) | PASS (Wine is a proxy for Windows) |
+
+Capture notes: Xvfb sometimes showed frames that were several frames old,
+and a leftover window from an earlier session sat on the same display.
+Shots were taken until two consecutive captures matched, and the field
+values were read from each image rather than assumed.

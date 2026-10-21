@@ -362,6 +362,9 @@ impl App {
     pub fn with(ctx: &egui::Context, assistant: assistant_panel::AssistantPanel, video: videogen::VideoGenPanel) -> Self {
         let pal = Palette::dark();
         install_fonts(ctx);
+        // Ctrl+= / Ctrl+- / Ctrl+0 belong to the Paint canvas (handle_keys);
+        // egui's built-in keyboard zoom would scale the whole UI as well.
+        ctx.options_mut(|o| o.zoom_with_keyboard = false);
         theme::apply(ctx, &pal);
         let mut toasts = Toasts::default();
         let paint = paint::PaintState::new(&mut toasts);
@@ -1852,6 +1855,37 @@ mod tests {
             })
             .flatten()
             .collect()
+    }
+
+    #[test]
+    fn ctrl_plus_zooms_the_canvas_not_the_ui() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        assert!(!ctx.options(|o| o.zoom_with_keyboard));
+        run(&mut app, &ctx, 2, 0.0);
+        app.mode = Mode::Paint;
+        let ui0 = ctx.zoom_factor();
+        let z0 = app.paint.zoom;
+        let key = |k: egui::Key| egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND };
+        let mut t = 1.0;
+        for k in [egui::Key::Equals, egui::Key::Plus, egui::Key::Minus, egui::Key::Num0, egui::Key::Equals] {
+            let mut i = input(t);
+            i.modifiers = egui::Modifiers::COMMAND;
+            i.events.push(key(k));
+            let _ = ctx.run(i, |ctx| app.frame(ctx));
+            run(&mut app, &ctx, 1, t + 0.05);
+            t += 0.2;
+            assert_eq!(ctx.zoom_factor(), ui0, "{:?} must not zoom the whole UI", k);
+        }
+        let _ = z0;
+        // the canvas itself still responds to Ctrl+=
+        let before = app.paint.zoom;
+        let mut i = input(t);
+        i.modifiers = egui::Modifiers::COMMAND;
+        i.events.push(key(egui::Key::Equals));
+        let _ = ctx.run(i, |ctx| app.frame(ctx));
+        assert!(app.paint.zoom > before, "canvas zoom {} -> {}", before, app.paint.zoom);
+        assert_eq!(ctx.zoom_factor(), ui0);
     }
 
     #[test]

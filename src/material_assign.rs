@@ -35,6 +35,11 @@ impl MaterialAssign {
         self.map.get(bone).map(|s| s.as_str()).ok_or(AssignError::Missing)
     }
 
+    /// (bone/object, material) pairs.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.map.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+
     pub fn len(&self) -> usize {
         self.map.len()
     }

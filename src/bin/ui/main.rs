@@ -15,6 +15,8 @@ mod assistant_panel;
 mod commands;
 mod composite;
 mod llm;
+mod lab;
+mod materials;
 mod maya;
 mod output;
 mod paint;
@@ -131,6 +133,23 @@ impl Toasts {
 
 // ---- app ----------------------------------------------------------------
 
+/// World bounding-box centre of an object's mesh (its position if it has none).
+fn a_center(o: &scene::Obj) -> [f32; 3] {
+    match o.world_mesh().filter(|m| !m.verts.is_empty()) {
+        Some(m) => {
+            let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+            for v in &m.verts {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(v[k]);
+                    hi[k] = hi[k].max(v[k]);
+                }
+            }
+            [(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, (lo[2] + hi[2]) * 0.5]
+        }
+        None => o.pos,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Paint,
@@ -138,15 +157,17 @@ pub enum Mode {
     Scene,
     Animate,
     Stream,
+    Materials,
 }
 
 impl Mode {
     /// Header order, as in the mockup.
-    pub const ALL: [Mode; 5] = [Mode::Paint, Mode::Composite, Mode::Scene, Mode::Animate, Mode::Stream];
+    pub const ALL: [Mode; 6] = [Mode::Paint, Mode::Composite, Mode::Scene, Mode::Animate, Mode::Stream, Mode::Materials];
 
     pub fn label(&self) -> &'static str {
         match self {
             Mode::Stream => "Stream",
+            Mode::Materials => "Materials",
             Mode::Paint => "Paint",
             Mode::Scene => "3D",
             Mode::Animate => "Animate",
@@ -157,6 +178,7 @@ impl Mode {
     pub fn icon(&self) -> &'static str {
         match self {
             Mode::Stream => ic::BROADCAST,
+            Mode::Materials => ic::ATOM,
             Mode::Paint => ic::PAINT_BRUSH,
             Mode::Scene => ic::CUBE,
             Mode::Animate => ic::FILM_STRIP,
@@ -167,6 +189,7 @@ impl Mode {
     pub fn style(&self) -> (&'static str, &'static str) {
         match self {
             Mode::Stream => ("OBS", "OBS-style streaming and bitstream inspection"),
+            Mode::Materials => ("Lab", "Materials Lab: periodic table, composition builder, PBR materials"),
             Mode::Paint => ("Ps", "Photoshop-style raster editing"),
             Mode::Scene => ("Ma", "Maya-style 3D layout"),
             Mode::Animate => ("Tb", "Toon Boom-style frame-by-frame animation"),
@@ -177,6 +200,7 @@ impl Mode {
     pub fn parse(s: &str) -> Option<Mode> {
         match s.trim().to_lowercase().as_str() {
             "stream" | "obs" => Some(Mode::Stream),
+            "materials" | "material" | "lab" | "materials_lab" | "materials lab" => Some(Mode::Materials),
             "paint" | "photoshop" => Some(Mode::Paint),
             "3d" | "scene" | "maya" => Some(Mode::Scene),
             "animate" | "animation" => Some(Mode::Animate),
@@ -194,6 +218,11 @@ impl Mode {
     }
 }
 
+/// How many AI batches stay undoable. Each snapshot is a full copy of the
+/// documents (Paint plus all Animate frames: tens of MB), so older ones are
+/// dropped instead of growing memory for the whole session.
+pub const MAX_AI_SNAPSHOTS: usize = 10;
+
 /// State captured before an AI batch so one click can undo all of it.
 pub struct Snapshot {
     mode: Mode,
@@ -202,6 +231,8 @@ pub struct Snapshot {
     scene_sel: Option<usize>,
     comp_layers: Vec<composite::CompLayer>,
     comp_sel: usize,
+    scene_assign: obs_rust_bitstream::material_assign::MaterialAssign,
+    mats: materials::MatSnap,
     anim_frames: Vec<Raster>,
     live: bool,
     rec: bool,
@@ -211,6 +242,7 @@ pub struct Snapshot {
 #[derive(Clone)]
 struct SceneSnap {
     objs: Vec<scene::Obj>,
+    assign: obs_rust_bitstream::material_assign::MaterialAssign,
     selected: Option<usize>,
     prev: Option<usize>,
 }
@@ -289,6 +321,8 @@ pub struct App {
     pub dock_tab: usize,
     pub shelf_tab: usize,
     pub native_frame: bool,
+    /// Repaint at ~10 fps even when idle (SERAPHINA_CONTINUOUS; for screen capture).
+    pub continuous: bool,
     pub toasts: Toasts,
     pub stream: stream::StreamState,
     pub output: output::Output,
@@ -296,6 +330,8 @@ pub struct App {
     pub scene: scene::SceneState,
     pub anim: animate::AnimState,
     pub comp: composite::CompState,
+    pub materials: materials::MaterialsState,
+    pub lab: lab::LabState,
     pub assistant: assistant_panel::AssistantPanel,
     pub video: videogen::VideoGenPanel,
     pub bus: Vec<AppCommand>,
@@ -303,6 +339,7 @@ pub struct App {
     snapshots: HashMap<u64, Snapshot>,
     scene_hist: History<SceneSnap>,
     comp_hist: History<CompSnap>,
+    mat_hist: History<materials::MatSnap>,
     sel_ov: paint::SelOverlay,
     last_time: Option<f64>,
 }
@@ -325,6 +362,9 @@ impl App {
     pub fn with(ctx: &egui::Context, assistant: assistant_panel::AssistantPanel, video: videogen::VideoGenPanel) -> Self {
         let pal = Palette::dark();
         install_fonts(ctx);
+        // Ctrl+= / Ctrl+- / Ctrl+0 belong to the Paint canvas (handle_keys);
+        // egui's built-in keyboard zoom would scale the whole UI as well.
+        ctx.options_mut(|o| o.zoom_with_keyboard = false);
         theme::apply(ctx, &pal);
         let mut toasts = Toasts::default();
         let paint = paint::PaintState::new(&mut toasts);
@@ -344,12 +384,15 @@ impl App {
             dock_tab: 0,
             shelf_tab: 0,
             native_frame: true,
+            continuous: false,
             stream: stream::StreamState::new(),
             output: output::Output::load(),
             paint,
             scene: scene::SceneState::new(),
             anim: animate::AnimState::new(),
             comp: composite::CompState::new(),
+            materials: materials::MaterialsState::new(),
+            lab: lab::LabState::new(),
             assistant,
             video,
             bus: Vec::new(),
@@ -357,6 +400,7 @@ impl App {
             snapshots: HashMap::new(),
             scene_hist: History::new(),
             comp_hist: History::new(),
+            mat_hist: History::new(),
             sel_ov: paint::SelOverlay::default(),
             toasts,
             last_time: None,
@@ -380,6 +424,7 @@ impl App {
             Mode::Scene => format!("{} Tool", self.scene.gizmo.label()),
             Mode::Animate => if self.anim.erase { "Eraser" } else { "Pencil" }.to_string(),
             Mode::Composite => "Keyframe".to_string(),
+            Mode::Materials => self.materials.selected.and_then(obs_rust_bitstream::element_data::get).map(|e| e.name.to_string()).unwrap_or_else(|| "Periodic table".into()),
         }
     }
 
@@ -398,6 +443,7 @@ impl App {
             Mode::Composite => format!("{} × {} px", composite::PW, composite::PH),
             Mode::Scene => "Viewport".into(),
             Mode::Stream => format!("{} bytes", self.stream.insp.data().len()),
+            Mode::Materials => "118 elements".into(),
         }
     }
 
@@ -408,6 +454,7 @@ impl App {
             Mode::Scene => "Untitled scene".into(),
             Mode::Animate => format!("{} frames", self.anim.frames.len()),
             Mode::Composite => "Comp 1".into(),
+            Mode::Materials => format!("{} materials", self.materials.lib.profiles.len()),
         }
     }
 
@@ -422,7 +469,7 @@ impl App {
             None => "not configured (no key)".into(),
         };
         format!(
-            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
+            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream, Materials). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
             self.mode.label(),
             if self.dark { "dark" } else { "light" },
             self.show_tools,
@@ -436,6 +483,7 @@ impl App {
             self.comp.context(),
             self.stream.context(),
             self.output.context(),
+            format!("{} {}", self.materials.context(), self.lab.context()),
             vid
         )
     }
@@ -448,6 +496,8 @@ impl App {
             scene_sel: self.scene.selected,
             comp_layers: self.comp.layers.clone(),
             comp_sel: self.comp.selected,
+            scene_assign: self.scene.assign.clone(),
+            mats: self.materials.snap(),
             anim_frames: self.anim.frames.clone(),
             live: self.output.is_live(),
             rec: self.output.is_recording(),
@@ -461,6 +511,11 @@ impl App {
         self.scene.selected = s.scene_sel;
         self.comp.layers = s.comp_layers;
         self.comp.selected = s.comp_sel;
+        self.scene.assign = s.scene_assign;
+        self.scene.arena = None;
+        self.scene.arena_playing = false;
+        self.scene.arena_start = None;
+        self.materials.restore(s.mats);
         self.anim.restore(s.anim_frames);
         // undoing an AI batch that started output really stops it
         if !s.live && self.output.is_live() {
@@ -481,6 +536,7 @@ impl App {
         match (recorded, &r) {
             (Some(Mode::Scene), Err(_)) => self.scene_hist.cancel(),
             (Some(Mode::Composite), Err(_)) => self.comp_hist.cancel(),
+            (Some(Mode::Materials), Err(_)) => self.mat_hist.cancel(),
             _ => {}
         }
         self.finish(cmd, origin, r)
@@ -493,6 +549,10 @@ impl App {
         match cmd {
             C::SceneTransform { object, translate, rotate_y, scale } => Some((Mode::Scene, format!("xf:{}:{}{}{}", target(object), translate.is_some() as u8, rotate_y.is_some() as u8, scale.is_some() as u8))),
             C::SceneAdd { .. } | C::SceneExtrude { .. } | C::SceneBevel { .. } | C::SceneDelete { .. } | C::SceneEdgeLoop { .. } | C::SceneMultiCut { .. } | C::SceneBridge { .. } | C::SceneBoolean { .. } | C::SceneQuadDraw { .. } => Some((Mode::Scene, format!("!{}", cmd.name()))),
+            C::MaterialAssign { .. } => Some((Mode::Scene, "!material_assign".into())),
+            // starting a simulation is one undo step (back to the pre-sim scene)
+            C::ArenaPlay { .. } | C::ArenaStep { .. } if self.scene.arena.is_none() => Some((Mode::Scene, "!arena_start".into())),
+            C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => Some((Mode::Materials, format!("!{}", cmd.name()))),
             C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Scene => Some((Mode::Scene, format!("!{}", cmd.name()))),
             C::SetKeyframe | C::DeleteKeyframe if self.mode == Mode::Composite => Some((Mode::Composite, format!("!{}", cmd.name()))),
             C::SetLayerOpacity { layer, .. } if self.mode == Mode::Composite => Some((Mode::Composite, format!("opacity:{:?}", layer))),
@@ -508,6 +568,10 @@ impl App {
                 let s = self.scene_snap();
                 self.scene_hist.record(key, now, s)
             }
+            Mode::Materials => {
+                let s = self.materials.snap();
+                self.mat_hist.record(key, now, s)
+            }
             _ => {
                 let s = self.comp_snap();
                 self.comp_hist.record(key, now, s)
@@ -517,11 +581,16 @@ impl App {
     }
 
     fn scene_snap(&self) -> SceneSnap {
-        SceneSnap { objs: self.scene.objs.clone(), selected: self.scene.selected, prev: self.scene.prev_selected }
+        SceneSnap { objs: self.scene.objs.clone(), assign: self.scene.assign.clone(), selected: self.scene.selected, prev: self.scene.prev_selected }
     }
 
     fn set_scene_snap(&mut self, s: SceneSnap) {
         self.scene.objs = s.objs;
+        self.scene.assign = s.assign;
+        // undo ends any running simulation (its start state is what's restored)
+        self.scene.arena = None;
+        self.scene.arena_playing = false;
+        self.scene.arena_start = None;
         let n = self.scene.objs.len();
         self.scene.selected = s.selected.filter(|i| *i < n);
         self.scene.prev_selected = s.prev.filter(|i| *i < n);
@@ -609,6 +678,17 @@ impl App {
                         None => Err(format!("nothing to {} in Composite", cmd.name())),
                     }
                 }
+                Mode::Materials => {
+                    let cur = self.materials.snap();
+                    let r = if matches!(cmd, C::Undo) { self.mat_hist.undo(cur) } else { self.mat_hist.redo(cur) };
+                    match r {
+                        Some(s) => {
+                            self.materials.restore(s);
+                            Ok(format!("Materials {}", cmd.name()))
+                        }
+                        None => Err(format!("nothing to {} in Materials", cmd.name())),
+                    }
+                }
                 m => Err(format!("{} mode has no undo history", m.label())),
             },
             C::OpenFile { path } => {
@@ -686,6 +766,137 @@ impl App {
             | C::SceneShading { .. } => {
                 self.mode = Mode::Scene;
                 self.scene.apply(cmd, &mut self.toasts).unwrap_or(Err("unsupported".into()))
+            }
+            C::MaterialAssign { object, material } => {
+                self.mode = Mode::Scene;
+                match self.scene.check_mesh_target(object.as_deref()) {
+                    Ok(obj) => match self.materials.lib.resolve(material) {
+                        Ok(name) => {
+                            self.scene.surfaces = self.materials.lib.profiles.iter().map(|(k, p)| (k.clone(), materials::surface_of(&p.pbr))).collect();
+                            self.scene.assign_material(&obj, &name)
+                        }
+                        Err(e) => Err(e),
+                    },
+                    Err(e) => Err(e),
+                }
+            }
+            C::ArenaPlay { playing } => {
+                self.mode = Mode::Scene;
+                let want = playing.unwrap_or(!self.scene.arena_playing);
+                if want && self.scene.arena.is_none() {
+                    if let Err(e) = self.arena_build() {
+                        return Err(e);
+                    }
+                }
+                self.scene.arena_playing = want && self.scene.arena.is_some();
+                Ok(if self.scene.arena_playing { format!("arena playing ({})", self.scene.arena_env.name) } else { "arena paused".into() })
+            }
+            C::ArenaStep { steps } => {
+                self.mode = Mode::Scene;
+                let n = steps.unwrap_or(4).clamp(1, 240 * 600);
+                if self.scene.arena.is_none() {
+                    self.arena_build()?;
+                }
+                self.scene.arena_playing = false;
+                if let Some(a) = &mut self.scene.arena {
+                    for _ in 0..n {
+                        a.step();
+                    }
+                }
+                self.arena_write_back();
+                Ok(format!("stepped {} × 1/240 s (t = {:.3} s)", n, self.scene.arena.as_ref().map(|a| a.time).unwrap_or(0.0)))
+            }
+            C::ArenaReset => {
+                self.mode = Mode::Scene;
+                self.scene.arena_playing = false;
+                self.scene.arena = None;
+                match self.scene.arena_start.take() {
+                    Some(objs) => {
+                        self.scene.objs = objs;
+                        Ok("arena reset".into())
+                    }
+                    None => Ok("arena already reset".into()),
+                }
+            }
+            C::ArenaEnv { preset, gravity, air_density, temperature_c, pressure_kpa, wind } => {
+                self.mode = Mode::Scene;
+                let mut e = match preset {
+                    Some(k) => obs_rust_bitstream::arena::Environment::preset(k).ok_or_else(|| format!("unknown environment '{}' (earth, moon, mars, vacuum, space, custom)", k))?,
+                    None => self.scene.arena_env.clone(),
+                };
+                let custom = gravity.is_some() || air_density.is_some() || temperature_c.is_some() || pressure_kpa.is_some() || wind.is_some();
+                if let Some(g) = gravity {
+                    e.gravity = g.clamp(0.0, 1000.0);
+                }
+                if let Some(r) = air_density {
+                    e.air_density = r.clamp(0.0, 100.0);
+                }
+                if let Some(t) = temperature_c {
+                    e.temperature = (t + 273.15).max(0.0);
+                }
+                if let Some(pk) = pressure_kpa {
+                    e.pressure = (*pk as f64 * 1000.0).max(0.0);
+                }
+                if let Some(w) = wind {
+                    e.wind = *w;
+                }
+                if custom && preset.is_none() && !e.name.ends_with("(custom)") {
+                    e.name = format!("{} (custom)", e.name);
+                }
+                self.scene.arena_env = e.clone();
+                if let Some(a) = &mut self.scene.arena {
+                    a.env = e.clone();
+                }
+                Ok(format!("environment {}: g {:.3} m/s², air {:.3} kg/m³, {:.1} kPa, {:.1} °C", e.name, e.gravity, e.air_density, e.pressure / 1000.0, e.temperature - 273.15))
+            }
+            C::ArenaBody { object, temperature_c, heater_w, fixed, velocity } => {
+                self.mode = Mode::Scene;
+                let name = self.scene.check_mesh_target(object.as_deref())?;
+                let pr = self.scene.phys.entry(name.clone()).or_default();
+                if let Some(t) = temperature_c {
+                    pr.temp = Some((t + 273.15).max(0.0));
+                }
+                if let Some(h) = heater_w {
+                    pr.heater = *h;
+                }
+                if let Some(f) = fixed {
+                    pr.fixed = *f;
+                }
+                if let Some(v) = velocity {
+                    pr.vel = *v;
+                }
+                let pr = *pr;
+                let pressure = self.scene.arena_env.pressure;
+                if let Some(a) = self.scene.arena.as_mut() {
+                    // an outside intervention: the energy books restart from here
+                    a.ledger = Default::default();
+                }
+                if let Some(b) = self.scene.arena.as_mut().and_then(|a| a.body_mut(&name)) {
+                    if let Some(t) = pr.temp.filter(|_| temperature_c.is_some()) {
+                        b.temp = t as f64;
+                        b.phase = b.env.phase_at(t, pressure);
+                        b.latent = 0.0;
+                    }
+                    b.heater = pr.heater;
+                    b.fixed = pr.fixed;
+                    if velocity.is_some() {
+                        b.vel = pr.vel;
+                    }
+                }
+                Ok(format!("{}: start {:.1} °C, heater {:.0} W{}", name, pr.temp.map(|t| t - 273.15).unwrap_or(self.scene.arena_env.temperature - 273.15), pr.heater, if pr.fixed { ", pinned" } else { "" }))
+            }
+            C::LabTab { .. } | C::ChemReact { .. } | C::CircuitRun { .. } | C::CpuRun { .. } | C::CpuHeatSweep { .. } | C::RelSpeed { .. } | C::NbodyPreset { .. } | C::NbodyPlay { .. } | C::NbodyMeasurePrecession => {
+                self.mode = Mode::Materials;
+                let die = match cmd {
+                    C::CpuRun { die_object: Some(o), .. } if !o.is_empty() => self.arena_temp(o),
+                    _ => None,
+                };
+                self.lab.apply(cmd, die).unwrap_or(Err("unsupported".into()))
+            }
+            C::MaterialsSelect { .. } | C::MaterialsSearch { .. } | C::MaterialsAdd { .. } | C::MaterialsRemove { .. } | C::MaterialsClear | C::MaterialsBuild { .. } | C::MaterialsBuildAtom { .. } | C::MaterialsPreset { .. } | C::MaterialsSave { .. } => {
+                self.mode = Mode::Materials;
+                self.lab.tab = 0;
+                self.materials.apply(cmd).unwrap_or(Err("unsupported".into()))
             }
             C::TimelinePlay { .. } | C::TimelineScrub { .. } | C::SetKeyframe | C::DeleteKeyframe => match self.mode {
                 Mode::Scene => self.scene.apply(cmd, &mut self.toasts),
@@ -781,6 +992,11 @@ impl App {
         }
         if lines.iter().any(|l| l.status == LineStatus::Done && l.cmd.as_ref().map(|c| c.mutates()).unwrap_or(false)) {
             self.snapshots.insert(batch, snap);
+            // batch ids increase, so the smallest keys are the oldest
+            while self.snapshots.len() > MAX_AI_SNAPSHOTS {
+                let oldest = *self.snapshots.keys().min().unwrap();
+                self.snapshots.remove(&oldest);
+            }
         }
         let ctx = self.app_context();
         self.assistant.submit_results(batch, lines, results, &ctx);
@@ -793,9 +1009,14 @@ impl App {
                 self.toasts.push(ToastKind::Info, "Undid Seraphina's actions.");
                 true
             }
-            None => false,
+            None => {
+                self.toasts.push(ToastKind::Info, &format!("That Seraphina action is too old to undo (the last {} are kept).", MAX_AI_SNAPSHOTS));
+                false
+            }
         };
-        self.assistant.mark_undone(batch);
+        if found {
+            self.assistant.mark_undone(batch);
+        }
         found
     }
 
@@ -833,7 +1054,7 @@ impl App {
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let pressed = |k: Key| ctx.input(|i| i.key_pressed(k));
         let mut out = Vec::new();
-        for (k, m) in [(Key::Num1, Mode::Paint), (Key::Num2, Mode::Composite), (Key::Num3, Mode::Scene), (Key::Num4, Mode::Animate), (Key::Num5, Mode::Stream)] {
+        for (k, m) in [(Key::Num1, Mode::Paint), (Key::Num2, Mode::Composite), (Key::Num3, Mode::Scene), (Key::Num4, Mode::Animate), (Key::Num5, Mode::Stream), (Key::Num6, Mode::Materials)] {
             if cmd && pressed(k) {
                 out.push(AppCommand::SwitchMode { mode: m.label().into() });
             }
@@ -938,7 +1159,7 @@ impl App {
                     }
                 }
             }
-            Mode::Composite => {}
+            Mode::Composite | Mode::Materials => {}
         }
         self.bus.extend(out);
     }
@@ -1098,7 +1319,7 @@ impl App {
         let mut open = self.show_shortcuts;
         egui::Window::new("Keyboard shortcuts").open(&mut open).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ctx, |ui| {
             let rows: &[(&str, &[(&str, &str)])] = &[
-                ("Global", &[("Ctrl+1 … 5", "Paint, Composite, 3D, Animate, Stream"), ("Ctrl+.", "Toggle Seraphina"), ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"), ("F1", "This sheet")]),
+                ("Global", &[("Ctrl+1 … 6", "Paint, Composite, 3D, Animate, Stream, Materials"), ("Ctrl+.", "Toggle Seraphina"), ("Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"), ("F1", "This sheet")]),
                 ("Paint", &[("V M L W C", "Move, Marquee, Lasso, Quick Select, Crop"), ("J S B E G", "Healing, Clone (Alt-click source), Brush, Eraser, Gradient"), ("O / Shift+O", "Dodge / Burn"), ("P T H Z I", "Pen, Type, Hand, Zoom, Eyedropper"), ("Enter / Esc", "Apply crop or stroke the pen path / cancel crop"), ("Ctrl+A / Ctrl+D", "Select all / deselect"), ("Ctrl+0, Ctrl+= / −", "Fit, zoom")]),
                 ("3D", &[("Q W E R", "Select, Move, Rotate, Scale"), ("Alt-drag", "Orbit"), ("Delete", "Delete object")]),
                 ("Timeline modes", &[("Space", "Play / pause"), ("K", "Set key"), (", / .", "Previous / next frame (Animate)")]),
@@ -1228,9 +1449,145 @@ impl App {
                 std::sync::Arc::new(out)
             }),
             Mode::Stream => Some(std::sync::Arc::new(self.stream.bit_raster())),
+            Mode::Materials => self.scene.frame.clone(),
         };
         if let Some(f) = frame {
             self.output.push_frame(f);
+        }
+    }
+
+    /// Dispatch a JSON-lines command script (see `--run`). Commands that need
+    /// the user's approval (file writes, network, going live) are skipped.
+    pub fn run_script(&mut self, path: &str) -> usize {
+        let text = match std::fs::read_to_string(path) {
+            Ok(t) => t,
+            Err(e) => {
+                self.toasts.push(ToastKind::Error, &format!("script {}: {}", path, e));
+                return 0;
+            }
+        };
+        let mut n = 0;
+        for (i, line) in text.lines().enumerate() {
+            let l = line.trim();
+            if l.is_empty() || l.starts_with('#') || l.starts_with("//") {
+                continue;
+            }
+            match serde_json::from_str::<AppCommand>(l) {
+                Ok(c) if c.needs_user() => self.toasts.push(ToastKind::Error, &format!("script line {}: {} needs the user; skipped", i + 1, c.name())),
+                Ok(c) => {
+                    match self.dispatch(&c, Origin::User) {
+                        Ok(msg) => {
+                            eprintln!("script line {}: {}: {}", i + 1, c.name(), msg);
+                            n += 1;
+                        }
+                        Err(e) => {
+                            eprintln!("script line {}: {} failed: {}", i + 1, c.name(), e);
+                            self.toasts.push(ToastKind::Error, &format!("script line {}: {}", i + 1, e));
+                        }
+                    }
+                }
+                Err(e) => self.toasts.push(ToastKind::Error, &format!("script line {}: {}", i + 1, e)),
+            }
+        }
+        n
+    }
+
+    /// Turn every visible mesh into a rigid body with its material's properties.
+    fn arena_build(&mut self) -> Result<(), String> {
+        use obs_rust_bitstream::arena::{Arena, Body};
+        let env = self.scene.arena_env.clone();
+        let mut a = Arena::new(env.clone());
+        for o in self.scene.objs.iter().filter(|o| o.visible) {
+            let Some(m) = o.world_mesh() else { continue };
+            if m.verts.is_empty() {
+                continue;
+            }
+            let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
+            for v in &m.verts {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(v[k]);
+                    hi[k] = hi[k].max(v[k]);
+                }
+            }
+            let mut half = [0.0f32; 3];
+            let mut c = [0.0f32; 3];
+            for k in 0..3 {
+                half[k] = ((hi[k] - lo[k]) * 0.5).max(0.005);
+                c[k] = (hi[k] + lo[k]) * 0.5;
+            }
+            let vol = if m.is_closed() { Some(m.volume().abs()).filter(|v| *v > 1e-9) } else { None };
+            let (mat, menv) = match self.scene.assign.material_of(&o.name).ok().and_then(|n| self.materials.lib.profiles.get(n).map(|p| (n.to_string(), p.env.clone()))) {
+                Some(x) => x,
+                None => ("unassigned".to_string(), materials::default_env()),
+            };
+            let pr = self.scene.phys.get(&o.name).copied().unwrap_or_default();
+            let mut b = Body::new(&o.name, &mat, menv, half, c, vol, pr.temp.unwrap_or(env.temperature), env.pressure);
+            b.heater = pr.heater;
+            // open meshes (planes) are static floors
+            b.fixed = pr.fixed || !m.is_closed();
+            b.vel = pr.vel;
+            a.add(b);
+        }
+        if a.bodies.is_empty() {
+            return Err("nothing to simulate: add a visible mesh".into());
+        }
+        self.scene.arena_start = Some(self.scene.objs.clone());
+        self.scene.arena = Some(a);
+        Ok(())
+    }
+
+    /// Copy body positions / shapes back onto the scene objects.
+    fn arena_write_back(&mut self) {
+        let (Some(a), Some(start)) = (&self.scene.arena, &self.scene.arena_start) else { return };
+        for b in &a.bodies {
+            let (Some(o), Some(o0)) = (self.scene.objs.iter_mut().find(|o| o.name == b.name), start.iter().find(|o| o.name == b.name)) else { continue };
+            // offset of the object origin from its bounding-box centre at the start
+            let c0 = a_center(o0);
+            let off = [o0.pos[0] - c0[0], o0.pos[1] - c0[1], o0.pos[2] - c0[2]];
+            let sq = [b.half[0] / b.half0[0].max(1e-6), b.half[1] / b.half0[1].max(1e-6), b.half[2] / b.half0[2].max(1e-6)];
+            o.squash = [o0.squash[0] * sq[0], o0.squash[1] * sq[1], o0.squash[2] * sq[2]];
+            o.pos = [b.pos[0] + off[0] * sq[0], b.pos[1] + off[1] * sq[1], b.pos[2] + off[2] * sq[2]];
+            o.visible = o0.visible && !b.vaporised;
+        }
+    }
+
+    /// Arena temperature (K) of a body by object name (case-insensitive).
+    fn arena_temp(&self, name: &str) -> Option<f64> {
+        self.scene.arena.as_ref()?.bodies.iter().find(|b| b.name.eq_ignore_ascii_case(name)).map(|b| b.temp)
+    }
+
+    fn tick_lab(&mut self, dt: f32) {
+        if self.lab.tick(dt) && self.mode == Mode::Materials {
+            self.ctx.request_repaint();
+        }
+        if let Some(name) = self.lab.cpu.follow.clone() {
+            if let Some(t) = self.arena_temp(&name) {
+                let was = self.lab.cpu.report.as_ref().map(|r| r.correct);
+                if let Some(msg) = self.lab.follow_die(t) {
+                    let now = self.lab.cpu.report.as_ref().map(|r| r.correct);
+                    if was == Some(true) && now == Some(false) {
+                        self.toasts.push(ToastKind::Error, &format!("CPU on '{}' failed: {}", name, msg));
+                    }
+                }
+            }
+        }
+    }
+
+    fn tick_arena(&mut self, dt: f32) {
+        if !self.scene.arena_playing {
+            return;
+        }
+        if let Some(a) = &mut self.scene.arena {
+            a.advance(dt);
+        }
+        self.arena_write_back();
+        self.ctx.request_repaint();
+    }
+
+    /// The 3D viewport draws with the library's current PBR values.
+    fn sync_scene_materials(&mut self) {
+        if self.scene.surfaces.len() != self.materials.lib.profiles.len() || self.materials.lib.profiles.iter().any(|(k, pr)| self.scene.surfaces.get(k) != Some(&materials::surface_of(&pr.pbr))) {
+            self.scene.surfaces = self.materials.lib.profiles.iter().map(|(k, pr)| (k.clone(), materials::surface_of(&pr.pbr))).collect();
         }
     }
 
@@ -1271,6 +1628,9 @@ impl App {
         self.edge_resize(ctx);
 
         let p = self.pal;
+        self.sync_scene_materials();
+        self.tick_arena(dt);
+        self.tick_lab(dt);
         self.header(ctx);
         self.status_bar(ctx);
 
@@ -1320,6 +1680,11 @@ impl App {
                         Mode::Scene => self.scene.inspector(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.inspector(ui, &p, &mut self.toasts, &mut self.bus),
                         Mode::Composite => self.comp.inspector(ui, &p, &mut self.bus),
+                        Mode::Materials if self.lab.tab > 0 => self.lab.inspector(ui, &p, &mut self.bus),
+                        Mode::Materials => {
+                            let sel = self.scene.selected.and_then(|i| self.scene.objs.get(i)).filter(|o| o.mesh.is_some()).map(|o| o.name.clone());
+                            self.materials.inspector(ui, &p, &mut self.bus, sel.as_deref())
+                        }
                         Mode::Paint => {}
                     });
                 }
@@ -1347,6 +1712,8 @@ impl App {
                         Mode::Scene => self.scene.tools(ui, &p, &mut self.bus),
                         Mode::Animate => self.anim.tools(ui, &p),
                         Mode::Composite => self.comp.tools(ui, &p, &mut self.bus),
+                        Mode::Materials if self.lab.tab > 0 => self.lab.tools(ui, &p, &mut self.bus),
+                        Mode::Materials => self.materials.tools(ui, &p, &mut self.bus),
                         Mode::Paint => {}
                     });
                 }
@@ -1371,11 +1738,22 @@ impl App {
             Mode::Scene => self.scene.center(ui, &p, &mut self.bus),
             Mode::Animate => self.anim.center(ui, &p),
             Mode::Composite => self.comp.center(ui, &p),
+            Mode::Materials => {
+                self.lab.tab_strip(ui, &p, &mut self.bus);
+                if self.lab.tab > 0 {
+                    self.lab.center(ui, &p);
+                } else {
+                    self.materials.center(ui, &p, &mut self.bus);
+                }
+            }
         });
         self.windows(ctx);
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
+        if self.continuous {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         self.process_bus();
         if had || !self.assistant.requests.is_empty() || self.assistant.want_send {
             ctx.request_repaint();
@@ -1392,7 +1770,10 @@ impl eframe::App for App {
 fn main() -> eframe::Result<()> {
     let start_mode = std::env::var("SERAPHINA_MODE").ok();
     // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
-    let open_arg = std::env::args().nth(1).filter(|a| !a.starts_with('-'));
+    let args: Vec<String> = std::env::args().collect();
+    let open_arg = args.get(1).filter(|a| !a.starts_with('-')).cloned();
+    // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
+    let run_script = args.iter().position(|a| a == "--run").and_then(|i| args.get(i + 1)).cloned();
     let start_light = std::env::var("SERAPHINA_LIGHT").is_ok();
     let native = std::env::var("SERAPHINA_NATIVE_FRAME").is_ok();
     let options = eframe::NativeOptions {
@@ -1405,6 +1786,7 @@ fn main() -> eframe::Result<()> {
         Box::new(move |cc| {
             let mut app = App::new(&cc.egui_ctx);
             app.native_frame = native;
+            app.continuous = std::env::var("SERAPHINA_CONTINUOUS").is_ok();
             if let Some(m) = start_mode.as_deref().and_then(Mode::parse) {
                 app.mode = m;
             }
@@ -1413,6 +1795,9 @@ fn main() -> eframe::Result<()> {
             }
             if let Some(path) = open_arg {
                 app.bus.push(AppCommand::OpenFile { path });
+            }
+            if let Some(path) = run_script {
+                app.run_script(&path);
             }
             Ok(Box::new(app))
         }),
@@ -1470,6 +1855,219 @@ mod tests {
             })
             .flatten()
             .collect()
+    }
+
+    #[test]
+    fn ctrl_plus_zooms_the_canvas_not_the_ui() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        assert!(!ctx.options(|o| o.zoom_with_keyboard));
+        run(&mut app, &ctx, 2, 0.0);
+        app.mode = Mode::Paint;
+        let ui0 = ctx.zoom_factor();
+        let z0 = app.paint.zoom;
+        let key = |k: egui::Key| egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND };
+        let mut t = 1.0;
+        for k in [egui::Key::Equals, egui::Key::Plus, egui::Key::Minus, egui::Key::Num0, egui::Key::Equals] {
+            let mut i = input(t);
+            i.modifiers = egui::Modifiers::COMMAND;
+            i.events.push(key(k));
+            let _ = ctx.run(i, |ctx| app.frame(ctx));
+            run(&mut app, &ctx, 1, t + 0.05);
+            t += 0.2;
+            assert_eq!(ctx.zoom_factor(), ui0, "{:?} must not zoom the whole UI", k);
+        }
+        let _ = z0;
+        // the canvas itself still responds to Ctrl+=
+        let before = app.paint.zoom;
+        let mut i = input(t);
+        i.modifiers = egui::Modifiers::COMMAND;
+        i.events.push(key(egui::Key::Equals));
+        let _ = ctx.run(i, |ctx| app.frame(ctx));
+        assert!(app.paint.zoom > before, "canvas zoom {} -> {}", before, app.paint.zoom);
+        assert_eq!(ctx.zoom_factor(), ui0);
+    }
+
+    #[test]
+    fn ai_undo_snapshots_are_capped() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        run(&mut app, &ctx, 1, 0.0);
+        let layers0 = app.paint.doc.layers.len();
+        let mut batches = Vec::new();
+        for i in 0..100 {
+            app.run_tool_calls(vec![call("add_layer", &format!(r#"{{"name":"ai {}"}}"#, i))]);
+            batches.push(action_lines(&app).last().unwrap().0);
+            assert!(app.snapshots.len() <= MAX_AI_SNAPSHOTS, "memory must stay flat: {} snapshots", app.snapshots.len());
+        }
+        assert_eq!(app.snapshots.len(), MAX_AI_SNAPSHOTS);
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 100);
+        // the oldest batch is gone: undo reports it and changes nothing
+        assert!(!app.undo_batch(batches[0]));
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 100);
+        // the newest is still undoable
+        assert!(app.undo_batch(*batches.last().unwrap()));
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 99);
+        // and so is the 10th newest
+        assert!(app.undo_batch(batches[100 - MAX_AI_SNAPSHOTS]));
+        assert_eq!(app.paint.doc.layers.len(), layers0 + 100 - MAX_AI_SNAPSHOTS);
+    }
+
+    #[test]
+    fn seraphina_makes_the_cube_copper_and_builds_water_with_undo() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        run(&mut app, &ctx, 2, 0.0);
+        app.scene.shading = scene::Shading::Shaded;
+        // grey before
+        let grey = app.scene.surface_of("cube1");
+        assert_eq!(grey, obs_rust_bitstream::mesh3d::Surface::grey());
+        // "make the cube copper" → material_assign through the Triad gate
+        app.run_tool_calls(vec![call("material_assign", r#"{"object":"cube1","material":"copper"}"#)]);
+        let lines = action_lines(&app);
+        assert!(lines.iter().any(|(_, l)| l.status == LineStatus::Done && l.text.contains("cube1 is now Copper")), "{:?}", lines.iter().map(|l| &l.1.text).collect::<Vec<_>>());
+        assert_eq!(app.scene.assign.material_of("cube1"), Ok("Copper"));
+        assert!(app.materials.lib.registry.get("Copper").is_ok(), "saved into MaterialRegistry");
+        let cu = app.scene.surface_of("cube1");
+        assert_eq!(cu.metalness, 1.0);
+        // the rendered cube is copper-coloured (red > blue) where it was grey
+        app.scene.selected = None;
+        let f = app.scene.render(320, 200, Color32::BLACK, Color32::from_gray(40), app.pal.accent);
+        let (mut r, mut b, mut n) = (0u64, 0u64, 0u64);
+        for (i, id) in f.ids.iter().enumerate() {
+            if *id >> 16 == 1 {
+                r += f.rgba[i * 4] as u64;
+                b += f.rgba[i * 4 + 2] as u64;
+                n += 1;
+            }
+        }
+        // copper F0 in sRGB is ≈ (250, 209, 194): red/blue ≈ 1.29 (grey is bluish, < 1)
+        assert!(n > 500 && r > b * 115 / 100, "copper cube: n {} r {} b {}", n, r, b);
+        // undo in 3D removes the assignment
+        app.mode = Mode::Scene;
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.scene.assign.material_of("cube1").is_err());
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        assert_eq!(app.scene.assign.material_of("cube1"), Ok("Copper"));
+        // non-mesh targets and junk materials are rejected
+        assert!(app.dispatch(&AppCommand::MaterialAssign { object: Some("key_light".into()), material: "gold".into() }, Origin::User).is_err());
+        assert!(app.dispatch(&AppCommand::MaterialAssign { object: Some("cube1".into()), material: "unobtainium".into() }, Origin::User).is_err());
+        // "build H2O"
+        app.run_tool_calls(vec![call("materials_build", r#"{"formula":"H2O"}"#)]);
+        assert_eq!(app.mode, Mode::Materials);
+        let w = app.materials.built.clone().unwrap();
+        assert_eq!(w.formula, "H2O");
+        assert!(w.analysis.charge_balanced && (w.pbr.ior - 1.333).abs() < 1e-3);
+        app.dispatch(&AppCommand::MaterialsSave { name: None }, Origin::User).unwrap();
+        assert!(app.materials.lib.profiles.contains_key("Water"));
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(!app.materials.lib.profiles.contains_key("Water"), "undo the save");
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.materials.built.is_none(), "undo the build");
+        // the whole AI batch can be undone too
+        let batch = lines[0].0;
+        assert!(app.undo_batch(batch));
+        assert!(app.scene.assign.material_of("cube1").is_err());
+        // Materials mode renders with the inspector and builder populated
+        app.dispatch(&AppCommand::MaterialsPreset { preset: "gold".into() }, Origin::User).unwrap();
+        run(&mut app, &ctx, 3, 10.0);
+    }
+
+    #[test]
+    fn arena_drops_the_copper_cube_on_the_moon_and_melts_ice() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        run(&mut app, &ctx, 2, 0.0);
+        // Seraphina: "drop the copper cube from 3 m on the Moon"
+        app.run_tool_calls(vec![
+            call("material_assign", r#"{"object":"cube1","material":"copper"}"#),
+            call("scene_transform", r#"{"object":"cube1","translate":[0,2.5,0]}"#),
+            call("arena_env", r#"{"preset":"moon"}"#),
+            call("arena_step", r#"{"steps":1}"#),
+        ]);
+        let lines = action_lines(&app);
+        assert!(lines.iter().all(|(_, l)| l.status == LineStatus::Done), "{:?}", lines.iter().map(|l| &l.1.text).collect::<Vec<_>>());
+        let a = app.scene.arena.as_ref().unwrap();
+        let b = a.body("cube1").unwrap();
+        assert_eq!(b.material, "Copper");
+        assert!((b.mass - 8960.0).abs() < 2.0, "1 m³ of copper: {}", b.mass);
+        assert!((a.env.gravity - 1.62).abs() < 1e-6);
+        // fall 2.5 m on the Moon: t = sqrt(2h/g) = 1.757 s
+        let t_land = (2.0 * 2.5f32 / 1.62).sqrt();
+        let steps = (t_land / obs_rust_bitstream::arena::DT) as u32 - 4;
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(steps) }, Origin::User).unwrap();
+        assert!(app.scene.objs[0].pos[1] > 0.5, "still falling just before t_land");
+        // it bounces (copper e = 0.55); bounces take long in lunar gravity
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240) }, Origin::User).unwrap();
+        assert!(app.scene.arena.as_ref().unwrap().body("cube1").unwrap().vel[1] != 0.0 || app.scene.objs[0].pos[1] > 0.51);
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240 * 15) }, Origin::User).unwrap();
+        let y = app.scene.objs[0].pos[1];
+        assert!((y - 0.5).abs() < 0.02, "landed on the ground: {}", y);
+        // play advances with real frame time
+        app.dispatch(&AppCommand::ArenaPlay { playing: Some(true) }, Origin::User).unwrap();
+        let t0 = app.scene.arena.as_ref().unwrap().time;
+        run(&mut app, &ctx, 10, 20.0);
+        assert!(app.scene.arena.as_ref().unwrap().time > t0 + 0.2);
+        // reset puts it back where it was before the simulation
+        app.dispatch(&AppCommand::ArenaReset, Origin::User).unwrap();
+        assert!(app.scene.arena.is_none());
+        assert!((app.scene.objs[0].pos[1] - 3.0).abs() < 1e-4, "{}", app.scene.objs[0].pos[1]);
+        // undo of a simulation start goes back to the pre-sim scene
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240) }, Origin::User).unwrap();
+        assert!(app.scene.objs[0].pos[1] < 3.0);
+        app.mode = Mode::Scene;
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.scene.arena.is_none() && (app.scene.objs[0].pos[1] - 3.0).abs() < 1e-4);
+        // ice melts with a heater: a 10 cm ice cube on Earth
+        app.dispatch(&AppCommand::ArenaEnv { preset: Some("earth".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::SceneAdd { kind: "cube".into() }, Origin::User).unwrap();
+        let ice = app.scene.objs[app.scene.selected.unwrap()].name.clone();
+        app.dispatch(&AppCommand::SceneTransform { object: Some(ice.clone()), translate: Some([3.0, 0.0, 0.0]), rotate_y: None, scale: Some(0.1) }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::MaterialAssign { object: Some(ice.clone()), material: "ice".into() }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaBody { object: Some(ice.clone()), temperature_c: Some(-10.0), heater_w: Some(5000.0), fixed: None, velocity: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(240 * 120) }, Origin::User).unwrap();
+        let b = app.scene.arena.as_ref().unwrap().body(&ice).unwrap().clone();
+        assert_eq!(b.phase, obs_rust_bitstream::material_env::Phase::Liquid, "{:?} {} K", b.phase, b.temp);
+        let o = app.scene.objs.iter().find(|o| o.name == ice).unwrap();
+        assert!(o.squash[1] < 0.5 && o.squash[0] > 1.5, "puddle: {:?}", o.squash);
+        assert!(app.scene.arena.as_ref().unwrap().events.log.iter().any(|(_, e)| e.contains("solid → liquid")));
+        assert!(app.app_context().contains("Physics arena"));
+        // errors
+        assert!(app.dispatch(&AppCommand::ArenaEnv { preset: Some("jupiter".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).is_err());
+        assert!(app.dispatch(&AppCommand::ArenaBody { object: Some("key_light".into()), temperature_c: None, heater_w: Some(1.0), fixed: None, velocity: None }, Origin::User).is_err());
+    }
+
+    #[test]
+    fn demo_scripts_run_cleanly() {
+        let ctx = egui::Context::default();
+        for f in ["materials_scene", "arena_moon", "arena_melt"] {
+            let mut app = app_with(&ctx, None);
+            let path = format!("{}/docs/scripts/{}.jsonl", env!("CARGO_MANIFEST_DIR"), f);
+            let lines = std::fs::read_to_string(&path).unwrap().lines().filter(|l| l.trim().starts_with('{')).count();
+            assert_eq!(app.run_script(&path), lines, "{}: every line dispatches", f);
+            run(&mut app, &ctx, 2, 0.0);
+        }
+        let mut app = app_with(&ctx, None);
+        assert_eq!(app.run_script("/nonexistent.jsonl"), 0);
+    }
+
+    #[test]
+    fn physics_owns_keyframed_objects_until_reset() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        // cube1 carries keyframes in the default scene
+        assert!(!app.scene.objs[0].track_y.is_empty());
+        let y0 = app.scene.objs[0].pos[1];
+        app.dispatch(&AppCommand::SceneTransform { object: Some("cube1".into()), translate: Some([0.0, 2.6, 0.0]), rotate_y: None, scale: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaEnv { preset: Some("moon".into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None }, Origin::User).unwrap();
+        app.dispatch(&AppCommand::ArenaStep { steps: Some(300) }, Origin::User).unwrap();
+        run(&mut app, &ctx, 3, 0.0);
+        // 1.25 s on the Moon: Δy = ½·1.62·1.25² = 1.266 m
+        let y = app.scene.objs[0].pos[1];
+        assert!((y - (y0 + 2.6 - 1.266)).abs() < 0.01, "y {}", y);
+        app.dispatch(&AppCommand::ArenaReset, Origin::User).unwrap();
+        run(&mut app, &ctx, 2, 0.0);
+        assert!(app.scene.arena.is_none());
     }
 
     #[test]

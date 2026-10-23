@@ -18,6 +18,8 @@ pub struct Material {
     base_color: Vec3,
     roughness: f32,
     metallic: f32,
+    ior: f32,
+    density: f32,
 }
 
 impl Material {
@@ -30,6 +32,8 @@ impl Material {
             base_color: Vec3::new(0.8, 0.8, 0.8),
             roughness: 0.5,
             metallic: 0.0,
+            ior: 1.5,
+            density: 1000.0,
         })
     }
 
@@ -59,6 +63,24 @@ impl Material {
 
     pub fn metallic(&self) -> f32 {
         self.metallic
+    }
+
+    /// Index of refraction (dielectric Fresnel F0 = ((n-1)/(n+1))²).
+    pub fn set_ior(&mut self, n: f32) {
+        self.ior = n.clamp(1.0, 4.0);
+    }
+
+    pub fn ior(&self) -> f32 {
+        self.ior
+    }
+
+    /// Density in kg/m³.
+    pub fn set_density(&mut self, d: f32) {
+        self.density = d.max(0.0);
+    }
+
+    pub fn density(&self) -> f32 {
+        self.density
     }
 }
 

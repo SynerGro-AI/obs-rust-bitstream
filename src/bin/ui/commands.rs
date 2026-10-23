@@ -80,6 +80,33 @@ pub enum AppCommand {
     SceneBoolean { op: String, object: Option<String>, with: Option<String> },
     SceneQuadDraw { points: Vec<[f32; 3]> },
     SceneShading { mode: String },
+    // ---- materials lab
+    MaterialsSelect { element: String },
+    MaterialsSearch { query: String },
+    MaterialsAdd { element: String, count: Option<u32> },
+    MaterialsRemove { element: String },
+    MaterialsClear,
+    MaterialsBuild { formula: Option<String> },
+    MaterialsBuildAtom { protons: u32, neutrons: u32, electrons: u32 },
+    MaterialsPreset { preset: String },
+    MaterialsSave { name: Option<String> },
+    MaterialAssign { object: Option<String>, material: String },
+    // ---- physics arena
+    ArenaPlay { playing: Option<bool> },
+    ArenaStep { steps: Option<u32> },
+    ArenaReset,
+    ArenaEnv { preset: Option<String>, gravity: Option<f32>, air_density: Option<f32>, temperature_c: Option<f32>, pressure_kpa: Option<f32>, wind: Option<[f32; 3]> },
+    ArenaBody { object: Option<String>, temperature_c: Option<f32>, heater_w: Option<f32>, fixed: Option<bool>, velocity: Option<[f32; 3]> },
+    // ---- lab: reactions, circuits, computer, relativity (simulations; not document edits)
+    LabTab { tab: String },
+    ChemReact { equation: Option<String>, temperature_c: Option<f64>, pressure_kpa: Option<f64>, seconds: Option<f64>, air: Option<bool> },
+    CircuitRun { preset: Option<String>, voltage: Option<f64>, temperature_c: Option<f64>, material: Option<String>, length_mm: Option<f64>, diameter_mm: Option<f64>, doping_cm3: Option<f64> },
+    CpuRun { program: Option<String>, source: Option<String>, temperature_c: Option<f64>, clock_mhz: Option<f64>, die_object: Option<String> },
+    CpuHeatSweep { program: Option<String>, clock_mhz: Option<f64> },
+    RelSpeed { beta: Option<f64>, speed_kms: Option<f64> },
+    NbodyPreset { preset: Option<String>, gr: Option<bool>, gr_exaggeration: Option<f64> },
+    NbodyPlay { playing: Option<bool>, days_per_second: Option<f64> },
+    NbodyMeasurePrecession,
     // ---- timeline
     TimelinePlay { playing: Option<bool> },
     TimelineScrub { time: f32 },
@@ -110,7 +137,7 @@ impl AppCommand {
     /// Whether this command changes document state (and so belongs in
     /// an AI action's undo snapshot). View-only commands return false.
     pub fn mutates(&self) -> bool {
-        !matches!(self, AppCommand::Zoom { .. } | AppCommand::Pan { .. } | AppCommand::SetTheme { .. } | AppCommand::TogglePanel { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. })
+        !matches!(self, AppCommand::Zoom { .. } | AppCommand::Pan { .. } | AppCommand::MaterialsSelect { .. } | AppCommand::MaterialsSearch { .. } | AppCommand::LabTab { .. } | AppCommand::ChemReact { .. } | AppCommand::CircuitRun { .. } | AppCommand::CpuRun { .. } | AppCommand::CpuHeatSweep { .. } | AppCommand::RelSpeed { .. } | AppCommand::NbodyPreset { .. } | AppCommand::NbodyPlay { .. } | AppCommand::NbodyMeasurePrecession | AppCommand::SetTheme { .. } | AppCommand::TogglePanel { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. })
     }
 
     /// Commands Seraphina may not run without the user (file writes and
@@ -154,7 +181,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
     let b = |d: &str| json!({ "type": "boolean", "description": d });
     let pts = json!({ "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }, "description": "Image-space [x, y] points" });
     vec![
-        ToolSpec { name: "switch_mode", description: "Switch workspace mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["paint", "composite", "3d", "animate", "stream"] } }), &["mode"]) },
+        ToolSpec { name: "switch_mode", description: "Switch workspace mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["paint", "composite", "3d", "animate", "stream", "materials"] } }), &["mode"]) },
         ToolSpec { name: "set_theme", description: "Dark or light appearance.", params: obj(json!({ "dark": b("true for dark") }), &["dark"]) },
         ToolSpec { name: "toggle_panel", description: "Show or hide a panel.", params: obj(json!({ "panel": { "type": "string", "enum": ["tools", "inspector", "timeline", "assistant", "videogen", "shelf"] }, "visible": b("omit to toggle") }), &["panel"]) },
         ToolSpec { name: "select_tool", description: "Pick a Paint tool.", params: obj(json!({ "tool": { "type": "string", "enum": ["move", "marquee", "lasso", "quick_select", "crop", "healing", "clone", "brush", "eraser", "gradient", "dodge", "burn", "pen", "type", "hand", "zoom", "eyedropper"] } }), &["tool"]) },
@@ -212,6 +239,30 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "scene_boolean", description: "Boolean of two meshes (the result replaces `object`; `with` is removed).", params: obj(json!({ "op": { "type": "string", "enum": ["union", "difference", "intersection"] }, "object": s("object; omit for selected"), "with": s("other mesh; omit for the previously selected one") }), &["op"]) },
         ToolSpec { name: "scene_quad_draw", description: "Add a quad (4 world-space points) to the quad-draw mesh, welding shared corners.", params: obj(json!({ "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }, "minItems": 4, "maxItems": 4 } }), &["points"]) },
         ToolSpec { name: "scene_shading", description: "Viewport display mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["shaded", "wireframe", "shaded_wire"] } }), &["mode"]) },
+        ToolSpec { name: "materials_select", description: "Show an element's detail card in the Materials Lab.", params: obj(json!({ "element": s("symbol, name or atomic number") }), &["element"]) },
+        ToolSpec { name: "materials_search", description: "Filter the periodic table.", params: obj(json!({ "query": s("symbol, name fragment or atomic number; empty clears") }), &["query"]) },
+        ToolSpec { name: "materials_add", description: "Add atoms of an element to the composition builder.", params: obj(json!({ "element": s("symbol, name or atomic number"), "count": n("atoms, default 1") }), &["element"]) },
+        ToolSpec { name: "materials_remove", description: "Remove one atom of an element from the composition builder.", params: obj(json!({ "element": s("symbol, name or atomic number") }), &["element"]) },
+        ToolSpec { name: "materials_clear", description: "Clear the composition builder.", params: obj(json!({}), &[]) },
+        ToolSpec { name: "materials_build", description: "Build a material from a chemical formula (e.g. H2O, Fe2O3, Ca(OH)2, CuZn) or the builder's composition: checks nuclear stability and charge balance, derives PBR and physical properties.", params: obj(json!({ "formula": s("formula; omit to use the builder composition") }), &[]) },
+        ToolSpec { name: "materials_build_atom", description: "Build an element from protons, neutrons and electrons (rejects ions and unstable nuclei).", params: obj(json!({ "protons": n("1-118"), "neutrons": n("neutrons"), "electrons": n("electrons (= protons for neutral)") }), &["protons", "neutrons", "electrons"]) },
+        ToolSpec { name: "materials_preset", description: "Load a measured material preset.", params: obj(json!({ "preset": { "type": "string", "enum": ["gold", "copper", "iron", "aluminum", "silicon", "glass", "water", "graphite", "diamond"] } }), &["preset"]) },
+        ToolSpec { name: "materials_save", description: "Save the built material to the library (MaterialRegistry).", params: obj(json!({ "name": s("name; default the material's name") }), &[]) },
+        ToolSpec { name: "material_assign", description: "Assign a material to a 3D mesh object (e.g. 'make the cube copper'). The material may be a library name, a preset (gold, copper, iron, aluminum, silicon, glass, water, graphite, diamond) or a formula; it is saved to the library if new.", params: obj(json!({ "object": s("object name; omit for selected"), "material": s("library name, preset or formula") }), &["material"]) },
+        ToolSpec { name: "arena_play", description: "Play or pause the physics arena: every visible 3D mesh becomes a rigid body (mass = material density × volume) under the arena environment (gravity, air drag, buoyancy, wind, heat exchange, phase changes).", params: obj(json!({ "playing": b("omit to toggle") }), &[]) },
+        ToolSpec { name: "arena_step", description: "Advance the physics arena by fixed 1/240 s steps (paused).", params: obj(json!({ "steps": n("number of 1/240 s steps, default 4") }), &[]) },
+        ToolSpec { name: "arena_reset", description: "Stop the physics arena and restore the scene to how it was before the simulation.", params: obj(json!({}), &[]) },
+        ToolSpec { name: "arena_env", description: "Set the arena environment: a preset and/or individual values.", params: obj(json!({ "preset": { "type": "string", "enum": ["earth", "moon", "mars", "vacuum", "space", "custom"] }, "gravity": n("m/s²"), "air_density": n("kg/m³"), "temperature_c": n("ambient °C"), "pressure_kpa": n("kPa"), "wind": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "m/s [x, y, z]" } }), &[]) },
+        ToolSpec { name: "arena_body", description: "Physics settings of a 3D mesh: starting temperature, heater power (e.g. melt it), pinned, initial velocity.", params: obj(json!({ "object": s("object; omit for selected"), "temperature_c": n("°C"), "heater_w": n("watts (negative = cooling)"), "fixed": b("pinned in place"), "velocity": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "m/s [x, y, z]" } }), &[]) },
+        ToolSpec { name: "lab_tab", description: "Show a Materials Lab tab: elements (periodic table), reactions, circuits, computer, relativity.", params: obj(json!({ "tab": { "type": "string", "enum": ["elements", "reactions", "circuits", "computer", "relativity"] } }), &["tab"]) },
+        ToolSpec { name: "chem_react", description: "Run a chemical reaction: the equation is balanced exactly, thermochemistry (ΔH, ΔS, ΔG, K) comes from CODATA/NIST-JANAF/CRC data, and an adiabatic constant-pressure reactor integrates the published rate law. Reports conversion, final and adiabatic flame temperature. Omitted fields keep their current values.", params: obj(json!({ "equation": s("e.g. 'CH4 + O2 -> CO2 + H2O' (balancing is automatic; <=> for equilibria; (g)/(l)/(s) tags optional)"), "temperature_c": n("start temperature °C"), "pressure_kpa": n("kPa"), "seconds": n("duration to simulate, s"), "air": b("oxygen comes as air (adds 3.76 N2 per O2)") }), &[]) },
+        ToolSpec { name: "circuit_run", description: "Simulate a circuit by modified nodal analysis: divider (DC), rc / rlc (step transients), diode (I–V vs temperature), inverter (CMOS transfer curve), fuse (a real wire: R = ρL/A from the element, Joule heating, melts open), silicon (doped-Si resistivity).", params: obj(json!({ "preset": { "type": "string", "enum": ["divider", "rc", "rlc", "diode", "inverter", "fuse", "silicon"] }, "voltage": n("source volts"), "temperature_c": n("°C"), "material": s("wire element symbol, e.g. Cu, Al, W"), "length_mm": n("wire length mm"), "diameter_mm": n("wire diameter mm"), "doping_cm3": n("donor doping cm⁻³ for silicon") }), &[]) },
+        ToolSpec { name: "cpu_run", description: "Run a program on the simulated 4-bit computer built from transistor-characterised CMOS gates. The die temperature and clock change gate delays; too hot or too fast and it computes wrong answers. die_object binds the die temperature to a 3D arena body (heat it with arena_body heater_w); empty string unbinds.", params: obj(json!({ "program": { "type": "string", "enum": ["multiply", "fibonacci", "countdown"] }, "source": s("custom assembly (LDI LDA STA ADD ADDI SUB SUBI JMP JZ JC OUT HLT, labels 'name:')"), "temperature_c": n("die °C"), "clock_mhz": n("MHz"), "die_object": s("3D object whose arena temperature is the die temperature") }), &[]) },
+        ToolSpec { name: "cpu_heat_sweep", description: "Heat the die from 27 °C until the program fails, and report why (timing, logic levels or intrinsic silicon).", params: obj(json!({ "program": { "type": "string", "enum": ["multiply", "fibonacci", "countdown"] }, "clock_mhz": n("MHz") }), &[]) },
+        ToolSpec { name: "rel_speed", description: "Special-relativity readouts (γ, time dilation, length contraction, energy, Doppler) at a speed.", params: obj(json!({ "beta": n("v/c, 0 to <1"), "speed_kms": n("speed in km/s (instead of beta)") }), &[]) },
+        ToolSpec { name: "nbody_preset", description: "Load a gravity scenario (Newtonian N-body; optional 1PN Schwarzschild GR correction). gr_exaggeration > 1 shrinks c as a visual aid so the precession is visible.", params: obj(json!({ "preset": { "type": "string", "enum": ["mercury", "inner", "earth_moon", "figure8", "binary"] }, "gr": b("GR correction on"), "gr_exaggeration": n("1 = real; up to 1e8") }), &[]) },
+        ToolSpec { name: "nbody_play", description: "Play or pause the N-body simulation.", params: obj(json!({ "playing": b("omit to toggle"), "days_per_second": n("simulated days per real second") }), &[]) },
+        ToolSpec { name: "nbody_measure_precession", description: "Simulate Mercury for 5 orbits with and without GR at real strength and report the perihelion advance in arcseconds per century.", params: obj(json!({}), &[]) },
         ToolSpec { name: "timeline_play", description: "Play or pause the current mode's timeline.", params: obj(json!({ "playing": b("omit to toggle") }), &[]) },
         ToolSpec { name: "timeline_scrub", description: "Move the playhead (seconds).", params: obj(json!({ "time": n("seconds") }), &["time"]) },
         ToolSpec { name: "set_keyframe", description: "Key the selected 3D object's Y / composite layer opacity / animate frame at the playhead.", params: obj(json!({}), &[]) },
@@ -294,6 +345,8 @@ mod tests {
         assert!(parse_tool_call("undo", "[1,2]").is_err());
         assert!(parse_tool_call("undo", "{not json").is_err());
         assert!(parse_tool_call("set_stream_key", r#"{"key":"x"}"#).is_err(), "UI-only commands are not tools");
+        assert_eq!(parse_tool_call("material_assign", r#"{"object":"cube1","material":"copper"}"#), Ok(AppCommand::MaterialAssign { object: Some("cube1".into()), material: "copper".into() }));
+        assert_eq!(parse_tool_call("materials_build", r#"{"formula":"H2O"}"#), Ok(AppCommand::MaterialsBuild { formula: Some("H2O".into()) }));
         assert_eq!(parse_tool_call("scene_boolean", r#"{"op":"difference"}"#), Ok(AppCommand::SceneBoolean { op: "difference".into(), object: None, with: None }));
     }
 

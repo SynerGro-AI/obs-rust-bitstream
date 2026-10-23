@@ -1,4 +1,4 @@
-//! 3D mode: polygon meshes with a z-buffered, flat-shaded software
+//! 3D mode: polygon meshes with a z-buffered, Blinn-Phong-shaded software
 //! viewport (`mesh3d::Frame3d`), Maya-style tools (move / rotate / scale,
 //! extrude, bevel, edge loop, multi-cut, bridge, booleans, quad draw),
 //! joints, lights, cameras and a keyed Y channel. Every edit goes through
@@ -9,7 +9,10 @@ use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::{self, Clock, Track};
 use crate::{ToastKind, Toasts};
 use eframe::egui::{self, Color32, Pos2, Rounding, Stroke, Vec2};
-use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, V3};
+use obs_rust_bitstream::arena::{Arena, Environment};
+use obs_rust_bitstream::material_assign::MaterialAssign;
+use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, Surface, V3};
+use std::collections::HashMap;
 use obs_rust_bitstream::ui_canvas::{KeyTrack, Raster};
 use obs_rust_bitstream::{Joint, JointHierarchy};
 use std::sync::Arc;
@@ -128,15 +131,18 @@ pub struct Obj {
     pub parent: Option<usize>,
     pub track_y: KeyTrack,
     pub mesh: Option<PolyMesh>,
+    /// Non-uniform local scale (a melted body slumps into a puddle).
+    pub squash: [f32; 3],
 }
 
 impl Obj {
     fn new(name: &str, kind: Kind, pos: [f32; 3]) -> Self {
         let mesh = (kind == Kind::Cube).then(PolyMesh::cube);
-        Self { name: name.to_string(), kind, pos, rot_y: 0.0, scale: 1.0, visible: true, parent: None, track_y: KeyTrack::new(), mesh }
+        Self { name: name.to_string(), kind, pos, rot_y: 0.0, scale: 1.0, visible: true, parent: None, track_y: KeyTrack::new(), mesh, squash: [1.0; 3] }
     }
 
     pub fn to_world(&self, v: V3) -> V3 {
+        let v = [v[0] * self.squash[0], v[1] * self.squash[1], v[2] * self.squash[2]];
         let (s, co) = self.rot_y.to_radians().sin_cos();
         let k = self.scale;
         [self.pos[0] + (v[0] * co - v[2] * s) * k, self.pos[1] + v[1] * k, self.pos[2] + (v[0] * s + v[2] * co) * k]
@@ -146,11 +152,31 @@ impl Obj {
         let (s, co) = self.rot_y.to_radians().sin_cos();
         let k = self.scale.max(1e-6);
         let d = [(w[0] - self.pos[0]) / k, (w[1] - self.pos[1]) / k, (w[2] - self.pos[2]) / k];
-        [d[0] * co + d[2] * s, d[1], -d[0] * s + d[2] * co]
+        let l = [d[0] * co + d[2] * s, d[1], -d[0] * s + d[2] * co];
+        [l[0] / self.squash[0].max(1e-6), l[1] / self.squash[1].max(1e-6), l[2] / self.squash[2].max(1e-6)]
     }
 
     pub fn world_mesh(&self) -> Option<PolyMesh> {
         self.mesh.as_ref().map(|m| m.transformed(|v| self.to_world(v)))
+    }
+}
+
+/// Physics settings an object keeps between simulation runs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PhysProps {
+    /// Starting temperature (K); `None` = ambient.
+    pub temp: Option<f32>,
+    /// Heater power (W).
+    pub heater: f32,
+    /// Pinned in place (infinite mass).
+    pub fixed: bool,
+    /// Initial velocity (m/s).
+    pub vel: [f32; 3],
+}
+
+impl Default for PhysProps {
+    fn default() -> Self {
+        Self { temp: None, heater: 0.0, fixed: false, vel: [0.0; 3] }
     }
 }
 
@@ -181,6 +207,18 @@ pub struct SceneState {
     pub quad_pts: Vec<V3>,
     /// Last rendered viewport (for recording / streaming).
     pub frame: Option<Arc<Raster>>,
+    /// Object name → material name (the library's `MaterialAssign`).
+    pub assign: MaterialAssign,
+    /// Material name → shading surface, kept in sync with the library by the app.
+    pub surfaces: HashMap<String, Surface>,
+    /// Physics arena (built from the scene on Play/Step; `None` when reset).
+    pub arena: Option<Arena>,
+    pub arena_env: Environment,
+    pub arena_playing: bool,
+    /// Per-object physics settings.
+    pub phys: HashMap<String, PhysProps>,
+    /// Scene state before the simulation started (Reset restores it).
+    pub arena_start: Option<Vec<Obj>>,
     ids: Vec<u32>,
     ids_w: usize,
     ids_h: usize,
@@ -190,7 +228,6 @@ pub struct SceneState {
     drag_rot: Option<(f32, f32)>,
 }
 
-pub const MESH_GREY: [u8; 3] = [168, 172, 182];
 
 impl SceneState {
     pub fn new() -> Self {
@@ -228,6 +265,13 @@ impl SceneState {
             cut_start: None,
             quad_pts: Vec::new(),
             frame: None,
+            assign: MaterialAssign::new(),
+            surfaces: HashMap::new(),
+            arena: None,
+            arena_env: Environment::earth(),
+            arena_playing: false,
+            phys: HashMap::new(),
+            arena_start: None,
             ids: Vec::new(),
             ids_w: 0,
             ids_h: 0,
@@ -245,7 +289,10 @@ impl SceneState {
     pub fn tick(&mut self, dt: f32) {
         self.clock.tick(dt);
         let t = self.clock.time;
-        for o in &mut self.objs {
+        // while a physics simulation exists it owns the transforms; keyframes
+        // resume once the arena is reset
+        let animate = self.arena.is_none();
+        for o in self.objs.iter_mut().filter(|_| animate) {
             if let Some(y) = o.track_y.sample(t) {
                 o.pos[1] = y;
             }
@@ -524,6 +571,29 @@ impl SceneState {
         })
     }
 
+    /// Name of the mesh object a material command targets (default: the selection).
+    pub fn check_mesh_target(&self, object: Option<&str>) -> Result<String, String> {
+        let i = match object {
+            Some(n) => self.objs.iter().position(|o| o.name.eq_ignore_ascii_case(n.trim())).ok_or_else(|| format!("no object named '{}'", n))?,
+            None => self.selected.filter(|i| *i < self.objs.len()).ok_or("select a mesh first")?,
+        };
+        let o = &self.objs[i];
+        if o.mesh.is_none() {
+            return Err(format!("{} is a {:?}, not a mesh; materials go on meshes", o.name, o.kind));
+        }
+        Ok(o.name.clone())
+    }
+
+    pub fn assign_material(&mut self, object: &str, material: &str) -> Result<String, String> {
+        self.assign.assign(object, material).map_err(|e| format!("assign: {:?}", e))?;
+        Ok(format!("{} is now {}", object, material))
+    }
+
+    /// Shading surface of an object (its material, or the default grey).
+    pub fn surface_of(&self, name: &str) -> Surface {
+        self.assign.material_of(name).ok().and_then(|m| self.surfaces.get(m)).copied().unwrap_or_else(Surface::grey)
+    }
+
     pub fn context(&self) -> String {
         let objs: Vec<String> = self
             .objs
@@ -531,11 +601,22 @@ impl SceneState {
             .enumerate()
             .map(|(i, o)| {
                 let mark = if self.selected == Some(i) { "*" } else if self.prev_selected == Some(i) { "+" } else { "" };
-                let mesh = o.mesh.as_ref().map(|m| format!(", {} verts {} faces{}", m.verts.len(), m.faces.len(), if m.is_closed() { " closed" } else { "" })).unwrap_or_default();
+                let mat = self.assign.material_of(&o.name).map(|m| format!(", material {}", m)).unwrap_or_default();
+                let mesh = o.mesh.as_ref().map(|m| format!(", {} verts {} faces{}{}", m.verts.len(), m.faces.len(), if m.is_closed() { " closed" } else { "" }, mat)).unwrap_or_default();
                 format!("{}{} ({:?} at {:.1},{:.1},{:.1} rotY {:.0} scale {:.2}{})", mark, o.name, o.kind, o.pos[0], o.pos[1], o.pos[2], o.rot_y, o.scale, mesh)
             })
             .collect();
-        format!("3D: tool {}, viewport {}, objects (* selected, + previous selection = second operand for boolean/bridge): {}", self.gizmo.label(), self.shading.label(), objs.join("; "))
+        let arena = match &self.arena {
+            Some(a) => {
+                let bodies: Vec<String> = a.bodies.iter().map(|b| format!("{} [{}] {:.0} kg {:.1} K {}{} v=({:.2},{:.2},{:.2})", b.name, b.material, b.mass, b.temp, b.phase.label(), if b.vaporised { " vaporised" } else { "" }, b.vel[0], b.vel[1], b.vel[2])).collect();
+                let e = a.energy();
+                let l = &a.ledger;
+                format!("running {} t={:.2}s: {}. Energy: KE {:.1} J, PE {:.1} J, internal {:.1} J; heaters in {:.1} J, air/radiation {:+.1} J, drag {:+.1} J, impacts→heat {:.1} J, conducted {:.1} J, residual {:+.3} J", if self.arena_playing { "playing" } else { "paused" }, a.time, bodies.join("; "), e.kinetic, e.potential, e.internal, l.heater_in, l.exchange_in, l.drag_work, l.dissipated, l.conducted, a.energy_residual())
+            }
+            None => "not running".into(),
+        };
+        let e = &self.arena_env;
+        format!("3D: tool {}, viewport {}, objects (* selected, + previous selection = second operand for boolean/bridge): {}\nPhysics arena: environment {} (g {:.3} m/s², air {:.3} kg/m³, {:.0} Pa, {:.1} K, wind {:?}); {}", self.gizmo.label(), self.shading.label(), objs.join("; "), e.name, e.gravity, e.air_density, e.pressure, e.temperature, e.wind, arena)
     }
 
     fn light_pos(&self) -> V3 {
@@ -559,7 +640,11 @@ impl SceneState {
         }
         let light = self.light_pos();
         let acc = [accent.r(), accent.g(), accent.b()];
-        for (i, o) in self.objs.iter().enumerate() {
+        // opaque objects first, transparent (glass, water) last so they blend over them
+        let mut order: Vec<usize> = (0..self.objs.len()).collect();
+        order.sort_by_key(|&i| (self.objs[i].mesh.is_some() && self.surface_of(&self.objs[i].name).transmission > 0.0) as u8);
+        for i in order {
+            let o = &self.objs[i];
             if !o.visible {
                 continue;
             }
@@ -568,11 +653,10 @@ impl SceneState {
             let col = if sel { [214, 214, 220] } else { [212, 212, 216] };
             match (&o.kind, o.world_mesh()) {
                 (_, Some(m)) => {
-                    let base = if sel {
-                        [(MESH_GREY[0] as u16 * 3 / 5 + acc[0] as u16 * 2 / 5) as u8, (MESH_GREY[1] as u16 * 3 / 5 + acc[1] as u16 * 2 / 5) as u8, (MESH_GREY[2] as u16 * 3 / 5 + acc[2] as u16 * 2 / 5) as u8]
-                    } else {
-                        MESH_GREY
-                    };
+                    let surf = self.surface_of(&o.name);
+                    let has_mat = self.assign.material_of(&o.name).is_ok();
+                    // selection: tint toward the accent (lighter for materials so their colour still reads)
+                    let tint = sel.then_some((acc, if has_mat { 0.18 } else { 0.4 }));
                     let wire = if sel {
                         Some([acc[0], acc[1], acc[2], 255])
                     } else if second {
@@ -588,7 +672,7 @@ impl SceneState {
                             f.world_line(&cam, m.verts[u], m.verts[v], wc);
                         }
                     } else {
-                        f.mesh(&cam, &m, base, light, ((i as u32) + 1) << 16, wire);
+                        f.mesh_surface(&cam, &m, &surf, light, ((i as u32) + 1) << 16, wire, tint);
                     }
                 }
                 (Kind::Joint, None) => {
@@ -700,6 +784,7 @@ impl SceneState {
                 }
             }
         });
+        self.arena_tools(ui, p, bus);
         theme::card(ui, p, self.gizmo.label(), |ui| {
             ui.label(theme::muted(p, self.gizmo.hint()));
             match self.gizmo {
@@ -904,6 +989,99 @@ impl SceneState {
         painter.text(rect.min + Vec2::new(SP_MD, SP_MD), egui::Align2::LEFT_TOP, format!("Perspective  ·  {} objects  ·  {} tool  ·  {}", self.objs.len(), self.gizmo.label(), self.shading.label()), egui::FontId::proportional(12.0), p.muted);
     }
 
+    fn arena_tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
+        theme::card(ui, p, "Physics Arena", |ui| {
+            let cur = self.arena_env.name.clone();
+            egui::ComboBox::from_id_salt("arena_env").width(ui.available_width() - 8.0).selected_text(&cur).show_ui(ui, |ui| {
+                for k in Environment::PRESETS {
+                    let e = Environment::preset(k).unwrap_or_else(Environment::earth);
+                    if ui.selectable_label(cur == e.name, &e.name).clicked() {
+                        bus.push(AppCommand::ArenaEnv { preset: Some(k.into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None });
+                    }
+                }
+            });
+            let e = self.arena_env.clone();
+            let (mut g, mut rho, mut tc, mut wx) = (e.gravity, e.air_density, e.temperature - 273.15, e.wind[0]);
+            egui::Grid::new("arena_env_grid").num_columns(2).spacing([SP_SM, 4.0]).show(ui, |ui| {
+                ui.label(theme::muted(p, "Gravity"));
+                ui.add(egui::DragValue::new(&mut g).speed(0.05).range(0.0..=50.0).suffix(" m/s²").max_decimals(3));
+                ui.end_row();
+                ui.label(theme::muted(p, "Air density"));
+                ui.add(egui::DragValue::new(&mut rho).speed(0.01).range(0.0..=50.0).suffix(" kg/m³").max_decimals(3));
+                ui.end_row();
+                ui.label(theme::muted(p, "Temperature"));
+                ui.add(egui::DragValue::new(&mut tc).speed(1.0).range(-273.15..=5000.0).suffix(" °C").max_decimals(1));
+                ui.end_row();
+                ui.label(theme::muted(p, "Wind x"));
+                ui.add(egui::DragValue::new(&mut wx).speed(0.1).range(-100.0..=100.0).suffix(" m/s").max_decimals(1));
+                ui.end_row();
+            });
+            if g != e.gravity || rho != e.air_density || tc != e.temperature - 273.15 || wx != e.wind[0] {
+                bus.push(AppCommand::ArenaEnv { preset: None, gravity: (g != e.gravity).then_some(g), air_density: (rho != e.air_density).then_some(rho), temperature_c: (tc != e.temperature - 273.15).then_some(tc), pressure_kpa: None, wind: (wx != e.wind[0]).then_some([wx, e.wind[1], e.wind[2]]) });
+            }
+            ui.label(theme::muted(p, &format!("Pressure {:.1} kPa", e.pressure / 1000.0)));
+            ui.horizontal(|ui| {
+                let label = if self.arena_playing { "Pause" } else { "Play" };
+                if ui.add(theme::primary_button(p, label)).clicked() {
+                    bus.push(AppCommand::ArenaPlay { playing: Some(!self.arena_playing) });
+                }
+                if ui.add(theme::toggle_button(p, "Step", false)).on_hover_text("Advance 1/60 s (4 fixed steps of 1/240 s)").clicked() {
+                    bus.push(AppCommand::ArenaStep { steps: Some(4) });
+                }
+                if ui.add(theme::toggle_button(p, "Reset", false)).clicked() {
+                    bus.push(AppCommand::ArenaReset);
+                }
+            });
+            match &self.arena {
+                Some(a) => {
+                    ui.label(theme::muted(p, &format!("t = {:.2} s  ·  {} bodies  ·  KE {:.1} J", a.time, a.bodies.iter().filter(|b| !b.vaporised).count(), a.total_kinetic())));
+                    energy_ledger(ui, p, a);
+                    for (t, ev) in a.events.log.iter().rev().take(4) {
+                        ui.label(egui::RichText::new(format!("{:.2}s  {}", t, ev)).size(10.5).color(p.warn));
+                    }
+                }
+                None => {
+                    ui.label(theme::muted(p, "Play drops every visible mesh under these conditions. Mass = material density × volume."));
+                }
+            }
+        });
+    }
+
+    fn physics_card(&self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>, i: usize) {
+        let o = &self.objs[i];
+        let name = o.name.clone();
+        let props = self.phys.get(&name).copied().unwrap_or_default();
+        theme::card(ui, p, "Physics", |ui| {
+            if let Some(b) = self.arena.as_ref().and_then(|a| a.body(&name)) {
+                theme::kv(ui, p, "Material", b.material.clone());
+                theme::kv(ui, p, "Mass", format!("{:.3} kg", b.mass));
+                theme::kv(ui, p, "Temperature", format!("{:.1} K ({:.1} °C)", b.temp, b.temp - 273.15));
+                theme::kv(ui, p, "Phase", if b.vaporised { "vaporised".to_string() } else { b.phase.label().to_string() });
+                theme::kv(ui, p, "Speed", format!("{:.2} m/s", (b.vel[0] * b.vel[0] + b.vel[1] * b.vel[1] + b.vel[2] * b.vel[2]).sqrt()));
+            } else {
+                ui.label(theme::muted(p, "Not simulated yet. Press Play in Physics Arena."));
+            }
+            let mut tc = props.temp.map(|t| t - 273.15).unwrap_or(self.arena_env.temperature - 273.15);
+            let mut heat = props.heater;
+            let mut fixed = props.fixed;
+            egui::Grid::new("phys_grid").num_columns(2).spacing([SP_SM, 4.0]).show(ui, |ui| {
+                ui.label(theme::muted(p, "Start temp"));
+                ui.add(egui::DragValue::new(&mut tc).speed(1.0).range(-273.15..=6000.0).suffix(" °C").max_decimals(1));
+                ui.end_row();
+                ui.label(theme::muted(p, "Heater"));
+                ui.add(egui::DragValue::new(&mut heat).speed(10.0).range(-1e7..=1e8).suffix(" W").max_decimals(0));
+                ui.end_row();
+                ui.label(theme::muted(p, "Pinned"));
+                ui.checkbox(&mut fixed, "");
+                ui.end_row();
+            });
+            let t0 = props.temp.map(|t| t - 273.15).unwrap_or(self.arena_env.temperature - 273.15);
+            if tc != t0 || heat != props.heater || fixed != props.fixed {
+                bus.push(AppCommand::ArenaBody { object: Some(name.clone()), temperature_c: (tc != t0).then_some(tc), heater_w: (heat != props.heater).then_some(heat), fixed: (fixed != props.fixed).then_some(fixed), velocity: None });
+            }
+        });
+    }
+
     pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Outliner", |ui| {
             let mut pick = None;
@@ -1005,6 +1183,42 @@ impl SceneState {
                     });
                 });
             });
+        }
+        if self.objs[i].mesh.is_some() {
+            let name = self.objs[i].name.clone();
+            let cur = self.assign.material_of(&name).ok().map(|s| s.to_string());
+            theme::card(ui, p, "Material", |ui| {
+                let mut choice: Option<String> = None;
+                egui::ComboBox::from_id_salt("mat_pick").width(ui.available_width() - 8.0).selected_text(cur.clone().unwrap_or_else(|| "Default grey".into())).show_ui(ui, |ui| {
+                    let mut names: Vec<String> = self.surfaces.keys().cloned().collect();
+                    for pr in obs_rust_bitstream::material_pbr::presets() {
+                        if !names.iter().any(|n| n == pr.name) {
+                            names.push(pr.key.to_string());
+                        }
+                    }
+                    for n in names {
+                        if ui.selectable_label(cur.as_deref() == Some(n.as_str()), &n).clicked() {
+                            choice = Some(n);
+                        }
+                    }
+                });
+                if let Some(m) = choice {
+                    bus.push(AppCommand::MaterialAssign { object: Some(name.clone()), material: m });
+                }
+                if let Some(m) = &cur {
+                    if let Some(sf) = self.surfaces.get(m) {
+                        theme::kv(ui, p, "Metalness", format!("{:.2}", sf.metalness));
+                        theme::kv(ui, p, "Roughness", format!("{:.2}", sf.roughness));
+                        theme::kv(ui, p, "IOR", format!("{:.3}", sf.ior));
+                    }
+                }
+                if ui.add(theme::toggle_button(p, "Open Materials Lab", false)).clicked() {
+                    bus.push(AppCommand::SwitchMode { mode: "materials".into() });
+                }
+            });
+        }
+        if self.objs[i].mesh.is_some() {
+            self.physics_card(ui, p, bus, i);
         }
         theme::card(ui, p, "Animation · Y position", |ui| {
             let o = &self.objs[i];
@@ -1120,3 +1334,25 @@ mod tests {
         assert_eq!(w.ids.iter().filter(|&&i| i != 0).count(), 0, "wireframe draws no faces");
     }
 }
+
+/// Energy books of the running arena: stocks change by exactly the flows.
+fn energy_ledger(ui: &mut egui::Ui, p: &Palette, a: &obs_rust_bitstream::arena::Arena) {
+    let Some(e0) = a.ledger.start else { return };
+    let e = a.energy();
+    let l = &a.ledger;
+    let kj = |j: f64| if j.abs() >= 1e6 { format!("{:+.3} MJ", j / 1e6) } else { format!("{:+.2} kJ", j / 1e3) };
+    egui::CollapsingHeader::new(egui::RichText::new("Energy ledger").size(11.0).color(p.text)).id_salt("energy-ledger").default_open(true).show(ui, |ui| {
+        let row = |ui: &mut egui::Ui, k: &str, v: String| theme::kv(ui, p, k, v);
+        row(ui, "Kinetic", kj(e.kinetic));
+        row(ui, "Potential", kj(e.potential));
+        row(ui, "Δ Thermal", kj(e.internal - (e0 - a.ledger_start_mech())));
+        row(ui, "Heaters in", kj(l.heater_in));
+        row(ui, "Air / radiation", kj(l.exchange_in));
+        row(ui, "Drag work", kj(l.drag_work));
+        row(ui, "Impacts → heat", kj(l.dissipated));
+        row(ui, "Conducted", kj(l.conducted));
+        let r = a.energy_residual();
+        ui.label(egui::RichText::new(format!("Residual {:+.3} J (stocks − start − flows)", r)).size(10.5).color(if r.abs() < 1e-3 * (1.0 + e.kinetic + l.heater_in.abs() + l.exchange_in.abs()) { p.success } else { p.warn }));
+    });
+}
+

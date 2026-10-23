@@ -1,0 +1,2 @@
+{"cmd":"cpu_heat_sweep","program":"fibonacci","clock_mhz":2000}
+{"cmd":"cpu_run","temperature_c":97,"clock_mhz":2000}

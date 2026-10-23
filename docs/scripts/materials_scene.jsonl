@@ -1,0 +1,18 @@
+# Five measured materials on five cubes (run: SeraphinaStudio --run docs/scripts/materials_scene.jsonl)
+{"cmd":"material_assign","object":"cube1","material":"copper"}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[-2.2,0.5,0.6]}
+{"cmd":"material_assign","material":"gold"}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[-1.0,0.5,2.2]}
+{"cmd":"material_assign","material":"glass"}
+{"cmd":"scene_add","kind":"cylinder"}
+{"cmd":"scene_transform","translate":[1.4,0.5,1.8]}
+{"cmd":"material_assign","material":"iron"}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[-3.4,0.5,-1.4]}
+{"cmd":"material_assign","material":"graphite"}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[1.6,0.5,-1.8]}
+{"cmd":"material_assign","material":"aluminum"}
+{"cmd":"scene_select","object":"cube1"}

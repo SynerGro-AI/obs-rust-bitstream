@@ -70,7 +70,7 @@ fn items(tab: usize) -> Vec<Item> {
             Btn { icon: ic::VIDEO_CAMERA, label: "Camera", tip: "Create a camera", cmds: || vec![AppCommand::SceneAdd { kind: "camera".into() }], gizmo: None },
             Sep,
             Soon { icon: ic::IMAGE, label: "Render" },
-            Soon { icon: ic::PALETTE, label: "Materials" },
+            Btn { icon: ic::PALETTE, label: "Materials", tip: "Open the Materials Lab (periodic table, composition builder, PBR materials)", cmds: || vec![AppCommand::SwitchMode { mode: "materials".into() }], gizmo: None },
             Soon { icon: ic::SUN_HORIZON, label: "Sky Dome" },
         ],
     }

@@ -1,0 +1,14 @@
+# Hammer and feather: copper cube and graphite sheet dropped on the Moon, ice block with a heater on the side
+{"cmd":"material_assign","object":"cube1","material":"copper"}
+{"cmd":"scene_transform","object":"cube1","translate":[0,2.6,0]}
+{"cmd":"scene_add","kind":"cube"}
+{"cmd":"scene_transform","translate":[-2.0,3.2,0.5],"scale":0.6}
+{"cmd":"material_assign","material":"gold"}
+{"cmd":"scene_add","kind":"cylinder"}
+{"cmd":"scene_transform","translate":[1.8,2.0,1.2],"scale":0.8}
+{"cmd":"material_assign","material":"aluminum"}
+{"cmd":"scene_add","kind":"plane"}
+{"cmd":"scene_transform","translate":[0,0,0],"scale":6}
+{"cmd":"material_assign","material":"iron"}
+{"cmd":"arena_env","preset":"moon"}
+{"cmd":"scene_select","object":"cube1"}

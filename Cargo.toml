@@ -2,6 +2,7 @@
 name = "obs-rust-bitstream"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 description = "Public foundation for the OBS Studio rewrite in Rust. Perfect bitstream port with Position trait (wrap vs no-wrap is type-level)."
 license = "GPL-2.0-or-later"
 repository = "https://github.com/SynerGro-AI/obs-rust-bitstream"

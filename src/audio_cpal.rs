@@ -14,6 +14,7 @@ mod imp {
     use super::*;
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use std::sync::{Arc, Mutex};
+    use crate::audio_capture::AudioSamples;
 
     pub struct CpalAudio {
         rate: u32,
@@ -98,13 +99,26 @@ pub fn open_cpal(rate: u32, channels: u16) -> Result<Box<dyn AudioCapture>, Stri
 mod tests {
     use super::*;
 
+    #[cfg(not(feature = "audio"))]
     #[test]
     fn disabled_is_clear() {
+        let e = open_cpal(48000, 1).err().expect("no backend without the feature");
+        assert!(e.contains("not enabled") && e.contains("--features audio"), "{}", e);
+    }
+
+    /// With the feature on, the cpal backend really runs: on a machine with
+    /// no input device (CI) it fails with a device/stream error, never the
+    /// "not enabled" stub.
+    #[cfg(feature = "audio")]
+    #[test]
+    fn enabled_backend_is_compiled_in() {
         match open_cpal(48000, 1) {
-            Ok(_) => {}
-            Err(e) => {
-                assert!(e.contains("cpal") || e.contains("not enabled") || e.contains("feature"));
+            Ok(mut a) => {
+                assert_eq!(a.rate(), 48000);
+                assert_eq!(a.channels(), 1);
+                let _ = a.samples(16);
             }
+            Err(e) => assert!(!e.contains("not enabled"), "audio feature built the stub: {}", e),
         }
     }
 }

@@ -32,10 +32,10 @@ pub struct PsdLayerPixels {
 
 impl PsdLayerPixels {
     pub fn width(&self) -> u32 {
-        (self.right - self.left).max(0) as u32
+        (self.right as i64 - self.left as i64).clamp(0, u32::MAX as i64) as u32
     }
     pub fn height(&self) -> u32 {
-        (self.bottom - self.top).max(0) as u32
+        (self.bottom as i64 - self.top as i64).clamp(0, u32::MAX as i64) as u32
     }
 
     /// A pixel layer from a full-canvas RGBA buffer; the stored rect is
@@ -414,6 +414,27 @@ fn read_channel(raw: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> {
     }
 }
 
+/// Largest side Photoshop allows in a PSD (PSB goes beyond; unsupported).
+pub const MAX_SIDE: u32 = 30_000;
+/// Largest pixel count we allocate for one image or layer (2²⁸ px = 1 GiB RGBA).
+pub const MAX_PIXELS: u64 = 1 << 28;
+
+/// Most pixels `len` bytes of channel data can decode to: PackBits needs
+/// at least 2 bytes per 128-pixel run, raw needs 1 byte per pixel.
+fn max_decodable(len: usize) -> u64 {
+    (len as u64).saturating_mul(64)
+}
+
+fn check_dims(what: &str, w: u64, h: u64) -> Result<(), String> {
+    if w > MAX_SIDE as u64 || h > MAX_SIDE as u64 {
+        return Err(format!("{} is {} × {} px; the PSD limit is {} px per side", what, w, h, MAX_SIDE));
+    }
+    if w.saturating_mul(h) > MAX_PIXELS {
+        return Err(format!("{} is {} × {} px, more than the {} px this app will allocate", what, w, h, MAX_PIXELS));
+    }
+    Ok(())
+}
+
 impl PsdPixels {
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let mut r = Rd { b, p: 0 };
@@ -437,16 +458,23 @@ impl PsdPixels {
         if mode != 3 {
             return Err(format!("colour mode {} isn't supported (RGB only)", mode));
         }
+        if width == 0 || height == 0 {
+            return Err("the document has zero width or height".into());
+        }
+        check_dims("the document", width as u64, height as u64)?;
+        if channels == 0 || channels > 56 {
+            return Err(format!("{} channels (a PSD has 1-56)", channels));
+        }
         let cm = r.u32()? as usize;
         r.take(cm)?;
         let ir = r.u32()? as usize;
         r.take(ir)?;
         let lmi_len = r.u32()? as usize;
-        let lmi_end = r.p + lmi_len;
+        let lmi_end = r.p.saturating_add(lmi_len);
         let mut layers = Vec::new();
         if lmi_len >= 4 {
             let li_len = r.u32()? as usize;
-            let li_end = r.p + li_len;
+            let li_end = r.p.saturating_add(li_len);
             if li_len >= 2 {
                 let count = (r.u16()? as i16).unsigned_abs() as usize;
                 let mut recs = Vec::with_capacity(count);
@@ -469,7 +497,7 @@ impl PsdPixels {
                     let flags = r.u8()?;
                     let _filler = r.u8()?;
                     let extra_len = r.u32()? as usize;
-                    let extra_end = r.p + extra_len;
+                    let extra_end = r.p.saturating_add(extra_len);
                     let mask_len = r.u32()? as usize;
                     r.take(mask_len)?;
                     let br_len = r.u32()? as usize;
@@ -514,6 +542,12 @@ impl PsdPixels {
                 }
                 for (mut l, chans) in recs {
                     let (w, h) = (l.width() as usize, l.height() as usize);
+                    check_dims(&format!("layer '{}'", l.name), w as u64, h as u64)?;
+                    // allocate only what the file's channel data could fill
+                    let data: usize = chans.iter().map(|c| c.1).fold(0usize, |a, b| a.saturating_add(b));
+                    if (w * h) as u64 > max_decodable(data) || data > r.b.len().saturating_sub(r.p) {
+                        return Err(format!("layer '{}' claims {} × {} px but carries only {} bytes of pixel data", l.name, w, h, data));
+                    }
                     let mut rgba = vec![255u8; w * h * 4];
                     for (id, len) in chans {
                         let raw = r.take(len)?;
@@ -543,6 +577,9 @@ impl PsdPixels {
         let merged = (|| -> Result<Vec<u8>, String> {
             let comp = r.u16()?;
             let (w, h) = (width as usize, height as usize);
+            if (w * h) as u64 > max_decodable(r.b.len().saturating_sub(r.p)) {
+                return Err("merged image is truncated".into());
+            }
             let mut rgba = vec![255u8; w * h * 4];
             let nch = channels.min(4);
             match comp {
@@ -587,6 +624,66 @@ impl PsdPixels {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 26-byte header + empty sections claiming `w` × `h` px (the audit's
+    /// probe: this used to allocate w·h·4 bytes before reading any pixels).
+    fn crafted_header(w: u32, h: u32, channels: u16) -> Vec<u8> {
+        let mut b = b"8BPS".to_vec();
+        b.extend(1u16.to_be_bytes());
+        b.extend([0u8; 6]);
+        b.extend(channels.to_be_bytes());
+        b.extend(h.to_be_bytes());
+        b.extend(w.to_be_bytes());
+        b.extend(8u16.to_be_bytes());
+        b.extend(3u16.to_be_bytes());
+        b.extend(0u32.to_be_bytes()); // colour mode data
+        b.extend(0u32.to_be_bytes()); // image resources
+        b.extend(0u32.to_be_bytes()); // layer and mask info
+        b.extend(0u16.to_be_bytes()); // merged: raw
+        b
+    }
+
+    #[test]
+    fn crafted_psd_dimensions_are_rejected_without_allocating() {
+        // 70 000 × 70 000 (19.6 GB of RGBA): over the side limit
+        let e = PsdPixels::parse(&crafted_header(70_000, 70_000, 3)).unwrap_err();
+        assert!(e.contains("limit"), "{}", e);
+        // within the side limit but over the pixel budget
+        let e = PsdPixels::parse(&crafted_header(30_000, 30_000, 3)).unwrap_err();
+        assert!(e.contains("allocate"), "{}", e);
+        // plausible size, but the file has no pixel data: no 400 MB allocation
+        let e = PsdPixels::parse(&crafted_header(10_000, 10_000, 3)).map(|p| p.merged.is_none());
+        assert_eq!(e, Ok(true));
+        assert!(PsdPixels::parse(&crafted_header(0, 10, 3)).is_err());
+        assert!(PsdPixels::parse(&crafted_header(10, 10, 0)).is_err());
+    }
+
+    #[test]
+    fn crafted_layer_rect_is_rejected() {
+        // one layer record whose rect spans i32::MIN..i32::MAX with 0 bytes of data
+        let mut b = crafted_header(4, 4, 3);
+        b.truncate(b.len() - 6); // drop the empty layer section + merged
+        let mut rec = Vec::new();
+        rec.extend(1u16.to_be_bytes()); // layer count
+        for v in [i32::MIN, i32::MIN, i32::MAX, i32::MAX] {
+            rec.extend(v.to_be_bytes());
+        }
+        rec.extend(1u16.to_be_bytes()); // one channel
+        rec.extend(0u16.to_be_bytes());
+        rec.extend(0u32.to_be_bytes());
+        rec.extend(b"8BIMnorm");
+        rec.extend([255u8, 0, 0, 0]);
+        rec.extend(12u32.to_be_bytes()); // extra data
+        rec.extend(0u32.to_be_bytes()); // mask
+        rec.extend(0u32.to_be_bytes()); // blending ranges
+        rec.extend([0u8, 0, 0, 0]); // empty Pascal name, padded to 4
+        let li = rec.len() as u32;
+        b.extend((li + 4).to_be_bytes());
+        b.extend(li.to_be_bytes());
+        b.extend(rec);
+        let e = PsdPixels::parse(&b).unwrap_err();
+        assert!(e.contains("limit") || e.contains("allocate"), "{}", e);
+    }
 
     #[test]
     fn packbits_roundtrip() {

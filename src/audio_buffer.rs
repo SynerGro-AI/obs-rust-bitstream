@@ -7,7 +7,7 @@
 //!
 //! Differential: total bytes match audio_size.
 
-use crate::audio_format::{AudioFormat, SpeakerLayout, audio_size};
+use crate::audio_format::{audio_size, AudioFormat, SpeakerLayout};
 #[cfg(test)]
 use crate::diff::assert_equal;
 

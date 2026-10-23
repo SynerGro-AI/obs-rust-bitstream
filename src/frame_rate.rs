@@ -20,7 +20,10 @@ impl MediaFps {
         if numerator == 0 || denominator == 0 {
             None
         } else {
-            Some(Self { numerator, denominator })
+            Some(Self {
+                numerator,
+                denominator,
+            })
         }
     }
 

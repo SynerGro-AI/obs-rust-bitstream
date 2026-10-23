@@ -91,9 +91,8 @@ impl TextOverlay {
         if let (Some(dst), Some(src)) = (frame.planes.get_mut(0), tmp.planes.get(0)) {
             for (d, s) in dst.iter_mut().zip(src.iter()) {
                 if *s != *d {
-                    let blended = ((*s as u16 * opacity as u16)
-                        + (*d as u16 * (255 - opacity as u16)))
-                        / 255;
+                    let blended =
+                        ((*s as u16 * opacity as u16) + (*d as u16 * (255 - opacity as u16))) / 255;
                     *d = blended as u8;
                 }
             }
@@ -119,7 +118,7 @@ mod tests {
         f.planes[0].fill(64);
         TextOverlay::draw(&mut f, 0, 0, "A", 255).unwrap();
         assert_eq!(f.planes[0][1], 255); // glyph pixel
-        assert_eq!(f.planes[0][0], 64);  // background kept
+        assert_eq!(f.planes[0][0], 64); // background kept
     }
 
     #[test]

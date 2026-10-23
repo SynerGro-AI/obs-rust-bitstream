@@ -23,13 +23,7 @@ impl TimestampStamp {
 
     /// Format a date and time as YYYY-MM-DD HH:MM:SS.
     pub fn format_full(year: u32, month: u32, day: u32, secs: u32) -> String {
-        format!(
-            "{:04}-{:02}-{:02} {}",
-            year,
-            month,
-            day,
-            Self::format(secs)
-        )
+        format!("{:04}-{:02}-{:02} {}", year, month, day, Self::format(secs))
     }
 
     /// Format a frame index and a total.
@@ -83,11 +77,7 @@ impl TimestampStamp {
     }
 
     /// Stamp at the bottom-right corner.
-    pub fn stamp_corner(
-        frame: &mut VideoFrame,
-        secs: u32,
-        lum: u8,
-    ) -> Result<u32, DrawError> {
+    pub fn stamp_corner(frame: &mut VideoFrame, secs: u32, lum: u8) -> Result<u32, DrawError> {
         let text = Self::format(secs);
         let width = text.len() as u32 * 6;
         let x = frame.width.saturating_sub(width + 2);
@@ -134,10 +124,7 @@ mod tests {
         let n = TimestampStamp::now();
         assert_eq!(n.len(), 8);
         assert!(n.contains(':'));
-        assert_eq!(
-            TimestampStamp::format_frame(60, 3),
-            "00:01:00 f3"
-        );
+        assert_eq!(TimestampStamp::format_frame(60, 3), "00:01:00 f3");
         assert_eq!(TimestampStamp::format_progress(3, 10), "3/10");
         assert_eq!(TimestampStamp::lum("white"), 255);
         assert_eq!(TimestampStamp::lum("black"), 0);

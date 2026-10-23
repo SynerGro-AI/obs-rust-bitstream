@@ -49,7 +49,9 @@ impl DisplayRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut DisplayContext, DisplayRegistryError> {
-        self.displays.get_mut(name).ok_or(DisplayRegistryError::Missing)
+        self.displays
+            .get_mut(name)
+            .ok_or(DisplayRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,8 +82,14 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = DisplayRegistry::new();
         r.add("a", 1, 1).unwrap();
-        assert!(matches!(r.add("a", 1, 1), Err(DisplayRegistryError::Duplicate)));
-        assert!(matches!(r.add("", 1, 1), Err(DisplayRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", 1, 1),
+            Err(DisplayRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", 1, 1),
+            Err(DisplayRegistryError::EmptyName)
+        ));
     }
 
     #[test]

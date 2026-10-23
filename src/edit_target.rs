@@ -75,8 +75,26 @@ mod tests {
         let g = GroupSet::new();
         let n = EditApply::set_opacity(&mut s, &g, &EditTarget::Layer("A".into()), 0.5);
         assert_eq!(n, 1);
-        assert!((s.layers().iter().find(|l| l.name() == "A").unwrap().opacity() - 0.5).abs() < 0.01);
-        assert!((s.layers().iter().find(|l| l.name() == "B").unwrap().opacity() - 1.0).abs() < 0.01);
+        assert!(
+            (s.layers()
+                .iter()
+                .find(|l| l.name() == "A")
+                .unwrap()
+                .opacity()
+                - 0.5)
+                .abs()
+                < 0.01
+        );
+        assert!(
+            (s.layers()
+                .iter()
+                .find(|l| l.name() == "B")
+                .unwrap()
+                .opacity()
+                - 1.0)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
@@ -91,14 +109,26 @@ mod tests {
         g.add_member("Group 1", "B").unwrap();
         let n = EditApply::set_opacity(&mut s, &g, &EditTarget::Group("Group 1".into()), 0.3);
         assert_eq!(n, 2);
-        assert!((s.layers().iter().find(|l| l.name() == "C").unwrap().opacity() - 1.0).abs() < 0.01);
+        assert!(
+            (s.layers()
+                .iter()
+                .find(|l| l.name() == "C")
+                .unwrap()
+                .opacity()
+                - 1.0)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
     fn missing_is_zero() {
         let mut s = LayerStack::new();
         let g = GroupSet::new();
-        assert_eq!(EditApply::set_opacity(&mut s, &g, &EditTarget::Layer("Nope".into()), 0.5), 0);
+        assert_eq!(
+            EditApply::set_opacity(&mut s, &g, &EditTarget::Layer("Nope".into()), 0.5),
+            0
+        );
     }
 
     #[test]

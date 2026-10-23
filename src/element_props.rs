@@ -62,12 +62,16 @@ pub struct ElementProps {
 impl ElementProps {
     /// Electrical conductivity (S/m) from resistivity.
     pub fn electrical_conductivity(&self) -> Option<f64> {
-        self.electrical_resistivity.filter(|r| *r > 0.0).map(|r| 1.0 / r)
+        self.electrical_resistivity
+            .filter(|r| *r > 0.0)
+            .map(|r| 1.0 / r)
     }
 }
 
 pub fn props(z: u32) -> Option<&'static ElementProps> {
-    z.checked_sub(1).and_then(|i| PROPS.get(i as usize)).filter(|p| p.z == z)
+    z.checked_sub(1)
+        .and_then(|i| PROPS.get(i as usize))
+        .filter(|p| p.z == z)
 }
 
 static PROPS: &[ElementProps] = &[
@@ -216,7 +220,10 @@ mod tests {
     #[test]
     fn spot_check_known_values() {
         // CRC Handbook room-temperature values
-        assert!(p("Cu").electrical_resistivity.map(|r| (r - 1.68e-8).abs() < 0.05e-8).unwrap());
+        assert!(p("Cu")
+            .electrical_resistivity
+            .map(|r| (r - 1.68e-8).abs() < 0.05e-8)
+            .unwrap());
         assert!(close(p("Cu").thermal_conductivity, 401.0, 0.02));
         assert!(close(p("Al").specific_heat, 0.897, 0.02));
         assert!(close(p("Fe").youngs_gpa, 211.0, 0.03));

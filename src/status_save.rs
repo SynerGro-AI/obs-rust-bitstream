@@ -31,15 +31,15 @@ impl StatusSave {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::av_status::AvStatus;
     use crate::caption_status::CaptionStatus;
     use crate::encoder_context::EncoderType;
     use crate::keyframe_status::KeyframeStatus;
     use crate::output_pause::OutputPause;
-use crate::av_status::AvStatus;
-use crate::service_status::ServiceStatus;
     use crate::path_status::PathStatus;
     use crate::reconnect::Reconnect;
     use crate::roi_status::RoiStatus;
+    use crate::service_status::ServiceStatus;
 
     fn status() -> FullStatus {
         FullStatus::from(
@@ -63,8 +63,16 @@ use crate::service_status::ServiceStatus;
             },
             &Reconnect::new(),
             &OutputPause::new(),
-            &AvStatus { pixels: 0, rate: 0, channels: 0, matches: true },
-            &ServiceStatus { name: String::new(), id: String::new() },
+            &AvStatus {
+                pixels: 0,
+                rate: 0,
+                channels: 0,
+                matches: true,
+            },
+            &ServiceStatus {
+                name: String::new(),
+                id: String::new(),
+            },
         )
     }
 

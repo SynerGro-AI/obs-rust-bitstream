@@ -15,12 +15,7 @@ pub struct MenuHistory;
 impl MenuHistory {
     /// Click and record. Undo/Redo use the history.
     /// Returns true if the stack or history changed.
-    pub fn click(
-        stack: &mut LayerStack,
-        history: &mut History,
-        menu: PsMenu,
-        item: &str,
-    ) -> bool {
+    pub fn click(stack: &mut LayerStack, history: &mut History, menu: PsMenu, item: &str) -> bool {
         match (menu, item) {
             (PsMenu::Edit, "Undo") => {
                 if let Some(name) = history.undo() {
@@ -68,7 +63,12 @@ mod tests {
     fn records_and_undoes() {
         let mut s = LayerStack::new();
         let mut h = History::new();
-        assert!(MenuHistory::click(&mut s, &mut h, PsMenu::Layer, "New Layer"));
+        assert!(MenuHistory::click(
+            &mut s,
+            &mut h,
+            PsMenu::Layer,
+            "New Layer"
+        ));
         assert_eq!(s.len(), 1);
         assert!(h.can_undo());
         assert!(MenuHistory::click(&mut s, &mut h, PsMenu::Edit, "Undo"));

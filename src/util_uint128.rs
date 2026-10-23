@@ -41,7 +41,10 @@ mod tests {
     #[test]
     fn add() {
         let a = U128 { low: 1, high: 0 };
-        let b = U128 { low: u64::MAX, high: 0 };
+        let b = U128 {
+            low: u64::MAX,
+            high: 0,
+        };
         let s = util_add128(a, b);
         assert_eq!(s.low, 0);
         assert_eq!(s.high, 1);

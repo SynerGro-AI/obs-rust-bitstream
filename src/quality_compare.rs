@@ -19,9 +19,13 @@ impl QualityCompare {
         high_qp: f32,
     ) -> Result<(usize, usize), H264Error> {
         let mut w_low = LiveWeights::new();
-        w_low.set("h264.qp", low_qp).map_err(|_| H264Error::Encode)?;
+        w_low
+            .set("h264.qp", low_qp)
+            .map_err(|_| H264Error::Encode)?;
         let mut w_high = LiveWeights::new();
-        w_high.set("h264.qp", high_qp).map_err(|_| H264Error::Encode)?;
+        w_high
+            .set("h264.qp", high_qp)
+            .map_err(|_| H264Error::Encode)?;
         let mut enc_low = H264Codec::new(frame.width, frame.height, &w_low)?;
         let mut enc_high = H264Codec::new(frame.width, frame.height, &w_high)?;
         let low = enc_low.encoded_size(frame)?;

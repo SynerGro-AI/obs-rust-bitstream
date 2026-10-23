@@ -88,7 +88,10 @@ impl JointHierarchy {
     }
 
     pub fn parent_of(&self, child: &str) -> Result<&str, JointError> {
-        self.parents.get(child).map(|s| s.as_str()).ok_or(JointError::Missing)
+        self.parents
+            .get(child)
+            .map(|s| s.as_str())
+            .ok_or(JointError::Missing)
     }
 
     pub fn get(&self, name: &str) -> Result<&Joint, JointError> {

@@ -36,7 +36,10 @@ mod tests {
             packets: 2,
             attempts: 0,
         };
-        assert_eq!(RtmpReconnectFile::attempts(&RtmpReconnectFile::write(&s)), Some(0));
+        assert_eq!(
+            RtmpReconnectFile::attempts(&RtmpReconnectFile::write(&s)),
+            Some(0)
+        );
     }
 
     #[test]
@@ -46,7 +49,10 @@ mod tests {
             packets: 0,
             attempts: 3,
         };
-        assert_eq!(RtmpReconnectFile::attempts(&RtmpReconnectFile::write(&s)), Some(3));
+        assert_eq!(
+            RtmpReconnectFile::attempts(&RtmpReconnectFile::write(&s)),
+            Some(3)
+        );
     }
 
     #[test]

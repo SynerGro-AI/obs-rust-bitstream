@@ -21,24 +21,47 @@ impl ToolOptions {
     pub fn for_tool(active: &ActiveTool) -> Vec<ToolOption> {
         match active.name() {
             "Brush" | "Pencil" | "Eraser" => vec![
-                ToolOption { name: "size", value: 20.0 },
-                ToolOption { name: "opacity", value: 100.0 },
-                ToolOption { name: "hardness", value: 50.0 },
+                ToolOption {
+                    name: "size",
+                    value: 20.0,
+                },
+                ToolOption {
+                    name: "opacity",
+                    value: 100.0,
+                },
+                ToolOption {
+                    name: "hardness",
+                    value: 50.0,
+                },
             ],
             "Clone Stamp" | "Healing Brush" | "Spot Healing" => vec![
-                ToolOption { name: "size", value: 20.0 },
-                ToolOption { name: "opacity", value: 100.0 },
+                ToolOption {
+                    name: "size",
+                    value: 20.0,
+                },
+                ToolOption {
+                    name: "opacity",
+                    value: 100.0,
+                },
             ],
             "Crop" => vec![
-                ToolOption { name: "ratio_w", value: 0.0 },
-                ToolOption { name: "ratio_h", value: 0.0 },
+                ToolOption {
+                    name: "ratio_w",
+                    value: 0.0,
+                },
+                ToolOption {
+                    name: "ratio_h",
+                    value: 0.0,
+                },
             ],
-            "Gradient" => vec![
-                ToolOption { name: "opacity", value: 100.0 },
-            ],
-            "Zoom" => vec![
-                ToolOption { name: "percent", value: 100.0 },
-            ],
+            "Gradient" => vec![ToolOption {
+                name: "opacity",
+                value: 100.0,
+            }],
+            "Zoom" => vec![ToolOption {
+                name: "percent",
+                value: 100.0,
+            }],
             _ => Vec::new(),
         }
     }

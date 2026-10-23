@@ -10,8 +10,8 @@
 use crate::ai::AiAssistant;
 use crate::blend::{Blend, BlendMode};
 use crate::color_balance::ColorBalance;
-use crate::inner_glow::InnerGlow;
 use crate::drop_shadow::DropShadow;
+use crate::inner_glow::InnerGlow;
 use crate::sharpen::Sharpen;
 use crate::tone_curves::Curves as ToneCurves;
 use crate::video_frame::VideoFrame;

@@ -56,7 +56,11 @@ impl SceneList {
     pub fn read_summaries<R: std::io::Read>(mut input: R) -> Result<Vec<String>, std::io::Error> {
         let mut buf = String::new();
         input.read_to_string(&mut buf)?;
-        Ok(buf.lines().filter(|l| !l.is_empty()).map(|s| s.to_string()).collect())
+        Ok(buf
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|s| s.to_string())
+            .collect())
     }
 
     /// True if the loaded summaries match.
@@ -151,7 +155,9 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list.names(), vec!["a", "b"]);
         assert!(list.summary().contains("2 scenes"));
-        let loaded = SceneList::read_summaries(std::io::Cursor::new("a | 0 sources | active none\n")).unwrap();
+        let loaded =
+            SceneList::read_summaries(std::io::Cursor::new("a | 0 sources | active none\n"))
+                .unwrap();
         assert_eq!(loaded.len(), 1);
         assert!(list.find("b").is_some());
         list.set_active(1);

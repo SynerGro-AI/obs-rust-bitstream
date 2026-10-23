@@ -60,10 +60,8 @@ impl RtmpSocket {
         })?;
         let connect = crate::rtmp_connect::RtmpConnect::body("live");
         let connect_chunk = crate::rtmp_chunk::RtmpChunk::wrap(
-            3,
-            20, // AMF0 command
-            0,
-            &connect,
+            3, 20, // AMF0 command
+            0, &connect,
         );
         stream.write_all(&connect_chunk).map_err(|_| {
             reconnect.start();

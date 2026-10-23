@@ -16,11 +16,7 @@ impl AudioPacket {
     /// Pull frames and wrap them as an audio EncoderPacket.
     /// pts and dts are set to the supplied timestamp.
     /// Returns None if the list yields nothing.
-    pub fn from_list(
-        list: &mut AudioSourceList,
-        frames: usize,
-        pts: i64,
-    ) -> Option<EncoderPacket> {
+    pub fn from_list(list: &mut AudioSourceList, frames: usize, pts: i64) -> Option<EncoderPacket> {
         let samples = list.samples(frames)?;
         if samples.data.is_empty() {
             return None;

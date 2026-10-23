@@ -6,8 +6,8 @@
 //!
 //! Differential: half opacity encodes differently.
 
-use crate::shell_frame::ShellFrame;
 use crate::photo_layers::LayerStack;
+use crate::shell_frame::ShellFrame;
 use crate::video_fourcc::VideoFormat;
 use crate::video_frame::VideoFrame;
 

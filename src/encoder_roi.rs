@@ -24,7 +24,13 @@ pub struct EncoderRoi {
 impl EncoderRoi {
     /// Create a region. bottom must be greater than top, right greater than left.
     /// Priority is clamped to [-1, 1].
-    pub fn new(top: u32, bottom: u32, left: u32, right: u32, priority: f32) -> Result<Self, RoiError> {
+    pub fn new(
+        top: u32,
+        bottom: u32,
+        left: u32,
+        right: u32,
+        priority: f32,
+    ) -> Result<Self, RoiError> {
         if bottom <= top || right <= left {
             return Err(RoiError::Inverted);
         }

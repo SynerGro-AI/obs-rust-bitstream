@@ -41,7 +41,10 @@ impl Parenting {
     }
 
     pub fn parent_of(&self, child: &str) -> Result<&str, ParentError> {
-        self.links.get(child).map(|s| s.as_str()).ok_or(ParentError::Missing)
+        self.links
+            .get(child)
+            .map(|s| s.as_str())
+            .ok_or(ParentError::Missing)
     }
 
     pub fn clear(&mut self, child: &str) -> bool {

@@ -49,8 +49,10 @@ impl Distort {
                             let dx = x - cx;
                             let dy = y - cy;
                             let scale = 1.0 + (amount as f32 / 255.0);
-                            ((cx as f32 + dx as f32 / scale) as i32,
-                             (cy as f32 + dy as f32 / scale) as i32)
+                            (
+                                (cx as f32 + dx as f32 / scale) as i32,
+                                (cy as f32 + dy as f32 / scale) as i32,
+                            )
                         }
                         DistortKind::Twirl => {
                             let cx = w as f32 / 2.0;

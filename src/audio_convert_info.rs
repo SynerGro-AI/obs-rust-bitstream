@@ -24,7 +24,11 @@ pub struct AudioConvertInfo {
 
 impl AudioConvertInfo {
     /// Create a convert request. Zero rate is rejected.
-    pub fn new(rate: u32, format: AudioFormat, speakers: SpeakerLayout) -> Result<Self, ConvertError> {
+    pub fn new(
+        rate: u32,
+        format: AudioFormat,
+        speakers: SpeakerLayout,
+    ) -> Result<Self, ConvertError> {
         if rate == 0 {
             return Err(ConvertError::ZeroRate);
         }

@@ -40,8 +40,7 @@ pub enum ExportError {
     ProtectionRemoved,
 }
 
-const PHOTO_PROTECTION: &str =
-    "photo-protection: third-party image, not an original render";
+const PHOTO_PROTECTION: &str = "photo-protection: third-party image, not an original render";
 
 #[derive(Clone, Debug)]
 pub struct Export {

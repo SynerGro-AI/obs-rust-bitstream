@@ -66,7 +66,10 @@ impl Macro {
         if !self.macros.contains_key(name) {
             return Err(MacroError::Missing);
         }
-        self.macros.insert(name.to_string(), keys.iter().map(|s| s.to_string()).collect());
+        self.macros.insert(
+            name.to_string(),
+            keys.iter().map(|s| s.to_string()).collect(),
+        );
         Ok(())
     }
 
@@ -114,7 +117,10 @@ mod tests {
         m.record("s");
         m.record("v");
         m.stop();
-        assert_eq!(m.sequence("go_live"), Some(&["r".to_string(), "s".to_string(), "v".to_string()][..]));
+        assert_eq!(
+            m.sequence("go_live"),
+            Some(&["r".to_string(), "s".to_string(), "v".to_string()][..])
+        );
     }
 
     #[test]

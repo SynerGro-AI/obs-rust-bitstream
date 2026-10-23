@@ -33,7 +33,10 @@ impl FileCache {
 
     /// Rebuild a missing file from the cache. Returns the bytes.
     pub fn rebuild(&self, path: &str) -> Result<&[u8], CacheError> {
-        self.files.get(path).map(|v| v.as_slice()).ok_or(CacheError::Missing)
+        self.files
+            .get(path)
+            .map(|v| v.as_slice())
+            .ok_or(CacheError::Missing)
     }
 
     pub fn contains(&self, path: &str) -> bool {

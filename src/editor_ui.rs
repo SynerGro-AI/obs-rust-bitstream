@@ -6,18 +6,18 @@
 //! Differential: add layer + set blend + attach mask + onion
 //! view round-trips.
 
-use crate::ai_approve::{AiApprove, ApproveMode};
+use crate::adjustment::{AdjustKind, Adjustment};
 use crate::ai::AiAssistant;
+use crate::ai_approve::{AiApprove, ApproveMode};
 use crate::ai_editor::AiEditor;
-use crate::adjustment::{Adjustment, AdjustKind};
 use crate::effect_list::EffectList;
-use crate::replay_save::SaveFormat;
 use crate::history::History;
 use crate::input_device::InputDevice;
 use crate::layer_group::GroupSet;
 use crate::layer_stack::{BlendMode, LayerStack};
 use crate::mask::MaskSet;
 use crate::onion_viewer::{OnionFrame, OnionViewer};
+use crate::replay_save::SaveFormat;
 
 #[derive(Clone, Debug)]
 pub struct EditorUi {
@@ -72,7 +72,11 @@ impl EditorUi {
     }
 
     /// Set a layer's blend mode.
-    pub fn set_blend(&mut self, layer: &str, mode: BlendMode) -> Result<(), crate::layer_stack::LayerError> {
+    pub fn set_blend(
+        &mut self,
+        layer: &str,
+        mode: BlendMode,
+    ) -> Result<(), crate::layer_stack::LayerError> {
         self.layers.set_blend(layer, mode)
     }
 
@@ -95,7 +99,11 @@ impl EditorUi {
     }
 
     /// Add an adjustment layer.
-    pub fn add_adjustment(&mut self, name: &str, kind: AdjustKind) -> Result<(), crate::adjustment::AdjustError> {
+    pub fn add_adjustment(
+        &mut self,
+        name: &str,
+        kind: AdjustKind,
+    ) -> Result<(), crate::adjustment::AdjustError> {
         let a = Adjustment::new(name, kind)?;
         self.adjustments.push(a);
         Ok(())

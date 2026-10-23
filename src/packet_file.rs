@@ -103,10 +103,7 @@ mod tests {
         let a = EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]);
         let b = EncoderPacket::new(EncoderType::Audio, 0, 0, vec![2, 3]);
         let one = PacketFile::write(&[a]);
-        let two = PacketFile::write(&[
-            EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]),
-            b,
-        ]);
+        let two = PacketFile::write(&[EncoderPacket::new(EncoderType::Video, 0, 0, vec![1]), b]);
         assert!(two.len() > one.len());
         assert_eq!(PacketFile::count(&two), Some(2));
     }

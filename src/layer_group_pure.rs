@@ -43,7 +43,10 @@ impl LayerGroup {
     }
 
     pub fn members(&self, group: &str) -> Result<&[String], GroupError> {
-        self.groups.get(group).map(|v| v.as_slice()).ok_or(GroupError::Missing)
+        self.groups
+            .get(group)
+            .map(|v| v.as_slice())
+            .ok_or(GroupError::Missing)
     }
 
     pub fn remove_member(&mut self, group: &str, layer: &str) -> Result<(), GroupError> {

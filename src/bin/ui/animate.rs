@@ -37,7 +37,13 @@ impl AnimState {
             dirty: vec![true; n],
             fps,
             clock: Clock::new(n as f32 / fps),
-            brush: Brush { size: 6.0, hardness: 0.9, flow: 1.0, spacing: 0.2, color: [28, 28, 30] },
+            brush: Brush {
+                size: 6.0,
+                hardness: 0.9,
+                flow: 1.0,
+                spacing: 0.2,
+                color: [28, 28, 30],
+            },
             erase: false,
             onion: true,
             onion_range: 1,
@@ -77,21 +83,33 @@ impl AnimState {
     pub fn restore(&mut self, frames: Vec<Raster>) {
         let n = frames.len();
         self.frames = frames;
-        self.ink = self.frames.iter().map(|f| f.data.chunks_exact(4).any(|p| p[3] > 0)).collect();
+        self.ink = self
+            .frames
+            .iter()
+            .map(|f| f.data.chunks_exact(4).any(|p| p[3] > 0))
+            .collect();
         self.texs = vec![None; n];
         self.dirty = vec![true; n];
         self.resize_clock();
     }
 
     /// Execute an Animate command. `None` = not handled here.
-    pub fn apply(&mut self, cmd: &AppCommand, toasts: &mut Toasts) -> Option<Result<String, String>> {
+    pub fn apply(
+        &mut self,
+        cmd: &AppCommand,
+        toasts: &mut Toasts,
+    ) -> Option<Result<String, String>> {
         match cmd {
             AppCommand::SetKeyframe => {
                 if self.frames.len() >= MAX_FRAMES {
                     return Some(Err(format!("frame limit reached ({})", MAX_FRAMES)));
                 }
                 self.duplicate(toasts);
-                Some(Ok(format!("new key drawing at frame {} of {}", self.current() + 1, self.frames.len())))
+                Some(Ok(format!(
+                    "new key drawing at frame {} of {}",
+                    self.current() + 1,
+                    self.frames.len()
+                )))
             }
             AppCommand::DeleteKeyframe => {
                 if self.frames.len() <= 1 {
@@ -99,12 +117,20 @@ impl AnimState {
                 }
                 let cur = self.current();
                 self.delete(toasts);
-                Some(Ok(format!("deleted frame {}, {} left", cur + 1, self.frames.len())))
+                Some(Ok(format!(
+                    "deleted frame {}, {} left",
+                    cur + 1,
+                    self.frames.len()
+                )))
             }
             AppCommand::TimelineScrub { time } => {
                 let r = crate::timeline::apply(&mut self.clock, cmd);
                 if time.is_finite() {
-                    return Some(Ok(format!("frame {} of {}", self.current() + 1, self.frames.len())));
+                    return Some(Ok(format!(
+                        "frame {} of {}",
+                        self.current() + 1,
+                        self.frames.len()
+                    )));
                 }
                 r
             }
@@ -114,7 +140,14 @@ impl AnimState {
     }
 
     pub fn context(&self) -> String {
-        format!("Animate: {} frames at {} fps, current frame {}, onion skin {}, drawn frames {}", self.frames.len(), self.fps, self.current() + 1, self.onion, self.ink.iter().filter(|x| **x).count())
+        format!(
+            "Animate: {} frames at {} fps, current frame {}, onion skin {}, drawn frames {}",
+            self.frames.len(),
+            self.fps,
+            self.current() + 1,
+            self.onion,
+            self.ink.iter().filter(|x| **x).count()
+        )
     }
 
     pub fn undo(&mut self) {
@@ -135,7 +168,10 @@ impl AnimState {
 
     pub fn insert(&mut self, at: usize, r: Raster, toasts: &mut Toasts) {
         if self.frames.len() >= MAX_FRAMES {
-            toasts.push(ToastKind::Error, &format!("Frame limit reached ({}).", MAX_FRAMES));
+            toasts.push(
+                ToastKind::Error,
+                &format!("Frame limit reached ({}).", MAX_FRAMES),
+            );
             return;
         }
         self.snapshot();
@@ -204,10 +240,19 @@ impl AnimState {
         }
         if self.dirty[i] || self.texs[i].is_none() {
             let r = &self.frames[i];
-            let img = egui::ColorImage::from_rgba_unmultiplied([r.width as usize, r.height as usize], &r.data);
+            let img = egui::ColorImage::from_rgba_unmultiplied(
+                [r.width as usize, r.height as usize],
+                &r.data,
+            );
             match &mut self.texs[i] {
                 Some(t) => t.set(img, egui::TextureOptions::LINEAR),
-                None => self.texs[i] = Some(ctx.load_texture(format!("anim-{}", i), img, egui::TextureOptions::LINEAR)),
+                None => {
+                    self.texs[i] = Some(ctx.load_texture(
+                        format!("anim-{}", i),
+                        img,
+                        egui::TextureOptions::LINEAR,
+                    ))
+                }
             }
             self.dirty[i] = false;
             if self.erase {
@@ -219,10 +264,32 @@ impl AnimState {
 
     pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette) {
         theme::card(ui, p, "Tools", |ui| {
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &format!("{}   Pencil", egui_phosphor::regular::PENCIL_SIMPLE), !self.erase)).on_hover_text("B").clicked() {
+            if ui
+                .add_sized(
+                    [ui.available_width(), 30.0],
+                    theme::toggle_button(
+                        p,
+                        &format!("{}   Pencil", egui_phosphor::regular::PENCIL_SIMPLE),
+                        !self.erase,
+                    ),
+                )
+                .on_hover_text("B")
+                .clicked()
+            {
                 self.erase = false;
             }
-            if ui.add_sized([ui.available_width(), 30.0], theme::toggle_button(p, &format!("{}   Eraser", egui_phosphor::regular::ERASER), self.erase)).on_hover_text("E").clicked() {
+            if ui
+                .add_sized(
+                    [ui.available_width(), 30.0],
+                    theme::toggle_button(
+                        p,
+                        &format!("{}   Eraser", egui_phosphor::regular::ERASER),
+                        self.erase,
+                    ),
+                )
+                .on_hover_text("E")
+                .clicked()
+            {
                 self.erase = true;
             }
         });
@@ -231,25 +298,42 @@ impl AnimState {
                 ui.label(theme::muted(p, "Colour"));
                 egui::color_picker::color_edit_button_srgb(ui, &mut self.brush.color);
             });
-            ui.add(egui::Slider::new(&mut self.brush.size, 1.0..=60.0).suffix(" px").text("Size"));
+            ui.add(
+                egui::Slider::new(&mut self.brush.size, 1.0..=60.0)
+                    .suffix(" px")
+                    .text("Size"),
+            );
         });
         theme::card(ui, p, "Onion skin", |ui| {
             ui.checkbox(&mut self.onion, "Show neighbouring frames");
-            ui.add_enabled(self.onion, egui::Slider::new(&mut self.onion_range, 1..=3).text("Frames"));
+            ui.add_enabled(
+                self.onion,
+                egui::Slider::new(&mut self.onion_range, 1..=3).text("Frames"),
+            );
             ui.label(theme::muted(p, "Red = before, green = after."));
         });
     }
 
     pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette) {
         let ctx = ui.ctx().clone();
-        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        let (resp, painter) =
+            ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let rect = resp.rect;
         painter.rect_filled(rect, Rounding::ZERO, p.canvas);
         let zoom = ViewTransform::fit_zoom(rect.width(), rect.height(), (W, H), 32.0);
-        let view = ViewTransform { viewport: (rect.min.x, rect.min.y, rect.width(), rect.height()), image: (W, H), zoom, pan: (0.0, 0.0) };
+        let view = ViewTransform {
+            viewport: (rect.min.x, rect.min.y, rect.width(), rect.height()),
+            image: (W, H),
+            zoom,
+            pan: (0.0, 0.0),
+        };
         let (x, y, w, h) = view.image_rect();
         let paper = Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, h));
-        painter.rect_filled(paper.translate(Vec2::new(0.0, 6.0)), Rounding::same(4.0), Color32::from_black_alpha(if p.dark { 120 } else { 40 }));
+        painter.rect_filled(
+            paper.translate(Vec2::new(0.0, 6.0)),
+            Rounding::same(4.0),
+            Color32::from_black_alpha(if p.dark { 120 } else { 40 }),
+        );
         painter.rect_filled(paper, Rounding::same(2.0), Color32::from_rgb(250, 249, 245));
         let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
         let cur = self.current();
@@ -258,11 +342,21 @@ impl AnimState {
                 let a = (110 / d) as u8;
                 if cur >= d {
                     if let Some(t) = self.tex(&ctx, cur - d) {
-                        painter.image(t, paper, uv, Color32::from_rgba_unmultiplied(255, 70, 70, a));
+                        painter.image(
+                            t,
+                            paper,
+                            uv,
+                            Color32::from_rgba_unmultiplied(255, 70, 70, a),
+                        );
                     }
                 }
                 if let Some(t) = self.tex(&ctx, cur + d) {
-                    painter.image(t, paper, uv, Color32::from_rgba_unmultiplied(60, 200, 90, a));
+                    painter.image(
+                        t,
+                        paper,
+                        uv,
+                        Color32::from_rgba_unmultiplied(60, 200, 90, a),
+                    );
                 }
             }
         }
@@ -270,7 +364,13 @@ impl AnimState {
             painter.image(t, paper, uv, Color32::WHITE);
         }
         painter.rect_stroke(paper, Rounding::same(2.0), Stroke::new(1.0_f32, p.border));
-        painter.text(paper.left_top() + Vec2::new(0.0, -SP_SM), egui::Align2::LEFT_BOTTOM, format!("Frame {} / {}", cur + 1, self.frames.len()), egui::FontId::proportional(12.0), p.muted);
+        painter.text(
+            paper.left_top() + Vec2::new(0.0, -SP_SM),
+            egui::Align2::LEFT_BOTTOM,
+            format!("Frame {} / {}", cur + 1, self.frames.len()),
+            egui::FontId::proportional(12.0),
+            p.muted,
+        );
 
         if resp.drag_started_by(egui::PointerButton::Primary) || resp.clicked() {
             self.snapshot();
@@ -286,18 +386,41 @@ impl AnimState {
             self.last_dab = None;
         }
         if let Some(hp) = resp.hover_pos() {
-            painter.circle_stroke(hp, (self.brush.size / 2.0 * zoom).max(1.5), Stroke::new(1.0_f32, p.accent));
+            painter.circle_stroke(
+                hp,
+                (self.brush.size / 2.0 * zoom).max(1.5),
+                Stroke::new(1.0_f32, p.accent),
+            );
             ctx.set_cursor_icon(egui::CursorIcon::None);
         }
     }
 
-    pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts, bus: &mut Vec<AppCommand>) {
+    pub fn inspector(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Palette,
+        toasts: &mut Toasts,
+        bus: &mut Vec<AppCommand>,
+    ) {
         theme::card(ui, p, "Sequence", |ui| {
-            theme::kv(ui, p, "Frame", format!("{} of {}", self.current() + 1, self.frames.len()));
+            theme::kv(
+                ui,
+                p,
+                "Frame",
+                format!("{} of {}", self.current() + 1, self.frames.len()),
+            );
             theme::kv(ui, p, "Canvas", format!("{} × {}", W, H));
             theme::kv(ui, p, "Duration", format!("{:.2} s", self.clock.duration));
             let mut fps = self.fps;
-            if ui.add(egui::Slider::new(&mut fps, 1.0..=30.0).step_by(1.0).suffix(" fps").text("Rate")).changed() {
+            if ui
+                .add(
+                    egui::Slider::new(&mut fps, 1.0..=30.0)
+                        .step_by(1.0)
+                        .suffix(" fps")
+                        .text("Rate"),
+                )
+                .changed()
+            {
                 self.set_fps(fps);
             }
         });
@@ -306,22 +429,41 @@ impl AnimState {
                 if ui.add(theme::toggle_button(p, "+ New", false)).clicked() {
                     self.add_frame(toasts);
                 }
-                if ui.add(theme::toggle_button(p, "Duplicate", false)).on_hover_text("New key drawing from this frame  (K)").clicked() {
+                if ui
+                    .add(theme::toggle_button(p, "Duplicate", false))
+                    .on_hover_text("New key drawing from this frame  (K)")
+                    .clicked()
+                {
                     bus.push(AppCommand::SetKeyframe);
                 }
                 if ui.add(theme::toggle_button(p, "Clear", false)).clicked() {
                     self.clear();
                 }
-                if ui.add_enabled(self.frames.len() > 1, theme::toggle_button(p, "Delete", false)).clicked() {
+                if ui
+                    .add_enabled(
+                        self.frames.len() > 1,
+                        theme::toggle_button(p, "Delete", false),
+                    )
+                    .clicked()
+                {
                     bus.push(AppCommand::DeleteKeyframe);
                 }
             });
             ui.add_space(SP_XS);
-            ui.label(theme::muted(p, ", and . step frames · Space plays · Ctrl+Z undoes"));
+            ui.label(theme::muted(
+                p,
+                ", and . step frames · Space plays · Ctrl+Z undoes",
+            ));
         });
     }
 
-    pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts, bus: &mut Vec<AppCommand>) {
+    pub fn timeline(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Palette,
+        toasts: &mut Toasts,
+        bus: &mut Vec<AppCommand>,
+    ) {
         ui.horizontal(|ui| {
             crate::timeline::transport(ui, p, &mut self.clock, bus);
             ui.add_space(SP_MD);
@@ -331,33 +473,60 @@ impl AnimState {
         });
         ui.add_space(SP_XS);
         let cur = self.current();
-        egui::ScrollArea::horizontal().id_salt("frames").show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = SP_XS;
-                let mut go = None;
-                for i in 0..self.frames.len() {
-                    let (r, resp) = ui.allocate_exact_size(Vec2::new(34.0, 44.0), egui::Sense::click());
-                    let on = i == cur;
-                    let hov = resp.hovered();
-                    let fill = if on { p.accent } else if hov { p.border } else { p.surface_hi };
-                    ui.painter().rect_filled(r, Rounding::same(R_SM), fill);
-                    let fg = if on { p.accent_text } else { p.muted };
-                    ui.painter().text(r.center_top() + Vec2::new(0.0, 8.0), egui::Align2::CENTER_TOP, format!("{}", i + 1), egui::FontId::monospace(11.0), fg);
-                    let dot = r.center_bottom() - Vec2::new(0.0, 10.0);
-                    if self.ink[i] {
-                        ui.painter().circle_filled(dot, 4.0, if on { p.accent_text } else { p.text });
-                    } else {
-                        ui.painter().circle_stroke(dot, 3.5, Stroke::new(1.0_f32, fg));
+        egui::ScrollArea::horizontal()
+            .id_salt("frames")
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = SP_XS;
+                    let mut go = None;
+                    for i in 0..self.frames.len() {
+                        let (r, resp) =
+                            ui.allocate_exact_size(Vec2::new(34.0, 44.0), egui::Sense::click());
+                        let on = i == cur;
+                        let hov = resp.hovered();
+                        let fill = if on {
+                            p.accent
+                        } else if hov {
+                            p.border
+                        } else {
+                            p.surface_hi
+                        };
+                        ui.painter().rect_filled(r, Rounding::same(R_SM), fill);
+                        let fg = if on { p.accent_text } else { p.muted };
+                        ui.painter().text(
+                            r.center_top() + Vec2::new(0.0, 8.0),
+                            egui::Align2::CENTER_TOP,
+                            format!("{}", i + 1),
+                            egui::FontId::monospace(11.0),
+                            fg,
+                        );
+                        let dot = r.center_bottom() - Vec2::new(0.0, 10.0);
+                        if self.ink[i] {
+                            ui.painter().circle_filled(
+                                dot,
+                                4.0,
+                                if on { p.accent_text } else { p.text },
+                            );
+                        } else {
+                            ui.painter()
+                                .circle_stroke(dot, 3.5, Stroke::new(1.0_f32, fg));
+                        }
+                        if resp
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .clicked()
+                        {
+                            go = Some(i);
+                        }
                     }
-                    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
-                        go = Some(i);
+                    if let Some(i) = go {
+                        bus.push(AppCommand::TimelinePlay {
+                            playing: Some(false),
+                        });
+                        bus.push(AppCommand::TimelineScrub {
+                            time: (i as f32 + 0.01) / self.fps,
+                        });
                     }
-                }
-                if let Some(i) = go {
-                    bus.push(AppCommand::TimelinePlay { playing: Some(false) });
-                    bus.push(AppCommand::TimelineScrub { time: (i as f32 + 0.01) / self.fps });
-                }
+                });
             });
-        });
     }
 }

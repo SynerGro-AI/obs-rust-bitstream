@@ -32,7 +32,10 @@ impl MaterialAssign {
     }
 
     pub fn material_of(&self, bone: &str) -> Result<&str, AssignError> {
-        self.map.get(bone).map(|s| s.as_str()).ok_or(AssignError::Missing)
+        self.map
+            .get(bone)
+            .map(|s| s.as_str())
+            .ok_or(AssignError::Missing)
     }
 
     /// (bone/object, material) pairs.

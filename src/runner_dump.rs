@@ -62,7 +62,10 @@ mod tests {
         let pipe = Pipeline::new(16, 16, weights).expect("pipe");
         let cap = Box::new(SyntheticCapture::new(16, 16));
         let mut audio = AudioSourceList::new();
-        let _ = audio.add("tone", crate::audio_source_list::AudioSource::synthetic(48000, 1));
+        let _ = audio.add(
+            "tone",
+            crate::audio_source_list::AudioSource::synthetic(48000, 1),
+        );
         let mut out = OutputInfo::new("rec", "Recording", OUTPUT_AV).expect("out");
         out.start();
         Runner::new(pipe, cap, audio, out)

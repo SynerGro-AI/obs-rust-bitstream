@@ -13,22 +13,70 @@ pub struct Rgb {
 
 /// Standard 16-color palette (VGA order).
 pub const PALETTE16: [Rgb; 16] = [
-    Rgb { r: 0, g: 0, b: 0 },       // 0 black
-    Rgb { r: 0, g: 0, b: 170 },     // 1 blue
-    Rgb { r: 0, g: 170, b: 0 },     // 2 green
-    Rgb { r: 0, g: 170, b: 170 },   // 3 cyan
-    Rgb { r: 170, g: 0, b: 0 },     // 4 red
-    Rgb { r: 170, g: 0, b: 170 },   // 5 magenta
-    Rgb { r: 170, g: 85, b: 0 },    // 6 brown
-    Rgb { r: 170, g: 170, b: 170 }, // 7 light gray
-    Rgb { r: 85, g: 85, b: 85 },    // 8 dark gray
-    Rgb { r: 85, g: 85, b: 255 },   // 9 bright blue
-    Rgb { r: 85, g: 255, b: 85 },   // 10 bright green
-    Rgb { r: 85, g: 255, b: 255 },  // 11 bright cyan
-    Rgb { r: 255, g: 85, b: 85 },   // 12 bright red
-    Rgb { r: 255, g: 85, b: 255 },  // 13 bright magenta
-    Rgb { r: 255, g: 255, b: 85 },  // 14 yellow
-    Rgb { r: 255, g: 255, b: 255 }, // 15 white
+    Rgb { r: 0, g: 0, b: 0 },   // 0 black
+    Rgb { r: 0, g: 0, b: 170 }, // 1 blue
+    Rgb { r: 0, g: 170, b: 0 }, // 2 green
+    Rgb {
+        r: 0,
+        g: 170,
+        b: 170,
+    }, // 3 cyan
+    Rgb { r: 170, g: 0, b: 0 }, // 4 red
+    Rgb {
+        r: 170,
+        g: 0,
+        b: 170,
+    }, // 5 magenta
+    Rgb {
+        r: 170,
+        g: 85,
+        b: 0,
+    }, // 6 brown
+    Rgb {
+        r: 170,
+        g: 170,
+        b: 170,
+    }, // 7 light gray
+    Rgb {
+        r: 85,
+        g: 85,
+        b: 85,
+    }, // 8 dark gray
+    Rgb {
+        r: 85,
+        g: 85,
+        b: 255,
+    }, // 9 bright blue
+    Rgb {
+        r: 85,
+        g: 255,
+        b: 85,
+    }, // 10 bright green
+    Rgb {
+        r: 85,
+        g: 255,
+        b: 255,
+    }, // 11 bright cyan
+    Rgb {
+        r: 255,
+        g: 85,
+        b: 85,
+    }, // 12 bright red
+    Rgb {
+        r: 255,
+        g: 85,
+        b: 255,
+    }, // 13 bright magenta
+    Rgb {
+        r: 255,
+        g: 255,
+        b: 85,
+    }, // 14 yellow
+    Rgb {
+        r: 255,
+        g: 255,
+        b: 255,
+    }, // 15 white
 ];
 
 pub struct Palette16;

@@ -20,7 +20,10 @@ impl UiView {
     pub fn render(workspace: &Workspace, stack: &LayerStack, select: &LayerSelect) -> String {
         let mut out = String::new();
         out.push_str(&format!("tool={}\n", workspace.active()));
-        out.push_str(&format!("thought: {}\n", ToolHelp::tool(workspace.active())));
+        out.push_str(&format!(
+            "thought: {}\n",
+            ToolHelp::tool(workspace.active())
+        ));
         out.push_str(&format!("options={}\n", workspace.options().line()));
         out.push_str("layers:\n");
         let panel = PsLayers::panel(stack);
@@ -63,10 +66,10 @@ impl UiView {
 
 #[cfg(test)]
 mod tests {
-    use crate::edit_target::EditTarget;
-    use crate::layer_select::LayerSelect;
     use super::*;
     use crate::active_tool::ToolSource;
+    use crate::edit_target::EditTarget;
+    use crate::layer_select::LayerSelect;
 
     #[test]
     fn shows_tool_and_layers() {
@@ -95,9 +98,11 @@ mod tests {
     fn shows_edit_target() {
         let w = Workspace::new(16, 16);
         let s = LayerStack::new();
-        let view = UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Layer("A".into()));
+        let view =
+            UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Layer("A".into()));
         assert!(view.contains("editing: layer A"));
-        let view = UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Group("G".into()));
+        let view =
+            UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Group("G".into()));
         assert!(view.contains("editing: group G"));
     }
 
@@ -108,6 +113,9 @@ mod tests {
         a.click("Brush", ToolSource::Photoshop);
         b.click("Crop", ToolSource::Photoshop);
         let s = LayerStack::new();
-        assert_ne!(UiView::render(&a, &s, &LayerSelect::new()), UiView::render(&b, &s, &LayerSelect::new()));
+        assert_ne!(
+            UiView::render(&a, &s, &LayerSelect::new()),
+            UiView::render(&b, &s, &LayerSelect::new())
+        );
     }
 }

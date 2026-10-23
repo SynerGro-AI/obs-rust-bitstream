@@ -8,8 +8,8 @@
 //! Math is perfect: after 255 bytes the safe reader stops; the ABI reader
 //! re-reads from byte 0. Tests below prove both behaviors.
 
-use std::os::raw::c_int;
 use std::convert::TryFrom;
+use std::os::raw::c_int;
 
 // Position trait — the perfect abstraction for the counter
 
@@ -20,13 +20,21 @@ pub trait Position: Copy {
 }
 
 impl Position for usize {
-    fn index(self) -> usize { self }
-    fn advance(&mut self) { *self += 1; }
+    fn index(self) -> usize {
+        self
+    }
+    fn advance(&mut self) {
+        *self += 1;
+    }
 }
 
 impl Position for u8 {
-    fn index(self) -> usize { usize::from(self) }
-    fn advance(&mut self) { *self = self.wrapping_add(1); }
+    fn index(self) -> usize {
+        usize::from(self)
+    }
+    fn advance(&mut self) {
+        *self = self.wrapping_add(1);
+    }
 }
 
 // Shared reader
@@ -38,11 +46,17 @@ pub struct Reader<'a, P: Position> {
 
 impl<'a, P: Position> Reader<'a, P> {
     pub fn new(buf: &'a [u8], pos: P) -> Self {
-        Self { buf, pos, sub_pos: 0x80 }
+        Self {
+            buf,
+            pos,
+            sub_pos: 0x80,
+        }
     }
 
     pub fn read_bit(&mut self) -> u8 {
-        let Some(&byte) = self.buf.get(self.pos.index()) else { return 0; };
+        let Some(&byte) = self.buf.get(self.pos.index()) else {
+            return 0;
+        };
         let bit = u8::from(byte & self.sub_pos == self.sub_pos);
         self.sub_pos >>= 1;
         if self.sub_pos == 0 {
@@ -54,28 +68,46 @@ impl<'a, P: Position> Reader<'a, P> {
 
     pub fn read_bits(&mut self, bits: u32) -> u8 {
         let mut res = 0u8;
-        for _ in 0..bits { res = (res << 1) | self.read_bit(); }
+        for _ in 0..bits {
+            res = (res << 1) | self.read_bit();
+        }
         res
     }
 
-    pub fn r8(&mut self) -> u8 { self.read_bits(8) }
+    pub fn r8(&mut self) -> u8 {
+        self.read_bits(8)
+    }
     pub fn r16(&mut self) -> u16 {
         let hi = u16::from(self.r8());
         (hi << 8) | u16::from(self.r8())
     }
-    pub fn position(&self) -> P { self.pos }
+    pub fn position(&self) -> P {
+        self.pos
+    }
 }
 
 /// Safe API — never wraps.
 pub struct BitstreamReader<'a>(Reader<'a, usize>);
 
 impl<'a> BitstreamReader<'a> {
-    pub fn new(buf: &'a [u8]) -> Self { Self(Reader::new(buf, 0)) }
-    pub fn read_bit(&mut self) -> u8 { self.0.read_bit() }
-    pub fn read_bits(&mut self, bits: u32) -> u8 { self.0.read_bits(bits) }
-    pub fn r8(&mut self) -> u8 { self.0.r8() }
-    pub fn r16(&mut self) -> u16 { self.0.r16() }
-    pub fn byte_pos(&self) -> usize { self.0.position() }
+    pub fn new(buf: &'a [u8]) -> Self {
+        Self(Reader::new(buf, 0))
+    }
+    pub fn read_bit(&mut self) -> u8 {
+        self.0.read_bit()
+    }
+    pub fn read_bits(&mut self, bits: u32) -> u8 {
+        self.0.read_bits(bits)
+    }
+    pub fn r8(&mut self) -> u8 {
+        self.0.r8()
+    }
+    pub fn r16(&mut self) -> u16 {
+        self.0.r16()
+    }
+    pub fn byte_pos(&self) -> usize {
+        self.0.position()
+    }
 }
 
 // C ABI — keeps the original uint8_t wrap
@@ -90,8 +122,16 @@ pub struct bitstream_reader {
 
 unsafe fn with_reader<T>(r: *mut bitstream_reader, f: impl FnOnce(&mut Reader<'_, u8>) -> T) -> T {
     let r = unsafe { &mut *r };
-    let buf = if r.buf.is_null() { &[][..] } else { unsafe { std::slice::from_raw_parts(r.buf, r.len) } };
-    let mut reader = Reader { buf, pos: r.pos, sub_pos: r.subPos };
+    let buf = if r.buf.is_null() {
+        &[][..]
+    } else {
+        unsafe { std::slice::from_raw_parts(r.buf, r.len) }
+    };
+    let mut reader = Reader {
+        buf,
+        pos: r.pos,
+        sub_pos: r.subPos,
+    };
     let out = f(&mut reader);
     r.pos = reader.pos;
     r.subPos = reader.sub_pos;
@@ -99,8 +139,19 @@ unsafe fn with_reader<T>(r: *mut bitstream_reader, f: impl FnOnce(&mut Reader<'_
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn bitstream_reader_init(r: *mut bitstream_reader, data: *mut u8, len: usize) {
-    unsafe { r.write(bitstream_reader { pos: 0, subPos: 0x80, buf: data, len }); }
+pub unsafe extern "C" fn bitstream_reader_init(
+    r: *mut bitstream_reader,
+    data: *mut u8,
+    len: usize,
+) {
+    unsafe {
+        r.write(bitstream_reader {
+            pos: 0,
+            subPos: 0x80,
+            buf: data,
+            len,
+        });
+    }
 }
 
 #[no_mangle]
@@ -149,7 +200,9 @@ mod tests {
     fn safe_does_not_wrap_past_255() {
         let data = vec![0xFFu8; 256];
         let mut r = BitstreamReader::new(&data);
-        for _ in 0..2048 { assert_eq!(r.read_bit(), 1); }
+        for _ in 0..2048 {
+            assert_eq!(r.read_bit(), 1);
+        }
         assert_eq!(r.byte_pos(), 256);
         assert_eq!(r.read_bit(), 0);
         assert_eq!(r.read_bits(8), 0);
@@ -159,8 +212,15 @@ mod tests {
     fn abi_wraps_at_255() {
         let mut data = vec![0x00u8; 300];
         data[0] = 0xAA;
-        let mut c_reader = bitstream_reader { pos: 0, subPos: 0x80, buf: data.as_mut_ptr(), len: data.len() };
-        for _ in 0..2048 { unsafe { bitstream_reader_read_bits(&mut c_reader, 1) }; }
+        let mut c_reader = bitstream_reader {
+            pos: 0,
+            subPos: 0x80,
+            buf: data.as_mut_ptr(),
+            len: data.len(),
+        };
+        for _ in 0..2048 {
+            unsafe { bitstream_reader_read_bits(&mut c_reader, 1) };
+        }
         assert_eq!(c_reader.pos, 0);
         let next = unsafe { bitstream_reader_r8(&mut c_reader) };
         assert_eq!(next, 0xAA);

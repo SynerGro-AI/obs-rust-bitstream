@@ -130,8 +130,12 @@ mod tests {
     #[test]
     fn layer_items_map() {
         let items = PsMenu::Layer.items();
-        assert!(items.iter().any(|(n, m)| *n == "Layer Mask" && *m == Some("layer_mask")));
-        assert!(items.iter().any(|(n, m)| *n == "Group Layers" && *m == Some("layer_group")));
+        assert!(items
+            .iter()
+            .any(|(n, m)| *n == "Layer Mask" && *m == Some("layer_mask")));
+        assert!(items
+            .iter()
+            .any(|(n, m)| *n == "Group Layers" && *m == Some("layer_group")));
     }
 
     #[test]

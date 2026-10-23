@@ -54,7 +54,9 @@ impl EncoderRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut EncoderContext, EncoderRegistryError> {
-        self.encoders.get_mut(name).ok_or(EncoderRegistryError::Missing)
+        self.encoders
+            .get_mut(name)
+            .ok_or(EncoderRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -85,8 +87,14 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = EncoderRegistry::new();
         r.add("a", "c", EncoderType::Audio).unwrap();
-        assert!(matches!(r.add("a", "c", EncoderType::Audio), Err(EncoderRegistryError::Duplicate)));
-        assert!(matches!(r.add("", "c", EncoderType::Audio), Err(EncoderRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", "c", EncoderType::Audio),
+            Err(EncoderRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", "c", EncoderType::Audio),
+            Err(EncoderRegistryError::EmptyName)
+        ));
     }
 
     #[test]
@@ -102,7 +110,14 @@ mod tests {
     fn differential() {
         let mut r = EncoderRegistry::new();
         r.add("aac", "ffmpeg_aac", EncoderType::Audio).unwrap();
-        r.get_mut("aac").unwrap().settings_mut().set_int("bitrate", 160).unwrap();
-        assert_eq!(r.get("aac").unwrap().settings().get_int("bitrate").unwrap(), 160);
+        r.get_mut("aac")
+            .unwrap()
+            .settings_mut()
+            .set_int("bitrate", 160)
+            .unwrap();
+        assert_eq!(
+            r.get("aac").unwrap().settings().get_int("bitrate").unwrap(),
+            160
+        );
     }
 }

@@ -61,7 +61,11 @@ impl ProcHandler {
                 id: id.to_string(),
             },
         );
-        Ok(self.procs.get(&name).map(|s| s.decl.name.as_str()).unwrap_or(""))
+        Ok(self
+            .procs
+            .get(&name)
+            .map(|s| s.decl.name.as_str())
+            .unwrap_or(""))
     }
 
     /// Call a registered procedure. Returns the id if found.

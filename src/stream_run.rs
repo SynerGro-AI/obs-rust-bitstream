@@ -11,9 +11,9 @@ use crate::output_info::OutputInfo;
 use crate::output_service::OutputService;
 use crate::program_stream::ProgramStream;
 use crate::runner::{Runner, RunnerError};
+use crate::service_status::ServiceStatus;
 use crate::stream_start::StreamStart;
 use crate::stream_status::StreamStatus;
-use crate::service_status::ServiceStatus;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StreamRunError {
@@ -94,7 +94,9 @@ mod tests {
         let mut svc = OutputService::new();
         let out = OutputInfo::new("rec", "Recording", OUTPUT_AV).unwrap();
         let mut w = LiveWeights::new();
-        assert!(StreamRun::run(&mut r, &mut stream, &mut svc, &out, &mut w, "", "rtmp", 1).is_err());
+        assert!(
+            StreamRun::run(&mut r, &mut stream, &mut svc, &out, &mut w, "", "rtmp", 1).is_err()
+        );
     }
 
     #[test]
@@ -108,8 +110,14 @@ mod tests {
         let out = OutputInfo::new("rec", "Recording", OUTPUT_AV).unwrap();
         let mut wa = LiveWeights::new();
         let mut wb = LiveWeights::new();
-        let sta = StreamRun::run(&mut a, &mut sa, &mut sva, &out, &mut wa, "twitch", "rtmp", 1).unwrap();
-        let stb = StreamRun::run(&mut b, &mut sb, &mut svb, &out, &mut wb, "youtube", "rtmp", 3).unwrap();
+        let sta = StreamRun::run(
+            &mut a, &mut sa, &mut sva, &out, &mut wa, "twitch", "rtmp", 1,
+        )
+        .unwrap();
+        let stb = StreamRun::run(
+            &mut b, &mut sb, &mut svb, &out, &mut wb, "youtube", "rtmp", 3,
+        )
+        .unwrap();
         assert!(sta.streaming && stb.streaming);
         assert_ne!(sta.service, stb.service);
     }

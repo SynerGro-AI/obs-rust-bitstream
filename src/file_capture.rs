@@ -28,7 +28,11 @@ impl FileCapture {
             return Err(FileCaptureError::BadSize);
         }
         let file = File::open(path).map_err(|_| FileCaptureError::Io)?;
-        Ok(Self { file, width, height })
+        Ok(Self {
+            file,
+            width,
+            height,
+        })
     }
 }
 

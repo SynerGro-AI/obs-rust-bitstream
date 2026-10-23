@@ -12,7 +12,9 @@ use crate::prefs::Prefs;
 use crate::theme::{self, Palette, R_LG, SP_MD, SP_SM, SP_XS};
 use eframe::egui::{self, Rounding};
 use egui_phosphor::regular as ic;
-use obs_rust_bitstream::assistant::{AssistantBackend, ChatMessage, OfflineBackend, Role, WorkspaceContext};
+use obs_rust_bitstream::assistant::{
+    AssistantBackend, ChatMessage, OfflineBackend, Role, WorkspaceContext,
+};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
@@ -36,8 +38,15 @@ pub struct ActionLine {
 #[derive(Clone, Debug)]
 pub enum ItemKind {
     User,
-    Assistant { source: String },
-    Actions { batch: u64, lines: Vec<ActionLine>, undone: bool, settled: bool },
+    Assistant {
+        source: String,
+    },
+    Actions {
+        batch: u64,
+        lines: Vec<ActionLine>,
+        undone: bool,
+        settled: bool,
+    },
     Note,
 }
 
@@ -50,7 +59,11 @@ pub struct ChatItem {
 
 pub enum PanelRequest {
     UndoBatch(u64),
-    Run { cmd: AppCommand, batch: u64, line: usize },
+    Run {
+        cmd: AppCommand,
+        batch: u64,
+        line: usize,
+    },
 }
 
 pub struct AssistantPanel {
@@ -102,7 +115,13 @@ impl AssistantPanel {
             cli: None,
             cli_rx: None,
             prefs,
-            items: vec![ChatItem { kind: ItemKind::Assistant { source: "Seraphina".into() }, text: hello, rated: Some(true) }],
+            items: vec![ChatItem {
+                kind: ItemKind::Assistant {
+                    source: "Seraphina".into(),
+                },
+                text: hello,
+                rated: Some(true),
+            }],
             convo: Vec::new(),
             rx: None,
             rx_source: String::new(),
@@ -135,16 +154,35 @@ impl AssistantPanel {
     }
 
     fn system(&self, app_ctx: &str) -> ChatMsg {
-        ChatMsg::new("system", &format!("{}\n\nCurrent app state:\n{}\n\nLearned user preferences (live, incremental):\n{}", persona(), app_ctx, self.prefs.summary()))
+        ChatMsg::new(
+            "system",
+            &format!(
+                "{}\n\nCurrent app state:\n{}\n\nLearned user preferences (live, incremental):\n{}",
+                persona(),
+                app_ctx,
+                self.prefs.summary()
+            ),
+        )
     }
 
     /// Mark earlier un-undone AI batches as accepted (one update each).
     pub fn settle(&mut self) {
         let mut names = Vec::new();
         for it in &mut self.items {
-            if let ItemKind::Actions { lines, undone, settled, .. } = &mut it.kind {
+            if let ItemKind::Actions {
+                lines,
+                undone,
+                settled,
+                ..
+            } = &mut it.kind
+            {
                 if !*settled && !*undone {
-                    names.extend(lines.iter().filter(|l| l.status == LineStatus::Done).filter_map(|l| l.cmd.as_ref().map(|c| c.name())));
+                    names.extend(
+                        lines
+                            .iter()
+                            .filter(|l| l.status == LineStatus::Done)
+                            .filter_map(|l| l.cmd.as_ref().map(|c| c.name())),
+                    );
                 }
                 *settled = true;
             }
@@ -157,11 +195,22 @@ impl AssistantPanel {
     pub fn mark_undone(&mut self, batch: u64) {
         let mut names = Vec::new();
         for it in &mut self.items {
-            if let ItemKind::Actions { batch: b, lines, undone, settled } = &mut it.kind {
+            if let ItemKind::Actions {
+                batch: b,
+                lines,
+                undone,
+                settled,
+            } = &mut it.kind
+            {
                 if *b == batch && !*undone {
                     *undone = true;
                     *settled = true;
-                    names.extend(lines.iter().filter(|l| l.status == LineStatus::Done).filter_map(|l| l.cmd.as_ref().map(|c| c.name())));
+                    names.extend(
+                        lines
+                            .iter()
+                            .filter(|l| l.status == LineStatus::Done)
+                            .filter_map(|l| l.cmd.as_ref().map(|c| c.name())),
+                    );
                 }
             }
         }
@@ -172,7 +221,10 @@ impl AssistantPanel {
 
     pub fn mark_ran(&mut self, batch: u64, line: usize, result: Result<String, String>) {
         for it in &mut self.items {
-            if let ItemKind::Actions { batch: b, lines, .. } = &mut it.kind {
+            if let ItemKind::Actions {
+                batch: b, lines, ..
+            } = &mut it.kind
+            {
                 if *b == batch {
                     if let Some(l) = lines.get_mut(line) {
                         l.ran = true;
@@ -202,7 +254,11 @@ impl AssistantPanel {
         }
         self.input.clear();
         self.settle();
-        self.items.push(ChatItem { kind: ItemKind::User, text: text.clone(), rated: None });
+        self.items.push(ChatItem {
+            kind: ItemKind::User,
+            text: text.clone(),
+            rated: None,
+        });
         if let (Some(cli), true) = (&self.cli, SeraphinaCli::is_native_intent(&text)) {
             self.rx_source = format!("{} (local CLI)", cli.version);
             self.rx = Some(llm::spawn_cli(cli.clone(), text));
@@ -216,8 +272,16 @@ impl AssistantPanel {
             }
             None => {
                 let hist = vec![ChatMessage::new(Role::User, &text)];
-                let reply = OfflineBackend.respond(&hist, wctx).unwrap_or_else(|e| format!("{:?}", e));
-                self.items.push(ChatItem { kind: ItemKind::Assistant { source: "Offline stub".into() }, text: reply, rated: None });
+                let reply = OfflineBackend
+                    .respond(&hist, wctx)
+                    .unwrap_or_else(|e| format!("{:?}", e));
+                self.items.push(ChatItem {
+                    kind: ItemKind::Assistant {
+                        source: "Offline stub".into(),
+                    },
+                    text: reply,
+                    rated: None,
+                });
             }
         }
     }
@@ -246,10 +310,15 @@ impl AssistantPanel {
         if let Some(rx) = &self.remember_rx {
             if let Ok(AgentEvent::Done(r)) = rx.try_recv() {
                 let t = match r {
-                    Ok(_) => "Saved to Seraphina.AGI memory (~/.seraphina/wizard/memory.jsonl).".to_string(),
+                    Ok(_) => "Saved to Seraphina.AGI memory (~/.seraphina/wizard/memory.jsonl)."
+                        .to_string(),
                     Err(e) => format!("Couldn't save to Seraphina.AGI memory: {}", e),
                 };
-                self.items.push(ChatItem { kind: ItemKind::Note, text: t, rated: None });
+                self.items.push(ChatItem {
+                    kind: ItemKind::Note,
+                    text: t,
+                    rated: None,
+                });
                 self.remember_rx = None;
             }
         }
@@ -270,10 +339,20 @@ impl AssistantPanel {
             let source = self.rx_source.clone();
             match r {
                 Ok(reply) => {
-                    let text = if reply.content.is_empty() { std::mem::take(&mut self.streaming) } else { reply.content.clone() };
+                    let text = if reply.content.is_empty() {
+                        std::mem::take(&mut self.streaming)
+                    } else {
+                        reply.content.clone()
+                    };
                     self.streaming.clear();
                     if !text.trim().is_empty() {
-                        self.items.push(ChatItem { kind: ItemKind::Assistant { source: source.clone() }, text: text.clone(), rated: None });
+                        self.items.push(ChatItem {
+                            kind: ItemKind::Assistant {
+                                source: source.clone(),
+                            },
+                            text: text.clone(),
+                            rated: None,
+                        });
                     }
                     if self.provider.is_some() && !source.contains("local CLI") {
                         let mut m = ChatMsg::new("assistant", &text);
@@ -284,16 +363,27 @@ impl AssistantPanel {
                                 self.pending_calls = Some(reply.tool_calls);
                             } else {
                                 for c in &reply.tool_calls {
-                                    self.convo.push(ChatMsg::tool_result(&c.id, "skipped: tool-round limit reached"));
+                                    self.convo.push(ChatMsg::tool_result(
+                                        &c.id,
+                                        "skipped: tool-round limit reached",
+                                    ));
                                 }
-                                self.items.push(ChatItem { kind: ItemKind::Note, text: format!("Stopped after {} tool rounds.", MAX_ROUNDS), rated: None });
+                                self.items.push(ChatItem {
+                                    kind: ItemKind::Note,
+                                    text: format!("Stopped after {} tool rounds.", MAX_ROUNDS),
+                                    rated: None,
+                                });
                             }
                         }
                     }
                 }
                 Err(e) => {
                     self.streaming.clear();
-                    self.items.push(ChatItem { kind: ItemKind::Note, text: format!("{} error: {}", source, e), rated: None });
+                    self.items.push(ChatItem {
+                        kind: ItemKind::Note,
+                        text: format!("{} error: {}", source, e),
+                        rated: None,
+                    });
                 }
             }
         }
@@ -311,9 +401,24 @@ impl AssistantPanel {
     }
 
     /// Record executed tool calls and continue the conversation.
-    pub fn submit_results(&mut self, batch: u64, lines: Vec<ActionLine>, results: Vec<(String, String)>, app_ctx: &str) {
+    pub fn submit_results(
+        &mut self,
+        batch: u64,
+        lines: Vec<ActionLine>,
+        results: Vec<(String, String)>,
+        app_ctx: &str,
+    ) {
         if !lines.is_empty() {
-            self.items.push(ChatItem { kind: ItemKind::Actions { batch, lines, undone: false, settled: false }, text: String::new(), rated: None });
+            self.items.push(ChatItem {
+                kind: ItemKind::Actions {
+                    batch,
+                    lines,
+                    undone: false,
+                    settled: false,
+                },
+                text: String::new(),
+                rated: None,
+            });
         }
         for (id, r) in results {
             self.convo.push(ChatMsg::tool_result(&id, &r));
@@ -327,22 +432,39 @@ impl AssistantPanel {
     pub fn ui(&mut self, ui: &mut egui::Ui, p: &Palette, wctx: &WorkspaceContext, now: f64) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(ic::SPARKLE).size(16.0).color(p.accent));
-            ui.label(egui::RichText::new("Seraphina").size(14.0).strong().color(p.text));
+            ui.label(
+                egui::RichText::new("Seraphina")
+                    .size(14.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::icon_button(ui, p, ic::BROOM, "Clear chat", false).clicked() && !self.is_busy() {
+                if theme::icon_button(ui, p, ic::BROOM, "Clear chat", false).clicked()
+                    && !self.is_busy()
+                {
                     self.settle();
                     self.items.truncate(1);
                     self.convo.clear();
                 }
-                let (c, t) = if self.provider.is_some() { (p.success, "LLM") } else { (p.warn, "Offline stub") };
+                let (c, t) = if self.provider.is_some() {
+                    (p.success, "LLM")
+                } else {
+                    (p.warn, "Offline stub")
+                };
                 theme::pill(ui, p, c, t).on_hover_text(self.backend_label());
             });
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label(theme::muted(p, &format!("{} · {} · {}", self.backend_label(), wctx.mode, wctx.tool)));
+            ui.label(theme::muted(
+                p,
+                &format!("{} · {} · {}", self.backend_label(), wctx.mode, wctx.tool),
+            ));
         });
         let cli_txt = match (&self.cli, &self.cli_rx) {
-            (Some(c), _) => format!("{} linked: remember / recall / triad run locally", c.version),
+            (Some(c), _) => format!(
+                "{} linked: remember / recall / triad run locally",
+                c.version
+            ),
             (None, Some(_)) => "Looking for the Seraphina.AGI CLI…".into(),
             (None, None) => "Seraphina.AGI CLI not found (pip install seraphina-agi)".into(),
         };

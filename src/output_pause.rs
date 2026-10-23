@@ -84,7 +84,12 @@ mod tests {
     use crate::output_info::{OutputInfo, OUTPUT_AV, OUTPUT_ENCODED};
 
     fn pausable() -> OutputInfo {
-        OutputInfo::new("rec", "Recording", OUTPUT_AV | OUTPUT_ENCODED | OUTPUT_CAN_PAUSE).unwrap()
+        OutputInfo::new(
+            "rec",
+            "Recording",
+            OUTPUT_AV | OUTPUT_ENCODED | OUTPUT_CAN_PAUSE,
+        )
+        .unwrap()
     }
 
     #[test]

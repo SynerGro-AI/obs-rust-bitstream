@@ -125,7 +125,12 @@ impl AvBundle {
             input.read_exact(&mut buf)?;
             audio.push(f32::from_le_bytes(buf));
         }
-        Ok(Self { video, audio, fps, encoder })
+        Ok(Self {
+            video,
+            audio,
+            fps,
+            encoder,
+        })
     }
 }
 

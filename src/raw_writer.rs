@@ -36,9 +36,12 @@ impl RawWriter {
         let height = first.height;
         let count = seq.len() as u32;
         out.write_all(MAGIC).map_err(|_| WriteError::Io)?;
-        out.write_all(&width.to_le_bytes()).map_err(|_| WriteError::Io)?;
-        out.write_all(&height.to_le_bytes()).map_err(|_| WriteError::Io)?;
-        out.write_all(&count.to_le_bytes()).map_err(|_| WriteError::Io)?;
+        out.write_all(&width.to_le_bytes())
+            .map_err(|_| WriteError::Io)?;
+        out.write_all(&height.to_le_bytes())
+            .map_err(|_| WriteError::Io)?;
+        out.write_all(&count.to_le_bytes())
+            .map_err(|_| WriteError::Io)?;
         for frame in seq.frames() {
             if let Some(plane) = frame.planes.first() {
                 out.write_all(plane).map_err(|_| WriteError::Io)?;

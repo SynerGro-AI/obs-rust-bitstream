@@ -60,7 +60,11 @@ impl Performance {
         } else {
             (0.4, 0.1, 0.5)
         };
-        let singer = if self.live { camera.frame() } else { (0.0, 0.0, 0.0) };
+        let singer = if self.live {
+            camera.frame()
+        } else {
+            (0.0, 0.0, 0.0)
+        };
         (bg, singer)
     }
 }

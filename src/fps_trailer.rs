@@ -16,7 +16,8 @@ impl FpsTrailer {
     /// Append an fps trailer.
     pub fn write<W: Write>(fps: f32, mut out: W) -> Result<(), WriteError> {
         out.write_all(TRAILER).map_err(|_| WriteError::Io)?;
-        out.write_all(&fps.to_le_bytes()).map_err(|_| WriteError::Io)?;
+        out.write_all(&fps.to_le_bytes())
+            .map_err(|_| WriteError::Io)?;
         Ok(())
     }
 

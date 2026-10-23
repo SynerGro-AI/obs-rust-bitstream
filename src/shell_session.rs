@@ -38,7 +38,13 @@ impl ShellSession {
 
     /// Serialize to a line.
     pub fn to_line(state: &SessionState) -> String {
-        format!("tool={} size={:.0} layers={} selected={}", state.tool, state.size, state.layers, state.selected.replace(' ', "_"))
+        format!(
+            "tool={} size={:.0} layers={} selected={}",
+            state.tool,
+            state.size,
+            state.layers,
+            state.selected.replace(' ', "_")
+        )
     }
 
     /// Parse a line. None if malformed.
@@ -62,7 +68,9 @@ impl ShellSession {
             tool: tool?,
             size: size?,
             layers: layers?,
-            selected: selected.unwrap_or_else(|| "none".to_string()).replace('_', " "),
+            selected: selected
+                .unwrap_or_else(|| "none".to_string())
+                .replace('_', " "),
         })
     }
 }
@@ -98,6 +106,9 @@ mod tests {
         let mut b = Workspace::new(16, 16);
         a.click("Brush", ToolSource::Photoshop);
         b.click("Crop", ToolSource::Photoshop);
-        assert_ne!(ShellSession::save(&a, 1, "A"), ShellSession::save(&b, 1, "A"));
+        assert_ne!(
+            ShellSession::save(&a, 1, "A"),
+            ShellSession::save(&b, 1, "A")
+        );
     }
 }

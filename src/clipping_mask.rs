@@ -35,7 +35,10 @@ impl ClippingMask {
     }
 
     pub fn base_of(&self, layer: &str) -> Result<&str, ClipError> {
-        self.clips.get(layer).map(|s| s.as_str()).ok_or(ClipError::Missing)
+        self.clips
+            .get(layer)
+            .map(|s| s.as_str())
+            .ok_or(ClipError::Missing)
     }
 
     pub fn unclip(&mut self, layer: &str) -> bool {

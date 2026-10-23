@@ -50,10 +50,10 @@ pub fn nv12_to_y800(nv12: &[u8], width: u32, height: u32) -> Option<VideoFrame> 
 mod imp {
     use super::*;
     use windows::Win32::Media::MediaFoundation::{
-        MFCreateAttributes, MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources, MFStartup,
+        IMFActivate, IMFSourceReader, MFCreateAttributes, MFCreateSourceReaderFromMediaSource,
+        MFEnumDeviceSources, MFStartup, MFVideoFormat_NV12, MFVideoFormat_YUY2,
         MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
         MF_MT_FRAME_SIZE, MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_VERSION,
-        MFVideoFormat_NV12, MFVideoFormat_YUY2, IMFActivate, IMFSourceReader,
     };
     use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 
@@ -84,7 +84,8 @@ mod imp {
 
                 // Enumerate video capture devices.
                 let mut attr = None;
-                MFCreateAttributes(&mut attr, 1).map_err(|e| format!("MFCreateAttributes: {}", e))?;
+                MFCreateAttributes(&mut attr, 1)
+                    .map_err(|e| format!("MFCreateAttributes: {}", e))?;
                 let attr = attr.ok_or("no attributes")?;
                 attr.SetGUID(
                     &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
@@ -100,7 +101,10 @@ mod imp {
                     return Err("no video capture devices".to_string());
                 }
                 if index >= count {
-                    return Err(format!("device index {} out of range ({} devices)", index, count));
+                    return Err(format!(
+                        "device index {} out of range ({} devices)",
+                        index, count
+                    ));
                 }
 
                 // Activate the chosen device.
@@ -150,10 +154,9 @@ mod imp {
         subtype: &windows::core::GUID,
     ) -> Result<(), String> {
         use windows::Win32::Media::MediaFoundation::{
-            MFCreateMediaType, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MFMediaType_Video,
+            MFCreateMediaType, MFMediaType_Video, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE,
         };
-        let mt = MFCreateMediaType()
-            .map_err(|e| format!("MFCreateMediaType: {:?}", e))?;
+        let mt = MFCreateMediaType().map_err(|e| format!("MFCreateMediaType: {:?}", e))?;
         mt.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)
             .map_err(|e| format!("SetGUID major: {}", e))?;
         mt.SetGUID(&MF_MT_SUBTYPE, subtype)
@@ -241,11 +244,17 @@ impl Capture for WindowsCapture {
 #[cfg(not(all(windows, feature = "windows")))]
 impl WindowsCapture {
     pub fn open() -> Result<Self, String> {
-        Err("Windows Media Foundation capture requires Windows and the `windows` feature".to_string())
+        Err(
+            "Windows Media Foundation capture requires Windows and the `windows` feature"
+                .to_string(),
+        )
     }
 
     pub fn open_index(_index: u32) -> Result<Self, String> {
-        Err("Windows Media Foundation capture requires Windows and the `windows` feature".to_string())
+        Err(
+            "Windows Media Foundation capture requires Windows and the `windows` feature"
+                .to_string(),
+        )
     }
 }
 
@@ -274,7 +283,10 @@ mod tests {
             Ok(_) => {}
             Err(e) => {
                 assert!(
-                    e.contains("Windows") || e.contains("no video") || e.contains("MF") || e.contains("CoInitialize")
+                    e.contains("Windows")
+                        || e.contains("no video")
+                        || e.contains("MF")
+                        || e.contains("CoInitialize")
                 );
             }
         }

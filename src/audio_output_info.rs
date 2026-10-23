@@ -73,7 +73,8 @@ mod tests {
 
     #[test]
     fn create() {
-        let a = AudioOutputInfo::new("main", 48000, AudioFormat::F32, SpeakerLayout::Stereo).unwrap();
+        let a =
+            AudioOutputInfo::new("main", 48000, AudioFormat::F32, SpeakerLayout::Stereo).unwrap();
         assert_eq!(a.name(), "main");
         assert_eq!(a.rate(), 48000);
         assert_eq!(a.channels(), 2);

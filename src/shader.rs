@@ -37,9 +37,14 @@ impl Shader {
     }
 
     /// light_dir and normal are unit vectors. Returns 0.0..=1.0.
-    pub fn shade(&self, light_dir: (f32, f32, f32), normal: (f32, f32, f32), roughness: f32) -> f32 {
-        let ndotl = (light_dir.0 * normal.0 + light_dir.1 * normal.1 + light_dir.2 * normal.2)
-            .max(0.0);
+    pub fn shade(
+        &self,
+        light_dir: (f32, f32, f32),
+        normal: (f32, f32, f32),
+        roughness: f32,
+    ) -> f32 {
+        let ndotl =
+            (light_dir.0 * normal.0 + light_dir.1 * normal.1 + light_dir.2 * normal.2).max(0.0);
         match self.kind {
             ShaderKind::Lambert => ndotl,
             ShaderKind::Phong => {

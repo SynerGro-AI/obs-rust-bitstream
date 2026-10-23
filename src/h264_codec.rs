@@ -90,7 +90,9 @@ impl H264Codec {
             return Ok(None);
         }
         let key = bytes.windows(4).any(|w| w == [0, 0, 0, 1])
-            && bytes.windows(5).any(|w| w[0..4] == [0, 0, 0, 1] && (w[4] & 0x1f) == 5);
+            && bytes
+                .windows(5)
+                .any(|w| w[0..4] == [0, 0, 0, 1] && (w[4] & 0x1f) == 5);
         let mut pkt = crate::encoder_packet::EncoderPacket::new(
             crate::encoder_context::EncoderType::Video,
             pts,
@@ -124,7 +126,13 @@ fn y800_to_i420(frame: &VideoFrame) -> Result<YuvFrame, H264Error> {
     let uv_size = ((w + 1) / 2) * ((h + 1) / 2);
     let u = vec![128u8; uv_size];
     let v = vec![128u8; uv_size];
-    Ok(YuvFrame { y, u, v, width: w, height: h })
+    Ok(YuvFrame {
+        y,
+        u,
+        v,
+        width: w,
+        height: h,
+    })
 }
 
 #[cfg(test)]

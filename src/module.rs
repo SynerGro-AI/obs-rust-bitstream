@@ -94,7 +94,10 @@ mod tests {
         assert!(Module::new("").is_err());
         let mut m = Module::new("m").unwrap();
         m.register_source("s").unwrap();
-        assert!(matches!(m.register_source("s"), Err(ModuleError::Duplicate)));
+        assert!(matches!(
+            m.register_source("s"),
+            Err(ModuleError::Duplicate)
+        ));
         assert!(matches!(m.register_source(""), Err(ModuleError::EmptyId)));
     }
 

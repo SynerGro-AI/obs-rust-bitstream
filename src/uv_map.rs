@@ -57,7 +57,12 @@ impl UvMap {
         let x = (uv.u * (frame.width.saturating_sub(1)) as f32) as u32;
         let y = (uv.v * (frame.height.saturating_sub(1)) as f32) as u32;
         let i = (y * frame.width + x) as usize;
-        frame.planes.get(0).and_then(|p| p.get(i)).copied().ok_or(UvError::Missing)
+        frame
+            .planes
+            .get(0)
+            .and_then(|p| p.get(i))
+            .copied()
+            .ok_or(UvError::Missing)
     }
 
     /// Read a UV from live weights.

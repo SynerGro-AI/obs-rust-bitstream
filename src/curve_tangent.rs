@@ -31,7 +31,8 @@ impl CurveTangent {
 
     pub fn add(&mut self, time: f32, value: f32, tangent: Tangent) {
         self.keys.push((time, value, tangent));
-        self.keys.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        self.keys
+            .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 
     pub fn len(&self) -> usize {

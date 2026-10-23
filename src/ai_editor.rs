@@ -85,7 +85,11 @@ impl AiEditor {
     }
 
     /// Suggest a filter and build it.
-    pub fn build_filter(ai: &AiAssistant, name: &str, prompt: &str) -> Result<Filter, crate::filter::FilterError> {
+    pub fn build_filter(
+        ai: &AiAssistant,
+        name: &str,
+        prompt: &str,
+    ) -> Result<Filter, crate::filter::FilterError> {
         let kind = Self::suggest_filter(ai, prompt);
         Filter::new(name, kind)
     }
@@ -118,10 +122,7 @@ mod tests {
     fn suggest_blend() {
         let ai = AiAssistant::new(AiConfig::seraphina());
         let m = AiEditor::suggest_blend(&ai, "use multiply");
-        assert!(matches!(
-            m,
-            BlendMode::Multiply | BlendMode::Normal
-        ));
+        assert!(matches!(m, BlendMode::Multiply | BlendMode::Normal));
     }
 
     #[test]

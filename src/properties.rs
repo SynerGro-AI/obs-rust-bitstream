@@ -21,12 +21,16 @@ pub struct Properties;
 impl Properties {
     /// Properties of the named layer. None if missing.
     pub fn of(stack: &LayerStack, name: &str) -> Option<LayerProps> {
-        stack.layers().iter().find(|l| l.name() == name).map(|l| LayerProps {
-            name: l.name().to_string(),
-            opacity: l.opacity(),
-            blend: l.blend(),
-            visible: l.visible(),
-        })
+        stack
+            .layers()
+            .iter()
+            .find(|l| l.name() == name)
+            .map(|l| LayerProps {
+                name: l.name().to_string(),
+                opacity: l.opacity(),
+                blend: l.blend(),
+                visible: l.visible(),
+            })
     }
 
     /// Set opacity. Returns false if the layer is missing.
@@ -81,7 +85,11 @@ mod tests {
     fn missing_is_none() {
         let s = LayerStack::new();
         assert!(Properties::of(&s, "Nope").is_none());
-        assert!(!Properties::set_opacity(&mut LayerStack::new(), "Nope", 1.0));
+        assert!(!Properties::set_opacity(
+            &mut LayerStack::new(),
+            "Nope",
+            1.0
+        ));
     }
 
     #[test]

@@ -109,7 +109,9 @@ impl AudioSourceList {
 
     /// Samples from the active source.
     pub fn samples(&mut self, frames: usize) -> Option<AudioSamples> {
-        self.items.get_mut(self.active).and_then(|(_, s)| s.samples(frames))
+        self.items
+            .get_mut(self.active)
+            .and_then(|(_, s)| s.samples(frames))
     }
 }
 

@@ -40,7 +40,9 @@ impl BitrateSlider {
             return Err(SliderError::Negative);
         }
         self.value = value;
-        weights.set("h264.bitrate", value).map_err(|_| SliderError::Negative)?;
+        weights
+            .set("h264.bitrate", value)
+            .map_err(|_| SliderError::Negative)?;
         Ok(())
     }
 

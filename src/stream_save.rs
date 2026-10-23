@@ -86,8 +86,18 @@ mod tests {
         let mut codec = H264Codec::new(16, 16, &w).unwrap();
         let mut cap = SyntheticCapture::new(16, 16);
         let (sb, pb) = StreamSave::run_and_save(
-            &mut r, &mut stream, &mut svc, &out, &mut w, &mut codec, &mut cap,
-            "twitch", "rtmp", 1, &sp, &pp,
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            &mut codec,
+            &mut cap,
+            "twitch",
+            "rtmp",
+            1,
+            &sp,
+            &pp,
         )
         .unwrap();
         assert!(sb > 0);
@@ -109,8 +119,18 @@ mod tests {
         let mut codec = H264Codec::new(16, 16, &w).unwrap();
         let mut cap = SyntheticCapture::new(16, 16);
         assert!(StreamSave::run_and_save(
-            &mut r, &mut stream, &mut svc, &out, &mut w, &mut codec, &mut cap,
-            "", "rtmp", 1, &dir.join("a"), &dir.join("b"),
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            &mut codec,
+            &mut cap,
+            "",
+            "rtmp",
+            1,
+            &dir.join("a"),
+            &dir.join("b"),
         )
         .is_err());
     }
@@ -132,13 +152,33 @@ mod tests {
         let mut capa = SyntheticCapture::new(16, 16);
         let mut capb = SyntheticCapture::new(16, 16);
         let (_, pa) = StreamSave::run_and_save(
-            &mut ra, &mut sa, &mut sva, &out, &mut wa, &mut ca, &mut capa,
-            "twitch", "rtmp", 1, &dir.join("sa"), &dir.join("pa"),
+            &mut ra,
+            &mut sa,
+            &mut sva,
+            &out,
+            &mut wa,
+            &mut ca,
+            &mut capa,
+            "twitch",
+            "rtmp",
+            1,
+            &dir.join("sa"),
+            &dir.join("pa"),
         )
         .unwrap();
         let (_, pb) = StreamSave::run_and_save(
-            &mut rb, &mut sb, &mut svb, &out, &mut wb, &mut cb, &mut capb,
-            "youtube", "rtmp", 3, &dir.join("sb"), &dir.join("pb"),
+            &mut rb,
+            &mut sb,
+            &mut svb,
+            &out,
+            &mut wb,
+            &mut cb,
+            &mut capb,
+            "youtube",
+            "rtmp",
+            3,
+            &dir.join("sb"),
+            &dir.join("pb"),
         )
         .unwrap();
         assert!(pb >= pa);

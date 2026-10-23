@@ -29,14 +29,22 @@ impl GroupComposite {
         single.add("A", Self::frame(200)).unwrap();
         single.add("B", Self::frame(200)).unwrap();
         let _ = single.set_opacity("A", 128);
-        let single_changed = single.visible_layers().iter().filter(|l| l.opacity != 255).count();
+        let single_changed = single
+            .visible_layers()
+            .iter()
+            .filter(|l| l.opacity != 255)
+            .count();
 
         let mut group = LayerStack::new();
         group.add("A", Self::frame(200)).unwrap();
         group.add("B", Self::frame(200)).unwrap();
         let _ = group.set_opacity("A", 128);
         let _ = group.set_opacity("B", 128);
-        let group_changed = group.visible_layers().iter().filter(|l| l.opacity != 255).count();
+        let group_changed = group
+            .visible_layers()
+            .iter()
+            .filter(|l| l.opacity != 255)
+            .count();
 
         (single_changed, group_changed)
     }

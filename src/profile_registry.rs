@@ -49,7 +49,9 @@ impl ProfileRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Profile, ProfileRegistryError> {
-        self.profiles.get_mut(name).ok_or(ProfileRegistryError::Missing)
+        self.profiles
+            .get_mut(name)
+            .ok_or(ProfileRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -97,7 +99,18 @@ mod tests {
     fn differential() {
         let mut r = ProfileRegistry::new();
         r.add("Gaming").unwrap();
-        r.get_mut("Gaming").unwrap().settings_mut().set_int("base_width", 1920).unwrap();
-        assert_eq!(r.get("Gaming").unwrap().settings().get_int("base_width").unwrap(), 1920);
+        r.get_mut("Gaming")
+            .unwrap()
+            .settings_mut()
+            .set_int("base_width", 1920)
+            .unwrap();
+        assert_eq!(
+            r.get("Gaming")
+                .unwrap()
+                .settings()
+                .get_int("base_width")
+                .unwrap(),
+            1920
+        );
     }
 }

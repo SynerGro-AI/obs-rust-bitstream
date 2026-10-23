@@ -145,7 +145,9 @@ mod tests {
         match AppleAudio::open(48000, 2) {
             Ok(_) => {}
             Err(e) => {
-                assert!(e.contains("CoreAudio") || e.contains("not available") || e.contains("not yet"));
+                assert!(
+                    e.contains("CoreAudio") || e.contains("not available") || e.contains("not yet")
+                );
             }
         }
     }

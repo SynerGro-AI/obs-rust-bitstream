@@ -7,11 +7,11 @@
 //!
 //! Differential: save then load round-trips the same bytes.
 
-use std::fs;
-use std::path::Path;
 #[cfg(test)]
 use crate::diff::assert_equal;
 use crate::serializer::{MemSerializer, Serializer};
+use std::fs;
+use std::path::Path;
 
 #[derive(Clone, Debug, Default)]
 pub struct FileSerializer {

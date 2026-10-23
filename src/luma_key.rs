@@ -33,10 +33,7 @@ impl LumaKey {
     }
 
     /// Read low/high from live weights.
-    pub fn from_weights(
-        frame: &mut VideoFrame,
-        weights: &LiveWeights,
-    ) -> Result<(), LumaKeyError> {
+    pub fn from_weights(frame: &mut VideoFrame, weights: &LiveWeights) -> Result<(), LumaKeyError> {
         let low = weights.get("key.luma.low").unwrap_or(0.0) as u8;
         let high = weights.get("key.luma.high").unwrap_or(255.0) as u8;
         Self::apply(frame, low, high)

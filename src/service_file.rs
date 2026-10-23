@@ -65,6 +65,9 @@ mod tests {
             name: "youtube".to_string(),
             id: String::new(),
         };
-        assert_ne!(ServiceFile::read(&ServiceFile::write(&a)), ServiceFile::read(&ServiceFile::write(&b)));
+        assert_ne!(
+            ServiceFile::read(&ServiceFile::write(&a)),
+            ServiceFile::read(&ServiceFile::write(&b))
+        );
     }
 }

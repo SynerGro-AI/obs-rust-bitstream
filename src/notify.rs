@@ -20,7 +20,11 @@ impl Notify {
         if share.target().is_empty() {
             return Err(NotifyError::EmptyTarget);
         }
-        Ok(format!("shared {} bytes to {}", share.bytes(), share.target()))
+        Ok(format!(
+            "shared {} bytes to {}",
+            share.bytes(),
+            share.target()
+        ))
     }
 }
 

@@ -7,9 +7,9 @@
 //! Differential: set then get returns the same string; missing keys
 //! fall back to defaults exactly as documented.
 
-use std::collections::HashMap;
 #[cfg(test)]
 use crate::diff::assert_equal;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
 pub struct Config {
@@ -22,7 +22,10 @@ impl Config {
         Self::default()
     }
 
-    fn section_mut<'a>(map: &'a mut HashMap<String, HashMap<String, String>>, section: &str) -> &'a mut HashMap<String, String> {
+    fn section_mut<'a>(
+        map: &'a mut HashMap<String, HashMap<String, String>>,
+        section: &str,
+    ) -> &'a mut HashMap<String, String> {
         map.entry(section.to_string()).or_default()
     }
 
@@ -43,7 +46,10 @@ impl Config {
     }
 
     pub fn has_user_value(&self, section: &str, name: &str) -> bool {
-        self.sections.get(section).and_then(|s| s.get(name)).is_some()
+        self.sections
+            .get(section)
+            .and_then(|s| s.get(name))
+            .is_some()
     }
 
     pub fn remove_value(&mut self, section: &str, name: &str) -> bool {

@@ -36,7 +36,11 @@ impl ColorFilter {
         let sat = |c: f32| lum + (c - lum) * self.saturation;
         let contrast = |c: f32| (c - 0.5) * self.contrast + 0.5 + self.brightness;
         let clamp = |c: f32| (c.clamp(0.0, 1.0) * 255.0) as u8;
-        (clamp(contrast(sat(rf))), clamp(contrast(sat(gf))), clamp(contrast(sat(bf))))
+        (
+            clamp(contrast(sat(rf))),
+            clamp(contrast(sat(gf))),
+            clamp(contrast(sat(bf))),
+        )
     }
 }
 

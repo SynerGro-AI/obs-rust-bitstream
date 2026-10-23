@@ -6,28 +6,28 @@
 //! Differential: a bright step is in the written bytes.
 
 use crate::ai::AiAssistant;
-use crate::crossfade::Crossfade;
-use crate::resample::Resample;
-use crate::scene_effect::SceneEffect;
-use crate::system_status::SystemStatus;
-use crate::av_bundle::AvBundle;
-use crate::audio_writer::AudioWriter;
 use crate::audio_sync::AudioSync;
-use crate::timestamp_stamp::TimestampStamp;
+use crate::audio_writer::AudioWriter;
+use crate::av_bundle::AvBundle;
+use crate::crossfade::Crossfade;
 use crate::encode_cancel::EncodeCancel;
-use crate::encode_status::EncodeStatus;
 use crate::encode_progress::EncodeProgress;
+use crate::encode_status::EncodeStatus;
 use crate::encoder_controls::EncoderControls;
-use crate::h264_codec::H264Codec;
 use crate::fps_trailer::FpsTrailer;
-use crate::timed_sequence::TimedSequence;
-use crate::ping_pong::PingPong;
-use crate::sequence_reverse::SequenceReverse;
 use crate::frame_hold::FrameHold;
 use crate::frame_sequence::FrameSequence;
+use crate::h264_codec::H264Codec;
 use crate::live_weights::LiveWeights;
+use crate::ping_pong::PingPong;
 use crate::pipe_suggest::PipeSuggest;
 use crate::raw_writer::{RawWriter, WriteError};
+use crate::resample::Resample;
+use crate::scene_effect::SceneEffect;
+use crate::sequence_reverse::SequenceReverse;
+use crate::system_status::SystemStatus;
+use crate::timed_sequence::TimedSequence;
+use crate::timestamp_stamp::TimestampStamp;
 use crate::tool_pipeline::ToolPipeline;
 use crate::video_frame::VideoFrame;
 use crate::weight_interp::WeightInterp;
@@ -59,7 +59,8 @@ impl EffectedWrite {
         weights: &LiveWeights,
         out: W,
     ) -> Result<(), WriteError> {
-        pipe.run_sequence(seq, weights).map_err(|_| WriteError::Empty)?;
+        pipe.run_sequence(seq, weights)
+            .map_err(|_| WriteError::Empty)?;
         RawWriter::write(seq, out)
     }
 
@@ -83,7 +84,8 @@ impl EffectedWrite {
         for f in frames {
             seq.push(f.clone());
         }
-        pipe.run_sequence(&mut seq, weights).map_err(|_| WriteError::Empty)?;
+        pipe.run_sequence(&mut seq, weights)
+            .map_err(|_| WriteError::Empty)?;
         RawWriter::write(&seq, out)
     }
 
@@ -106,7 +108,8 @@ impl EffectedWrite {
         for f in frames {
             seq.push(f.clone());
         }
-        pipe.run_sequence(&mut seq, weights).map_err(|_| WriteError::Empty)?;
+        pipe.run_sequence(&mut seq, weights)
+            .map_err(|_| WriteError::Empty)?;
         RawWriter::write(&seq, out)
     }
 
@@ -163,10 +166,7 @@ impl EffectedWrite {
     }
 
     /// Crossfade from the first frame to the last across the sequence.
-    pub fn write_crossfade<W: Write>(
-        frames: &[VideoFrame],
-        out: W,
-    ) -> Result<(), WriteError> {
+    pub fn write_crossfade<W: Write>(frames: &[VideoFrame], out: W) -> Result<(), WriteError> {
         if frames.len() < 2 {
             return Err(WriteError::Empty);
         }
@@ -196,10 +196,7 @@ impl EffectedWrite {
     }
 
     /// Reverse a sequence and write it.
-    pub fn write_reverse<W: Write>(
-        frames: &[VideoFrame],
-        out: W,
-    ) -> Result<(), WriteError> {
+    pub fn write_reverse<W: Write>(frames: &[VideoFrame], out: W) -> Result<(), WriteError> {
         if frames.is_empty() {
             return Err(WriteError::Empty);
         }
@@ -212,10 +209,7 @@ impl EffectedWrite {
     }
 
     /// Bounce a sequence forward then backward and write it.
-    pub fn write_ping_pong<W: Write>(
-        frames: &[VideoFrame],
-        out: W,
-    ) -> Result<(), WriteError> {
+    pub fn write_ping_pong<W: Write>(frames: &[VideoFrame], out: W) -> Result<(), WriteError> {
         if frames.is_empty() {
             return Err(WriteError::Empty);
         }
@@ -228,10 +222,7 @@ impl EffectedWrite {
     }
 
     /// Write the frames from a timed sequence.
-    pub fn write_timed<W: Write>(
-        timed: &TimedSequence,
-        out: W,
-    ) -> Result<(), WriteError> {
+    pub fn write_timed<W: Write>(timed: &TimedSequence, out: W) -> Result<(), WriteError> {
         if timed.len() == 0 {
             return Err(WriteError::Empty);
         }
@@ -239,10 +230,7 @@ impl EffectedWrite {
     }
 
     /// Write the frames and append the fps trailer.
-    pub fn write_timed_fps<W: Write>(
-        timed: &TimedSequence,
-        mut out: W,
-    ) -> Result<(), WriteError> {
+    pub fn write_timed_fps<W: Write>(timed: &TimedSequence, mut out: W) -> Result<(), WriteError> {
         if timed.len() == 0 {
             return Err(WriteError::Empty);
         }
@@ -272,8 +260,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         for f in frames {
             let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
             out.write_all(&bytes).map_err(|_| WriteError::Io)?;
@@ -296,8 +284,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         for f in frames {
             let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
             out.write_all(&bytes).map_err(|_| WriteError::Io)?;
@@ -340,8 +328,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         for f in frames {
             let mut processed = f.clone();
             let _ = effect.apply(&mut processed, weights);
@@ -367,8 +355,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         for f in frames {
             let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
             out.write_all(&bytes).map_err(|_| WriteError::Io)?;
@@ -393,8 +381,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         for f in frames {
             if cancel.is_cancelled() {
                 break;
@@ -423,8 +411,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         for f in frames {
             if cancel.is_cancelled() {
                 break;
@@ -453,8 +441,8 @@ impl EffectedWrite {
         }
         controls.apply(weights).map_err(|_| WriteError::Empty)?;
         let first = &frames[0];
-        let mut enc = H264Codec::new(first.width, first.height, weights)
-            .map_err(|_| WriteError::Empty)?;
+        let mut enc =
+            H264Codec::new(first.width, first.height, weights).map_err(|_| WriteError::Empty)?;
         let mut samples = Vec::new();
         for (i, f) in frames.iter().enumerate() {
             let bytes = enc.encode(f).map_err(|_| WriteError::Empty)?;
@@ -532,14 +520,7 @@ impl EffectedWrite {
             let _ = effect.apply(&mut p, weights);
             processed.push(p);
         }
-        Self::write_h264_bundle_status(
-            &processed,
-            controls,
-            weights,
-            sync,
-            bundle_out,
-            status_out,
-        )
+        Self::write_h264_bundle_status(&processed, controls, weights, sync, bundle_out, status_out)
     }
 
     /// Apply an effect, encode with progress, and write both.
@@ -563,14 +544,7 @@ impl EffectedWrite {
             processed.push(p);
             progress.tick();
         }
-        Self::write_h264_bundle_status(
-            &processed,
-            controls,
-            weights,
-            sync,
-            bundle_out,
-            status_out,
-        )
+        Self::write_h264_bundle_status(&processed, controls, weights, sync, bundle_out, status_out)
     }
 
     /// Apply an effect, encode with progress and cancel, and write both.
@@ -601,14 +575,7 @@ impl EffectedWrite {
         if processed.is_empty() {
             return Err(WriteError::Empty);
         }
-        Self::write_h264_bundle_status(
-            &processed,
-            controls,
-            weights,
-            sync,
-            bundle_out,
-            status_out,
-        )
+        Self::write_h264_bundle_status(&processed, controls, weights, sync, bundle_out, status_out)
     }
 
     /// Stamp each frame with its time, then encode and write both.
@@ -642,14 +609,7 @@ impl EffectedWrite {
             let _ = crate::text_draw::TextDraw::text(&mut p, 0, 0, &text, blended);
             stamped.push(p);
         }
-        Self::write_h264_bundle_status(
-            &stamped,
-            controls,
-            weights,
-            sync,
-            bundle_out,
-            status_out,
-        )
+        Self::write_h264_bundle_status(&stamped, controls, weights, sync, bundle_out, status_out)
     }
 }
 
@@ -682,13 +642,19 @@ mod tests {
         EffectedWrite::write_ai(&[f.clone()], &ai, &mut w, &mut buf3).unwrap();
         assert!(buf3.len() > 16);
         let mut buf4 = Vec::new();
-        EffectedWrite::write_ai_steps(&[f.clone()], &["bright", "invert"], &ai, &mut w, &mut buf4).unwrap();
+        EffectedWrite::write_ai_steps(&[f.clone()], &["bright", "invert"], &ai, &mut w, &mut buf4)
+            .unwrap();
         assert!(buf4.len() > 16);
         let mut buf5 = Vec::new();
         EffectedWrite::write_fade(&[f.clone(), f.clone()], "bright", 0.0, 20.0, &mut buf5).unwrap();
         assert!(buf5.len() > 16);
         let mut buf6 = Vec::new();
-        EffectedWrite::write_fade_steps(&[f.clone()], &[("bright", 10.0), ("glow", 5.0)], &mut buf6).unwrap();
+        EffectedWrite::write_fade_steps(
+            &[f.clone()],
+            &[("bright", 10.0), ("glow", 5.0)],
+            &mut buf6,
+        )
+        .unwrap();
         assert!(buf6.len() > 16);
         let mut dark = f.clone();
         dark.planes[0].fill(0);
@@ -725,13 +691,22 @@ mod tests {
         assert!(!buf14.is_empty());
         let mut status = EncodeStatus::new(1, 30.0).unwrap();
         let mut buf16 = Vec::new();
-        EffectedWrite::write_h264_status(&[f.clone()], &controls, &mut w, &mut status, &mut buf16).unwrap();
+        EffectedWrite::write_h264_status(&[f.clone()], &controls, &mut w, &mut status, &mut buf16)
+            .unwrap();
         assert!(status.is_done());
         let mut cancel = EncodeCancel::new();
         cancel.cancel();
         let mut status2 = EncodeStatus::new(2, 30.0).unwrap();
         let mut buf17 = Vec::new();
-        EffectedWrite::write_h264_cancellable(&[f.clone(), f.clone()], &controls, &mut w, &mut status2, &cancel, &mut buf17).unwrap();
+        EffectedWrite::write_h264_cancellable(
+            &[f.clone(), f.clone()],
+            &controls,
+            &mut w,
+            &mut status2,
+            &cancel,
+            &mut buf17,
+        )
+        .unwrap();
         assert_eq!(status2.done(), 0);
     }
 }

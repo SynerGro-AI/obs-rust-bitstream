@@ -49,7 +49,9 @@ impl MonitorRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut AudioMonitor, MonitorRegistryError> {
-        self.monitors.get_mut(name).ok_or(MonitorRegistryError::Missing)
+        self.monitors
+            .get_mut(name)
+            .ok_or(MonitorRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {

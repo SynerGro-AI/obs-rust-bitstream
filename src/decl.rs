@@ -22,7 +22,10 @@ pub struct ParamFlags {
 
 impl Default for ParamFlags {
     fn default() -> Self {
-        Self { in_: true, out: false }
+        Self {
+            in_: true,
+            out: false,
+        }
     }
 }
 
@@ -50,7 +53,9 @@ pub enum DeclError {
     UnexpectedToken(String),
 }
 
-const RESERVED: &[&str] = &["int", "float", "bool", "ptr", "string", "void", "return", "in", "out"];
+const RESERVED: &[&str] = &[
+    "int", "float", "bool", "ptr", "string", "void", "return", "in", "out",
+];
 
 fn is_reserved(name: &str) -> bool {
     RESERVED.iter().any(|r| *r == name)
@@ -78,7 +83,7 @@ pub fn parse_decl(s: &str) -> Result<DeclInfo, DeclError> {
         return Err(DeclError::Empty);
     }
 
-    // Split on the first '(' 
+    // Split on the first '('
     let open = s.find('(').ok_or(DeclError::MissingParen)?;
     let close = s.rfind(')').ok_or(DeclError::MissingParen)?;
     if close < open {
@@ -123,7 +128,10 @@ fn parse_param(raw: &str) -> Result<DeclParam, DeclError> {
         return Err(DeclError::UnexpectedToken(raw.to_string()));
     }
 
-    let mut flags = ParamFlags { in_: false, out: false };
+    let mut flags = ParamFlags {
+        in_: false,
+        out: false,
+    };
     let mut i = 0;
 
     // Leading in/out specifiers

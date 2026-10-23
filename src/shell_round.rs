@@ -58,6 +58,9 @@ mod tests {
         a.click("Brush", ToolSource::Photoshop);
         b.click("Crop", ToolSource::Photoshop);
         let s = LayerStack::new();
-        assert_ne!(UiView::render(&a, &s, &LayerSelect::new()), UiView::render(&b, &s, &LayerSelect::new()));
+        assert_ne!(
+            UiView::render(&a, &s, &LayerSelect::new()),
+            UiView::render(&b, &s, &LayerSelect::new())
+        );
     }
 }

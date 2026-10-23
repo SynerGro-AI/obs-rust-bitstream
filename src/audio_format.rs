@@ -54,7 +54,10 @@ impl AudioFormat {
         match self {
             AudioFormat::U8 | AudioFormat::U8Planar => 1,
             AudioFormat::S16 | AudioFormat::S16Planar => 2,
-            AudioFormat::S32 | AudioFormat::F32 | AudioFormat::S32Planar | AudioFormat::F32Planar => 4,
+            AudioFormat::S32
+            | AudioFormat::F32
+            | AudioFormat::S32Planar
+            | AudioFormat::F32Planar => 4,
             AudioFormat::Unknown => 0,
         }
     }
@@ -62,7 +65,10 @@ impl AudioFormat {
     pub fn is_planar(self) -> bool {
         matches!(
             self,
-            AudioFormat::U8Planar | AudioFormat::S16Planar | AudioFormat::S32Planar | AudioFormat::F32Planar
+            AudioFormat::U8Planar
+                | AudioFormat::S16Planar
+                | AudioFormat::S32Planar
+                | AudioFormat::F32Planar
         )
     }
 
@@ -104,8 +110,14 @@ mod tests {
 
     #[test]
     fn unknown_safe() {
-        assert_eq!(audio_size(AudioFormat::Unknown, SpeakerLayout::Stereo, 100), None);
-        assert_eq!(audio_size(AudioFormat::S16, SpeakerLayout::Unknown, 100), None);
+        assert_eq!(
+            audio_size(AudioFormat::Unknown, SpeakerLayout::Stereo, 100),
+            None
+        );
+        assert_eq!(
+            audio_size(AudioFormat::S16, SpeakerLayout::Unknown, 100),
+            None
+        );
         assert_eq!(audio_size(AudioFormat::S16, SpeakerLayout::Mono, 0), None);
     }
 

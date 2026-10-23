@@ -127,7 +127,14 @@ mod tests {
     fn differential() {
         let mut c = FilterChain::new();
         c.add("gain", "gain_filter").unwrap();
-        c.get_mut("gain").unwrap().settings_mut().set_double("db", -3.0).unwrap();
-        assert_eq!(c.get("gain").unwrap().settings().get_double("db").unwrap(), -3.0);
+        c.get_mut("gain")
+            .unwrap()
+            .settings_mut()
+            .set_double("db", -3.0)
+            .unwrap();
+        assert_eq!(
+            c.get("gain").unwrap().settings().get_double("db").unwrap(),
+            -3.0
+        );
     }
 }

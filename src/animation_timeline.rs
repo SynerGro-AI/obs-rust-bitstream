@@ -60,7 +60,11 @@ impl AnimationTimeline {
             z,
             ai: false,
         });
-        self.keys.sort_by(|a, b| a.time_secs.partial_cmp(&b.time_secs).unwrap_or(std::cmp::Ordering::Equal));
+        self.keys.sort_by(|a, b| {
+            a.time_secs
+                .partial_cmp(&b.time_secs)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     /// Add an AI-suggested keyframe. The assistant is asked for a
@@ -84,7 +88,11 @@ impl AnimationTimeline {
             z,
             ai: true,
         });
-        self.keys.sort_by(|a, b| a.time_secs.partial_cmp(&b.time_secs).unwrap_or(std::cmp::Ordering::Equal));
+        self.keys.sort_by(|a, b| {
+            a.time_secs
+                .partial_cmp(&b.time_secs)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     pub fn ai_key_count(&self) -> usize {

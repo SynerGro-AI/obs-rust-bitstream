@@ -12,9 +12,9 @@ use eframe::egui::{self, Color32, Pos2, Rounding, Stroke, Vec2};
 use obs_rust_bitstream::arena::{Arena, Environment};
 use obs_rust_bitstream::material_assign::MaterialAssign;
 use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, Surface, V3};
-use std::collections::HashMap;
 use obs_rust_bitstream::ui_canvas::{KeyTrack, Raster};
 use obs_rust_bitstream::{Joint, JointHierarchy};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,10 +97,17 @@ pub enum Shading {
 
 impl Shading {
     pub fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_lowercase().replace([' ', '-', '+'], "_").as_str() {
+        match s
+            .trim()
+            .to_lowercase()
+            .replace([' ', '-', '+'], "_")
+            .as_str()
+        {
             "shaded" | "solid" => Some(Shading::Shaded),
             "wireframe" | "wire" => Some(Shading::Wireframe),
-            "shaded_wire" | "shaded_wireframe" | "wireframe_on_shaded" | "shaded__wire" => Some(Shading::ShadedWire),
+            "shaded_wire" | "shaded_wireframe" | "wireframe_on_shaded" | "shaded__wire" => {
+                Some(Shading::ShadedWire)
+            }
             _ => None,
         }
     }
@@ -138,26 +145,55 @@ pub struct Obj {
 impl Obj {
     fn new(name: &str, kind: Kind, pos: [f32; 3]) -> Self {
         let mesh = (kind == Kind::Cube).then(PolyMesh::cube);
-        Self { name: name.to_string(), kind, pos, rot_y: 0.0, scale: 1.0, visible: true, parent: None, track_y: KeyTrack::new(), mesh, squash: [1.0; 3] }
+        Self {
+            name: name.to_string(),
+            kind,
+            pos,
+            rot_y: 0.0,
+            scale: 1.0,
+            visible: true,
+            parent: None,
+            track_y: KeyTrack::new(),
+            mesh,
+            squash: [1.0; 3],
+        }
     }
 
     pub fn to_world(&self, v: V3) -> V3 {
-        let v = [v[0] * self.squash[0], v[1] * self.squash[1], v[2] * self.squash[2]];
+        let v = [
+            v[0] * self.squash[0],
+            v[1] * self.squash[1],
+            v[2] * self.squash[2],
+        ];
         let (s, co) = self.rot_y.to_radians().sin_cos();
         let k = self.scale;
-        [self.pos[0] + (v[0] * co - v[2] * s) * k, self.pos[1] + v[1] * k, self.pos[2] + (v[0] * s + v[2] * co) * k]
+        [
+            self.pos[0] + (v[0] * co - v[2] * s) * k,
+            self.pos[1] + v[1] * k,
+            self.pos[2] + (v[0] * s + v[2] * co) * k,
+        ]
     }
 
     pub fn to_local(&self, w: V3) -> V3 {
         let (s, co) = self.rot_y.to_radians().sin_cos();
         let k = self.scale.max(1e-6);
-        let d = [(w[0] - self.pos[0]) / k, (w[1] - self.pos[1]) / k, (w[2] - self.pos[2]) / k];
+        let d = [
+            (w[0] - self.pos[0]) / k,
+            (w[1] - self.pos[1]) / k,
+            (w[2] - self.pos[2]) / k,
+        ];
         let l = [d[0] * co + d[2] * s, d[1], -d[0] * s + d[2] * co];
-        [l[0] / self.squash[0].max(1e-6), l[1] / self.squash[1].max(1e-6), l[2] / self.squash[2].max(1e-6)]
+        [
+            l[0] / self.squash[0].max(1e-6),
+            l[1] / self.squash[1].max(1e-6),
+            l[2] / self.squash[2].max(1e-6),
+        ]
     }
 
     pub fn world_mesh(&self) -> Option<PolyMesh> {
-        self.mesh.as_ref().map(|m| m.transformed(|v| self.to_world(v)))
+        self.mesh
+            .as_ref()
+            .map(|m| m.transformed(|v| self.to_world(v)))
     }
 }
 
@@ -176,7 +212,12 @@ pub struct PhysProps {
 
 impl Default for PhysProps {
     fn default() -> Self {
-        Self { temp: None, heater: 0.0, fixed: false, vel: [0.0; 3] }
+        Self {
+            temp: None,
+            heater: 0.0,
+            fixed: false,
+            vel: [0.0; 3],
+        }
     }
 }
 
@@ -227,7 +268,6 @@ pub struct SceneState {
     counter: usize,
     drag_rot: Option<(f32, f32)>,
 }
-
 
 impl SceneState {
     pub fn new() -> Self {
@@ -283,7 +323,11 @@ impl SceneState {
     }
 
     pub fn camera(&self) -> Camera {
-        Camera { yaw: self.yaw, pitch: self.pitch, dist: self.dist }
+        Camera {
+            yaw: self.yaw,
+            pitch: self.pitch,
+            dist: self.dist,
+        }
     }
 
     pub fn tick(&mut self, dt: f32) {
@@ -321,7 +365,12 @@ impl SceneState {
             "joint" => (Kind::Joint, "joint", None),
             "light" => (Kind::Light, "light", None),
             "camera" => (Kind::Camera, "camera", None),
-            other => return Err(format!("unknown kind '{}' (cube, plane, cylinder, joint, light, camera)", other)),
+            other => {
+                return Err(format!(
+                    "unknown kind '{}' (cube, plane, cylinder, joint, light, camera)",
+                    other
+                ))
+            }
         };
         self.counter += 1;
         let name = format!("{}{}", base, self.counter);
@@ -362,13 +411,34 @@ impl SceneState {
             return;
         }
         self.remove_obj(i);
-        self.selected = if self.objs.is_empty() { None } else { Some(i.min(self.objs.len() - 1)) };
+        self.selected = if self.objs.is_empty() {
+            None
+        } else {
+            Some(i.min(self.objs.len() - 1))
+        };
     }
 
     pub fn find(&self, name: Option<&str>) -> Result<usize, String> {
         match name.map(|n| n.trim()).filter(|n| !n.is_empty()) {
-            None => self.selected.filter(|i| *i < self.objs.len()).ok_or_else(|| "no object selected".to_string()),
-            Some(n) => self.objs.iter().position(|o| o.name.eq_ignore_ascii_case(n)).ok_or_else(|| format!("no object named '{}' (objects: {})", n, self.objs.iter().map(|o| o.name.as_str()).collect::<Vec<_>>().join(", "))),
+            None => self
+                .selected
+                .filter(|i| *i < self.objs.len())
+                .ok_or_else(|| "no object selected".to_string()),
+            Some(n) => self
+                .objs
+                .iter()
+                .position(|o| o.name.eq_ignore_ascii_case(n))
+                .ok_or_else(|| {
+                    format!(
+                        "no object named '{}' (objects: {})",
+                        n,
+                        self.objs
+                            .iter()
+                            .map(|o| o.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }),
         }
     }
 
@@ -384,12 +454,21 @@ impl SceneState {
     fn other_mesh(&self, a: usize, with: Option<&str>) -> Result<usize, String> {
         if let Some(w) = with.filter(|w| !w.trim().is_empty()) {
             let b = self.find_mesh(Some(w))?;
-            return if b == a { Err("pick two different meshes".into()) } else { Ok(b) };
+            return if b == a {
+                Err("pick two different meshes".into())
+            } else {
+                Ok(b)
+            };
         }
-        if let Some(b) = self.prev_selected.filter(|&b| b != a && b < self.objs.len() && self.objs[b].mesh.is_some()) {
+        if let Some(b) = self
+            .prev_selected
+            .filter(|&b| b != a && b < self.objs.len() && self.objs[b].mesh.is_some())
+        {
             return Ok(b);
         }
-        let others: Vec<usize> = (0..self.objs.len()).filter(|&i| i != a && self.objs[i].mesh.is_some()).collect();
+        let others: Vec<usize> = (0..self.objs.len())
+            .filter(|&i| i != a && self.objs[i].mesh.is_some())
+            .collect();
         match others.as_slice() {
             [b] => Ok(*b),
             [] => Err("needs a second mesh: add another cube first".into()),
@@ -402,7 +481,11 @@ impl SceneState {
     }
 
     /// Execute a 3D command. `None` = not a 3D command.
-    pub fn apply(&mut self, cmd: &AppCommand, toasts: &mut Toasts) -> Option<Result<String, String>> {
+    pub fn apply(
+        &mut self,
+        cmd: &AppCommand,
+        toasts: &mut Toasts,
+    ) -> Option<Result<String, String>> {
         use AppCommand as C;
         Some(match cmd {
             C::SceneAdd { kind } => self.add(kind, toasts),
@@ -426,9 +509,17 @@ impl SceneState {
                     self.shading = s;
                     Ok(format!("viewport: {}", s.label()))
                 }
-                None => Err(format!("unknown shading '{}' (shaded, wireframe, shaded_wire)", mode)),
+                None => Err(format!(
+                    "unknown shading '{}' (shaded, wireframe, shaded_wire)",
+                    mode
+                )),
             },
-            C::SceneTransform { object, translate, rotate_y, scale } => self.find(object.as_deref()).map(|i| {
+            C::SceneTransform {
+                object,
+                translate,
+                rotate_y,
+                scale,
+            } => self.find(object.as_deref()).map(|i| {
                 let t = self.clock.time;
                 let o = &mut self.objs[i];
                 let mut parts = Vec::new();
@@ -456,37 +547,64 @@ impl SceneState {
                 let m = self.mesh_mut(i);
                 let f = m.top_face().ok_or("mesh has no faces")?;
                 m.extrude(f, d)?;
-                Ok(format!("extruded {} top face by {:.2}", self.objs[i].name, d))
+                Ok(format!(
+                    "extruded {} top face by {:.2}",
+                    self.objs[i].name, d
+                ))
             }),
             C::SceneBevel { amount } => self.find_mesh(None).and_then(|i| {
                 let a = amount.unwrap_or(0.15).clamp(0.02, 0.45);
                 let m = self.mesh_mut(i);
                 let f = m.top_face().ok_or("mesh has no faces")?;
                 m.bevel(f, a, a * 0.5)?;
-                Ok(format!("bevelled {} top face ({:.2})", self.objs[i].name, a))
+                Ok(format!(
+                    "bevelled {} top face ({:.2})",
+                    self.objs[i].name, a
+                ))
             }),
-            C::SceneEdgeLoop { object, edge, t } => self.find_mesh(object.as_deref()).and_then(|i| {
-                let m = self.mesh_mut(i);
-                let (a, b) = match edge {
-                    Some([a, b]) => (*a, *b),
-                    None => m.default_loop_edge().ok_or("no quad faces to loop through")?,
-                };
-                let n = m.edge_loop(a, b, t.unwrap_or(0.5))?;
-                let faces = m.faces.len();
-                Ok(format!("inserted an edge loop on {} ({} quads split, {} faces)", self.objs[i].name, n, faces))
-            }),
-            C::SceneMultiCut { object, face, from_edge, to_edge, from_t, to_t } => self.find_mesh(object.as_deref()).and_then(|i| {
+            C::SceneEdgeLoop { object, edge, t } => {
+                self.find_mesh(object.as_deref()).and_then(|i| {
+                    let m = self.mesh_mut(i);
+                    let (a, b) = match edge {
+                        Some([a, b]) => (*a, *b),
+                        None => m
+                            .default_loop_edge()
+                            .ok_or("no quad faces to loop through")?,
+                    };
+                    let n = m.edge_loop(a, b, t.unwrap_or(0.5))?;
+                    let faces = m.faces.len();
+                    Ok(format!(
+                        "inserted an edge loop on {} ({} quads split, {} faces)",
+                        self.objs[i].name, n, faces
+                    ))
+                })
+            }
+            C::SceneMultiCut {
+                object,
+                face,
+                from_edge,
+                to_edge,
+                from_t,
+                to_t,
+            } => self.find_mesh(object.as_deref()).and_then(|i| {
                 let m = self.mesh_mut(i);
                 let f = match face {
                     Some(f) => *f,
                     None => m.top_face().ok_or("mesh has no faces")?,
                 };
-                let n = m.faces.get(f).map(|x| x.len()).ok_or_else(|| format!("face {} doesn't exist", f))?;
+                let n = m
+                    .faces
+                    .get(f)
+                    .map(|x| x.len())
+                    .ok_or_else(|| format!("face {} doesn't exist", f))?;
                 let a = from_edge.unwrap_or(0);
                 let b = to_edge.unwrap_or(n / 2);
                 m.multi_cut(f, a, from_t.unwrap_or(0.5), b, to_t.unwrap_or(0.5))?;
                 let faces = m.faces.len();
-                Ok(format!("cut face {} of {} ({} faces)", f, self.objs[i].name, faces))
+                Ok(format!(
+                    "cut face {} of {} ({} faces)",
+                    f, self.objs[i].name, faces
+                ))
             }),
             C::SceneBridge { object, with } => self.find_mesh(object.as_deref()).and_then(|a| {
                 let b = self.other_mesh(a, with.as_deref())?;
@@ -495,7 +613,9 @@ impl SceneState {
                 let local = other.transformed(|w| oa.to_local(w));
                 let mut merged = self.objs[a].mesh.clone().unwrap_or_default();
                 let split = merged.merge(&local);
-                let (fa, fb) = merged.facing_pair(split).ok_or("no pair of facing faces with the same corner count")?;
+                let (fa, fb) = merged
+                    .facing_pair(split)
+                    .ok_or("no pair of facing faces with the same corner count")?;
                 merged.bridge(fa, fb)?;
                 let (na, nb) = (self.objs[a].name.clone(), self.objs[b].name.clone());
                 self.objs[a].mesh = Some(merged);
@@ -507,15 +627,26 @@ impl SceneState {
                 Ok(format!("bridged {} to {} (merged into {})", na, nb, na))
             }),
             C::SceneBoolean { op, object, with } => {
-                let Some(op) = BoolOp::parse(op) else { return Some(Err(format!("unknown boolean '{}' (union, difference, intersection)", op))) };
+                let Some(op) = BoolOp::parse(op) else {
+                    return Some(Err(format!(
+                        "unknown boolean '{}' (union, difference, intersection)",
+                        op
+                    )));
+                };
                 self.find_mesh(object.as_deref()).and_then(|a| {
                     let b = self.other_mesh(a, with.as_deref())?;
                     let oa = self.objs[a].clone();
-                    let mb = self.objs[b].world_mesh().unwrap_or_default().transformed(|w| oa.to_local(w));
+                    let mb = self.objs[b]
+                        .world_mesh()
+                        .unwrap_or_default()
+                        .transformed(|w| oa.to_local(w));
                     let ma = self.objs[a].mesh.clone().unwrap_or_default();
                     let r = m3::boolean(&ma, &mb, op);
                     if r.faces.is_empty() {
-                        return Err(format!("the {} is empty (do the meshes overlap?)", op.label()));
+                        return Err(format!(
+                            "the {} is empty (do the meshes overlap?)",
+                            op.label()
+                        ));
                     }
                     let (na, nb) = (self.objs[a].name.clone(), self.objs[b].name.clone());
                     let faces = r.faces.len();
@@ -525,12 +656,22 @@ impl SceneState {
                     let a = if b < a { a - 1 } else { a };
                     self.selected = Some(a);
                     self.prev_selected = None;
-                    Ok(format!("{} {} {} → {} ({} faces)", na, op.label(), nb, na, faces))
+                    Ok(format!(
+                        "{} {} {} → {} ({} faces)",
+                        na,
+                        op.label(),
+                        nb,
+                        na,
+                        faces
+                    ))
                 })
             }
             C::SceneQuadDraw { points } => {
                 if points.len() != 4 {
-                    return Some(Err(format!("quad draw needs 4 points, got {}", points.len())));
+                    return Some(Err(format!(
+                        "quad draw needs 4 points, got {}",
+                        points.len()
+                    )));
                 }
                 let i = match self.objs.iter().position(|o| o.name == "quadDraw1") {
                     Some(i) => i,
@@ -542,12 +683,20 @@ impl SceneState {
                     }
                 };
                 let o = self.objs[i].clone();
-                let pts = [o.to_local(points[0]), o.to_local(points[1]), o.to_local(points[2]), o.to_local(points[3])];
+                let pts = [
+                    o.to_local(points[0]),
+                    o.to_local(points[1]),
+                    o.to_local(points[2]),
+                    o.to_local(points[3]),
+                ];
                 let m = self.mesh_mut(i);
                 m.quad_draw(&pts, 0.12 / o.scale.max(1e-3), None);
                 let (v, f) = (m.verts.len(), m.faces.len());
                 self.select(Some(i));
-                Ok(format!("quad added to quadDraw1 ({} verts, {} faces)", v, f))
+                Ok(format!(
+                    "quad added to quadDraw1 ({} verts, {} faces)",
+                    v, f
+                ))
             }
             C::SetKeyframe => self.find(None).map(|i| {
                 let t = self.clock.time;
@@ -558,9 +707,15 @@ impl SceneState {
             C::DeleteKeyframe => self.find(None).and_then(|i| {
                 let t = self.clock.time;
                 let o = &mut self.objs[i];
-                if o.track_y.remove_near(t, 0.05) { Ok(format!("deleted {} key at {:.2}s", o.name, t)) } else { Err(format!("no key on {} near {:.2}s", o.name, t)) }
+                if o.track_y.remove_near(t, 0.05) {
+                    Ok(format!("deleted {} key at {:.2}s", o.name, t))
+                } else {
+                    Err(format!("no key on {} near {:.2}s", o.name, t))
+                }
             }),
-            C::TimelinePlay { .. } | C::TimelineScrub { .. } => return timeline::apply(&mut self.clock, cmd),
+            C::TimelinePlay { .. } | C::TimelineScrub { .. } => {
+                return timeline::apply(&mut self.clock, cmd)
+            }
             C::SceneDelete { object } => self.find(object.as_deref()).map(|i| {
                 self.selected = Some(i);
                 let n = self.objs[i].name.clone();
@@ -574,24 +729,41 @@ impl SceneState {
     /// Name of the mesh object a material command targets (default: the selection).
     pub fn check_mesh_target(&self, object: Option<&str>) -> Result<String, String> {
         let i = match object {
-            Some(n) => self.objs.iter().position(|o| o.name.eq_ignore_ascii_case(n.trim())).ok_or_else(|| format!("no object named '{}'", n))?,
-            None => self.selected.filter(|i| *i < self.objs.len()).ok_or("select a mesh first")?,
+            Some(n) => self
+                .objs
+                .iter()
+                .position(|o| o.name.eq_ignore_ascii_case(n.trim()))
+                .ok_or_else(|| format!("no object named '{}'", n))?,
+            None => self
+                .selected
+                .filter(|i| *i < self.objs.len())
+                .ok_or("select a mesh first")?,
         };
         let o = &self.objs[i];
         if o.mesh.is_none() {
-            return Err(format!("{} is a {:?}, not a mesh; materials go on meshes", o.name, o.kind));
+            return Err(format!(
+                "{} is a {:?}, not a mesh; materials go on meshes",
+                o.name, o.kind
+            ));
         }
         Ok(o.name.clone())
     }
 
     pub fn assign_material(&mut self, object: &str, material: &str) -> Result<String, String> {
-        self.assign.assign(object, material).map_err(|e| format!("assign: {:?}", e))?;
+        self.assign
+            .assign(object, material)
+            .map_err(|e| format!("assign: {:?}", e))?;
         Ok(format!("{} is now {}", object, material))
     }
 
     /// Shading surface of an object (its material, or the default grey).
     pub fn surface_of(&self, name: &str) -> Surface {
-        self.assign.material_of(name).ok().and_then(|m| self.surfaces.get(m)).copied().unwrap_or_else(Surface::grey)
+        self.assign
+            .material_of(name)
+            .ok()
+            .and_then(|m| self.surfaces.get(m))
+            .copied()
+            .unwrap_or_else(Surface::grey)
     }
 
     pub fn context(&self) -> String {
@@ -600,15 +772,57 @@ impl SceneState {
             .iter()
             .enumerate()
             .map(|(i, o)| {
-                let mark = if self.selected == Some(i) { "*" } else if self.prev_selected == Some(i) { "+" } else { "" };
-                let mat = self.assign.material_of(&o.name).map(|m| format!(", material {}", m)).unwrap_or_default();
-                let mesh = o.mesh.as_ref().map(|m| format!(", {} verts {} faces{}{}", m.verts.len(), m.faces.len(), if m.is_closed() { " closed" } else { "" }, mat)).unwrap_or_default();
-                format!("{}{} ({:?} at {:.1},{:.1},{:.1} rotY {:.0} scale {:.2}{})", mark, o.name, o.kind, o.pos[0], o.pos[1], o.pos[2], o.rot_y, o.scale, mesh)
+                let mark = if self.selected == Some(i) {
+                    "*"
+                } else if self.prev_selected == Some(i) {
+                    "+"
+                } else {
+                    ""
+                };
+                let mat = self
+                    .assign
+                    .material_of(&o.name)
+                    .map(|m| format!(", material {}", m))
+                    .unwrap_or_default();
+                let mesh = o
+                    .mesh
+                    .as_ref()
+                    .map(|m| {
+                        format!(
+                            ", {} verts {} faces{}{}",
+                            m.verts.len(),
+                            m.faces.len(),
+                            if m.is_closed() { " closed" } else { "" },
+                            mat
+                        )
+                    })
+                    .unwrap_or_default();
+                format!(
+                    "{}{} ({:?} at {:.1},{:.1},{:.1} rotY {:.0} scale {:.2}{})",
+                    mark, o.name, o.kind, o.pos[0], o.pos[1], o.pos[2], o.rot_y, o.scale, mesh
+                )
             })
             .collect();
         let arena = match &self.arena {
             Some(a) => {
-                let bodies: Vec<String> = a.bodies.iter().map(|b| format!("{} [{}] {:.0} kg {:.1} K {}{} v=({:.2},{:.2},{:.2})", b.name, b.material, b.mass, b.temp, b.phase.label(), if b.vaporised { " vaporised" } else { "" }, b.vel[0], b.vel[1], b.vel[2])).collect();
+                let bodies: Vec<String> = a
+                    .bodies
+                    .iter()
+                    .map(|b| {
+                        format!(
+                            "{} [{}] {:.0} kg {:.1} K {}{} v=({:.2},{:.2},{:.2})",
+                            b.name,
+                            b.material,
+                            b.mass,
+                            b.temp,
+                            b.phase.label(),
+                            if b.vaporised { " vaporised" } else { "" },
+                            b.vel[0],
+                            b.vel[1],
+                            b.vel[2]
+                        )
+                    })
+                    .collect();
                 let e = a.energy();
                 let l = &a.ledger;
                 format!("running {} t={:.2}s: {}. Energy: KE {:.1} J, PE {:.1} J, internal {:.1} J; heaters in {:.1} J, air/radiation {:+.1} J, drag {:+.1} J, impacts→heat {:.1} J, conducted {:.1} J, residual {:+.3} J", if self.arena_playing { "playing" } else { "paused" }, a.time, bodies.join("; "), e.kinetic, e.potential, e.internal, l.heater_in, l.exchange_in, l.drag_work, l.dissipated, l.conducted, a.energy_residual())
@@ -620,11 +834,22 @@ impl SceneState {
     }
 
     fn light_pos(&self) -> V3 {
-        self.objs.iter().find(|o| o.kind == Kind::Light && o.visible).map(|o| o.pos).unwrap_or([-2.5, 3.0, 2.0])
+        self.objs
+            .iter()
+            .find(|o| o.kind == Kind::Light && o.visible)
+            .map(|o| o.pos)
+            .unwrap_or([-2.5, 3.0, 2.0])
     }
 
     /// Rasterise the scene (meshes, grid, bones, camera gizmos) at `w`×`h`.
-    pub fn render(&self, w: usize, h: usize, bg: Color32, grid: Color32, accent: Color32) -> Frame3d {
+    pub fn render(
+        &self,
+        w: usize,
+        h: usize,
+        bg: Color32,
+        grid: Color32,
+        accent: Color32,
+    ) -> Frame3d {
         let cam = self.camera();
         let mut f = Frame3d::new(w.max(1), h.max(1), [bg.r(), bg.g(), bg.b()]);
         let gc = [grid.r(), grid.g(), grid.b(), 255];
@@ -634,15 +859,28 @@ impl SceneState {
                 f.world_line(&cam, [v, 0.0, -5.0], [v, 0.0, 5.0], gc);
                 f.world_line(&cam, [-5.0, 0.0, v], [5.0, 0.0, v], gc);
             }
-            f.world_line(&cam, [0.0, 0.002, 0.0], [1.5, 0.002, 0.0], [230, 80, 80, 255]);
+            f.world_line(
+                &cam,
+                [0.0, 0.002, 0.0],
+                [1.5, 0.002, 0.0],
+                [230, 80, 80, 255],
+            );
             f.world_line(&cam, [0.0, 0.0, 0.0], [0.0, 1.5, 0.0], [90, 200, 100, 255]);
-            f.world_line(&cam, [0.0, 0.002, 0.0], [0.0, 0.002, 1.5], [90, 140, 240, 255]);
+            f.world_line(
+                &cam,
+                [0.0, 0.002, 0.0],
+                [0.0, 0.002, 1.5],
+                [90, 140, 240, 255],
+            );
         }
         let light = self.light_pos();
         let acc = [accent.r(), accent.g(), accent.b()];
         // opaque objects first, transparent (glass, water) last so they blend over them
         let mut order: Vec<usize> = (0..self.objs.len()).collect();
-        order.sort_by_key(|&i| (self.objs[i].mesh.is_some() && self.surface_of(&self.objs[i].name).transmission > 0.0) as u8);
+        order.sort_by_key(|&i| {
+            (self.objs[i].mesh.is_some() && self.surface_of(&self.objs[i].name).transmission > 0.0)
+                as u8
+        });
         for i in order {
             let o = &self.objs[i];
             if !o.visible {
@@ -650,7 +888,11 @@ impl SceneState {
             }
             let sel = self.selected == Some(i);
             let second = self.prev_selected == Some(i);
-            let col = if sel { [214, 214, 220] } else { [212, 212, 216] };
+            let col = if sel {
+                [214, 214, 220]
+            } else {
+                [212, 212, 216]
+            };
             match (&o.kind, o.world_mesh()) {
                 (_, Some(m)) => {
                     let surf = self.surface_of(&o.name);
@@ -667,7 +909,11 @@ impl SceneState {
                         None
                     };
                     if self.shading == Shading::Wireframe {
-                        let wc = if sel || second { wire.unwrap_or([0, 0, 0, 255]) } else { [col[0], col[1], col[2], 220] };
+                        let wc = if sel || second {
+                            wire.unwrap_or([0, 0, 0, 255])
+                        } else {
+                            [col[0], col[1], col[2], 220]
+                        };
                         for (u, v) in m.edges() {
                             f.world_line(&cam, m.verts[u], m.verts[v], wc);
                         }
@@ -677,19 +923,37 @@ impl SceneState {
                 }
                 (Kind::Joint, None) => {
                     if let Some(pp) = o.parent.and_then(|pi| self.objs.get(pi)) {
-                        f.world_line(&cam, pp.pos, o.pos, if sel { [acc[0], acc[1], acc[2], 255] } else { [col[0], col[1], col[2], 200] });
+                        f.world_line(
+                            &cam,
+                            pp.pos,
+                            o.pos,
+                            if sel {
+                                [acc[0], acc[1], acc[2], 255]
+                            } else {
+                                [col[0], col[1], col[2], 200]
+                            },
+                        );
                     }
                 }
                 (Kind::Camera, None) => {
                     let c = o.pos;
                     let tip = [c[0], c[1], c[2] - 0.8];
-                    let wc = if sel { [acc[0], acc[1], acc[2], 255] } else { [col[0], col[1], col[2], 220] };
+                    let wc = if sel {
+                        [acc[0], acc[1], acc[2], 255]
+                    } else {
+                        [col[0], col[1], col[2], 220]
+                    };
                     let corners = [(-0.3, -0.2), (0.3, -0.2), (0.3, 0.2), (-0.3, 0.2)];
                     for k in 0..4 {
                         let (dx, dy) = corners[k];
                         let (ex, ey) = corners[(k + 1) % 4];
                         f.world_line(&cam, c, [tip[0] + dx, tip[1] + dy, tip[2]], wc);
-                        f.world_line(&cam, [tip[0] + dx, tip[1] + dy, tip[2]], [tip[0] + ex, tip[1] + ey, tip[2]], wc);
+                        f.world_line(
+                            &cam,
+                            [tip[0] + dx, tip[1] + dy, tip[2]],
+                            [tip[0] + ex, tip[1] + ey, tip[2]],
+                            wc,
+                        );
                     }
                 }
                 _ => {}
@@ -701,7 +965,8 @@ impl SceneState {
     /// (object, face) under a viewport position (logical points from the rect origin).
     fn pick(&self, local: Vec2) -> Option<(usize, usize)> {
         let (x, y) = (local.x * self.ppp, local.y * self.ppp);
-        if self.ids_w == 0 || x < 0.0 || y < 0.0 || x >= self.ids_w as f32 || y >= self.ids_h as f32 {
+        if self.ids_w == 0 || x < 0.0 || y < 0.0 || x >= self.ids_w as f32 || y >= self.ids_h as f32
+        {
             return None;
         }
         let id = self.ids[y as usize * self.ids_w + x as usize];
@@ -719,7 +984,12 @@ impl SceneState {
         let mut best: Option<(f32, usize, f32)> = None;
         for k in 0..f.len() {
             let (a, b) = (m.verts[f[k]], m.verts[f[(k + 1) % f.len()]]);
-            let (Some(pa), Some(pb)) = (cam.project(a, rect.width(), rect.height()), cam.project(b, rect.width(), rect.height())) else { continue };
+            let (Some(pa), Some(pb)) = (
+                cam.project(a, rect.width(), rect.height()),
+                cam.project(b, rect.width(), rect.height()),
+            ) else {
+                continue;
+            };
             let pa = Vec2::new(pa[0], pa[1]);
             let pb = Vec2::new(pb[0], pb[1]);
             let q = at - rect.min;
@@ -730,7 +1000,12 @@ impl SceneState {
                 best = Some((d, k, t));
             }
         }
-        best.map(|(_, edge, t)| EdgePick { obj, face, edge, t: t.clamp(0.05, 0.95) })
+        best.map(|(_, edge, t)| EdgePick {
+            obj,
+            face,
+            edge,
+            t: t.clamp(0.05, 0.95),
+        })
     }
 
     /// Screen point → ground plane (y = 0).
@@ -755,15 +1030,34 @@ impl SceneState {
             return None;
         }
         let p = m3::lerp(p1, p2, t);
-        Some([(p[0] * 20.0).round() / 20.0, 0.0, (p[2] * 20.0).round() / 20.0])
+        Some([
+            (p[0] * 20.0).round() / 20.0,
+            0.0,
+            (p[2] * 20.0).round() / 20.0,
+        ])
     }
 
     // ---- panels -----------------------------------------------------------------
 
     pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "View", |ui| {
-            for (label, yaw, pitch) in [("Perspective", 0.6, 0.45), ("Front", 0.0, 0.0), ("Side", std::f32::consts::FRAC_PI_2, 0.0), ("Top", 0.0, 1.5)] {
-                if ui.add_sized([ui.available_width(), 28.0], theme::toggle_button(p, label, (self.yaw - yaw).abs() < 1e-3 && (self.pitch - pitch).abs() < 1e-3)).clicked() {
+            for (label, yaw, pitch) in [
+                ("Perspective", 0.6, 0.45),
+                ("Front", 0.0, 0.0),
+                ("Side", std::f32::consts::FRAC_PI_2, 0.0),
+                ("Top", 0.0, 1.5),
+            ] {
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 28.0],
+                        theme::toggle_button(
+                            p,
+                            label,
+                            (self.yaw - yaw).abs() < 1e-3 && (self.pitch - pitch).abs() < 1e-3,
+                        ),
+                    )
+                    .clicked()
+                {
                     self.yaw = yaw;
                     self.pitch = pitch;
                 }
@@ -771,15 +1065,44 @@ impl SceneState {
             ui.checkbox(&mut self.grid, "Show grid");
         });
         theme::card(ui, p, "Display", |ui| {
-            for (s, key) in [(Shading::Shaded, "5"), (Shading::Wireframe, "4"), (Shading::ShadedWire, "6")] {
-                if ui.add_sized([ui.available_width(), 26.0], theme::toggle_button(p, &format!("{}   ({})", s.label(), key), self.shading == s)).clicked() {
-                    bus.push(AppCommand::SceneShading { mode: s.key().into() });
+            for (s, key) in [
+                (Shading::Shaded, "5"),
+                (Shading::Wireframe, "4"),
+                (Shading::ShadedWire, "6"),
+            ] {
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 26.0],
+                        theme::toggle_button(
+                            p,
+                            &format!("{}   ({})", s.label(), key),
+                            self.shading == s,
+                        ),
+                    )
+                    .clicked()
+                {
+                    bus.push(AppCommand::SceneShading {
+                        mode: s.key().into(),
+                    });
                 }
             }
         });
         theme::card(ui, p, "Create", |ui| {
-            for (label, kind) in [("Cube", "cube"), ("Plane", "plane"), ("Cylinder", "cylinder"), ("Joint", "joint"), ("Light", "light"), ("Camera", "camera")] {
-                if ui.add_sized([ui.available_width(), 26.0], theme::toggle_button(p, label, false)).clicked() {
+            for (label, kind) in [
+                ("Cube", "cube"),
+                ("Plane", "plane"),
+                ("Cylinder", "cylinder"),
+                ("Joint", "joint"),
+                ("Light", "light"),
+                ("Camera", "camera"),
+            ] {
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 26.0],
+                        theme::toggle_button(p, label, false),
+                    )
+                    .clicked()
+                {
                     bus.push(AppCommand::SceneAdd { kind: kind.into() });
                 }
             }
@@ -789,21 +1112,50 @@ impl SceneState {
             ui.label(theme::muted(p, self.gizmo.hint()));
             match self.gizmo {
                 Gizmo::EdgeLoop => {
-                    if ui.add(theme::toggle_button(p, "Insert at the default edge", false)).clicked() {
-                        bus.push(AppCommand::SceneEdgeLoop { object: None, edge: None, t: None });
+                    if ui
+                        .add(theme::toggle_button(p, "Insert at the default edge", false))
+                        .clicked()
+                    {
+                        bus.push(AppCommand::SceneEdgeLoop {
+                            object: None,
+                            edge: None,
+                            t: None,
+                        });
                     }
                 }
                 Gizmo::MultiCut => {
                     if self.cut_start.is_some() {
-                        ui.label(egui::RichText::new("First point set: click a second edge of the same face.").color(p.accent));
+                        ui.label(
+                            egui::RichText::new(
+                                "First point set: click a second edge of the same face.",
+                            )
+                            .color(p.accent),
+                        );
                     }
-                    if ui.add(theme::toggle_button(p, "Cut the top face in half", false)).clicked() {
-                        bus.push(AppCommand::SceneMultiCut { object: None, face: None, from_edge: None, to_edge: None, from_t: None, to_t: None });
+                    if ui
+                        .add(theme::toggle_button(p, "Cut the top face in half", false))
+                        .clicked()
+                    {
+                        bus.push(AppCommand::SceneMultiCut {
+                            object: None,
+                            face: None,
+                            from_edge: None,
+                            to_edge: None,
+                            from_t: None,
+                            to_t: None,
+                        });
                     }
                 }
                 Gizmo::QuadDraw => {
-                    ui.label(theme::muted(p, &format!("{} of 4 points placed", self.quad_pts.len())));
-                    if !self.quad_pts.is_empty() && ui.add(theme::toggle_button(p, "Clear points", false)).clicked() {
+                    ui.label(theme::muted(
+                        p,
+                        &format!("{} of 4 points placed", self.quad_pts.len()),
+                    ));
+                    if !self.quad_pts.is_empty()
+                        && ui
+                            .add(theme::toggle_button(p, "Clear points", false))
+                            .clicked()
+                    {
                         self.quad_pts.clear();
                     }
                 }
@@ -813,12 +1165,18 @@ impl SceneState {
     }
 
     pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
-        let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
+        let (resp, painter) =
+            ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let rect = resp.rect;
         let alt = ui.input(|i| i.modifiers.alt);
         let shift = ui.input(|i| i.modifiers.shift);
-        let click_tool = matches!(self.gizmo, Gizmo::EdgeLoop | Gizmo::MultiCut | Gizmo::QuadDraw);
-        let orbit = resp.dragged_by(egui::PointerButton::Middle) || (resp.dragged_by(egui::PointerButton::Primary) && (alt || self.gizmo == Gizmo::Select || click_tool));
+        let click_tool = matches!(
+            self.gizmo,
+            Gizmo::EdgeLoop | Gizmo::MultiCut | Gizmo::QuadDraw
+        );
+        let orbit = resp.dragged_by(egui::PointerButton::Middle)
+            || (resp.dragged_by(egui::PointerButton::Primary)
+                && (alt || self.gizmo == Gizmo::Select || click_tool));
         if orbit {
             let d = resp.drag_delta();
             self.yaw += d.x * 0.008;
@@ -832,18 +1190,42 @@ impl SceneState {
                 if resp.drag_started() {
                     self.drag_rot = Some((self.objs[i].rot_y, self.objs[i].scale));
                 }
-                let (r0, s0) = self.drag_rot.unwrap_or((self.objs[i].rot_y, self.objs[i].scale));
-                let total = ui.input(|inp| match (inp.pointer.press_origin(), inp.pointer.latest_pos()) {
-                    (Some(a), Some(b)) => b - a,
-                    _ => Vec2::ZERO,
-                });
+                let (r0, s0) = self
+                    .drag_rot
+                    .unwrap_or((self.objs[i].rot_y, self.objs[i].scale));
+                let total =
+                    ui.input(
+                        |inp| match (inp.pointer.press_origin(), inp.pointer.latest_pos()) {
+                            (Some(a), Some(b)) => b - a,
+                            _ => Vec2::ZERO,
+                        },
+                    );
                 match self.gizmo {
                     Gizmo::Move if d != Vec2::ZERO => {
-                        let t = if shift { [0.0, -d.y * k, 0.0] } else { [(d.x * cy + d.y * sy) * k, 0.0, (-d.x * sy + d.y * cy) * k] };
-                        bus.push(AppCommand::SceneTransform { object: name, translate: Some(t), rotate_y: None, scale: None });
+                        let t = if shift {
+                            [0.0, -d.y * k, 0.0]
+                        } else {
+                            [(d.x * cy + d.y * sy) * k, 0.0, (-d.x * sy + d.y * cy) * k]
+                        };
+                        bus.push(AppCommand::SceneTransform {
+                            object: name,
+                            translate: Some(t),
+                            rotate_y: None,
+                            scale: None,
+                        });
                     }
-                    Gizmo::Rotate if d != Vec2::ZERO => bus.push(AppCommand::SceneTransform { object: name, translate: None, rotate_y: Some((r0 + total.x * 0.6) % 360.0), scale: None }),
-                    Gizmo::Scale if d != Vec2::ZERO => bus.push(AppCommand::SceneTransform { object: name, translate: None, rotate_y: None, scale: Some((s0 * (1.0 + total.x * 0.01)).clamp(0.05, 20.0)) }),
+                    Gizmo::Rotate if d != Vec2::ZERO => bus.push(AppCommand::SceneTransform {
+                        object: name,
+                        translate: None,
+                        rotate_y: Some((r0 + total.x * 0.6) % 360.0),
+                        scale: None,
+                    }),
+                    Gizmo::Scale if d != Vec2::ZERO => bus.push(AppCommand::SceneTransform {
+                        object: name,
+                        translate: None,
+                        rotate_y: None,
+                        scale: Some((s0 * (1.0 + total.x * 0.01)).clamp(0.05, 20.0)),
+                    }),
                     _ => {}
                 }
             }
@@ -857,7 +1239,13 @@ impl SceneState {
                 self.dist = (self.dist * (1.0 - s * 0.0015)).clamp(2.0, 60.0);
             }
             let c = match self.gizmo {
-                Gizmo::Select => if resp.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Default },
+                Gizmo::Select => {
+                    if resp.dragged() {
+                        egui::CursorIcon::Grabbing
+                    } else {
+                        egui::CursorIcon::Default
+                    }
+                }
                 Gizmo::Move => egui::CursorIcon::Move,
                 Gizmo::Rotate => egui::CursorIcon::Alias,
                 Gizmo::Scale => egui::CursorIcon::ResizeHorizontal,
@@ -868,15 +1256,29 @@ impl SceneState {
 
         // ---- render
         let ppp = ui.ctx().pixels_per_point();
-        let (pw, ph) = ((rect.width() * ppp).round().max(1.0) as usize, (rect.height() * ppp).round().max(1.0) as usize);
+        let (pw, ph) = (
+            (rect.width() * ppp).round().max(1.0) as usize,
+            (rect.height() * ppp).round().max(1.0) as usize,
+        );
         let frame = self.render(pw, ph, p.canvas, p.border.gamma_multiply(0.9), p.accent);
         let img = egui::ColorImage::from_rgba_unmultiplied([pw, ph], &frame.rgba);
         match &mut self.tex {
             Some(t) => t.set(img, egui::TextureOptions::LINEAR),
-            None => self.tex = Some(ui.ctx().load_texture("viewport3d", img, egui::TextureOptions::LINEAR)),
+            None => {
+                self.tex = Some(ui.ctx().load_texture(
+                    "viewport3d",
+                    img,
+                    egui::TextureOptions::LINEAR,
+                ))
+            }
         }
         if let Some(t) = &self.tex {
-            painter.image(t.id(), rect, egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+            painter.image(
+                t.id(),
+                rect,
+                egui::Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
         }
         self.frame = Raster::from_rgba(pw as u32, ph as u32, frame.rgba).map(Arc::new);
         self.ids = frame.ids;
@@ -886,26 +1288,42 @@ impl SceneState {
 
         // ---- overlays: icons and labels
         let cam = self.camera();
-        let proj = |v: V3| cam.project(v, rect.width(), rect.height()).map(|q| rect.min + Vec2::new(q[0], q[1]));
+        let proj = |v: V3| {
+            cam.project(v, rect.width(), rect.height())
+                .map(|q| rect.min + Vec2::new(q[0], q[1]))
+        };
         let mut best: Option<(usize, f32)> = None;
-        let click = if resp.clicked() { resp.interact_pointer_pos() } else { None };
+        let click = if resp.clicked() {
+            resp.interact_pointer_pos()
+        } else {
+            None
+        };
         for (i, o) in self.objs.iter().enumerate() {
             if !o.visible {
                 continue;
             }
             let sel = self.selected == Some(i);
-            let col = if sel { p.accent } else { p.text.gamma_multiply(0.8) };
+            let col = if sel {
+                p.accent
+            } else {
+                p.text.gamma_multiply(0.8)
+            };
             let Some(sp) = proj(o.pos) else { continue };
             match o.kind {
                 Kind::Joint => {
-                    painter.circle_stroke(sp, 6.0, Stroke::new(if sel { 2.0_f32 } else { 1.2 }, col));
+                    painter.circle_stroke(
+                        sp,
+                        6.0,
+                        Stroke::new(if sel { 2.0_f32 } else { 1.2 }, col),
+                    );
                 }
                 Kind::Light => {
                     painter.circle_filled(sp, 5.0, Color32::from_rgb(255, 214, 10));
                     for k in 0..8 {
                         let a = k as f32 * std::f32::consts::FRAC_PI_4;
                         let d = Vec2::new(a.cos(), a.sin());
-                        painter.line_segment([sp + d * 8.0, sp + d * 13.0], Stroke::new(1.2_f32, col));
+                        painter
+                            .line_segment([sp + d * 8.0, sp + d * 13.0], Stroke::new(1.2_f32, col));
                     }
                 }
                 _ => {}
@@ -916,13 +1334,23 @@ impl SceneState {
                     best = Some((i, d));
                 }
             }
-            painter.text(sp + Vec2::new(10.0, -10.0), egui::Align2::LEFT_BOTTOM, &o.name, egui::FontId::proportional(11.0), if sel { p.accent } else { p.muted });
+            painter.text(
+                sp + Vec2::new(10.0, -10.0),
+                egui::Align2::LEFT_BOTTOM,
+                &o.name,
+                egui::FontId::proportional(11.0),
+                if sel { p.accent } else { p.muted },
+            );
         }
         // pending tool state
         if let Some(cs) = self.cut_start {
             if let Some(m) = self.objs.get(cs.obj).and_then(|o| o.world_mesh()) {
                 if let Some(f) = m.faces.get(cs.face) {
-                    let v = m3::lerp(m.verts[f[cs.edge]], m.verts[f[(cs.edge + 1) % f.len()]], cs.t);
+                    let v = m3::lerp(
+                        m.verts[f[cs.edge]],
+                        m.verts[f[(cs.edge + 1) % f.len()]],
+                        cs.t,
+                    );
                     if let Some(sp) = proj(v) {
                         painter.circle_filled(sp, 4.5, p.accent);
                         if let Some(hp) = resp.hover_pos() {
@@ -951,17 +1379,34 @@ impl SceneState {
                         if let Some(m) = &o.mesh {
                             let f = &m.faces[ep.face];
                             let (a, b) = (f[ep.edge], f[(ep.edge + 1) % f.len()]);
-                            bus.push(AppCommand::SceneSelect { object: o.name.clone() });
-                            bus.push(AppCommand::SceneEdgeLoop { object: Some(o.name.clone()), edge: Some([a, b]), t: Some(ep.t) });
+                            bus.push(AppCommand::SceneSelect {
+                                object: o.name.clone(),
+                            });
+                            bus.push(AppCommand::SceneEdgeLoop {
+                                object: Some(o.name.clone()),
+                                edge: Some([a, b]),
+                                t: Some(ep.t),
+                            });
                         }
                     }
                 }
                 Gizmo::MultiCut => match picked.and_then(|(o, f)| self.edge_pick(o, f, cp, rect)) {
                     Some(ep) => match self.cut_start {
-                        Some(cs) if cs.obj == ep.obj && cs.face == ep.face && cs.edge != ep.edge => {
+                        Some(cs)
+                            if cs.obj == ep.obj && cs.face == ep.face && cs.edge != ep.edge =>
+                        {
                             let name = self.objs[ep.obj].name.clone();
-                            bus.push(AppCommand::SceneSelect { object: name.clone() });
-                            bus.push(AppCommand::SceneMultiCut { object: Some(name), face: Some(ep.face), from_edge: Some(cs.edge), to_edge: Some(ep.edge), from_t: Some(cs.t), to_t: Some(ep.t) });
+                            bus.push(AppCommand::SceneSelect {
+                                object: name.clone(),
+                            });
+                            bus.push(AppCommand::SceneMultiCut {
+                                object: Some(name),
+                                face: Some(ep.face),
+                                from_edge: Some(cs.edge),
+                                to_edge: Some(ep.edge),
+                                from_t: Some(cs.t),
+                                to_t: Some(ep.t),
+                            });
                             self.cut_start = None;
                         }
                         _ => self.cut_start = Some(ep),
@@ -970,62 +1415,146 @@ impl SceneState {
                 },
                 Gizmo::QuadDraw => {
                     if let Some(g) = self.ground_point(cp, rect) {
-                        let snapped = self.objs.iter().find(|o| o.name == "quadDraw1").and_then(|o| o.world_mesh()).and_then(|m| m.verts.iter().copied().find(|v| m3::length(m3::sub(*v, g)) < 0.15)).unwrap_or(g);
+                        let snapped = self
+                            .objs
+                            .iter()
+                            .find(|o| o.name == "quadDraw1")
+                            .and_then(|o| o.world_mesh())
+                            .and_then(|m| {
+                                m.verts
+                                    .iter()
+                                    .copied()
+                                    .find(|v| m3::length(m3::sub(*v, g)) < 0.15)
+                            })
+                            .unwrap_or(g);
                         self.quad_pts.push(snapped);
                         if self.quad_pts.len() == 4 {
-                            bus.push(AppCommand::SceneQuadDraw { points: std::mem::take(&mut self.quad_pts) });
+                            bus.push(AppCommand::SceneQuadDraw {
+                                points: std::mem::take(&mut self.quad_pts),
+                            });
                         }
                     }
                 }
                 _ => {
                     let target = picked.map(|(o, _)| o).or(best.map(|b| b.0));
                     match target {
-                        Some(i) => bus.push(AppCommand::SceneSelect { object: self.objs[i].name.clone() }),
+                        Some(i) => bus.push(AppCommand::SceneSelect {
+                            object: self.objs[i].name.clone(),
+                        }),
                         None => self.select(None),
                     }
                 }
             }
         }
-        painter.text(rect.min + Vec2::new(SP_MD, SP_MD), egui::Align2::LEFT_TOP, format!("Perspective  ·  {} objects  ·  {} tool  ·  {}", self.objs.len(), self.gizmo.label(), self.shading.label()), egui::FontId::proportional(12.0), p.muted);
+        painter.text(
+            rect.min + Vec2::new(SP_MD, SP_MD),
+            egui::Align2::LEFT_TOP,
+            format!(
+                "Perspective  ·  {} objects  ·  {} tool  ·  {}",
+                self.objs.len(),
+                self.gizmo.label(),
+                self.shading.label()
+            ),
+            egui::FontId::proportional(12.0),
+            p.muted,
+        );
     }
 
     fn arena_tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Physics Arena", |ui| {
             let cur = self.arena_env.name.clone();
-            egui::ComboBox::from_id_salt("arena_env").width(ui.available_width() - 8.0).selected_text(&cur).show_ui(ui, |ui| {
-                for k in Environment::PRESETS {
-                    let e = Environment::preset(k).unwrap_or_else(Environment::earth);
-                    if ui.selectable_label(cur == e.name, &e.name).clicked() {
-                        bus.push(AppCommand::ArenaEnv { preset: Some(k.into()), gravity: None, air_density: None, temperature_c: None, pressure_kpa: None, wind: None });
+            egui::ComboBox::from_id_salt("arena_env")
+                .width(ui.available_width() - 8.0)
+                .selected_text(&cur)
+                .show_ui(ui, |ui| {
+                    for k in Environment::PRESETS {
+                        let e = Environment::preset(k).unwrap_or_else(Environment::earth);
+                        if ui.selectable_label(cur == e.name, &e.name).clicked() {
+                            bus.push(AppCommand::ArenaEnv {
+                                preset: Some(k.into()),
+                                gravity: None,
+                                air_density: None,
+                                temperature_c: None,
+                                pressure_kpa: None,
+                                wind: None,
+                            });
+                        }
                     }
-                }
-            });
+                });
             let e = self.arena_env.clone();
-            let (mut g, mut rho, mut tc, mut wx) = (e.gravity, e.air_density, e.temperature - 273.15, e.wind[0]);
-            egui::Grid::new("arena_env_grid").num_columns(2).spacing([SP_SM, 4.0]).show(ui, |ui| {
-                ui.label(theme::muted(p, "Gravity"));
-                ui.add(egui::DragValue::new(&mut g).speed(0.05).range(0.0..=50.0).suffix(" m/s²").max_decimals(3));
-                ui.end_row();
-                ui.label(theme::muted(p, "Air density"));
-                ui.add(egui::DragValue::new(&mut rho).speed(0.01).range(0.0..=50.0).suffix(" kg/m³").max_decimals(3));
-                ui.end_row();
-                ui.label(theme::muted(p, "Temperature"));
-                ui.add(egui::DragValue::new(&mut tc).speed(1.0).range(-273.15..=5000.0).suffix(" °C").max_decimals(1));
-                ui.end_row();
-                ui.label(theme::muted(p, "Wind x"));
-                ui.add(egui::DragValue::new(&mut wx).speed(0.1).range(-100.0..=100.0).suffix(" m/s").max_decimals(1));
-                ui.end_row();
-            });
-            if g != e.gravity || rho != e.air_density || tc != e.temperature - 273.15 || wx != e.wind[0] {
-                bus.push(AppCommand::ArenaEnv { preset: None, gravity: (g != e.gravity).then_some(g), air_density: (rho != e.air_density).then_some(rho), temperature_c: (tc != e.temperature - 273.15).then_some(tc), pressure_kpa: None, wind: (wx != e.wind[0]).then_some([wx, e.wind[1], e.wind[2]]) });
+            let (mut g, mut rho, mut tc, mut wx) =
+                (e.gravity, e.air_density, e.temperature - 273.15, e.wind[0]);
+            egui::Grid::new("arena_env_grid")
+                .num_columns(2)
+                .spacing([SP_SM, 4.0])
+                .show(ui, |ui| {
+                    ui.label(theme::muted(p, "Gravity"));
+                    ui.add(
+                        egui::DragValue::new(&mut g)
+                            .speed(0.05)
+                            .range(0.0..=50.0)
+                            .suffix(" m/s²")
+                            .max_decimals(3),
+                    );
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Air density"));
+                    ui.add(
+                        egui::DragValue::new(&mut rho)
+                            .speed(0.01)
+                            .range(0.0..=50.0)
+                            .suffix(" kg/m³")
+                            .max_decimals(3),
+                    );
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Temperature"));
+                    ui.add(
+                        egui::DragValue::new(&mut tc)
+                            .speed(1.0)
+                            .range(-273.15..=5000.0)
+                            .suffix(" °C")
+                            .max_decimals(1),
+                    );
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Wind x"));
+                    ui.add(
+                        egui::DragValue::new(&mut wx)
+                            .speed(0.1)
+                            .range(-100.0..=100.0)
+                            .suffix(" m/s")
+                            .max_decimals(1),
+                    );
+                    ui.end_row();
+                });
+            if g != e.gravity
+                || rho != e.air_density
+                || tc != e.temperature - 273.15
+                || wx != e.wind[0]
+            {
+                bus.push(AppCommand::ArenaEnv {
+                    preset: None,
+                    gravity: (g != e.gravity).then_some(g),
+                    air_density: (rho != e.air_density).then_some(rho),
+                    temperature_c: (tc != e.temperature - 273.15).then_some(tc),
+                    pressure_kpa: None,
+                    wind: (wx != e.wind[0]).then_some([wx, e.wind[1], e.wind[2]]),
+                });
             }
-            ui.label(theme::muted(p, &format!("Pressure {:.1} kPa", e.pressure / 1000.0)));
+            ui.label(theme::muted(
+                p,
+                &format!("Pressure {:.1} kPa", e.pressure / 1000.0),
+            ));
             ui.horizontal(|ui| {
                 let label = if self.arena_playing { "Pause" } else { "Play" };
                 if ui.add(theme::primary_button(p, label)).clicked() {
-                    bus.push(AppCommand::ArenaPlay { playing: Some(!self.arena_playing) });
+                    bus.push(AppCommand::ArenaPlay {
+                        playing: Some(!self.arena_playing),
+                    });
                 }
-                if ui.add(theme::toggle_button(p, "Step", false)).on_hover_text("Advance 1/60 s (4 fixed steps of 1/240 s)").clicked() {
+                if ui
+                    .add(theme::toggle_button(p, "Step", false))
+                    .on_hover_text("Advance 1/60 s (4 fixed steps of 1/240 s)")
+                    .clicked()
+                {
                     bus.push(AppCommand::ArenaStep { steps: Some(4) });
                 }
                 if ui.add(theme::toggle_button(p, "Reset", false)).clicked() {
@@ -1034,10 +1563,22 @@ impl SceneState {
             });
             match &self.arena {
                 Some(a) => {
-                    ui.label(theme::muted(p, &format!("t = {:.2} s  ·  {} bodies  ·  KE {:.1} J", a.time, a.bodies.iter().filter(|b| !b.vaporised).count(), a.total_kinetic())));
+                    ui.label(theme::muted(
+                        p,
+                        &format!(
+                            "t = {:.2} s  ·  {} bodies  ·  KE {:.1} J",
+                            a.time,
+                            a.bodies.iter().filter(|b| !b.vaporised).count(),
+                            a.total_kinetic()
+                        ),
+                    ));
                     energy_ledger(ui, p, a);
                     for (t, ev) in a.events.log.iter().rev().take(4) {
-                        ui.label(egui::RichText::new(format!("{:.2}s  {}", t, ev)).size(10.5).color(p.warn));
+                        ui.label(
+                            egui::RichText::new(format!("{:.2}s  {}", t, ev))
+                                .size(10.5)
+                                .color(p.warn),
+                        );
                     }
                 }
                 None => {
@@ -1055,29 +1596,81 @@ impl SceneState {
             if let Some(b) = self.arena.as_ref().and_then(|a| a.body(&name)) {
                 theme::kv(ui, p, "Material", b.material.clone());
                 theme::kv(ui, p, "Mass", format!("{:.3} kg", b.mass));
-                theme::kv(ui, p, "Temperature", format!("{:.1} K ({:.1} °C)", b.temp, b.temp - 273.15));
-                theme::kv(ui, p, "Phase", if b.vaporised { "vaporised".to_string() } else { b.phase.label().to_string() });
-                theme::kv(ui, p, "Speed", format!("{:.2} m/s", (b.vel[0] * b.vel[0] + b.vel[1] * b.vel[1] + b.vel[2] * b.vel[2]).sqrt()));
+                theme::kv(
+                    ui,
+                    p,
+                    "Temperature",
+                    format!("{:.1} K ({:.1} °C)", b.temp, b.temp - 273.15),
+                );
+                theme::kv(
+                    ui,
+                    p,
+                    "Phase",
+                    if b.vaporised {
+                        "vaporised".to_string()
+                    } else {
+                        b.phase.label().to_string()
+                    },
+                );
+                theme::kv(
+                    ui,
+                    p,
+                    "Speed",
+                    format!(
+                        "{:.2} m/s",
+                        (b.vel[0] * b.vel[0] + b.vel[1] * b.vel[1] + b.vel[2] * b.vel[2]).sqrt()
+                    ),
+                );
             } else {
-                ui.label(theme::muted(p, "Not simulated yet. Press Play in Physics Arena."));
+                ui.label(theme::muted(
+                    p,
+                    "Not simulated yet. Press Play in Physics Arena.",
+                ));
             }
-            let mut tc = props.temp.map(|t| t - 273.15).unwrap_or(self.arena_env.temperature - 273.15);
+            let mut tc = props
+                .temp
+                .map(|t| t - 273.15)
+                .unwrap_or(self.arena_env.temperature - 273.15);
             let mut heat = props.heater;
             let mut fixed = props.fixed;
-            egui::Grid::new("phys_grid").num_columns(2).spacing([SP_SM, 4.0]).show(ui, |ui| {
-                ui.label(theme::muted(p, "Start temp"));
-                ui.add(egui::DragValue::new(&mut tc).speed(1.0).range(-273.15..=6000.0).suffix(" °C").max_decimals(1));
-                ui.end_row();
-                ui.label(theme::muted(p, "Heater"));
-                ui.add(egui::DragValue::new(&mut heat).speed(10.0).range(-1e7..=1e8).suffix(" W").max_decimals(0));
-                ui.end_row();
-                ui.label(theme::muted(p, "Pinned"));
-                ui.checkbox(&mut fixed, "");
-                ui.end_row();
-            });
-            let t0 = props.temp.map(|t| t - 273.15).unwrap_or(self.arena_env.temperature - 273.15);
+            egui::Grid::new("phys_grid")
+                .num_columns(2)
+                .spacing([SP_SM, 4.0])
+                .show(ui, |ui| {
+                    ui.label(theme::muted(p, "Start temp"));
+                    ui.add(
+                        egui::DragValue::new(&mut tc)
+                            .speed(1.0)
+                            .range(-273.15..=6000.0)
+                            .suffix(" °C")
+                            .max_decimals(1),
+                    );
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Heater"));
+                    ui.add(
+                        egui::DragValue::new(&mut heat)
+                            .speed(10.0)
+                            .range(-1e7..=1e8)
+                            .suffix(" W")
+                            .max_decimals(0),
+                    );
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Pinned"));
+                    ui.checkbox(&mut fixed, "");
+                    ui.end_row();
+                });
+            let t0 = props
+                .temp
+                .map(|t| t - 273.15)
+                .unwrap_or(self.arena_env.temperature - 273.15);
             if tc != t0 || heat != props.heater || fixed != props.fixed {
-                bus.push(AppCommand::ArenaBody { object: Some(name.clone()), temperature_c: (tc != t0).then_some(tc), heater_w: (heat != props.heater).then_some(heat), fixed: (fixed != props.fixed).then_some(fixed), velocity: None });
+                bus.push(AppCommand::ArenaBody {
+                    object: Some(name.clone()),
+                    temperature_c: (tc != t0).then_some(tc),
+                    heater_w: (heat != props.heater).then_some(heat),
+                    fixed: (fixed != props.fixed).then_some(fixed),
+                    velocity: None,
+                });
             }
         });
     }
@@ -1089,29 +1682,66 @@ impl SceneState {
             for (i, o) in self.objs.iter().enumerate() {
                 let on = self.selected == Some(i);
                 let second = self.prev_selected == Some(i);
-                egui::Frame::none().fill(if on { p.accent_soft() } else { Color32::TRANSPARENT }).rounding(Rounding::same(R_SM + 1.0)).inner_margin(egui::Margin::symmetric(SP_XS, 1.0)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        if o.parent.is_some() {
-                            ui.add_space(SP_MD);
-                        }
-                        if ui.add(egui::Button::new(egui::RichText::new(if o.visible { "👁" } else { "–" }).color(p.muted)).frame(false)).clicked() {
-                            vis = Some(i);
-                        }
-                        let label = format!("{}  {}{}", o.kind.icon(), o.name, if second { "  ·  2nd" } else { "" });
-                        if ui.add(egui::Button::new(egui::RichText::new(label).color(if on { p.accent } else { p.text })).frame(false)).clicked() {
-                            pick = Some(i);
-                        }
+                egui::Frame::none()
+                    .fill(if on {
+                        p.accent_soft()
+                    } else {
+                        Color32::TRANSPARENT
+                    })
+                    .rounding(Rounding::same(R_SM + 1.0))
+                    .inner_margin(egui::Margin::symmetric(SP_XS, 1.0))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            if o.parent.is_some() {
+                                ui.add_space(SP_MD);
+                            }
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new(if o.visible { "👁" } else { "–" })
+                                            .color(p.muted),
+                                    )
+                                    .frame(false),
+                                )
+                                .clicked()
+                            {
+                                vis = Some(i);
+                            }
+                            let label = format!(
+                                "{}  {}{}",
+                                o.kind.icon(),
+                                o.name,
+                                if second { "  ·  2nd" } else { "" }
+                            );
+                            if ui
+                                .add(
+                                    egui::Button::new(egui::RichText::new(label).color(if on {
+                                        p.accent
+                                    } else {
+                                        p.text
+                                    }))
+                                    .frame(false),
+                                )
+                                .clicked()
+                            {
+                                pick = Some(i);
+                            }
+                        });
                     });
-                });
             }
             if let Some(i) = vis {
                 self.objs[i].visible = !self.objs[i].visible;
             }
             if let Some(i) = pick {
-                bus.push(AppCommand::SceneSelect { object: self.objs[i].name.clone() });
+                bus.push(AppCommand::SceneSelect {
+                    object: self.objs[i].name.clone(),
+                });
             }
             if self.objs.is_empty() {
-                ui.label(theme::muted(p, "Empty scene. Create an object on the left."));
+                ui.label(theme::muted(
+                    p,
+                    "Empty scene. Create an object on the left.",
+                ));
             }
         });
         let t = self.clock.time;
@@ -1133,52 +1763,109 @@ impl SceneState {
                 });
             });
             let (mut pos, mut rot, mut sc) = (o.pos, o.rot_y, o.scale);
-            egui::Grid::new("xf").num_columns(2).spacing([SP_SM, 6.0]).show(ui, |ui| {
-                ui.label(theme::muted(p, "Position"));
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut pos[0]).speed(0.05).prefix("x ").max_decimals(2));
-                    ui.add(egui::DragValue::new(&mut pos[1]).speed(0.05).prefix("y ").max_decimals(2));
-                    ui.add(egui::DragValue::new(&mut pos[2]).speed(0.05).prefix("z ").max_decimals(2));
+            egui::Grid::new("xf")
+                .num_columns(2)
+                .spacing([SP_SM, 6.0])
+                .show(ui, |ui| {
+                    ui.label(theme::muted(p, "Position"));
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::DragValue::new(&mut pos[0])
+                                .speed(0.05)
+                                .prefix("x ")
+                                .max_decimals(2),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut pos[1])
+                                .speed(0.05)
+                                .prefix("y ")
+                                .max_decimals(2),
+                        );
+                        ui.add(
+                            egui::DragValue::new(&mut pos[2])
+                                .speed(0.05)
+                                .prefix("z ")
+                                .max_decimals(2),
+                        );
+                    });
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Rotate Y"));
+                    ui.add(egui::DragValue::new(&mut rot).speed(1.0).suffix("°"));
+                    ui.end_row();
+                    ui.label(theme::muted(p, "Scale"));
+                    ui.add(egui::DragValue::new(&mut sc).speed(0.02).range(0.05..=20.0));
+                    ui.end_row();
                 });
-                ui.end_row();
-                ui.label(theme::muted(p, "Rotate Y"));
-                ui.add(egui::DragValue::new(&mut rot).speed(1.0).suffix("°"));
-                ui.end_row();
-                ui.label(theme::muted(p, "Scale"));
-                ui.add(egui::DragValue::new(&mut sc).speed(0.02).range(0.05..=20.0));
-                ui.end_row();
-            });
             let d = [pos[0] - o.pos[0], pos[1] - o.pos[1], pos[2] - o.pos[2]];
             if d != [0.0; 3] {
-                bus.push(AppCommand::SceneTransform { object: name.clone(), translate: Some(d), rotate_y: None, scale: None });
+                bus.push(AppCommand::SceneTransform {
+                    object: name.clone(),
+                    translate: Some(d),
+                    rotate_y: None,
+                    scale: None,
+                });
             }
             if rot != o.rot_y {
-                bus.push(AppCommand::SceneTransform { object: name.clone(), translate: None, rotate_y: Some(rot), scale: None });
+                bus.push(AppCommand::SceneTransform {
+                    object: name.clone(),
+                    translate: None,
+                    rotate_y: Some(rot),
+                    scale: None,
+                });
             }
             if sc != o.scale {
-                bus.push(AppCommand::SceneTransform { object: name, translate: None, rotate_y: None, scale: Some(sc) });
+                bus.push(AppCommand::SceneTransform {
+                    object: name,
+                    translate: None,
+                    rotate_y: None,
+                    scale: Some(sc),
+                });
             }
         });
         if let Some(m) = &self.objs[i].mesh {
             let (v, f, closed) = (m.verts.len(), m.faces.len(), m.is_closed());
-            let other = self.prev_selected.filter(|&b| b != i && b < self.objs.len() && self.objs[b].mesh.is_some()).map(|b| self.objs[b].name.clone());
+            let other = self
+                .prev_selected
+                .filter(|&b| b != i && b < self.objs.len() && self.objs[b].mesh.is_some())
+                .map(|b| self.objs[b].name.clone());
             theme::card(ui, p, "Mesh", |ui| {
                 theme::kv(ui, p, "Vertices", format!("{}", v));
                 theme::kv(ui, p, "Faces", format!("{}", f));
-                theme::kv(ui, p, "Closed", if closed { "yes" } else { "no" }.to_string());
-                ui.label(theme::muted(p, &match &other {
-                    Some(n) => format!("Second operand: {}", n),
-                    None => "Select another mesh, then this one, to Bridge or Boolean them.".into(),
-                }));
+                theme::kv(
+                    ui,
+                    p,
+                    "Closed",
+                    if closed { "yes" } else { "no" }.to_string(),
+                );
+                ui.label(theme::muted(
+                    p,
+                    &match &other {
+                        Some(n) => format!("Second operand: {}", n),
+                        None => {
+                            "Select another mesh, then this one, to Bridge or Boolean them.".into()
+                        }
+                    },
+                ));
                 ui.add_enabled_ui(other.is_some(), |ui| {
                     ui.horizontal_wrapped(|ui| {
-                        for (label, op) in [("Union", "union"), ("Difference", "difference"), ("Intersect", "intersection")] {
+                        for (label, op) in [
+                            ("Union", "union"),
+                            ("Difference", "difference"),
+                            ("Intersect", "intersection"),
+                        ] {
                             if ui.add(theme::toggle_button(p, label, false)).clicked() {
-                                bus.push(AppCommand::SceneBoolean { op: op.into(), object: None, with: other.clone() });
+                                bus.push(AppCommand::SceneBoolean {
+                                    op: op.into(),
+                                    object: None,
+                                    with: other.clone(),
+                                });
                             }
                         }
                         if ui.add(theme::toggle_button(p, "Bridge", false)).clicked() {
-                            bus.push(AppCommand::SceneBridge { object: None, with: other.clone() });
+                            bus.push(AppCommand::SceneBridge {
+                                object: None,
+                                with: other.clone(),
+                            });
                         }
                     });
                 });
@@ -1189,21 +1876,30 @@ impl SceneState {
             let cur = self.assign.material_of(&name).ok().map(|s| s.to_string());
             theme::card(ui, p, "Material", |ui| {
                 let mut choice: Option<String> = None;
-                egui::ComboBox::from_id_salt("mat_pick").width(ui.available_width() - 8.0).selected_text(cur.clone().unwrap_or_else(|| "Default grey".into())).show_ui(ui, |ui| {
-                    let mut names: Vec<String> = self.surfaces.keys().cloned().collect();
-                    for pr in obs_rust_bitstream::material_pbr::presets() {
-                        if !names.iter().any(|n| n == pr.name) {
-                            names.push(pr.key.to_string());
+                egui::ComboBox::from_id_salt("mat_pick")
+                    .width(ui.available_width() - 8.0)
+                    .selected_text(cur.clone().unwrap_or_else(|| "Default grey".into()))
+                    .show_ui(ui, |ui| {
+                        let mut names: Vec<String> = self.surfaces.keys().cloned().collect();
+                        for pr in obs_rust_bitstream::material_pbr::presets() {
+                            if !names.iter().any(|n| n == pr.name) {
+                                names.push(pr.key.to_string());
+                            }
                         }
-                    }
-                    for n in names {
-                        if ui.selectable_label(cur.as_deref() == Some(n.as_str()), &n).clicked() {
-                            choice = Some(n);
+                        for n in names {
+                            if ui
+                                .selectable_label(cur.as_deref() == Some(n.as_str()), &n)
+                                .clicked()
+                            {
+                                choice = Some(n);
+                            }
                         }
-                    }
-                });
+                    });
                 if let Some(m) = choice {
-                    bus.push(AppCommand::MaterialAssign { object: Some(name.clone()), material: m });
+                    bus.push(AppCommand::MaterialAssign {
+                        object: Some(name.clone()),
+                        material: m,
+                    });
                 }
                 if let Some(m) = &cur {
                     if let Some(sf) = self.surfaces.get(m) {
@@ -1212,8 +1908,13 @@ impl SceneState {
                         theme::kv(ui, p, "IOR", format!("{:.3}", sf.ior));
                     }
                 }
-                if ui.add(theme::toggle_button(p, "Open Materials Lab", false)).clicked() {
-                    bus.push(AppCommand::SwitchMode { mode: "materials".into() });
+                if ui
+                    .add(theme::toggle_button(p, "Open Materials Lab", false))
+                    .clicked()
+                {
+                    bus.push(AppCommand::SwitchMode {
+                        mode: "materials".into(),
+                    });
                 }
             });
         }
@@ -1224,18 +1925,30 @@ impl SceneState {
             let o = &self.objs[i];
             theme::kv(ui, p, "Keys", format!("{}", o.track_y.keys().len()));
             ui.horizontal(|ui| {
-                if ui.add(theme::primary_button(p, "Add key")).on_hover_text("Key the current Y at the playhead  (K)").clicked() {
+                if ui
+                    .add(theme::primary_button(p, "Add key"))
+                    .on_hover_text("Key the current Y at the playhead  (K)")
+                    .clicked()
+                {
                     bus.push(AppCommand::SetKeyframe);
                 }
                 let near = o.track_y.has_key_near(t, 0.05);
-                if ui.add_enabled(near, theme::toggle_button(p, "Delete key", false)).clicked() {
+                if ui
+                    .add_enabled(near, theme::toggle_button(p, "Delete key", false))
+                    .clicked()
+                {
                     bus.push(AppCommand::DeleteKeyframe);
                 }
             });
             if o.kind == Kind::Joint {
                 if let Ok(j) = self.joints.get(&o.name) {
                     let (x, y, z) = j.position();
-                    theme::kv(ui, p, "JointHierarchy", format!("{:.2}, {:.2}, {:.2}", x, y, z));
+                    theme::kv(
+                        ui,
+                        p,
+                        "JointHierarchy",
+                        format!("{:.2}, {:.2}, {:.2}", x, y, z),
+                    );
                 }
             }
         });
@@ -1244,7 +1957,17 @@ impl SceneState {
     pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         ui.horizontal(|ui| timeline::transport(ui, p, &mut self.clock, bus));
         ui.add_space(SP_XS);
-        let tracks: Vec<Track> = self.objs.iter().enumerate().filter(|(i, o)| !o.track_y.is_empty() || self.selected == Some(*i)).map(|(i, o)| Track { label: &o.name, keys: &o.track_y, selected: self.selected == Some(i) }).collect();
+        let tracks: Vec<Track> = self
+            .objs
+            .iter()
+            .enumerate()
+            .filter(|(i, o)| !o.track_y.is_empty() || self.selected == Some(*i))
+            .map(|(i, o)| Track {
+                label: &o.name,
+                keys: &o.track_y,
+                selected: self.selected == Some(i),
+            })
+            .collect();
         let names: Vec<String> = tracks.iter().map(|t| t.label.to_string()).collect();
         let out = timeline::ruler(ui, p, "scene-ruler", &mut self.clock, &tracks);
         if let Some(k) = out.picked_track {
@@ -1260,7 +1983,10 @@ mod tests {
     use super::*;
 
     fn toasts() -> Toasts {
-        Toasts { now: 0.0, items: Vec::new() }
+        Toasts {
+            now: 0.0,
+            items: Vec::new(),
+        }
     }
 
     #[test]
@@ -1269,69 +1995,260 @@ mod tests {
         let mut t = toasts();
         let run = |s: &mut SceneState, t: &mut Toasts, c: AppCommand| s.apply(&c, t).unwrap();
         // edge loop on the cube
-        run(&mut s, &mut t, AppCommand::SceneEdgeLoop { object: None, edge: None, t: None }).unwrap();
+        run(
+            &mut s,
+            &mut t,
+            AppCommand::SceneEdgeLoop {
+                object: None,
+                edge: None,
+                t: None,
+            },
+        )
+        .unwrap();
         let m = s.objs[0].mesh.as_ref().unwrap();
         assert_eq!(m.faces.len(), 10);
         assert!(m.is_closed());
         // multi-cut on a plane
-        run(&mut s, &mut t, AppCommand::SceneAdd { kind: "plane".into() }).unwrap();
-        run(&mut s, &mut t, AppCommand::SceneMultiCut { object: None, face: None, from_edge: None, to_edge: None, from_t: None, to_t: None }).unwrap();
-        assert_eq!(s.objs[s.selected.unwrap()].mesh.as_ref().unwrap().faces.len(), 2);
+        run(
+            &mut s,
+            &mut t,
+            AppCommand::SceneAdd {
+                kind: "plane".into(),
+            },
+        )
+        .unwrap();
+        run(
+            &mut s,
+            &mut t,
+            AppCommand::SceneMultiCut {
+                object: None,
+                face: None,
+                from_edge: None,
+                to_edge: None,
+                from_t: None,
+                to_t: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            s.objs[s.selected.unwrap()]
+                .mesh
+                .as_ref()
+                .unwrap()
+                .faces
+                .len(),
+            2
+        );
         // quad draw welds
-        let q = |x: f32| [[x, 0.0, 0.0], [x + 1.0, 0.0, 0.0], [x + 1.0, 0.0, 1.0], [x, 0.0, 1.0]];
-        run(&mut s, &mut t, AppCommand::SceneQuadDraw { points: q(3.0).to_vec() }).unwrap();
-        run(&mut s, &mut t, AppCommand::SceneQuadDraw { points: q(4.0).to_vec() }).unwrap();
-        let qd = s.objs.iter().find(|o| o.name == "quadDraw1").unwrap().mesh.as_ref().unwrap();
+        let q = |x: f32| {
+            [
+                [x, 0.0, 0.0],
+                [x + 1.0, 0.0, 0.0],
+                [x + 1.0, 0.0, 1.0],
+                [x, 0.0, 1.0],
+            ]
+        };
+        run(
+            &mut s,
+            &mut t,
+            AppCommand::SceneQuadDraw {
+                points: q(3.0).to_vec(),
+            },
+        )
+        .unwrap();
+        run(
+            &mut s,
+            &mut t,
+            AppCommand::SceneQuadDraw {
+                points: q(4.0).to_vec(),
+            },
+        )
+        .unwrap();
+        let qd = s
+            .objs
+            .iter()
+            .find(|o| o.name == "quadDraw1")
+            .unwrap()
+            .mesh
+            .as_ref()
+            .unwrap();
         assert_eq!((qd.verts.len(), qd.faces.len()), (6, 2));
-        assert!(run(&mut s, &mut t, AppCommand::SceneQuadDraw { points: vec![[0.0; 3]; 3] }).is_err());
+        assert!(run(
+            &mut s,
+            &mut t,
+            AppCommand::SceneQuadDraw {
+                points: vec![[0.0; 3]; 3]
+            }
+        )
+        .is_err());
     }
 
     #[test]
     fn boolean_and_bridge_between_two_objects() {
         let mut t = toasts();
-        for (op, vol) in [("union", 1.5f32), ("difference", 0.5), ("intersection", 0.5)] {
+        for (op, vol) in [
+            ("union", 1.5f32),
+            ("difference", 0.5),
+            ("intersection", 0.5),
+        ] {
             let mut s = SceneState::new();
-            s.apply(&AppCommand::SceneAdd { kind: "cube".into() }, &mut t).unwrap().unwrap();
-            s.apply(&AppCommand::SceneTransform { object: None, translate: Some([0.5, 0.0, 0.0]), rotate_y: None, scale: None }, &mut t).unwrap().unwrap();
+            s.apply(
+                &AppCommand::SceneAdd {
+                    kind: "cube".into(),
+                },
+                &mut t,
+            )
+            .unwrap()
+            .unwrap();
+            s.apply(
+                &AppCommand::SceneTransform {
+                    object: None,
+                    translate: Some([0.5, 0.0, 0.0]),
+                    rotate_y: None,
+                    scale: None,
+                },
+                &mut t,
+            )
+            .unwrap()
+            .unwrap();
             // select cube1 last so the new cube is the second operand
-            s.apply(&AppCommand::SceneSelect { object: "cube1".into() }, &mut t).unwrap().unwrap();
+            s.apply(
+                &AppCommand::SceneSelect {
+                    object: "cube1".into(),
+                },
+                &mut t,
+            )
+            .unwrap()
+            .unwrap();
             let n = s.objs.len();
-            let msg = s.apply(&AppCommand::SceneBoolean { op: op.into(), object: None, with: None }, &mut t).unwrap().unwrap();
+            let msg = s
+                .apply(
+                    &AppCommand::SceneBoolean {
+                        op: op.into(),
+                        object: None,
+                        with: None,
+                    },
+                    &mut t,
+                )
+                .unwrap()
+                .unwrap();
             assert!(msg.contains(op), "{}", msg);
             assert_eq!(s.objs.len(), n - 1);
             let m = s.objs[s.selected.unwrap()].mesh.as_ref().unwrap();
-            assert!((m.volume() - vol).abs() < 2e-3, "{} volume {}", op, m.volume());
+            assert!(
+                (m.volume() - vol).abs() < 2e-3,
+                "{} volume {}",
+                op,
+                m.volume()
+            );
         }
         let mut s = SceneState::new();
-        s.apply(&AppCommand::SceneAdd { kind: "cube".into() }, &mut t).unwrap().unwrap();
-        s.apply(&AppCommand::SceneTransform { object: None, translate: Some([2.0, 0.0, 0.0]), rotate_y: None, scale: None }, &mut t).unwrap().unwrap();
-        s.apply(&AppCommand::SceneSelect { object: "cube1".into() }, &mut t).unwrap().unwrap();
-        s.apply(&AppCommand::SceneBridge { object: None, with: None }, &mut t).unwrap().unwrap();
+        s.apply(
+            &AppCommand::SceneAdd {
+                kind: "cube".into(),
+            },
+            &mut t,
+        )
+        .unwrap()
+        .unwrap();
+        s.apply(
+            &AppCommand::SceneTransform {
+                object: None,
+                translate: Some([2.0, 0.0, 0.0]),
+                rotate_y: None,
+                scale: None,
+            },
+            &mut t,
+        )
+        .unwrap()
+        .unwrap();
+        s.apply(
+            &AppCommand::SceneSelect {
+                object: "cube1".into(),
+            },
+            &mut t,
+        )
+        .unwrap()
+        .unwrap();
+        s.apply(
+            &AppCommand::SceneBridge {
+                object: None,
+                with: None,
+            },
+            &mut t,
+        )
+        .unwrap()
+        .unwrap();
         let m = s.objs[0].mesh.as_ref().unwrap();
         assert!(m.is_closed());
         assert!((m.volume() - 3.0).abs() < 1e-3, "{}", m.volume());
         // a boolean with nothing else to combine is a clear error
         let mut lone = SceneState::new();
-        assert!(lone.apply(&AppCommand::SceneBoolean { op: "union".into(), object: None, with: None }, &mut t).unwrap().is_err());
+        assert!(lone
+            .apply(
+                &AppCommand::SceneBoolean {
+                    op: "union".into(),
+                    object: None,
+                    with: None
+                },
+                &mut t
+            )
+            .unwrap()
+            .is_err());
     }
 
     #[test]
     fn shaded_viewport_renders_selection_highlight_and_picks() {
         let mut s = SceneState::new();
         s.dist = 4.0;
-        let f = s.render(240, 160, Color32::from_rgb(20, 20, 22), Color32::from_gray(60), Color32::from_rgb(214, 180, 92));
+        let f = s.render(
+            240,
+            160,
+            Color32::from_rgb(20, 20, 22),
+            Color32::from_gray(60),
+            Color32::from_rgb(214, 180, 92),
+        );
         let mesh_px = f.ids.iter().filter(|&&i| i >> 16 == 1).count();
         assert!(mesh_px > 2000, "{}", mesh_px);
         // highlighted (gold tinted) vs. unselected grey
-        let goldish = (0..f.ids.len()).filter(|&i| f.ids[i] >> 16 == 1 && f.rgba[i * 4] as i32 - f.rgba[i * 4 + 2] as i32 > 20).count();
-        assert!(goldish > mesh_px / 2, "selected mesh is tinted ({} of {})", goldish, mesh_px);
+        let goldish = (0..f.ids.len())
+            .filter(|&i| {
+                f.ids[i] >> 16 == 1 && f.rgba[i * 4] as i32 - f.rgba[i * 4 + 2] as i32 > 20
+            })
+            .count();
+        assert!(
+            goldish > mesh_px / 2,
+            "selected mesh is tinted ({} of {})",
+            goldish,
+            mesh_px
+        );
         s.selected = None;
-        let g = s.render(240, 160, Color32::from_rgb(20, 20, 22), Color32::from_gray(60), Color32::from_rgb(214, 180, 92));
-        let goldish = (0..g.ids.len()).filter(|&i| g.ids[i] >> 16 == 1 && g.rgba[i * 4] as i32 - g.rgba[i * 4 + 2] as i32 > 20).count();
+        let g = s.render(
+            240,
+            160,
+            Color32::from_rgb(20, 20, 22),
+            Color32::from_gray(60),
+            Color32::from_rgb(214, 180, 92),
+        );
+        let goldish = (0..g.ids.len())
+            .filter(|&i| {
+                g.ids[i] >> 16 == 1 && g.rgba[i * 4] as i32 - g.rgba[i * 4 + 2] as i32 > 20
+            })
+            .count();
         assert!(goldish < mesh_px / 10);
         s.shading = Shading::Wireframe;
-        let w = s.render(240, 160, Color32::from_rgb(20, 20, 22), Color32::from_gray(60), Color32::from_rgb(214, 180, 92));
-        assert_eq!(w.ids.iter().filter(|&&i| i != 0).count(), 0, "wireframe draws no faces");
+        let w = s.render(
+            240,
+            160,
+            Color32::from_rgb(20, 20, 22),
+            Color32::from_gray(60),
+            Color32::from_rgb(214, 180, 92),
+        );
+        assert_eq!(
+            w.ids.iter().filter(|&&i| i != 0).count(),
+            0,
+            "wireframe draws no faces"
+        );
     }
 }
 
@@ -1340,19 +2257,46 @@ fn energy_ledger(ui: &mut egui::Ui, p: &Palette, a: &obs_rust_bitstream::arena::
     let Some(e0) = a.ledger.start else { return };
     let e = a.energy();
     let l = &a.ledger;
-    let kj = |j: f64| if j.abs() >= 1e6 { format!("{:+.3} MJ", j / 1e6) } else { format!("{:+.2} kJ", j / 1e3) };
-    egui::CollapsingHeader::new(egui::RichText::new("Energy ledger").size(11.0).color(p.text)).id_salt("energy-ledger").default_open(true).show(ui, |ui| {
+    let kj = |j: f64| {
+        if j.abs() >= 1e6 {
+            format!("{:+.3} MJ", j / 1e6)
+        } else {
+            format!("{:+.2} kJ", j / 1e3)
+        }
+    };
+    egui::CollapsingHeader::new(
+        egui::RichText::new("Energy ledger")
+            .size(11.0)
+            .color(p.text),
+    )
+    .id_salt("energy-ledger")
+    .default_open(true)
+    .show(ui, |ui| {
         let row = |ui: &mut egui::Ui, k: &str, v: String| theme::kv(ui, p, k, v);
         row(ui, "Kinetic", kj(e.kinetic));
         row(ui, "Potential", kj(e.potential));
-        row(ui, "Δ Thermal", kj(e.internal - (e0 - a.ledger_start_mech())));
+        row(
+            ui,
+            "Δ Thermal",
+            kj(e.internal - (e0 - a.ledger_start_mech())),
+        );
         row(ui, "Heaters in", kj(l.heater_in));
         row(ui, "Air / radiation", kj(l.exchange_in));
         row(ui, "Drag work", kj(l.drag_work));
         row(ui, "Impacts → heat", kj(l.dissipated));
         row(ui, "Conducted", kj(l.conducted));
         let r = a.energy_residual();
-        ui.label(egui::RichText::new(format!("Residual {:+.3} J (stocks − start − flows)", r)).size(10.5).color(if r.abs() < 1e-3 * (1.0 + e.kinetic + l.heater_in.abs() + l.exchange_in.abs()) { p.success } else { p.warn }));
+        ui.label(
+            egui::RichText::new(format!("Residual {:+.3} J (stocks − start − flows)", r))
+                .size(10.5)
+                .color(
+                    if r.abs() < 1e-3 * (1.0 + e.kinetic + l.heater_in.abs() + l.exchange_in.abs())
+                    {
+                        p.success
+                    } else {
+                        p.warn
+                    },
+                ),
+        );
     });
 }
-

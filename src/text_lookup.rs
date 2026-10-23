@@ -61,6 +61,10 @@ mod tests {
         safe.insert("k", "v");
         // trivial path
         let abi = "v";
-        assert_equal(safe.get("k").unwrap().as_bytes(), abi.as_bytes(), "insert/get");
+        assert_equal(
+            safe.get("k").unwrap().as_bytes(),
+            abi.as_bytes(),
+            "insert/get",
+        );
     }
 }

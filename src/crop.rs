@@ -27,7 +27,11 @@ impl Crop {
         if frame.format != VideoFormat::Y800 {
             return Err(CropError::WrongFormat);
         }
-        if w == 0 || h == 0 || x.saturating_add(w) > frame.width || y.saturating_add(h) > frame.height {
+        if w == 0
+            || h == 0
+            || x.saturating_add(w) > frame.width
+            || y.saturating_add(h) > frame.height
+        {
             return Err(CropError::OutOfBounds);
         }
         let mut out = VideoFrame::new(VideoFormat::Y800, w, h).ok_or(CropError::OutOfBounds)?;

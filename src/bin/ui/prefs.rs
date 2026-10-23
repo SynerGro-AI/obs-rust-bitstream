@@ -27,7 +27,9 @@ pub fn seraphina_home() -> PathBuf {
             return PathBuf::from(h);
         }
     }
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".into());
     PathBuf::from(home).join(".seraphina")
 }
 
@@ -50,13 +52,26 @@ pub struct Prefs {
 impl Prefs {
     /// Load from disk (missing file = fresh bank).
     pub fn load(path: PathBuf) -> Self {
-        let bank = std::fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-        Self { bank, path: Some(path), last_error: None, last_update: None }
+        let bank = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        Self {
+            bank,
+            path: Some(path),
+            last_error: None,
+            last_update: None,
+        }
     }
 
     /// In-memory only (tests).
     pub fn ephemeral() -> Self {
-        Self { bank: MercyBank::default(), path: None, last_error: None, last_update: None }
+        Self {
+            bank: MercyBank::default(),
+            path: None,
+            last_error: None,
+            last_update: None,
+        }
     }
 
     fn save(&mut self) {
@@ -66,7 +81,10 @@ impl Prefs {
                 std::fs::create_dir_all(d)?;
             }
             let tmp = p.with_extension("json.tmp");
-            std::fs::write(&tmp, serde_json::to_string_pretty(&self.bank).unwrap_or_default())?;
+            std::fs::write(
+                &tmp,
+                serde_json::to_string_pretty(&self.bank).unwrap_or_default(),
+            )?;
             std::fs::rename(&tmp, p)
         })();
         self.last_error = res.err().map(|e| e.to_string());
@@ -110,23 +128,44 @@ impl Prefs {
         if b.updates == 0 {
             return "No learned preferences yet.".into();
         }
-        let mut tools: Vec<(&String, &u32)> = b.counts.iter().filter(|(k, _)| k.starts_with("tool.")).collect();
+        let mut tools: Vec<(&String, &u32)> = b
+            .counts
+            .iter()
+            .filter(|(k, _)| k.starts_with("tool."))
+            .collect();
         tools.sort_by(|a, b| b.1.cmp(a.1));
-        let tools: Vec<String> = tools.iter().take(4).map(|(k, n)| format!("{} ×{}", k.trim_start_matches("tool."), n)).collect();
+        let tools: Vec<String> = tools
+            .iter()
+            .take(4)
+            .map(|(k, n)| format!("{} ×{}", k.trim_start_matches("tool."), n))
+            .collect();
         let mut parts = vec![format!("{} incremental updates", b.updates)];
         if !tools.is_empty() {
             parts.push(format!("most-used tools: {}", tools.join(", ")));
         }
-        let params: Vec<String> = b.weights.iter().filter(|(k, _)| k.starts_with("param.")).map(|(k, v)| format!("{} ≈ {:.0}", k.trim_start_matches("param."), v)).collect();
+        let params: Vec<String> = b
+            .weights
+            .iter()
+            .filter(|(k, _)| k.starts_with("param."))
+            .map(|(k, v)| format!("{} ≈ {:.0}", k.trim_start_matches("param."), v))
+            .collect();
         if !params.is_empty() {
             parts.push(format!("typical settings: {}", params.join(", ")));
         }
         if let Some(a) = b.weights.get("ai.acceptance") {
             parts.push(format!("AI action acceptance {:.0}%", a * 100.0));
         }
-        let disliked: Vec<String> = b.weights.iter().filter(|(k, v)| k.starts_with("ai.") && *k != "ai.acceptance" && **v < 0.5).map(|(k, _)| k.trim_start_matches("ai.").to_string()).collect();
+        let disliked: Vec<String> = b
+            .weights
+            .iter()
+            .filter(|(k, v)| k.starts_with("ai.") && *k != "ai.acceptance" && **v < 0.5)
+            .map(|(k, _)| k.trim_start_matches("ai.").to_string())
+            .collect();
         if !disliked.is_empty() {
-            parts.push(format!("often undone: {} (ask before using these)", disliked.join(", ")));
+            parts.push(format!(
+                "often undone: {} (ask before using these)",
+                disliked.join(", ")
+            ));
         }
         if let Some(h) = b.weights.get("reply.helpfulness") {
             parts.push(format!("reply helpfulness {:.0}%", h * 100.0));

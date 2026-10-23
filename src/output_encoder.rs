@@ -115,7 +115,13 @@ mod tests {
         let enc = EncoderContext::new("aac", "ffmpeg_aac", EncoderType::Audio).unwrap();
         oe.set_audio(&out, 0, enc).unwrap();
         assert!(oe.audio(0).is_some());
-        assert!(oe.set_audio(&out, 6, EncoderContext::new("aac", "ffmpeg_aac", EncoderType::Audio).unwrap()).is_err());
+        assert!(oe
+            .set_audio(
+                &out,
+                6,
+                EncoderContext::new("aac", "ffmpeg_aac", EncoderType::Audio).unwrap()
+            )
+            .is_err());
     }
 
     #[test]
@@ -123,7 +129,11 @@ mod tests {
         let out = OutputInfo::new("rec", "Recording", OUTPUT_AV | OUTPUT_ENCODED).unwrap();
         let mut a = OutputEncoder::new();
         let b = OutputEncoder::new();
-        a.set_video(&out, EncoderContext::new("h264", "obs_x264", EncoderType::Video).unwrap()).unwrap();
+        a.set_video(
+            &out,
+            EncoderContext::new("h264", "obs_x264", EncoderType::Video).unwrap(),
+        )
+        .unwrap();
         assert!(a.video().is_some());
         assert!(b.video().is_none());
     }

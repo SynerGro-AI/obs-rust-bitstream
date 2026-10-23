@@ -18,7 +18,12 @@ pub struct Quat {
 }
 
 impl Quat {
-    pub const IDENTITY: Self = Self { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+    pub const IDENTITY: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        w: 1.0,
+    };
 
     #[inline]
     pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
@@ -56,7 +61,12 @@ impl Quat {
         if len <= 0.0 {
             None
         } else {
-            Some(Self::new(self.x / len, self.y / len, self.z / len, self.w / len))
+            Some(Self::new(
+                self.x / len,
+                self.y / len,
+                self.z / len,
+                self.w / len,
+            ))
         }
     }
 }

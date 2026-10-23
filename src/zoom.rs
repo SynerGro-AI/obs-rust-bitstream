@@ -56,7 +56,10 @@ impl Zoom {
 
     /// Map a view pixel to a frame pixel.
     pub fn to_frame(&self, vx: f32, vy: f32) -> (f32, f32) {
-        ((vx - self.pan_x) / self.factor, (vy - self.pan_y) / self.factor)
+        (
+            (vx - self.pan_x) / self.factor,
+            (vy - self.pan_y) / self.factor,
+        )
     }
 }
 

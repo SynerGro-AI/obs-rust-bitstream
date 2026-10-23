@@ -55,8 +55,8 @@ impl Codec {
         }
         let width = u32::from_le_bytes(data[0..4].try_into().map_err(|_| CodecError::BadData)?);
         let height = u32::from_le_bytes(data[4..8].try_into().map_err(|_| CodecError::BadData)?);
-        let mut frame = VideoFrame::new(VideoFormat::Y800, width, height)
-            .ok_or(CodecError::BadData)?;
+        let mut frame =
+            VideoFrame::new(VideoFormat::Y800, width, height).ok_or(CodecError::BadData)?;
         let expected = (width as usize) * (height as usize);
         let mut pixels = Vec::with_capacity(expected);
         let mut i = 8;

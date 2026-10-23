@@ -138,7 +138,9 @@ mod tests {
     fn differential() {
         let mut s = SourceContext::new("src").unwrap();
         s.settings_mut().set_int("width", 1920).unwrap();
-        s.signals_mut().add_decl("void activate(ptr source)").unwrap();
+        s.signals_mut()
+            .add_decl("void activate(ptr source)")
+            .unwrap();
         assert_eq!(s.settings().get_int("width").unwrap(), 1920);
         assert!(s.signals().has("activate"));
     }

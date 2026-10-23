@@ -26,7 +26,11 @@ impl Exposure {
         } else {
             1
         };
-        let div = if stops < 0 { 1u32 << ((-stops) as u32) } else { 1 };
+        let div = if stops < 0 {
+            1u32 << ((-stops) as u32)
+        } else {
+            1
+        };
         if let Some(plane) = frame.planes.get_mut(0) {
             for p in plane.iter_mut() {
                 let v = (*p as u32 * factor) / div;

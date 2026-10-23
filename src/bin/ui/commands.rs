@@ -17,139 +17,430 @@ pub enum Origin {
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum AppCommand {
     // ---- shell
-    SwitchMode { mode: String },
-    SetTheme { dark: bool },
-    TogglePanel { panel: String, visible: Option<bool> },
+    SwitchMode {
+        mode: String,
+    },
+    SetTheme {
+        dark: bool,
+    },
+    TogglePanel {
+        panel: String,
+        visible: Option<bool>,
+    },
     // ---- paint: tools & brush
-    SelectTool { tool: String },
-    SetBrush { size: Option<f32>, hardness: Option<f32>, flow: Option<f32>, color: Option<String>, exposure: Option<f32> },
-    BrushStroke { points: Vec<[f32; 2]> },
-    Gradient { x0: f32, y0: f32, x1: f32, y1: f32 },
-    SetCloneSource { x: f32, y: f32 },
+    SelectTool {
+        tool: String,
+    },
+    SetBrush {
+        size: Option<f32>,
+        hardness: Option<f32>,
+        flow: Option<f32>,
+        color: Option<String>,
+        exposure: Option<f32>,
+    },
+    BrushStroke {
+        points: Vec<[f32; 2]>,
+    },
+    Gradient {
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+    },
+    SetCloneSource {
+        x: f32,
+        y: f32,
+    },
     // ---- paint: layers
-    AddLayer { name: Option<String> },
-    AddGroup { name: Option<String> },
-    DuplicateLayer { layer: Option<String> },
-    RemoveLayer { layer: Option<String> },
-    MoveLayer { layer: Option<String>, direction: String },
-    SelectLayer { layer: String },
-    RenameLayer { layer: Option<String>, name: String },
-    SetLayerOpacity { layer: Option<String>, opacity: f32 },
-    SetLayerFill { layer: Option<String>, fill: f32 },
-    SetLayerBlend { layer: Option<String>, mode: String },
-    SetLayerVisibility { layer: Option<String>, visible: bool },
-    SetLayerLocked { layer: Option<String>, locked: bool },
-    OffsetLayer { layer: Option<String>, dx: i32, dy: i32 },
-    SetGroupVisibility { group: String, visible: bool },
+    AddLayer {
+        name: Option<String>,
+    },
+    AddGroup {
+        name: Option<String>,
+    },
+    DuplicateLayer {
+        layer: Option<String>,
+    },
+    RemoveLayer {
+        layer: Option<String>,
+    },
+    MoveLayer {
+        layer: Option<String>,
+        direction: String,
+    },
+    SelectLayer {
+        layer: String,
+    },
+    RenameLayer {
+        layer: Option<String>,
+        name: String,
+    },
+    SetLayerOpacity {
+        layer: Option<String>,
+        opacity: f32,
+    },
+    SetLayerFill {
+        layer: Option<String>,
+        fill: f32,
+    },
+    SetLayerBlend {
+        layer: Option<String>,
+        mode: String,
+    },
+    SetLayerVisibility {
+        layer: Option<String>,
+        visible: bool,
+    },
+    SetLayerLocked {
+        layer: Option<String>,
+        locked: bool,
+    },
+    OffsetLayer {
+        layer: Option<String>,
+        dx: i32,
+        dy: i32,
+    },
+    SetGroupVisibility {
+        group: String,
+        visible: bool,
+    },
     // ---- paint: masks & selection
-    AddMask { layer: Option<String> },
-    SetMask { layer: Option<String>, density: Option<f32>, feather: Option<f32>, invert: Option<bool>, enabled: Option<bool> },
-    RemoveMask { layer: Option<String> },
-    SelectRect { x: f32, y: f32, w: f32, h: f32 },
-    SelectPolygon { points: Vec<[f32; 2]> },
-    MagicWand { x: f32, y: f32, tolerance: Option<u8> },
+    AddMask {
+        layer: Option<String>,
+    },
+    SetMask {
+        layer: Option<String>,
+        density: Option<f32>,
+        feather: Option<f32>,
+        invert: Option<bool>,
+        enabled: Option<bool>,
+    },
+    RemoveMask {
+        layer: Option<String>,
+    },
+    SelectRect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    },
+    SelectPolygon {
+        points: Vec<[f32; 2]>,
+    },
+    MagicWand {
+        x: f32,
+        y: f32,
+        tolerance: Option<u8>,
+    },
     SelectAll,
     Deselect,
     InvertSelection,
     // ---- paint: image ops
-    ApplyFilter { filter: String, strength: Option<f32> },
-    Crop { x: f32, y: f32, w: f32, h: f32 },
-    AddText { text: String, x: f32, y: f32, size: Option<f32>, color: Option<String> },
-    PenAddPoint { x: f32, y: f32 },
+    ApplyFilter {
+        filter: String,
+        strength: Option<f32>,
+    },
+    Crop {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    },
+    AddText {
+        text: String,
+        x: f32,
+        y: f32,
+        size: Option<f32>,
+        color: Option<String>,
+    },
+    PenAddPoint {
+        x: f32,
+        y: f32,
+    },
     PenStroke,
     PenToSelection,
     PenClear,
     Undo,
     Redo,
-    Zoom { percent: Option<f32>, fit: Option<bool> },
-    Pan { dx: f32, dy: f32 },
-    OpenFile { path: String },
+    Zoom {
+        percent: Option<f32>,
+        fit: Option<bool>,
+    },
+    Pan {
+        dx: f32,
+        dy: f32,
+    },
+    OpenFile {
+        path: String,
+    },
     SavePsd,
     ExportPng,
     // ---- 3D
-    SceneAdd { kind: String },
-    SceneSelect { object: String },
-    SceneGizmo { mode: String },
-    SceneTransform { object: Option<String>, translate: Option<[f32; 3]>, rotate_y: Option<f32>, scale: Option<f32> },
-    SceneExtrude { distance: Option<f32> },
-    SceneBevel { amount: Option<f32> },
-    SceneDelete { object: Option<String> },
-    SceneEdgeLoop { object: Option<String>, edge: Option<[usize; 2]>, t: Option<f32> },
-    SceneMultiCut { object: Option<String>, face: Option<usize>, from_edge: Option<usize>, to_edge: Option<usize>, from_t: Option<f32>, to_t: Option<f32> },
-    SceneBridge { object: Option<String>, with: Option<String> },
-    SceneBoolean { op: String, object: Option<String>, with: Option<String> },
-    SceneQuadDraw { points: Vec<[f32; 3]> },
-    SceneShading { mode: String },
+    SceneAdd {
+        kind: String,
+    },
+    SceneSelect {
+        object: String,
+    },
+    SceneGizmo {
+        mode: String,
+    },
+    SceneTransform {
+        object: Option<String>,
+        translate: Option<[f32; 3]>,
+        rotate_y: Option<f32>,
+        scale: Option<f32>,
+    },
+    SceneExtrude {
+        distance: Option<f32>,
+    },
+    SceneBevel {
+        amount: Option<f32>,
+    },
+    SceneDelete {
+        object: Option<String>,
+    },
+    SceneEdgeLoop {
+        object: Option<String>,
+        edge: Option<[usize; 2]>,
+        t: Option<f32>,
+    },
+    SceneMultiCut {
+        object: Option<String>,
+        face: Option<usize>,
+        from_edge: Option<usize>,
+        to_edge: Option<usize>,
+        from_t: Option<f32>,
+        to_t: Option<f32>,
+    },
+    SceneBridge {
+        object: Option<String>,
+        with: Option<String>,
+    },
+    SceneBoolean {
+        op: String,
+        object: Option<String>,
+        with: Option<String>,
+    },
+    SceneQuadDraw {
+        points: Vec<[f32; 3]>,
+    },
+    SceneShading {
+        mode: String,
+    },
     // ---- materials lab
-    MaterialsSelect { element: String },
-    MaterialsSearch { query: String },
-    MaterialsAdd { element: String, count: Option<u32> },
-    MaterialsRemove { element: String },
+    MaterialsSelect {
+        element: String,
+    },
+    MaterialsSearch {
+        query: String,
+    },
+    MaterialsAdd {
+        element: String,
+        count: Option<u32>,
+    },
+    MaterialsRemove {
+        element: String,
+    },
     MaterialsClear,
-    MaterialsBuild { formula: Option<String> },
-    MaterialsBuildAtom { protons: u32, neutrons: u32, electrons: u32 },
-    MaterialsPreset { preset: String },
-    MaterialsSave { name: Option<String> },
-    MaterialAssign { object: Option<String>, material: String },
+    MaterialsBuild {
+        formula: Option<String>,
+    },
+    MaterialsBuildAtom {
+        protons: u32,
+        neutrons: u32,
+        electrons: u32,
+    },
+    MaterialsPreset {
+        preset: String,
+    },
+    MaterialsSave {
+        name: Option<String>,
+    },
+    MaterialAssign {
+        object: Option<String>,
+        material: String,
+    },
     // ---- physics arena
-    ArenaPlay { playing: Option<bool> },
-    ArenaStep { steps: Option<u32> },
+    ArenaPlay {
+        playing: Option<bool>,
+    },
+    ArenaStep {
+        steps: Option<u32>,
+    },
     ArenaReset,
-    ArenaEnv { preset: Option<String>, gravity: Option<f32>, air_density: Option<f32>, temperature_c: Option<f32>, pressure_kpa: Option<f32>, wind: Option<[f32; 3]> },
-    ArenaBody { object: Option<String>, temperature_c: Option<f32>, heater_w: Option<f32>, fixed: Option<bool>, velocity: Option<[f32; 3]> },
+    ArenaEnv {
+        preset: Option<String>,
+        gravity: Option<f32>,
+        air_density: Option<f32>,
+        temperature_c: Option<f32>,
+        pressure_kpa: Option<f32>,
+        wind: Option<[f32; 3]>,
+    },
+    ArenaBody {
+        object: Option<String>,
+        temperature_c: Option<f32>,
+        heater_w: Option<f32>,
+        fixed: Option<bool>,
+        velocity: Option<[f32; 3]>,
+    },
     // ---- lab: reactions, circuits, computer, relativity (simulations; not document edits)
-    LabTab { tab: String },
-    ChemReact { equation: Option<String>, temperature_c: Option<f64>, pressure_kpa: Option<f64>, seconds: Option<f64>, air: Option<bool> },
-    CircuitRun { preset: Option<String>, voltage: Option<f64>, temperature_c: Option<f64>, material: Option<String>, length_mm: Option<f64>, diameter_mm: Option<f64>, doping_cm3: Option<f64> },
-    CpuRun { program: Option<String>, source: Option<String>, temperature_c: Option<f64>, clock_mhz: Option<f64>, die_object: Option<String> },
-    CpuHeatSweep { program: Option<String>, clock_mhz: Option<f64> },
-    RelSpeed { beta: Option<f64>, speed_kms: Option<f64> },
-    NbodyPreset { preset: Option<String>, gr: Option<bool>, gr_exaggeration: Option<f64> },
-    NbodyPlay { playing: Option<bool>, days_per_second: Option<f64> },
+    LabTab {
+        tab: String,
+    },
+    ChemReact {
+        equation: Option<String>,
+        temperature_c: Option<f64>,
+        pressure_kpa: Option<f64>,
+        seconds: Option<f64>,
+        air: Option<bool>,
+    },
+    CircuitRun {
+        preset: Option<String>,
+        voltage: Option<f64>,
+        temperature_c: Option<f64>,
+        material: Option<String>,
+        length_mm: Option<f64>,
+        diameter_mm: Option<f64>,
+        doping_cm3: Option<f64>,
+    },
+    CpuRun {
+        program: Option<String>,
+        source: Option<String>,
+        temperature_c: Option<f64>,
+        clock_mhz: Option<f64>,
+        die_object: Option<String>,
+    },
+    CpuHeatSweep {
+        program: Option<String>,
+        clock_mhz: Option<f64>,
+    },
+    RelSpeed {
+        beta: Option<f64>,
+        speed_kms: Option<f64>,
+    },
+    NbodyPreset {
+        preset: Option<String>,
+        gr: Option<bool>,
+        gr_exaggeration: Option<f64>,
+    },
+    NbodyPlay {
+        playing: Option<bool>,
+        days_per_second: Option<f64>,
+    },
     NbodyMeasurePrecession,
     // ---- timeline
-    TimelinePlay { playing: Option<bool> },
-    TimelineScrub { time: f32 },
+    TimelinePlay {
+        playing: Option<bool>,
+    },
+    TimelineScrub {
+        time: f32,
+    },
     SetKeyframe,
     DeleteKeyframe,
     // ---- stream
-    RunReader { width: Option<u32>, reads: Option<usize>, wrap: Option<bool> },
+    RunReader {
+        width: Option<u32>,
+        reads: Option<usize>,
+        wrap: Option<bool>,
+    },
     ResetReader,
-    SetStreaming { live: bool },
-    SetRecording { recording: bool },
+    SetStreaming {
+        live: bool,
+    },
+    SetRecording {
+        recording: bool,
+    },
     RetryStream,
-    SetOutputSource { source: String },
-    SetStreamTarget { url: String },
+    SetOutputSource {
+        source: String,
+    },
+    SetStreamTarget {
+        url: String,
+    },
     /// UI only: never exposed as a tool, never logged with its value.
-    SetStreamKey { key: String },
+    SetStreamKey {
+        key: String,
+    },
     // ---- video generation
-    VideoGenerate { prompt: String, duration: Option<u32> },
-    GenerateImage { prompt: String },
-    VideoExtend { clip: usize, prompt: String },
-    VideoStitch { clips: Option<Vec<usize>> },
+    VideoGenerate {
+        prompt: String,
+        duration: Option<u32>,
+    },
+    GenerateImage {
+        prompt: String,
+    },
+    VideoExtend {
+        clip: usize,
+        prompt: String,
+    },
+    VideoStitch {
+        clips: Option<Vec<usize>>,
+    },
 }
 
 impl AppCommand {
     pub fn name(&self) -> String {
-        serde_json::to_value(self).ok().and_then(|v| v.get("cmd").and_then(|c| c.as_str()).map(|s| s.to_string())).unwrap_or_else(|| "unknown".into())
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.get("cmd").and_then(|c| c.as_str()).map(|s| s.to_string()))
+            .unwrap_or_else(|| "unknown".into())
     }
 
     /// Whether this command changes document state (and so belongs in
     /// an AI action's undo snapshot). View-only commands return false.
     pub fn mutates(&self) -> bool {
-        !matches!(self, AppCommand::Zoom { .. } | AppCommand::Pan { .. } | AppCommand::MaterialsSelect { .. } | AppCommand::MaterialsSearch { .. } | AppCommand::LabTab { .. } | AppCommand::ChemReact { .. } | AppCommand::CircuitRun { .. } | AppCommand::CpuRun { .. } | AppCommand::CpuHeatSweep { .. } | AppCommand::RelSpeed { .. } | AppCommand::NbodyPreset { .. } | AppCommand::NbodyPlay { .. } | AppCommand::NbodyMeasurePrecession | AppCommand::SetTheme { .. } | AppCommand::TogglePanel { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::OpenFile { .. })
+        !matches!(
+            self,
+            AppCommand::Zoom { .. }
+                | AppCommand::Pan { .. }
+                | AppCommand::MaterialsSelect { .. }
+                | AppCommand::MaterialsSearch { .. }
+                | AppCommand::LabTab { .. }
+                | AppCommand::ChemReact { .. }
+                | AppCommand::CircuitRun { .. }
+                | AppCommand::CpuRun { .. }
+                | AppCommand::CpuHeatSweep { .. }
+                | AppCommand::RelSpeed { .. }
+                | AppCommand::NbodyPreset { .. }
+                | AppCommand::NbodyPlay { .. }
+                | AppCommand::NbodyMeasurePrecession
+                | AppCommand::SetTheme { .. }
+                | AppCommand::TogglePanel { .. }
+                | AppCommand::SavePsd
+                | AppCommand::ExportPng
+                | AppCommand::OpenFile { .. }
+        )
     }
 
     /// Commands Seraphina may not run without the user (file writes and
     /// paid/networked generation). The Triad mercy wheel blocks these.
     pub fn needs_user(&self) -> bool {
-        matches!(self, AppCommand::OpenFile { .. } | AppCommand::SavePsd | AppCommand::ExportPng | AppCommand::VideoGenerate { .. } | AppCommand::GenerateImage { .. } | AppCommand::VideoExtend { .. } | AppCommand::VideoStitch { .. } | AppCommand::SetStreaming { live: true } | AppCommand::SetRecording { recording: true } | AppCommand::SetStreamTarget { .. } | AppCommand::SetStreamKey { .. } | AppCommand::RetryStream)
+        matches!(
+            self,
+            AppCommand::OpenFile { .. }
+                | AppCommand::SavePsd
+                | AppCommand::ExportPng
+                | AppCommand::VideoGenerate { .. }
+                | AppCommand::GenerateImage { .. }
+                | AppCommand::VideoExtend { .. }
+                | AppCommand::VideoStitch { .. }
+                | AppCommand::SetStreaming { live: true }
+                | AppCommand::SetRecording { recording: true }
+                | AppCommand::SetStreamTarget { .. }
+                | AppCommand::SetStreamKey { .. }
+                | AppCommand::RetryStream
+        )
     }
 }
 
 /// Parse an OpenAI-style tool call (`name`, JSON `arguments`).
 pub fn parse_tool_call(name: &str, arguments: &str) -> Result<AppCommand, String> {
-    let args: Value = if arguments.trim().is_empty() { json!({}) } else { serde_json::from_str(arguments).map_err(|e| format!("arguments are not JSON: {}", e))? };
+    let args: Value = if arguments.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(arguments).map_err(|e| format!("arguments are not JSON: {}", e))?
+    };
     let mut obj = match args {
         Value::Object(m) => m,
         Value::Null => serde_json::Map::new(),
@@ -172,7 +463,8 @@ fn obj(props: Value, required: &[&str]) -> Value {
     json!({ "type": "object", "properties": props, "required": required })
 }
 
-const LAYER: &str = "Layer name (case-insensitive) or 1-based index from the top. Omit for the selected layer.";
+const LAYER: &str =
+    "Layer name (case-insensitive) or 1-based index from the top. Omit for the selected layer.";
 
 /// JSON-schema tool definitions for every command.
 pub fn tool_specs() -> Vec<ToolSpec> {
@@ -302,12 +594,20 @@ mod tests {
 
     fn sample_value(schema: &Value) -> Value {
         match schema.get("type").and_then(|t| t.as_str()) {
-            Some("string") => schema.get("enum").and_then(|e| e.get(0)).cloned().unwrap_or(json!("x")),
+            Some("string") => schema
+                .get("enum")
+                .and_then(|e| e.get(0))
+                .cloned()
+                .unwrap_or(json!("x")),
             Some("number") => json!(1),
             Some("boolean") => json!(true),
             Some("array") => {
                 let item = schema.get("items").cloned().unwrap_or(json!({}));
-                let n = schema.get("minItems").and_then(|m| m.as_u64()).unwrap_or(1).max(1);
+                let n = schema
+                    .get("minItems")
+                    .and_then(|m| m.as_u64())
+                    .unwrap_or(1)
+                    .max(1);
                 Value::Array((0..n).map(|_| sample_value(&item)).collect())
             }
             _ => json!({}),
@@ -319,43 +619,100 @@ mod tests {
         let specs = tool_specs();
         assert!(specs.len() >= 60, "{}", specs.len());
         for t in &specs {
-            let props = t.params.get("properties").and_then(|p| p.as_object()).cloned().unwrap_or_default();
-            let required: Vec<String> = t.params.get("required").and_then(|r| r.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default();
+            let props = t
+                .params
+                .get("properties")
+                .and_then(|p| p.as_object())
+                .cloned()
+                .unwrap_or_default();
+            let required: Vec<String> = t
+                .params
+                .get("required")
+                .and_then(|r| r.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
             let mut args = serde_json::Map::new();
             for r in &required {
                 args.insert(r.clone(), sample_value(&props[r.as_str()]));
             }
-            let cmd = parse_tool_call(t.name, &Value::Object(args).to_string()).unwrap_or_else(|e| panic!("{} failed: {}", t.name, e));
+            let cmd = parse_tool_call(t.name, &Value::Object(args).to_string())
+                .unwrap_or_else(|e| panic!("{} failed: {}", t.name, e));
             assert_eq!(cmd.name(), t.name);
             // all optional args at once
             let mut all = serde_json::Map::new();
             for (k, v) in &props {
                 all.insert(k.clone(), sample_value(v));
             }
-            parse_tool_call(t.name, &Value::Object(all).to_string()).unwrap_or_else(|e| panic!("{} (all args) failed: {}", t.name, e));
+            parse_tool_call(t.name, &Value::Object(all).to_string())
+                .unwrap_or_else(|e| panic!("{} (all args) failed: {}", t.name, e));
         }
     }
 
     #[test]
     fn parse_examples_and_errors() {
-        assert_eq!(parse_tool_call("set_layer_opacity", r#"{"layer":"Mist Overlay","opacity":55}"#), Ok(AppCommand::SetLayerOpacity { layer: Some("Mist Overlay".into()), opacity: 55.0 }));
+        assert_eq!(
+            parse_tool_call(
+                "set_layer_opacity",
+                r#"{"layer":"Mist Overlay","opacity":55}"#
+            ),
+            Ok(AppCommand::SetLayerOpacity {
+                layer: Some("Mist Overlay".into()),
+                opacity: 55.0
+            })
+        );
         assert_eq!(parse_tool_call("undo", ""), Ok(AppCommand::Undo));
         assert!(parse_tool_call("set_layer_opacity", r#"{"layer":"x"}"#).is_err());
         assert!(parse_tool_call("format_disk", "{}").is_err());
         assert!(parse_tool_call("undo", "[1,2]").is_err());
         assert!(parse_tool_call("undo", "{not json").is_err());
-        assert!(parse_tool_call("set_stream_key", r#"{"key":"x"}"#).is_err(), "UI-only commands are not tools");
-        assert_eq!(parse_tool_call("material_assign", r#"{"object":"cube1","material":"copper"}"#), Ok(AppCommand::MaterialAssign { object: Some("cube1".into()), material: "copper".into() }));
-        assert_eq!(parse_tool_call("materials_build", r#"{"formula":"H2O"}"#), Ok(AppCommand::MaterialsBuild { formula: Some("H2O".into()) }));
-        assert_eq!(parse_tool_call("scene_boolean", r#"{"op":"difference"}"#), Ok(AppCommand::SceneBoolean { op: "difference".into(), object: None, with: None }));
+        assert!(
+            parse_tool_call("set_stream_key", r#"{"key":"x"}"#).is_err(),
+            "UI-only commands are not tools"
+        );
+        assert_eq!(
+            parse_tool_call(
+                "material_assign",
+                r#"{"object":"cube1","material":"copper"}"#
+            ),
+            Ok(AppCommand::MaterialAssign {
+                object: Some("cube1".into()),
+                material: "copper".into()
+            })
+        );
+        assert_eq!(
+            parse_tool_call("materials_build", r#"{"formula":"H2O"}"#),
+            Ok(AppCommand::MaterialsBuild {
+                formula: Some("H2O".into())
+            })
+        );
+        assert_eq!(
+            parse_tool_call("scene_boolean", r#"{"op":"difference"}"#),
+            Ok(AppCommand::SceneBoolean {
+                op: "difference".into(),
+                object: None,
+                with: None
+            })
+        );
     }
 
     #[test]
     fn policy_flags() {
         assert!(AppCommand::ExportPng.needs_user());
-        assert!(AppCommand::VideoGenerate { prompt: "x".into(), duration: None }.needs_user());
+        assert!(AppCommand::VideoGenerate {
+            prompt: "x".into(),
+            duration: None
+        }
+        .needs_user());
         assert!(!AppCommand::SetStreaming { live: false }.needs_user());
-        assert!(!AppCommand::Zoom { percent: Some(50.0), fit: None }.mutates());
+        assert!(!AppCommand::Zoom {
+            percent: Some(50.0),
+            fit: None
+        }
+        .mutates());
         assert!(AppCommand::Undo.mutates());
         assert_eq!(parse_hex("#ff8000"), Some([255, 128, 0]));
         assert_eq!(parse_hex("nope"), None);

@@ -105,7 +105,10 @@ mod tests {
         assert!(SceneContext::new("").is_err());
         let mut s = SceneContext::new("s").unwrap();
         s.add_item("a", "src").unwrap();
-        assert!(matches!(s.add_item("a", "src"), Err(SceneError::DuplicateItem)));
+        assert!(matches!(
+            s.add_item("a", "src"),
+            Err(SceneError::DuplicateItem)
+        ));
         assert!(matches!(s.add_item("", "src"), Err(SceneError::EmptyName)));
         assert!(matches!(s.add_item("b", ""), Err(SceneError::EmptySource)));
     }

@@ -17,12 +17,7 @@ pub enum EraserError {
 pub struct Eraser;
 
 impl Eraser {
-    pub fn clear(
-        frame: &mut VideoFrame,
-        x: u32,
-        y: u32,
-        size: u8,
-    ) -> Result<(), EraserError> {
+    pub fn clear(frame: &mut VideoFrame, x: u32, y: u32, size: u8) -> Result<(), EraserError> {
         if frame.format != VideoFormat::Y800 {
             return Err(EraserError::WrongFormat);
         }

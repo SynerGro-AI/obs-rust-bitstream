@@ -34,13 +34,15 @@ impl SignalHandler {
         if name.is_empty() {
             return false;
         }
-        self.signals.entry(name.to_string()).or_insert_with(|| SignalSlot {
-            decl: DeclInfo {
-                name: name.to_string(),
-                params: Vec::new(),
-            },
-            listeners: Vec::new(),
-        });
+        self.signals
+            .entry(name.to_string())
+            .or_insert_with(|| SignalSlot {
+                decl: DeclInfo {
+                    name: name.to_string(),
+                    params: Vec::new(),
+                },
+                listeners: Vec::new(),
+            });
         true
     }
 
@@ -49,11 +51,17 @@ impl SignalHandler {
     pub fn add_decl(&mut self, decl_string: &str) -> Result<&str, DeclError> {
         let info = parse_decl(decl_string)?;
         let name = info.name.clone();
-        self.signals.entry(name.clone()).or_insert_with(|| SignalSlot {
-            decl: info,
-            listeners: Vec::new(),
-        });
-        Ok(self.signals.get(&name).map(|s| s.decl.name.as_str()).unwrap_or(""))
+        self.signals
+            .entry(name.clone())
+            .or_insert_with(|| SignalSlot {
+                decl: info,
+                listeners: Vec::new(),
+            });
+        Ok(self
+            .signals
+            .get(&name)
+            .map(|s| s.decl.name.as_str())
+            .unwrap_or(""))
     }
 
     /// Connect a listener id to a signal. Returns false if the signal was not declared.
@@ -123,7 +131,10 @@ impl SignalHandler {
     }
 
     pub fn listener_count(&self, name: &str) -> usize {
-        self.signals.get(name).map(|s| s.listeners.len()).unwrap_or(0)
+        self.signals
+            .get(name)
+            .map(|s| s.listeners.len())
+            .unwrap_or(0)
     }
 
     pub fn has(&self, name: &str) -> bool {

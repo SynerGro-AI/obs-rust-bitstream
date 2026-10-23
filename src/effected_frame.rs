@@ -13,11 +13,7 @@ pub struct EffectedFrame;
 
 impl EffectedFrame {
     /// Apply the effect and return a new frame.
-    pub fn apply(
-        effect: &SceneEffect,
-        frame: &VideoFrame,
-        weights: &LiveWeights,
-    ) -> VideoFrame {
+    pub fn apply(effect: &SceneEffect, frame: &VideoFrame, weights: &LiveWeights) -> VideoFrame {
         let mut out = frame.clone();
         let _ = effect.apply(&mut out, weights);
         out

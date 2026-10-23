@@ -45,11 +45,15 @@ impl MaterialRegistry {
     }
 
     pub fn get(&self, name: &str) -> Result<&Material, MaterialRegistryError> {
-        self.materials.get(name).ok_or(MaterialRegistryError::Missing)
+        self.materials
+            .get(name)
+            .ok_or(MaterialRegistryError::Missing)
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Material, MaterialRegistryError> {
-        self.materials.get_mut(name).ok_or(MaterialRegistryError::Missing)
+        self.materials
+            .get_mut(name)
+            .ok_or(MaterialRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {

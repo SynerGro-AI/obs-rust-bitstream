@@ -13,18 +13,19 @@ pub struct PsLayers;
 impl PsLayers {
     /// One line per layer, top first: "eye opacity% blend name"
     pub fn panel(stack: &LayerStack) -> Vec<String> {
-        stack
-            .layers()
-            .iter()
-            .rev()
-            .map(|l| Self::line(l))
-            .collect()
+        stack.layers().iter().rev().map(|l| Self::line(l)).collect()
     }
 
     fn line(layer: &Layer) -> String {
         let eye = if layer.visible() { "●" } else { "○" };
         let pct = (layer.opacity() * 100.0).round() as u32;
-        format!("{} {}% {} {}", eye, pct, Self::blend_name(layer.blend()), layer.name())
+        format!(
+            "{} {}% {} {}",
+            eye,
+            pct,
+            Self::blend_name(layer.blend()),
+            layer.name()
+        )
     }
 
     fn blend_name(mode: BlendMode) -> &'static str {

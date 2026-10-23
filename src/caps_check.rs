@@ -24,7 +24,7 @@ impl CapsCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encoder_caps::{EncoderCaps, CAP_ROI, CAP_SCALING, CAP_INTERNAL};
+    use crate::encoder_caps::{EncoderCaps, CAP_INTERNAL, CAP_ROI, CAP_SCALING};
 
     #[test]
     fn supports_one() {

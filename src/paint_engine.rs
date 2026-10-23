@@ -21,11 +21,19 @@ pub struct Selection {
 
 impl Selection {
     pub fn empty(width: u32, height: u32) -> Self {
-        Self { width, height, mask: vec![0; (width as usize) * (height as usize)] }
+        Self {
+            width,
+            height,
+            mask: vec![0; (width as usize) * (height as usize)],
+        }
     }
 
     pub fn all(width: u32, height: u32) -> Self {
-        Self { width, height, mask: vec![255; (width as usize) * (height as usize)] }
+        Self {
+            width,
+            height,
+            mask: vec![255; (width as usize) * (height as usize)],
+        }
     }
 
     pub fn from_rect(width: u32, height: u32, r: PixelRect) -> Self {
@@ -75,8 +83,12 @@ impl Selection {
     /// difference) of the seed colour.
     pub fn magic_wand(r: &Raster, seed: (u32, u32), tolerance: u8) -> Self {
         let mut s = Self::empty(r.width, r.height);
-        let Some(c0) = r.pixel(seed.0, seed.1) else { return s };
-        let close = |p: [u8; 4]| (0..3).all(|k| (p[k] as i16 - c0[k] as i16).unsigned_abs() as u8 <= tolerance);
+        let Some(c0) = r.pixel(seed.0, seed.1) else {
+            return s;
+        };
+        let close = |p: [u8; 4]| {
+            (0..3).all(|k| (p[k] as i16 - c0[k] as i16).unsigned_abs() as u8 <= tolerance)
+        };
         let w = r.width as usize;
         let mut stack = vec![(seed.0, seed.1)];
         while let Some((x, y)) = stack.pop() {
@@ -110,10 +122,17 @@ impl Selection {
     /// within a looser bound of the seed.
     pub fn quick_select(r: &Raster, seed: (u32, u32), tolerance: u8) -> Self {
         let mut s = Self::empty(r.width, r.height);
-        let Some(c0) = r.pixel(seed.0, seed.1) else { return s };
+        let Some(c0) = r.pixel(seed.0, seed.1) else {
+            return s;
+        };
         let step = (tolerance as i16 / 3).max(4);
         let span = (tolerance as i16 * 3).min(255);
-        let diff = |a: [u8; 4], b: [u8; 4]| (0..3).map(|k| (a[k] as i16 - b[k] as i16).abs()).max().unwrap_or(0);
+        let diff = |a: [u8; 4], b: [u8; 4]| {
+            (0..3)
+                .map(|k| (a[k] as i16 - b[k] as i16).abs())
+                .max()
+                .unwrap_or(0)
+        };
         let w = r.width as usize;
         s.mask[(seed.1 as usize) * w + seed.0 as usize] = 255;
         let mut stack = vec![(seed.0, seed.1, c0)];
@@ -185,7 +204,12 @@ impl Selection {
         if x0 == u32::MAX {
             None
         } else {
-            Some(PixelRect { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 })
+            Some(PixelRect {
+                x: x0,
+                y: y0,
+                w: x1 - x0 + 1,
+                h: y1 - y0 + 1,
+            })
         }
     }
 
@@ -260,7 +284,9 @@ pub fn blur_mask(data: &[u8], w: u32, h: u32, radius: u32) -> Vec<u8> {
             }
         }
     }
-    a.iter().map(|v| v.round().clamp(0.0, 255.0) as u8).collect()
+    a.iter()
+        .map(|v| v.round().clamp(0.0, 255.0) as u8)
+        .collect()
 }
 
 /// Grayscale layer mask. White reveals, black hides.
@@ -280,7 +306,16 @@ pub struct LayerMask {
 
 impl LayerMask {
     pub fn from_selection(sel: &Selection) -> Self {
-        Self { width: sel.width, height: sel.height, data: Arc::new(sel.mask.clone()), density: 1.0, feather: 0.0, invert: false, enabled: true, cache: None }
+        Self {
+            width: sel.width,
+            height: sel.height,
+            data: Arc::new(sel.mask.clone()),
+            density: 1.0,
+            feather: 0.0,
+            invert: false,
+            enabled: true,
+            cache: None,
+        }
     }
 
     pub fn reveal_all(width: u32, height: u32) -> Self {
@@ -295,7 +330,10 @@ impl LayerMask {
             return;
         }
         if self.cache.as_ref().map(|c| c.0) != Some(r) {
-            self.cache = Some((r, Arc::new(blur_mask(&self.data, self.width, self.height, r))));
+            self.cache = Some((
+                r,
+                Arc::new(blur_mask(&self.data, self.width, self.height, r)),
+            ));
         }
     }
 
@@ -322,7 +360,12 @@ impl LayerMask {
     }
 
     pub fn cropped(&self, r: PixelRect) -> Self {
-        let sel = Selection { width: self.width, height: self.height, mask: (*self.data).clone() }.cropped(r);
+        let sel = Selection {
+            width: self.width,
+            height: self.height,
+            mask: (*self.data).clone(),
+        }
+        .cropped(r);
         let mut m = Self::from_selection(&sel);
         m.density = self.density;
         m.feather = self.feather;
@@ -364,7 +407,20 @@ pub struct PaintLayer {
 
 impl PaintLayer {
     pub fn new(id: u32, name: &str, raster: Raster) -> Self {
-        Self { id, name: name.to_string(), visible: true, opacity: 1.0, fill: 1.0, blend: BlendMode::Normal, raster: Arc::new(raster), offset: (0, 0), mask: None, group: None, locked: false, text: None }
+        Self {
+            id,
+            name: name.to_string(),
+            visible: true,
+            opacity: 1.0,
+            fill: 1.0,
+            blend: BlendMode::Normal,
+            raster: Arc::new(raster),
+            offset: (0, 0),
+            mask: None,
+            group: None,
+            locked: false,
+            text: None,
+        }
     }
 
     pub fn raster_mut(&mut self) -> &mut Raster {
@@ -409,10 +465,32 @@ pub struct LayerGroup {
 
 /// Composite visible layers bottom-to-top into `out` (document sized),
 /// touching only `region` when given. Linear in pixels × layers.
-pub fn composite_into(out: &mut Raster, layers: &[PaintLayer], groups: &[LayerGroup], background: [u8; 3], region: Option<PixelRect>) {
-    let full = PixelRect { x: 0, y: 0, w: out.width, h: out.height };
-    let Some(r) = region.unwrap_or(full).clamped(out.width, out.height) else { return };
-    let group_visible = |g: Option<u32>| g.map(|id| groups.iter().find(|x| x.id == id).map(|x| x.visible).unwrap_or(true)).unwrap_or(true);
+pub fn composite_into(
+    out: &mut Raster,
+    layers: &[PaintLayer],
+    groups: &[LayerGroup],
+    background: [u8; 3],
+    region: Option<PixelRect>,
+) {
+    let full = PixelRect {
+        x: 0,
+        y: 0,
+        w: out.width,
+        h: out.height,
+    };
+    let Some(r) = region.unwrap_or(full).clamped(out.width, out.height) else {
+        return;
+    };
+    let group_visible = |g: Option<u32>| {
+        g.map(|id| {
+            groups
+                .iter()
+                .find(|x| x.id == id)
+                .map(|x| x.visible)
+                .unwrap_or(true)
+        })
+        .unwrap_or(true)
+    };
     let ow = out.width as usize;
     for y in r.y..r.y + r.h {
         for x in r.x..r.x + r.w {
@@ -456,7 +534,8 @@ pub fn composite_into(out: &mut Raster, layers: &[PaintLayer], groups: &[LayerGr
                     let bv = out.data[d + c] as f32 / 255.0;
                     let tv = src.data[s + c] as f32 / 255.0;
                     let mixed = l.blend.channel(bv, tv);
-                    out.data[d + c] = ((bv + (mixed - bv) * a) * 255.0).round().clamp(0.0, 255.0) as u8;
+                    out.data[d + c] =
+                        ((bv + (mixed - bv) * a) * 255.0).round().clamp(0.0, 255.0) as u8;
                 }
             }
         }
@@ -490,7 +569,14 @@ fn dist(x: u32, y: u32, cx: f32, cy: f32) -> f32 {
 }
 
 /// Brush or eraser dab honouring a soft selection mask.
-pub fn paint_dab(r: &mut Raster, b: &Brush, cx: f32, cy: f32, erase: bool, sel: Option<&Selection>) {
+pub fn paint_dab(
+    r: &mut Raster,
+    b: &Brush,
+    cx: f32,
+    cy: f32,
+    erase: bool,
+    sel: Option<&Selection>,
+) {
     let (x0, y0, x1, y1) = dab_bounds(r, cx, cy, b.size / 2.0);
     let flow = b.flow.clamp(0.0, 1.0);
     for y in y0..y1 {
@@ -507,7 +593,8 @@ pub fn paint_dab(r: &mut Raster, b: &Brush, cx: f32, cy: f32, erase: bool, sel: 
             } else {
                 let out_a = cov + a * (1.0 - cov);
                 for c in 0..3 {
-                    let v = (b.color[c] as f32 * cov + px[c] as f32 * a * (1.0 - cov)) / out_a.max(1e-6);
+                    let v = (b.color[c] as f32 * cov + px[c] as f32 * a * (1.0 - cov))
+                        / out_a.max(1e-6);
                     px[c] = v.round().clamp(0.0, 255.0) as u8;
                 }
                 px[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
@@ -521,10 +608,12 @@ pub fn dab_points(b: &Brush, from: (f32, f32), to: (f32, f32)) -> Vec<(f32, f32)
     let step = (b.size * b.spacing.clamp(0.05, 2.0)).max(1.0);
     let (dx, dy) = (to.0 - from.0, to.1 - from.1);
     let n = ((dx * dx + dy * dy).sqrt() / step).ceil().max(1.0) as usize;
-    (1..=n).map(|i| {
-        let t = i as f32 / n as f32;
-        (from.0 + dx * t, from.1 + dy * t)
-    }).collect()
+    (1..=n)
+        .map(|i| {
+            let t = i as f32 / n as f32;
+            (from.0 + dx * t, from.1 + dy * t)
+        })
+        .collect()
 }
 
 /// Dabs every `spacing` pixels along `from → to`, where `from` is the last
@@ -539,11 +628,21 @@ pub fn spaced_dab_points(b: &Brush, from: (f32, f32), to: (f32, f32)) -> Vec<(f3
         return Vec::new();
     }
     let (ux, uy) = (dx / dist, dy / dist);
-    (1..=n.min(100_000)).map(|k| (from.0 + ux * step * k as f32, from.1 + uy * step * k as f32)).collect()
+    (1..=n.min(100_000))
+        .map(|k| (from.0 + ux * step * k as f32, from.1 + uy * step * k as f32))
+        .collect()
 }
 
 /// Dodge (lighten) or burn (darken) under the brush. Alpha untouched.
-pub fn tone_dab(r: &mut Raster, b: &Brush, cx: f32, cy: f32, exposure: f32, dodge: bool, sel: Option<&Selection>) {
+pub fn tone_dab(
+    r: &mut Raster,
+    b: &Brush,
+    cx: f32,
+    cy: f32,
+    exposure: f32,
+    dodge: bool,
+    sel: Option<&Selection>,
+) {
     let (x0, y0, x1, y1) = dab_bounds(r, cx, cy, b.size / 2.0);
     let e = exposure.clamp(0.0, 1.0) * 0.25;
     for y in y0..y1 {
@@ -555,7 +654,11 @@ pub fn tone_dab(r: &mut Raster, b: &Brush, cx: f32, cy: f32, exposure: f32, dodg
             let i = ((y as usize) * (r.width as usize) + x as usize) * 4;
             for c in 0..3 {
                 let v = r.data[i + c] as f32;
-                let nv = if dodge { v + (255.0 - v) * cov } else { v * (1.0 - cov) };
+                let nv = if dodge {
+                    v + (255.0 - v) * cov
+                } else {
+                    v * (1.0 - cov)
+                };
                 r.data[i + c] = nv.round().clamp(0.0, 255.0) as u8;
             }
         }
@@ -567,7 +670,12 @@ fn sample(src: &Raster, x: i64, y: i64) -> Option<[f32; 4]> {
         return None;
     }
     let i = ((y as usize) * (src.width as usize) + x as usize) * 4;
-    Some([src.data[i] as f32, src.data[i + 1] as f32, src.data[i + 2] as f32, src.data[i + 3] as f32])
+    Some([
+        src.data[i] as f32,
+        src.data[i + 1] as f32,
+        src.data[i + 2] as f32,
+        src.data[i + 3] as f32,
+    ])
 }
 
 fn mix_px(r: &mut Raster, x: u32, y: u32, c: [f32; 4], cov: f32) {
@@ -580,12 +688,21 @@ fn mix_px(r: &mut Raster, x: u32, y: u32, c: [f32; 4], cov: f32) {
 
 /// Clone stamp: copy from `src` (snapshot at stroke start) at
 /// `offset` (source minus destination) under the brush.
-pub fn clone_dab(r: &mut Raster, src: &Raster, b: &Brush, cx: f32, cy: f32, offset: (f32, f32), sel: Option<&Selection>) {
+pub fn clone_dab(
+    r: &mut Raster,
+    src: &Raster,
+    b: &Brush,
+    cx: f32,
+    cy: f32,
+    offset: (f32, f32),
+    sel: Option<&Selection>,
+) {
     let (x0, y0, x1, y1) = dab_bounds(r, cx, cy, b.size / 2.0);
     let (ox, oy) = (offset.0.round() as i64, offset.1.round() as i64);
     for y in y0..y1 {
         for x in x0..x1 {
-            let cov = b.coverage(dist(x, y, cx, cy)) * b.flow.clamp(0.0, 1.0) * sel_factor(sel, x, y);
+            let cov =
+                b.coverage(dist(x, y, cx, cy)) * b.flow.clamp(0.0, 1.0) * sel_factor(sel, x, y);
             if cov <= 0.0 {
                 continue;
             }
@@ -616,16 +733,36 @@ fn ring_mean(src: &Raster, cx: f32, cy: f32, r0: f32, r1: f32) -> Option<[f32; 3
     if n == 0.0 {
         None
     } else {
-        Some([(acc[0] / n) as f32, (acc[1] / n) as f32, (acc[2] / n) as f32])
+        Some([
+            (acc[0] / n) as f32,
+            (acc[1] / n) as f32,
+            (acc[2] / n) as f32,
+        ])
     }
 }
 
 /// Healing-lite (spot heal): take texture from a nearby patch and
 /// shift its tone to match the ring around the dab.
-pub fn heal_dab(r: &mut Raster, src: &Raster, b: &Brush, cx: f32, cy: f32, sel: Option<&Selection>) {
+pub fn heal_dab(
+    r: &mut Raster,
+    src: &Raster,
+    b: &Brush,
+    cx: f32,
+    cy: f32,
+    sel: Option<&Selection>,
+) {
     let rad = (b.size / 2.0).max(1.0);
-    let off = if cx + rad * 3.0 < src.width as f32 { rad * 2.2 } else { -rad * 2.2 };
-    let (Some(dest_ring), Some(src_ring)) = (ring_mean(src, cx, cy, rad, rad * 1.5), ring_mean(src, cx + off, cy, rad, rad * 1.5)) else { return };
+    let off = if cx + rad * 3.0 < src.width as f32 {
+        rad * 2.2
+    } else {
+        -rad * 2.2
+    };
+    let (Some(dest_ring), Some(src_ring)) = (
+        ring_mean(src, cx, cy, rad, rad * 1.5),
+        ring_mean(src, cx + off, cy, rad, rad * 1.5),
+    ) else {
+        return;
+    };
     let (x0, y0, x1, y1) = dab_bounds(r, cx, cy, rad);
     for y in y0..y1 {
         for x in x0..x1 {
@@ -633,8 +770,16 @@ pub fn heal_dab(r: &mut Raster, src: &Raster, b: &Brush, cx: f32, cy: f32, sel: 
             if cov <= 0.0 {
                 continue;
             }
-            if let (Some(s), Some(orig)) = (sample(src, (x as f32 + off).round() as i64, y as i64), sample(src, x as i64, y as i64)) {
-                let c = [s[0] + dest_ring[0] - src_ring[0], s[1] + dest_ring[1] - src_ring[1], s[2] + dest_ring[2] - src_ring[2], orig[3]];
+            if let (Some(s), Some(orig)) = (
+                sample(src, (x as f32 + off).round() as i64, y as i64),
+                sample(src, x as i64, y as i64),
+            ) {
+                let c = [
+                    s[0] + dest_ring[0] - src_ring[0],
+                    s[1] + dest_ring[1] - src_ring[1],
+                    s[2] + dest_ring[2] - src_ring[2],
+                    orig[3],
+                ];
                 mix_px(r, x, y, c, cov);
             }
         }
@@ -643,7 +788,14 @@ pub fn heal_dab(r: &mut Raster, src: &Raster, b: &Brush, cx: f32, cy: f32, sel: 
 
 /// Linear gradient from `a` to `b`, colour `c0` to `c1` (RGBA),
 /// composited over the existing pixels inside the selection.
-pub fn gradient_fill(r: &mut Raster, a: (f32, f32), b: (f32, f32), c0: [u8; 4], c1: [u8; 4], sel: Option<&Selection>) {
+pub fn gradient_fill(
+    r: &mut Raster,
+    a: (f32, f32),
+    b: (f32, f32),
+    c0: [u8; 4],
+    c1: [u8; 4],
+    sel: Option<&Selection>,
+) {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len2 = (dx * dx + dy * dy).max(1e-3);
     for y in 0..r.height {
@@ -652,8 +804,11 @@ pub fn gradient_fill(r: &mut Raster, a: (f32, f32), b: (f32, f32), c0: [u8; 4], 
             if f <= 0.0 {
                 continue;
             }
-            let t = (((x as f32 + 0.5 - a.0) * dx + (y as f32 + 0.5 - a.1) * dy) / len2).clamp(0.0, 1.0);
-            let col: Vec<f32> = (0..4).map(|k| c0[k] as f32 + (c1[k] as f32 - c0[k] as f32) * t).collect();
+            let t = (((x as f32 + 0.5 - a.0) * dx + (y as f32 + 0.5 - a.1) * dy) / len2)
+                .clamp(0.0, 1.0);
+            let col: Vec<f32> = (0..4)
+                .map(|k| c0[k] as f32 + (c1[k] as f32 - c0[k] as f32) * t)
+                .collect();
             let ga = col[3] / 255.0 * f;
             let i = ((y as usize) * (r.width as usize) + x as usize) * 4;
             let ba = r.data[i + 3] as f32 / 255.0;
@@ -674,7 +829,18 @@ pub fn fill_polygon(r: &mut Raster, pts: &[(f32, f32)], color: [u8; 4], sel: Opt
         for x in 0..r.width {
             let f = (poly.at(x, y) as f32 / 255.0) * sel_factor(sel, x, y);
             if f > 0.0 {
-                mix_px(r, x, y, [color[0] as f32, color[1] as f32, color[2] as f32, color[3] as f32], f);
+                mix_px(
+                    r,
+                    x,
+                    y,
+                    [
+                        color[0] as f32,
+                        color[1] as f32,
+                        color[2] as f32,
+                        color[3] as f32,
+                    ],
+                    f,
+                );
             }
         }
     }
@@ -683,7 +849,13 @@ pub fn fill_polygon(r: &mut Raster, pts: &[(f32, f32)], color: [u8; 4], sel: Opt
 /// Bounding rect of a dab, for partial texture updates.
 pub fn dab_rect(cx: f32, cy: f32, size: f32, w: u32, h: u32) -> Option<PixelRect> {
     let rad = size / 2.0 + 2.0;
-    PixelRect { x: (cx - rad).max(0.0) as u32, y: (cy - rad).max(0.0) as u32, w: (size + 4.0).ceil() as u32 + 1, h: (size + 4.0).ceil() as u32 + 1 }.clamped(w, h)
+    PixelRect {
+        x: (cx - rad).max(0.0) as u32,
+        y: (cy - rad).max(0.0) as u32,
+        w: (size + 4.0).ceil() as u32 + 1,
+        h: (size + 4.0).ceil() as u32 + 1,
+    }
+    .clamped(w, h)
 }
 
 pub fn union_rect(a: Option<PixelRect>, b: Option<PixelRect>) -> Option<PixelRect> {
@@ -694,7 +866,12 @@ pub fn union_rect(a: Option<PixelRect>, b: Option<PixelRect>) -> Option<PixelRec
             let y0 = a.y.min(b.y);
             let x1 = (a.x + a.w).max(b.x + b.w);
             let y1 = (a.y + a.h).max(b.y + b.h);
-            Some(PixelRect { x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+            Some(PixelRect {
+                x: x0,
+                y: y0,
+                w: x1 - x0,
+                h: y1 - y0,
+            })
         }
     }
 }
@@ -709,9 +886,26 @@ mod tests {
 
     #[test]
     fn rect_and_polygon_selection() {
-        let s = Selection::from_rect(10, 10, PixelRect { x: 2, y: 2, w: 3, h: 3 });
+        let s = Selection::from_rect(
+            10,
+            10,
+            PixelRect {
+                x: 2,
+                y: 2,
+                w: 3,
+                h: 3,
+            },
+        );
         assert_eq!(s.count(), 9);
-        assert_eq!(s.bounds(), Some(PixelRect { x: 2, y: 2, w: 3, h: 3 }));
+        assert_eq!(
+            s.bounds(),
+            Some(PixelRect {
+                x: 2,
+                y: 2,
+                w: 3,
+                h: 3
+            })
+        );
         let tri = Selection::from_polygon(20, 20, &[(0.0, 0.0), (20.0, 0.0), (0.0, 20.0)]);
         let n = tri.count();
         assert!(n > 150 && n < 250, "triangle area ~200, got {}", n);
@@ -733,11 +927,25 @@ mod tests {
 
     #[test]
     fn invert_and_crop_selection() {
-        let mut s = Selection::from_rect(4, 4, PixelRect { x: 0, y: 0, w: 2, h: 4 });
+        let mut s = Selection::from_rect(
+            4,
+            4,
+            PixelRect {
+                x: 0,
+                y: 0,
+                w: 2,
+                h: 4,
+            },
+        );
         s.invert();
         assert_eq!(s.at(0, 0), 0);
         assert_eq!(s.at(3, 0), 255);
-        let c = s.cropped(PixelRect { x: 2, y: 0, w: 2, h: 2 });
+        let c = s.cropped(PixelRect {
+            x: 2,
+            y: 0,
+            w: 2,
+            h: 2,
+        });
         assert_eq!(c.count(), 4);
     }
 
@@ -753,7 +961,16 @@ mod tests {
 
     #[test]
     fn mask_density_and_feather() {
-        let sel = Selection::from_rect(10, 10, PixelRect { x: 0, y: 0, w: 5, h: 10 });
+        let sel = Selection::from_rect(
+            10,
+            10,
+            PixelRect {
+                x: 0,
+                y: 0,
+                w: 5,
+                h: 10,
+            },
+        );
         let mut m = LayerMask::from_selection(&sel);
         assert_eq!(m.factor(8, 5), 0.0);
         m.density = 0.5;
@@ -781,11 +998,31 @@ mod tests {
         assert_eq!(out.pixel(0, 0).map(|p| p[0]), Some(128));
         top.fill = 1.0;
         top.group = Some(7);
-        let g = LayerGroup { id: 7, name: "g".into(), visible: false, collapsed: false };
-        composite_into(&mut out, &[base.clone(), top.clone()], &[g], [9, 9, 9], None);
+        let g = LayerGroup {
+            id: 7,
+            name: "g".into(),
+            visible: false,
+            collapsed: false,
+        };
+        composite_into(
+            &mut out,
+            &[base.clone(), top.clone()],
+            &[g],
+            [9, 9, 9],
+            None,
+        );
         assert_eq!(out.pixel(0, 0).map(|p| p[0]), Some(0));
         top.group = None;
-        top.mask = Some(LayerMask::from_selection(&Selection::from_rect(4, 4, PixelRect { x: 0, y: 0, w: 2, h: 4 })));
+        top.mask = Some(LayerMask::from_selection(&Selection::from_rect(
+            4,
+            4,
+            PixelRect {
+                x: 0,
+                y: 0,
+                w: 2,
+                h: 4,
+            },
+        )));
         composite_into(&mut out, &[base.clone(), top.clone()], &[], [9, 9, 9], None);
         assert_eq!(out.pixel(0, 0).map(|p| p[0]), Some(255));
         assert_eq!(out.pixel(3, 0).map(|p| p[0]), Some(0));
@@ -794,7 +1031,13 @@ mod tests {
         half.data[0..4].copy_from_slice(&[255, 0, 0, 255]);
         let mut moved = PaintLayer::new(3, "m", half);
         moved.offset = (2, 1);
-        composite_into(&mut out, &[base.clone(), moved.clone()], &[], [9, 9, 9], None);
+        composite_into(
+            &mut out,
+            &[base.clone(), moved.clone()],
+            &[],
+            [9, 9, 9],
+            None,
+        );
         assert_eq!(out.pixel(2, 1), Some([255, 0, 0, 255]));
         moved.bake_offset();
         assert_eq!(moved.raster.pixel(2, 1), Some([255, 0, 0, 255]));
@@ -805,7 +1048,18 @@ mod tests {
     fn region_composite_only_touches_region() {
         let l = PaintLayer::new(1, "w", solid(8, 8, [200, 0, 0, 255]));
         let mut out = Raster::filled(8, 8, [1, 2, 3, 255]);
-        composite_into(&mut out, &[l], &[], [0, 0, 0], Some(PixelRect { x: 0, y: 0, w: 2, h: 2 }));
+        composite_into(
+            &mut out,
+            &[l],
+            &[],
+            [0, 0, 0],
+            Some(PixelRect {
+                x: 0,
+                y: 0,
+                w: 2,
+                h: 2,
+            }),
+        );
         assert_eq!(out.pixel(0, 0), Some([200, 0, 0, 255]));
         assert_eq!(out.pixel(5, 5), Some([1, 2, 3, 255]));
     }
@@ -813,8 +1067,21 @@ mod tests {
     #[test]
     fn brush_respects_selection_mask() {
         let mut r = Raster::new(20, 20);
-        let sel = Selection::from_rect(20, 20, PixelRect { x: 0, y: 0, w: 10, h: 20 });
-        let b = Brush { size: 30.0, hardness: 1.0, ..Brush::default() };
+        let sel = Selection::from_rect(
+            20,
+            20,
+            PixelRect {
+                x: 0,
+                y: 0,
+                w: 10,
+                h: 20,
+            },
+        );
+        let b = Brush {
+            size: 30.0,
+            hardness: 1.0,
+            ..Brush::default()
+        };
         paint_dab(&mut r, &b, 10.0, 10.0, false, Some(&sel));
         assert!(r.pixel(5, 10).map(|p| p[3]).unwrap_or(0) > 200);
         assert_eq!(r.pixel(15, 10).map(|p| p[3]), Some(0));
@@ -826,7 +1093,11 @@ mod tests {
     #[test]
     fn dodge_lightens_burn_darkens() {
         let mut r = solid(10, 10, [100, 100, 100, 255]);
-        let b = Brush { size: 10.0, hardness: 1.0, ..Brush::default() };
+        let b = Brush {
+            size: 10.0,
+            hardness: 1.0,
+            ..Brush::default()
+        };
         tone_dab(&mut r, &b, 5.0, 5.0, 1.0, true, None);
         assert!(r.pixel(5, 5).map(|p| p[0]).unwrap_or(0) > 100);
         let mut r2 = solid(10, 10, [100, 100, 100, 255]);
@@ -845,7 +1116,12 @@ mod tests {
             }
         }
         let mut r = src.clone();
-        let b = Brush { size: 6.0, hardness: 1.0, flow: 1.0, ..Brush::default() };
+        let b = Brush {
+            size: 6.0,
+            hardness: 1.0,
+            flow: 1.0,
+            ..Brush::default()
+        };
         clone_dab(&mut r, &src, &b, 4.0, 5.0, (10.0, 0.0), None);
         assert_eq!(r.pixel(4, 5).map(|p| p[0]), Some(250));
     }
@@ -856,21 +1132,41 @@ mod tests {
         let i = ((15 * 60 + 15) * 4) as usize;
         src.data[i..i + 3].copy_from_slice(&[255, 0, 0]);
         let mut r = src.clone();
-        let b = Brush { size: 8.0, hardness: 1.0, ..Brush::default() };
+        let b = Brush {
+            size: 8.0,
+            hardness: 1.0,
+            ..Brush::default()
+        };
         heal_dab(&mut r, &src, &b, 15.5, 15.5, None);
         let p = r.pixel(15, 15).unwrap_or([0; 4]);
-        assert!((p[0] as i32 - 120).abs() < 6 && (p[1] as i32 - 120).abs() < 6, "{:?}", p);
+        assert!(
+            (p[0] as i32 - 120).abs() < 6 && (p[1] as i32 - 120).abs() < 6,
+            "{:?}",
+            p
+        );
     }
 
     #[test]
     fn gradient_runs_from_c0_to_c1() {
         let mut r = Raster::new(100, 4);
-        gradient_fill(&mut r, (0.0, 0.0), (100.0, 0.0), [255, 0, 0, 255], [0, 0, 255, 255], None);
+        gradient_fill(
+            &mut r,
+            (0.0, 0.0),
+            (100.0, 0.0),
+            [255, 0, 0, 255],
+            [0, 0, 255, 255],
+            None,
+        );
         let a = r.pixel(0, 0).unwrap_or([0; 4]);
         let b = r.pixel(99, 0).unwrap_or([0; 4]);
         assert!(a[0] > 240 && b[2] > 240);
         let mut t = Raster::new(10, 10);
-        fill_polygon(&mut t, &[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)], [1, 2, 3, 255], None);
+        fill_polygon(
+            &mut t,
+            &[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)],
+            [1, 2, 3, 255],
+            None,
+        );
         assert_eq!(t.pixel(5, 5), Some([1, 2, 3, 255]));
     }
 
@@ -878,14 +1174,23 @@ mod tests {
     fn rect_helpers() {
         let a = dab_rect(5.0, 5.0, 4.0, 100, 100);
         let b = dab_rect(50.0, 50.0, 4.0, 100, 100);
-        let u = union_rect(a, b).unwrap_or(PixelRect { x: 0, y: 0, w: 0, h: 0 });
+        let u = union_rect(a, b).unwrap_or(PixelRect {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+        });
         assert!(u.x <= 3 && u.x + u.w >= 52);
         assert_eq!(thumbnail(&Raster::new(400, 200), 40).width, 40);
     }
 
     #[test]
     fn spaced_dabs_ignore_pauses_and_keep_spacing() {
-        let b = Brush { size: 20.0, spacing: 0.25, ..Brush::default() };
+        let b = Brush {
+            size: 20.0,
+            spacing: 0.25,
+            ..Brush::default()
+        };
         assert!(spaced_dab_points(&b, (10.0, 10.0), (10.0, 10.0)).is_empty());
         assert!(spaced_dab_points(&b, (10.0, 10.0), (13.0, 10.0)).is_empty());
         let d = spaced_dab_points(&b, (0.0, 0.0), (17.5, 0.0));

@@ -8,9 +8,9 @@
 //! Differential: push/pop sequences produce the same logical order
 //! as a reference circular implementation.
 
-use std::collections::VecDeque;
 #[cfg(test)]
 use crate::diff::assert_equal;
+use std::collections::VecDeque;
 
 #[derive(Clone, Debug, Default)]
 pub struct Deque<T> {
@@ -19,7 +19,9 @@ pub struct Deque<T> {
 
 impl<T> Deque<T> {
     pub fn new() -> Self {
-        Self { inner: VecDeque::new() }
+        Self {
+            inner: VecDeque::new(),
+        }
     }
 
     pub fn len(&self) -> usize {

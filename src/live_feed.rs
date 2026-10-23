@@ -53,7 +53,11 @@ impl LiveFeed {
             .unwrap_or(0);
         let next = match key {
             "left" | "arrowleft" => {
-                if idx == 0 { cameras.len() - 1 } else { idx - 1 }
+                if idx == 0 {
+                    cameras.len() - 1
+                } else {
+                    idx - 1
+                }
             }
             "right" | "arrowright" => (idx + 1) % cameras.len(),
             _ => return self.current().map(|s| s.to_string()),

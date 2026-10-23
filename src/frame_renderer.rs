@@ -26,8 +26,8 @@ impl FrameRenderer {
         if width == 0 || height == 0 {
             return Err(RenderError::ZeroSize);
         }
-        let mut frame = VideoFrame::new(VideoFormat::Y800, width, height)
-            .ok_or(RenderError::ZeroSize)?;
+        let mut frame =
+            VideoFrame::new(VideoFormat::Y800, width, height).ok_or(RenderError::ZeroSize)?;
         if let Some(plane) = frame.planes.get_mut(0) {
             for y in 0..height {
                 for x in 0..width {
@@ -47,8 +47,8 @@ impl FrameRenderer {
         if width == 0 || height == 0 {
             return Err(RenderError::ZeroSize);
         }
-        let mut frame = VideoFrame::new(VideoFormat::Y800, width, height)
-            .ok_or(RenderError::ZeroSize)?;
+        let mut frame =
+            VideoFrame::new(VideoFormat::Y800, width, height).ok_or(RenderError::ZeroSize)?;
         let (r, g, b) = color.rgb();
         let y = ((77 * r as u32 + 150 * g as u32 + 29 * b as u32) / 256) as u8;
         if let Some(plane) = frame.planes.get_mut(0) {

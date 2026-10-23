@@ -49,7 +49,9 @@ impl VirtualCamRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut VirtualCam, VirtualCamRegistryError> {
-        self.cams.get_mut(name).ok_or(VirtualCamRegistryError::Missing)
+        self.cams
+            .get_mut(name)
+            .ok_or(VirtualCamRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,14 +82,20 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = VirtualCamRegistry::new();
         r.add("a").unwrap();
-        assert!(matches!(r.add("a"), Err(VirtualCamRegistryError::Duplicate)));
+        assert!(matches!(
+            r.add("a"),
+            Err(VirtualCamRegistryError::Duplicate)
+        ));
         assert!(matches!(r.add(""), Err(VirtualCamRegistryError::EmptyName)));
     }
 
     #[test]
     fn missing_and_remove() {
         let mut r = VirtualCamRegistry::new();
-        assert!(matches!(r.get("nope"), Err(VirtualCamRegistryError::Missing)));
+        assert!(matches!(
+            r.get("nope"),
+            Err(VirtualCamRegistryError::Missing)
+        ));
         r.add("c").unwrap();
         assert!(r.remove("c"));
         assert!(!r.contains("c"));

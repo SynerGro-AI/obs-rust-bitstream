@@ -118,11 +118,7 @@ mod tests {
         let mut w = LiveWeights::new();
         w.set_capacity(2);
         w.set("keep", 1.0).unwrap();
-        let added = w.merge_lessons(&[
-            ("a", 0.1),
-            ("b", 0.2),
-            ("c", 0.3),
-        ]);
+        let added = w.merge_lessons(&[("a", 0.1), ("b", 0.2), ("c", 0.3)]);
         assert_eq!(added, 1);
         assert_eq!(w.get("keep").unwrap(), 1.0);
         assert!(w.contains("a"));
@@ -133,11 +129,7 @@ mod tests {
     fn merge_adds_only_new() {
         let mut w = LiveWeights::new();
         w.set("glow", 0.5).unwrap();
-        let added = w.merge_lessons(&[
-            ("glow", 0.9),
-            ("blur", 0.3),
-            ("", 1.0),
-        ]);
+        let added = w.merge_lessons(&[("glow", 0.9), ("blur", 0.3), ("", 1.0)]);
         assert_eq!(added, 1);
         assert_eq!(w.get("glow").unwrap(), 0.5);
         assert_eq!(w.get("blur").unwrap(), 0.3);

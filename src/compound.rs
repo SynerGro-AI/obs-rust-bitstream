@@ -6,8 +6,8 @@
 //!
 //! Differential: H2O (2H + 1O) produces a material.
 
-use crate::materials_lab::Atom;
 use crate::material_registry::{MaterialRegistry, MaterialRegistryError};
+use crate::materials_lab::Atom;
 use crate::vec3::Vec3;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

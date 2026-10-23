@@ -102,8 +102,20 @@ mod tests {
             service: String::new(),
             bitrate_kbps: 0,
         };
-        let a = UiStatus::from("synthetic", false, &audio, &stream, &RtmpOpenStatus::from(100));
-        let b = UiStatus::from("platform", true, &audio, &stream, &RtmpOpenStatus::from(3060));
+        let a = UiStatus::from(
+            "synthetic",
+            false,
+            &audio,
+            &stream,
+            &RtmpOpenStatus::from(100),
+        );
+        let b = UiStatus::from(
+            "platform",
+            true,
+            &audio,
+            &stream,
+            &RtmpOpenStatus::from(3060),
+        );
         assert!(b.rtmp_bytes > a.rtmp_bytes);
         assert!(!a.capture_live && b.capture_live);
     }

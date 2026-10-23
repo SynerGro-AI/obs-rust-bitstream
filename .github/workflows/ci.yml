@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, ui-polish ]
-  pull_request:
     branches: [ main ]
+  # every PR, whatever its base (stacked PRs into feature branches included)
+  pull_request:
   workflow_dispatch:
 
 jobs:

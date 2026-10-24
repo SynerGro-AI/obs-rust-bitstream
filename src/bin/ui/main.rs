@@ -25,6 +25,7 @@ mod paint_undo;
 mod prefs;
 mod project;
 mod scene;
+mod settings;
 mod stream;
 mod text_raster;
 mod theme;
@@ -78,6 +79,8 @@ pub struct Toast {
     pub kind: ToastKind,
     pub text: String,
     pub born: f64,
+    /// Seconds on screen.
+    pub life: f64,
 }
 
 #[derive(Default)]
@@ -90,10 +93,16 @@ impl Toasts {
     const LIFE: f64 = 3.6;
 
     pub fn push(&mut self, kind: ToastKind, text: &str) {
+        self.push_for(kind, text, Self::LIFE);
+    }
+
+    /// A toast that stays up for `life` seconds (startup notices).
+    pub fn push_for(&mut self, kind: ToastKind, text: &str, life: f64) {
         self.items.push(Toast {
             kind,
             text: text.to_string(),
             born: self.now,
+            life,
         });
         if self.items.len() > 4 {
             self.items.remove(0);
@@ -102,7 +111,7 @@ impl Toasts {
 
     fn show(&mut self, ctx: &egui::Context, p: &Palette) {
         let now = self.now;
-        self.items.retain(|t| now - t.born < Self::LIFE);
+        self.items.retain(|t| now - t.born < t.life);
         if self.items.is_empty() {
             return;
         }
@@ -113,7 +122,7 @@ impl Toasts {
             .show(ctx, |ui| {
                 for t in &self.items {
                     let age = now - t.born;
-                    let a = ((age / 0.18).min(1.0) * ((Self::LIFE - age) / 0.35).min(1.0))
+                    let a = ((age / 0.18).min(1.0) * ((t.life - age) / 0.35).min(1.0))
                         .clamp(0.0, 1.0) as f32;
                     let dot = match t.kind {
                         ToastKind::Info => p.accent,
@@ -394,6 +403,8 @@ pub struct App {
     pub project: workspace::ProjectState,
     /// Crash reports from an earlier run, shown once (D1).
     pub crash_notice: Option<crash::CrashNotice>,
+    /// Settings read before the window opens (renderer, UI scale).
+    pub app_settings: settings::AppSettings,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -416,6 +427,18 @@ impl App {
         app.project.native_dialogs = project::native_dialogs_available();
         app.start_session(project::autosave_dir());
         app.crash_notice = crash::CrashNotice::check();
+        app.app_settings = settings::AppSettings::load().0;
+        if let Some(why) = crash::take_fallback_note() {
+            app.toasts.push_for(
+                ToastKind::Warn,
+                &format!(
+                    "Using {} because the other renderer couldn't start ({}). Change it in Settings > Graphics.",
+                    crash::renderer(),
+                    why
+                ),
+                15.0,
+            );
+        }
         app
     }
 
@@ -483,6 +506,7 @@ impl App {
             last_time: None,
             project: workspace::ProjectState::new(project::Session::default()),
             crash_notice: None,
+            app_settings: settings::AppSettings::default(),
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
             app.toasts.push(ToastKind::Warn, &w);
@@ -2025,6 +2049,8 @@ impl App {
                 self.bus.push(AppCommand::SetTheme { dark: i == 0 });
             }
             ui.add_space(SP_SM);
+            self.graphics_settings_ui(ui, &p);
+            ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Seraphina"));
             theme::kv(ui, &p, "Language model", self.assistant.backend_label());
             theme::kv(ui, &p, "Seraphina.AGI CLI", self.assistant.cli.as_ref().map(|c| c.version.clone()).unwrap_or_else(|| "not found".into()));
@@ -2734,6 +2760,7 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        crash::GPU_INIT.store(false, std::sync::atomic::Ordering::SeqCst);
         if crash::CRASH_TEST.swap(false, std::sync::atomic::Ordering::SeqCst) {
             panic!("crash test requested with --crash-test");
         }
@@ -2746,82 +2773,208 @@ impl eframe::App for App {
     }
 }
 
+impl App {
+    /// Settings ▸ Graphics: renderer choice (D2), applied on the next launch.
+    fn graphics_settings_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        ui.label(theme::section(p, "Graphics"));
+        theme::kv(ui, p, "Renderer in use", crash::renderer());
+        let mut pick = self.app_settings.renderer;
+        egui::ComboBox::from_id_salt("renderer-pref")
+            .selected_text(pick.label())
+            .show_ui(ui, |ui| {
+                for r in settings::RendererPref::ALL {
+                    ui.selectable_value(&mut pick, r, r.label());
+                }
+            });
+        if pick != self.app_settings.renderer {
+            self.app_settings.renderer = pick;
+            // a fresh choice: let Automatic try the preferred renderer again
+            self.app_settings.auto_fallback = None;
+            match self.app_settings.save() {
+                Ok(()) => self.toasts.push(
+                    ToastKind::Info,
+                    "Renderer saved. Restart Seraphina Studio to use it.",
+                ),
+                Err(e) => self
+                    .toasts
+                    .push(ToastKind::Error, &format!("Couldn't save settings: {}", e)),
+            }
+        }
+        ui.add(egui::Label::new(theme::muted(p, "If the chosen renderer can't start, the other one is used automatically. SERAPHINA_RENDERER=wgpu|glow overrides this.")).wrap());
+    }
+}
+
+/// Everything the app creator needs; cloned for each renderer attempt.
+#[derive(Clone)]
+struct StartCfg {
+    start_mode: Option<String>,
+    open_arg: Option<String>,
+    script_files: bool,
+    run_script: Option<String>,
+    start_light: bool,
+    native: bool,
+}
+
+fn app_creator(c: StartCfg) -> eframe::AppCreator<'static> {
+    Box::new(move |cc| {
+        let mut app = App::new(&cc.egui_ctx);
+        app.native_frame = c.native;
+        app.continuous = std::env::var("SERAPHINA_CONTINUOUS").is_ok();
+        if let Some(m) = c.start_mode.as_deref().and_then(Mode::parse) {
+            app.mode = m;
+        }
+        if c.start_light {
+            app.set_dark(false);
+        }
+        app.project.script_files = c.script_files;
+        if let Some(path) = c.open_arg {
+            let is_project = std::path::Path::new(&path)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case(project::EXT));
+            app.bus.push(if is_project {
+                // a path typed in a terminal is relative to the shell's
+                // directory, not Documents/Seraphina
+                let abs = std::path::absolute(&path)
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or(path);
+                AppCommand::OpenProject { path: Some(abs) }
+            } else {
+                AppCommand::OpenFile { path }
+            });
+        }
+        if let Some(path) = c.run_script {
+            app.run_script(&path);
+        }
+        Ok(Box::new(app))
+    })
+}
+
+fn panic_text(p: &(dyn std::any::Any + Send)) -> String {
+    p.downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| p.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "panic".into())
+}
+
+/// Start over in a fresh process with `next`: a panic can leave the event
+/// loop unusable, so an in-process retry isn't safe after one.
+fn relaunch_with(next: settings::RendererPref, why: &str) -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let name = match next {
+        settings::RendererPref::Glow => "glow",
+        _ => "wgpu",
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(std::env::args_os().skip(1))
+        .env("SERAPHINA_RENDERER", name)
+        .env("SERAPHINA_RENDERER_ONLY", "1")
+        .env(
+            "SERAPHINA_RENDERER_FALLBACK",
+            why.chars().take(300).collect::<String>(),
+        );
+    cmd.spawn().is_ok()
+}
+
 fn main() -> eframe::Result<()> {
+    use std::sync::atomic::Ordering;
     crash::install_hook();
-    let start_mode = std::env::var("SERAPHINA_MODE").ok();
     // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
     let args: Vec<String> = std::env::args().collect();
-    let open_arg = args.get(1).filter(|a| !a.starts_with('-')).cloned();
-    // `--allow-file-commands`: let a `--run` script save and open projects
-    let script_files = args.iter().any(|a| a == "--allow-file-commands");
     if args.iter().any(|a| a == "--crash-test") {
-        crash::CRASH_TEST.store(true, std::sync::atomic::Ordering::SeqCst);
+        crash::CRASH_TEST.store(true, Ordering::SeqCst);
     }
-    // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
-    let run_script = args
-        .iter()
-        .position(|a| a == "--run")
-        .and_then(|i| args.get(i + 1))
-        .cloned();
-    let start_light = std::env::var("SERAPHINA_LIGHT").is_ok();
-    let native = std::env::var("SERAPHINA_NATIVE_FRAME").is_ok();
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Seraphina Studio")
-            .with_inner_size([1600.0, 940.0])
-            .with_min_inner_size([1180.0, 700.0])
-            .with_decorations(native),
-        ..Default::default()
+    let cfg = StartCfg {
+        start_mode: std::env::var("SERAPHINA_MODE").ok(),
+        open_arg: args.get(1).filter(|a| !a.starts_with('-')).cloned(),
+        // `--allow-file-commands`: let a `--run` script save and open projects
+        script_files: args.iter().any(|a| a == "--allow-file-commands"),
+        // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
+        run_script: args
+            .iter()
+            .position(|a| a == "--run")
+            .and_then(|i| args.get(i + 1))
+            .cloned(),
+        start_light: std::env::var("SERAPHINA_LIGHT").is_ok(),
+        native: std::env::var("SERAPHINA_NATIVE_FRAME").is_ok(),
     };
-    crash::set_renderer("OpenGL (glow)");
-    let res = eframe::run_native(
-        "Seraphina Studio",
-        options,
-        Box::new(move |cc| {
-            let mut app = App::new(&cc.egui_ctx);
-            app.native_frame = native;
-            app.continuous = std::env::var("SERAPHINA_CONTINUOUS").is_ok();
-            if let Some(m) = start_mode.as_deref().and_then(Mode::parse) {
-                app.mode = m;
-            }
-            if start_light {
-                app.set_dark(false);
-            }
-            app.project.script_files = script_files;
-            if let Some(path) = open_arg {
-                let is_project = std::path::Path::new(&path)
-                    .extension()
-                    .is_some_and(|e| e.eq_ignore_ascii_case(project::EXT));
-                app.bus.push(if is_project {
-                    // a path typed in a terminal is relative to the shell's
-                    // directory, not Documents/Seraphina
-                    let abs = std::path::absolute(&path)
-                        .map(|p| p.to_string_lossy().into_owned())
-                        .unwrap_or(path);
-                    AppCommand::OpenProject { path: Some(abs) }
-                } else {
-                    AppCommand::OpenFile { path }
-                });
-            }
-            if let Some(path) = run_script {
-                app.run_script(&path);
-            }
-            Ok(Box::new(app))
-        }),
-    );
-    if let Err(e) = &res {
-        let path = crash::write_report("crash", &format!("Startup failed: {}", e), "");
-        crash::message_box(
-            "Seraphina Studio couldn't start",
-            &format!(
-                "{}\n\n{}",
-                e,
-                path.map(|p| format!("Details: {}", p.display()))
-                    .unwrap_or_default()
-            ),
-        );
+    // D2: start with the preferred renderer; if it can't start before the
+    // first frame, try the other one instead of dying
+    let (mut prefs, _) = settings::AppSettings::load();
+    let env_r = std::env::var("SERAPHINA_RENDERER").ok();
+    let mut order = prefs.renderer_order(env_r.as_deref(), cfg!(windows));
+    if std::env::var("SERAPHINA_RENDERER_ONLY").is_ok() {
+        order.truncate(1);
     }
-    res
+    if let Ok(why) = std::env::var("SERAPHINA_RENDERER_FALLBACK") {
+        crash::set_fallback_note(&why);
+    }
+    let remember = |prefs: &mut settings::AppSettings, r: settings::RendererPref| {
+        if prefs.renderer == settings::RendererPref::Auto && env_r.is_none() {
+            prefs.auto_fallback = Some(r);
+            let _ = prefs.save();
+        }
+    };
+    let mut failures: Vec<String> = Vec::new();
+    for (i, &r) in order.iter().enumerate() {
+        let next = order.get(i + 1).copied();
+        crash::set_renderer(r.label());
+        crash::GPU_INIT.store(next.is_some(), Ordering::SeqCst);
+        let options = eframe::NativeOptions {
+            renderer: settings::to_eframe(r),
+            viewport: egui::ViewportBuilder::default()
+                .with_title("Seraphina Studio")
+                .with_inner_size([1600.0, 940.0])
+                .with_min_inner_size([1180.0, 700.0])
+                .with_decorations(cfg.native),
+            ..Default::default()
+        };
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            eframe::run_native("Seraphina Studio", options, app_creator(cfg.clone()))
+        }));
+        crash::GPU_INIT.store(false, Ordering::SeqCst);
+        let started = crash::FIRST_FRAME.load(Ordering::SeqCst);
+        match (res, next) {
+            (Ok(Ok(())), _) => return Ok(()),
+            (Err(p), Some(next)) if !started => {
+                // the panic hook already wrote a gpu-* report
+                let why = format!("{} panicked: {}", r.label(), panic_text(&*p));
+                remember(&mut prefs, next);
+                if relaunch_with(next, &why) {
+                    return Ok(());
+                }
+                std::panic::resume_unwind(p);
+            }
+            (Err(p), _) => std::panic::resume_unwind(p),
+            (Ok(Err(e)), Some(next)) if !started => {
+                let why = format!("{} failed: {}", r.label(), e);
+                let _ = crash::write_report("gpu", &why, "");
+                crash::set_fallback_note(&why);
+                failures.push(why);
+                remember(&mut prefs, next);
+            }
+            (Ok(Err(e)), _) => {
+                failures.push(format!("{} failed: {}", r.label(), e));
+                let path = crash::write_report(
+                    "crash",
+                    &format!("Startup failed: {}", e),
+                    &failures.join("\n"),
+                );
+                crash::message_box(
+                    "Seraphina Studio couldn't start",
+                    &format!(
+                        "The graphics system couldn't be started.\n\n{}\n\n{}\n\nUpdating the graphics driver usually fixes this.",
+                        failures.join("\n"),
+                        path.map(|p| format!("Details: {}", p.display()))
+                            .unwrap_or_default()
+                    ),
+                );
+                return Err(e);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

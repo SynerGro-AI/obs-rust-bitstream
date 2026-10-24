@@ -61,6 +61,19 @@ pub fn set_renderer(name: &str) {
     }
 }
 
+static FALLBACK_NOTE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Why the first renderer didn't start (shown once as a toast).
+pub fn set_fallback_note(why: &str) {
+    if let Ok(mut n) = FALLBACK_NOTE.lock() {
+        *n = Some(redact(why));
+    }
+}
+
+pub fn take_fallback_note() -> Option<String> {
+    FALLBACK_NOTE.lock().ok().and_then(|mut n| n.take())
+}
+
 pub fn renderer() -> String {
     RENDERER.lock().map(|r| r.clone()).unwrap_or_default()
 }

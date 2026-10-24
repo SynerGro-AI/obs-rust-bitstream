@@ -123,6 +123,8 @@ def main():
         f"{n['installs_getmap_only']} for GetMap alone",
         f"about {n['installs_4h']} installs if radar is visible 4 hours a day",
         f"{n['visible_requests_4h']} requests",
+        f"Point queries made at run time are not in the {n['budget_per_day']}-a-day budget",
+        "Each one would raise it",
     ]
     bad = [p for p in phrases if p not in flat]
     bad += [c for c in cmds if c not in text]

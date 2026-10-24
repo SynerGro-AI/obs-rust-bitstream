@@ -321,7 +321,10 @@ coded, the capture below records the same point (−95, 50) on
 (longitude first) and EPSG:3857. The test
 `geomet_point_query_fixture_pins_axis_order` checks which request form
 answers for the asked point. The app uses only the form that fixture
-proves.
+proves. Point queries made at run time are not in the 721-a-day budget
+below (it counts only the per-step refresh and the legend). Each one
+would raise it, so the budget and `tools/geomet_budget.py` are revised
+when point queries are coded.
 
 **"Live" follows the radar's own time:**
 
@@ -378,9 +381,13 @@ the licence: the MSC Open Data Services Usage Policy,
   is in the output being recorded or streamed, or in a Stream preview
   that is on screen. It pauses when the background is hidden or
   replaced, and when the window is minimised with nothing recording or
-  streaming. (The Auditor wrote "pause when hidden or minimised". A
-  minimised window that is still streaming keeps the radar on viewers'
-  screens, so it keeps refreshing.)
+  streaming. **The minimised-but-recording exception is pending user
+  confirmation** (open question 4). The Auditor wrote "pause when hidden
+  or minimised". The exception (a minimised window that is still
+  recording or streaming keeps refreshing, because the radar is still on
+  viewers' screens) was added in round 2 and has not been approved.
+  Until it is, the strict rule is the fallback: pause whenever the
+  window is minimised.
 * **The per-install budget**, computed by `tools/geomet_budget.py`:
   * one time step is 6 minutes, so there are 240 steps a day;
   * at most 3 GeoMet requests per step: the layer-filtered
@@ -782,6 +789,10 @@ pending confirmation. Still to settle:
 3. Whether the `Radar_1km_SfcPrecipType` abstract names the US radars,
    which the credit wording relies on. This is checked when the fixtures
    are captured.
+4. Whether the radar keeps refreshing while the window is minimised but
+   still recording or streaming (see "Only while visible" under the MSC
+   usage policy). Pending user confirmation. Until answered, the radar
+   pauses whenever the window is minimised, as the Auditor wrote.
 
 The rain/snow season constants are gone: the precipitation type layer
 replaced them (Auditor round 2, decision 12).

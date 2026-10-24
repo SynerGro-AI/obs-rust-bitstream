@@ -108,7 +108,6 @@ jobs:
             packaging/windows/README.txt
             assets/
             out.h264
-            out.avbn
             out.obsr
 
   msrv:

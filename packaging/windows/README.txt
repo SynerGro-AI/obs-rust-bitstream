@@ -1,9 +1,13 @@
 Seraphina Studio (Windows x64)
 
-Double-click SeraphinaStudio.exe. Keep the assets folder and out.* files next to it.
+Double-click SeraphinaStudio.exe. Keep the assets folder, out.obsr and out.h264
+next to it: Paint and Composite open the sample images in assets, Stream mode
+opens out.obsr at startup, and out.h264 is the default file in its Open box.
 You can also open a file directly:  SeraphinaStudio.exe path\to\image.psd
-Built with the x86_64-pc-windows-gnu toolchain. Tested under Wine 10 on Linux
-(a proxy, not real Windows) and built + unit-tested by CI on windows-latest.
+Built with the x86_64-pc-windows-msvc toolchain (C runtime linked in, so no
+Visual C++ Redistributable is needed). Its tests pass on a GitHub Windows
+Server 2025 runner before the release zip is made; the code is also tested
+under Wine 10 on Linux (a proxy, not real Windows).
 
 RECORDING AND STREAMING NEED FFMPEG (not bundled)
 -------------------------------------------------

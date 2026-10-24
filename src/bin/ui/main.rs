@@ -50,11 +50,17 @@ use theme::{Palette, SP_LG, SP_MD, SP_SM, SP_XS};
 
 /// Find a bundled file: as given, next to the exe, or one/two/three levels up.
 pub fn resolve_asset(path: &str) -> std::path::PathBuf {
+    resolve_asset_from(path, std::env::current_exe().ok())
+}
+
+/// `resolve_asset` with the exe path passed in, so the unzipped release
+/// layout (files next to SeraphinaStudio.exe) can be tested.
+fn resolve_asset_from(path: &str, exe: Option<std::path::PathBuf>) -> std::path::PathBuf {
     let p = std::path::Path::new(path);
     if p.is_absolute() || p.exists() {
         return p.to_path_buf();
     }
-    if let Ok(exe) = std::env::current_exe() {
+    if let Some(exe) = exe {
         let mut dir = exe.parent().map(|d| d.to_path_buf());
         for _ in 0..4 {
             if let Some(d) = &dir {
@@ -3505,6 +3511,37 @@ mod tests {
     use crate::llm::{LlmReply, MockProvider, ToolCall};
     use egui::Pos2;
     use std::sync::Arc;
+
+    /// The release zip ships out.obsr and out.h264 next to
+    /// SeraphinaStudio.exe: Stream mode opens out.obsr at startup and
+    /// out.h264 is the default path in its Open box. Unzipped anywhere and
+    /// started from another folder, they must resolve next to the exe.
+    #[test]
+    fn stream_samples_resolve_next_to_the_exe_in_the_zip_layout() {
+        let root =
+            std::env::temp_dir().join(format!("seraphina_zip_layout_{}", std::process::id()));
+        let app = root.join("SeraphinaStudio");
+        std::fs::create_dir_all(&app).unwrap();
+        for name in ["out.obsr", "out.h264"] {
+            assert!(
+                std::fs::metadata(name).unwrap().len() > 0,
+                "{name} must be a non-empty file in the repo root"
+            );
+            std::fs::copy(name, app.join(name)).unwrap();
+        }
+        let exe = app.join("SeraphinaStudio.exe");
+        for name in ["out.obsr", "out.h264"] {
+            // A name that is not in the working directory, so only the
+            // next-to-the-exe lookup can find it.
+            let unique = format!("zip_layout_{}_{name}", std::process::id());
+            std::fs::rename(app.join(name), app.join(&unique)).unwrap();
+            assert!(!std::path::Path::new(&unique).exists());
+            let found = resolve_asset_from(&unique, Some(exe.clone()));
+            assert_eq!(found, app.join(&unique), "{name} not found next to the exe");
+            assert!(std::fs::metadata(&found).unwrap().len() > 0);
+        }
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     fn input(t: f64) -> egui::RawInput {
         egui::RawInput {

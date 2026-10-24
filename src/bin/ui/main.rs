@@ -31,6 +31,8 @@ mod secrets;
 mod settings;
 mod single;
 mod stream;
+#[cfg(test)]
+mod test_dir;
 mod text_raster;
 mod theme;
 mod tiled_tex;
@@ -3541,9 +3543,8 @@ mod tests {
                 "{name} is used or named by Stream mode but packaging/windows/README.txt does not list it"
             );
         }
-        let root =
-            std::env::temp_dir().join(format!("seraphina_zip_layout_{}", std::process::id()));
-        let app = root.join("SeraphinaStudio");
+        let root = crate::test_dir::TestDir::new("zip_layout");
+        let app = root.path().join("SeraphinaStudio");
         std::fs::create_dir_all(&app).unwrap();
         let exe = app.join("SeraphinaStudio.exe");
         for name in &names {
@@ -3560,7 +3561,6 @@ mod tests {
             assert_eq!(found, app.join(&unique), "{name} not found next to the exe");
             assert!(std::fs::metadata(&found).unwrap().len() > 0);
         }
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

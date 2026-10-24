@@ -178,6 +178,17 @@ approximate.
   (`pip install seraphina-agi`) is on PATH, or set via `SERAPHINA_CLI`, its
   native intents (`remember …`, `recall`, `triad …`, `help`, `version`) are
   forwarded to it. Recent `recall` notes are added to the prompt.
+* **Topic backgrounds (planned, not built).** Off by default. When you
+  turn it on, the stream background follows the topic, for example a
+  live weather radar map of the place being talked about, a photo for
+  "sunny" (a beach unless a place is named), or a Grok Imagine image
+  after you approve it on the **Run** card. Changes need a confidence
+  threshold, a cooldown and hysteresis. Third-party images carry on-screen
+  attribution. A failure keeps the current background and says why, and
+  nothing that isn't live is labelled live. Chat text comes first. Speech
+  needs speech-to-text, which the app does not have yet. Spec, sources and
+  licences, tests and open questions: "Topic backgrounds" in
+  [PLAN.md](PLAN.md).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -489,6 +500,7 @@ stay out of the code until a real implementation lands with tests.
 | Microphone capture verified on real hardware on Windows (dshow) | after v0.2.0 (needs a run on a Windows PC with a microphone) |
 | Camera source verified on real hardware: a Windows webcam through Media Foundation (`media_foundation_reads_frames_from_a_real_camera`) and a Linux V4L2 device or v4l2loopback (`v4l2_reads_frames_from_a_real_device`); both tests are `#[ignore]` because the dev box has neither | after v0.2.0 (needs a run with a camera) |
 | Team features (organisation, invite, roles, presence) | after v0.2.0 |
+| Topic backgrounds: an opt-in Studio background layer that follows the chat topic (later the spoken topic): live ECCC or NOAA radar maps over OpenStreetMap tiles, licence-checked Wikimedia Commons photos, approved Grok Imagine images, with attribution drawn into the frame, threshold, cooldown and hysteresis, and an offline GeoNames place lookup that asks when a place is ambiguous. No background layer, speech-to-text or map code exists today (spec: "Topic backgrounds" in PLAN.md) | after v0.2.0 (planned; milestone is open question 8 in PLAN.md) |
 
 Removed and not planned, because the app already does the real thing:
 

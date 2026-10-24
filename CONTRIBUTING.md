@@ -1,7 +1,9 @@
-# Contributing to obs-rust-bitstream
+# Contributing to seraphina-studio
 
 This repo is Seraphina Studio (an egui desktop app in `src/bin/ui/`)
-and the tested Rust library behind it. It is public, free and open.
+and the tested Rust library behind it. It is public, free and open:
+<https://github.com/SynerGro-AI/seraphina-studio> (formerly
+`obs-rust-bitstream`; the crate keeps that name).
 
 ## How to start
 

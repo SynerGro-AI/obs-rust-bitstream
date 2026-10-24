@@ -1,4 +1,4 @@
-# Audit: SynerGro-AI/obs-rust-bitstream (UI focus)
+# Audit: SynerGro-AI/obs-rust-bitstream, now SynerGro-AI/seraphina-studio (UI focus)
 
 Date: 2026-10-20 (America/Edmonton, MDT)
 Clone: `/workspace/obs-rust-bitstream`. Base: `main` @ `b0046ec`. Work is on the local branch `ui-polish` and has **not been pushed**.

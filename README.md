@@ -1,9 +1,11 @@
-# obs-rust-bitstream
+# seraphina-studio
 
 **Seraphina Studio**, a desktop app for paint, composite, 3D, animation,
 streaming and a materials lab, and the tested Rust library behind it. It
 started as a Rust port of OBS's `bitstream_reader` (still here as
 `bitstream`, with its C ABI); recording and streaming go through ffmpeg.
+The GitHub repo is [SynerGro-AI/seraphina-studio](https://github.com/SynerGro-AI/seraphina-studio)
+(formerly `obs-rust-bitstream`, which is still the crate's name).
 
 ## Desktop app: Seraphina Studio
 
@@ -227,8 +229,8 @@ A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
 2. In PowerShell:
 
    ```powershell
-   git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
-   cd obs-rust-bitstream
+   git clone https://github.com/SynerGro-AI/seraphina-studio
+   cd seraphina-studio
    $env:XAI_API_KEY = "<your key>"   # optional, enables Seraphina + Grok Imagine
    cargo run --release --features ui --bin ui
    ```

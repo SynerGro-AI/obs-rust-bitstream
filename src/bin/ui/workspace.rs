@@ -1032,7 +1032,7 @@ fn fmt_ago(d: Duration) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::assistant_panel::{AssistantPanel, ChatItem, ItemKind};
     use crate::commands::{AppCommand, Origin};

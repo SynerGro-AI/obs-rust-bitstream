@@ -289,7 +289,7 @@ impl SceneState {
             }
         }
         let _ = joints.set_parent("knee", "hip");
-        Self {
+        let mut s = Self {
             objs,
             selected: Some(0),
             prev_selected: None,
@@ -319,7 +319,9 @@ impl SceneState {
             tex: None,
             counter: 1,
             drag_rot: None,
-        }
+        };
+        s.sync_joints();
+        s
     }
 
     pub fn camera(&self) -> Camera {
@@ -341,6 +343,12 @@ impl SceneState {
                 o.pos[1] = y;
             }
         }
+        self.sync_joints();
+    }
+
+    /// Joint positions follow their scene objects. Done on creation and
+    /// load too, so the first frame does not look like an edit.
+    fn sync_joints(&mut self) {
         for o in self.objs.iter().filter(|o| o.kind == Kind::Joint) {
             if let Ok(j) = self.joints.get_mut(&o.name) {
                 j.set_position(o.pos[0], o.pos[1], o.pos[2]);
@@ -2114,6 +2122,7 @@ impl SceneState {
             arena_start: f.arena_start,
             ..Self::new()
         };
+        self.sync_joints();
         Ok(())
     }
 }

@@ -2704,6 +2704,44 @@ mod tests {
     }
 
     #[test]
+    fn a_fresh_launch_is_not_marked_unsaved() {
+        let ctx = egui::Context::default();
+        let mut app = crate::workspace::tests::test_app(&ctx);
+        let s0 = (app.paint.edits, app.anim.edits, app.project.edits);
+        let mut t = 0.0;
+        for m in [
+            Mode::Paint,
+            Mode::Composite,
+            Mode::Scene,
+            Mode::Animate,
+            Mode::Stream,
+            Mode::Materials,
+            Mode::Paint,
+        ] {
+            app.mode = m;
+            run(&mut app, &ctx, 12, t);
+            t += 1.0;
+            assert!(
+                !app.check_dirty(),
+                "{:?}: {:?} -> {:?}",
+                m,
+                s0,
+                (app.paint.edits, app.anim.edits, app.project.edits)
+            );
+        }
+        // and the same after saving and reopening
+        let path = project::test_dir("fresh-clean").join("fresh.seraphina");
+        app.save_project_to(&path).unwrap();
+        app.open_project_from(&path).unwrap();
+        for m in [Mode::Scene, Mode::Materials, Mode::Paint] {
+            app.mode = m;
+            run(&mut app, &ctx, 12, t);
+            t += 1.0;
+            assert!(!app.check_dirty(), "{:?} after reopening", m);
+        }
+    }
+
+    #[test]
     fn a_damaged_learning_bank_is_announced_at_startup() {
         let dir = project::test_dir("startup-corrupt");
         let path = dir.join("mercy_bank.json");

@@ -5,6 +5,7 @@
 use crate::animate::AnimFile;
 use crate::assistant_panel::ChatFile;
 use crate::composite::CompFile;
+use crate::lab::LabFile;
 use crate::materials::MaterialsFile;
 use crate::output::OutputConfig;
 use crate::paint::PaintFile;
@@ -56,6 +57,9 @@ pub struct Manifest {
     pub scene: Option<SceneFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub materials: Option<MaterialsFile>,
+    /// Materials Lab: reactions, circuits, computer and relativity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lab: Option<LabFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stream: Option<StreamFile>,
     /// Output / streaming settings with the stream key and URL
@@ -227,6 +231,8 @@ const VIEW_KEYS: &[&str] = &[
     "shelf_tab",
     "builder_tab",
     "atom_note",
+    "arena_playing",
+    "tab",
 ];
 
 fn hash_sections(sections: &[Value]) -> u64 {
@@ -282,6 +288,7 @@ impl App {
         hash_sections(&[
             to(serde_json::to_value(self.scene.to_file())),
             to(serde_json::to_value(self.materials.to_file())),
+            to(serde_json::to_value(self.lab.to_file())),
             to(serde_json::to_value(self.comp.to_file(&mut scratch))),
             to(serde_json::to_value(self.stream.to_file(&mut scratch))),
             to(serde_json::to_value(self.output.project_cfg())),
@@ -347,6 +354,7 @@ impl App {
             comp: Some(self.comp.to_file(&mut assets)),
             scene: Some(self.scene.to_file()),
             materials: Some(self.materials.to_file()),
+            lab: Some(self.lab.to_file()),
             stream: Some(self.stream.to_file(&mut assets)),
             output: Some(self.output.project_cfg()),
             chat: include_chat.then(|| self.assistant.to_file()),
@@ -399,6 +407,9 @@ impl App {
             self.materials
                 .load_file(f)
                 .map_err(|e| format!("Materials: {}", e))?;
+        }
+        if let Some(f) = m.lab {
+            self.lab.load_file(f).map_err(|e| format!("Lab: {}", e))?;
         }
         if let Some(f) = m.stream {
             self.stream
@@ -1133,12 +1144,66 @@ mod tests {
         });
     }
 
+    /// A physics run part-way through: a heated, launched gold cube and a
+    /// pinned one on the Moon.
+    fn edit_physics(app: &mut App) {
+        run(app, r#"{"cmd":"switch_mode","mode":"3d"}"#);
+        run(app, r#"{"cmd":"scene_add","kind":"cube"}"#);
+        run(
+            app,
+            r#"{"cmd":"scene_transform","translate":[0.0,2.0,0.0]}"#,
+        );
+        run(app, r#"{"cmd":"material_assign","material":"gold"}"#);
+        run(
+            app,
+            r#"{"cmd":"arena_body","temperature_c":300,"heater_w":2000,"velocity":[1.0,3.0,0.0]}"#,
+        );
+        run(app, r#"{"cmd":"scene_add","kind":"cube"}"#);
+        run(
+            app,
+            r#"{"cmd":"scene_transform","translate":[3.0,0.5,0.0]}"#,
+        );
+        run(app, r#"{"cmd":"arena_body","fixed":true}"#);
+        run(app, r#"{"cmd":"arena_env","preset":"moon"}"#);
+        run(app, r#"{"cmd":"arena_step","steps":90}"#);
+    }
+
+    /// Every lab simulation with results, and an orbit part-way round.
+    fn edit_lab(app: &mut App) {
+        run(
+            app,
+            r#"{"cmd":"chem_react","equation":"CH4 + O2 -> CO2 + H2O","temperature_c":900,"seconds":2}"#,
+        );
+        run(
+            app,
+            r#"{"cmd":"circuit_run","preset":"fuse","material":"Al","voltage":2.5}"#,
+        );
+        run(
+            app,
+            r#"{"cmd":"cpu_run","program":"multiply","temperature_c":60,"clock_mhz":800}"#,
+        );
+        run(app, r#"{"cmd":"rel_speed","beta":0.8}"#);
+        run(
+            app,
+            r#"{"cmd":"nbody_preset","preset":"earth_moon","gr":true}"#,
+        );
+        run(
+            app,
+            r#"{"cmd":"nbody_play","playing":true,"days_per_second":5}"#,
+        );
+        for _ in 0..20 {
+            app.lab.tick(0.05);
+        }
+    }
+
     fn edit_all(app: &mut App) {
         edit_paint(app);
         edit_anim(app);
         edit_comp(app);
         edit_scene(app);
+        edit_physics(app);
         edit_materials(app);
+        edit_lab(app);
         edit_stream(app);
         edit_output(app);
         edit_chat(app);
@@ -1151,10 +1216,35 @@ mod tests {
         c
     }
 
+    /// First differing JSON path, for readable failures.
+    fn first_diff(path: &str, x: &Value, y: &Value) -> Option<String> {
+        match (x, y) {
+            (Value::Object(a), Value::Object(b)) => a
+                .iter()
+                .find_map(|(k, v)| {
+                    let p = format!("{}.{}", path, k);
+                    match b.get(k) {
+                        Some(w) => first_diff(&p, v, w),
+                        None => Some(format!("{} missing", p)),
+                    }
+                })
+                .or_else(|| (a.len() != b.len()).then(|| format!("{} has extra keys", path))),
+            (Value::Array(a), Value::Array(b)) if a.len() == b.len() => a
+                .iter()
+                .zip(b)
+                .enumerate()
+                .find_map(|(i, (v, w))| first_diff(&format!("{}[{}]", path, i), v, w)),
+            _ => (x != y).then(|| format!("{}: {} vs {}", path, x, y)),
+        }
+    }
+
     fn assert_same(a: &App, b: &App) {
         let (x, y) = (state(a), state(b));
-        for (k, v) in x.manifest.as_object().unwrap() {
-            assert_eq!(Some(v), y.manifest.get(k), "section '{}' differs", k);
+        if let Some(d) = first_diff("", &x.manifest, &y.manifest) {
+            panic!(
+                "saved state differs at {}",
+                d.chars().take(400).collect::<String>()
+            );
         }
         assert_eq!(x.manifest, y.manifest);
         assert_eq!(
@@ -1281,6 +1371,87 @@ mod tests {
         let path = project::test_dir("nochat").join("p.seraphina");
         a.save_project_to(&path).unwrap();
         assert!(project::read(&path).unwrap().manifest.get("chat").is_none());
+    }
+
+    #[test]
+    fn physics_arena_round_trips_and_continues_identically() {
+        let (mut a, mut b) = round_trip("physics", edit_physics);
+        let (x, y) = (
+            a.scene.arena.as_ref().unwrap(),
+            b.scene.arena.as_ref().unwrap(),
+        );
+        assert!(x.time > 0.3);
+        assert_eq!(x.time, y.time);
+        assert!(x.bodies.len() >= 2);
+        assert_eq!(format!("{:?}", x.bodies), format!("{:?}", y.bodies));
+        assert_eq!(format!("{:?}", x.ledger), format!("{:?}", y.ledger));
+        assert!(x.ledger.heater_in > 0.0);
+        assert_eq!(format!("{:?}", x.env), format!("{:?}", y.env));
+        assert!(y.env.gravity < 2.0, "moon gravity kept");
+        assert_eq!(a.scene.phys, b.scene.phys);
+        assert!(b.scene.phys.values().any(|p| p.fixed));
+        assert!(b.scene.arena_start.is_some());
+        // the reopened run carries on exactly as the original would have
+        run(&mut a, r#"{"cmd":"arena_step","steps":240}"#);
+        run(&mut b, r#"{"cmd":"arena_step","steps":240}"#);
+        let (x, y) = (
+            a.scene.arena.as_ref().unwrap(),
+            b.scene.arena.as_ref().unwrap(),
+        );
+        assert_eq!(format!("{:?}", x.bodies), format!("{:?}", y.bodies));
+        assert_eq!(format!("{:?}", x.ledger), format!("{:?}", y.ledger));
+        // and Reset still goes back to the scene before the simulation
+        run(&mut b, r#"{"cmd":"arena_reset"}"#);
+        assert!(b.scene.arena.is_none());
+        assert_eq!(
+            b.scene.objs[0].name,
+            a.scene.arena_start.as_ref().unwrap()[0].name
+        );
+    }
+
+    #[test]
+    fn lab_circuits_reactions_cpu_and_relativity_round_trip() {
+        let (mut a, mut b) = round_trip("lab", edit_lab);
+        assert_eq!(a.lab.to_file(), b.lab.to_file());
+        assert_eq!(b.lab.circ.preset, "fuse");
+        assert_eq!(b.lab.circ.params.material, "Al");
+        assert!(b.lab.circ.run.is_some(), "circuit plot re-simulated");
+        assert!(b.lab.chem.run.is_some(), "reaction re-simulated");
+        let (r1, r2) = (
+            a.lab.cpu.report.as_ref().unwrap(),
+            b.lab.cpu.report.as_ref().unwrap(),
+        );
+        assert_eq!(r1, r2);
+        assert_eq!(b.lab.rel.beta, 0.8);
+        assert_eq!(b.lab.rel.preset, "earth_moon");
+        assert!(b.lab.rel.nb.time > 0.0);
+        assert_eq!(a.lab.rel.nb, b.lab.rel.nb);
+        // the orbit continues identically
+        for _ in 0..10 {
+            a.lab.tick(0.05);
+            b.lab.tick(0.05);
+        }
+        assert_eq!(a.lab.rel.nb, b.lab.rel.nb);
+        assert_eq!(a.lab.rel.peri_moved, b.lab.rel.peri_moved);
+    }
+
+    #[test]
+    fn old_projects_without_physics_or_lab_still_open() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        edit_scene(&mut a);
+        let mut c = a.to_container(false, None);
+        c.manifest.as_object_mut().unwrap().remove("lab");
+        let scene = c.manifest["scene"].as_object_mut().unwrap();
+        for k in ["arena", "arena_env", "arena_playing", "phys", "arena_start"] {
+            scene.remove(k);
+        }
+        let path = project::test_dir("oldfmt").join("old.seraphina");
+        project::write(&path, &c).unwrap();
+        let mut b = test_app(&egui::Context::default());
+        b.open_project_from(&path).unwrap();
+        assert_eq!(b.scene.objs.len(), a.scene.objs.len());
+        assert!(b.scene.arena.is_none());
     }
 
     #[test]

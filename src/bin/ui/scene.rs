@@ -198,7 +198,7 @@ impl Obj {
 }
 
 /// Physics settings an object keeps between simulation runs.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PhysProps {
     /// Starting temperature (K); `None` = ambient.
     pub temp: Option<f32>,
@@ -2047,6 +2047,19 @@ pub struct SceneFile {
     pub assign: MaterialAssign,
     /// Next auto-name number ("cube3").
     pub counter: usize,
+    /// Physics: the running (or paused) arena with its bodies, materials,
+    /// environment and energy ledger.
+    #[serde(default)]
+    pub arena: Option<Arena>,
+    #[serde(default = "Environment::earth")]
+    pub arena_env: Environment,
+    #[serde(default)]
+    pub arena_playing: bool,
+    #[serde(default)]
+    pub phys: HashMap<String, PhysProps>,
+    /// The scene before the simulation started (Reset restores it).
+    #[serde(default)]
+    pub arena_start: Option<Vec<Obj>>,
 }
 
 impl SceneState {
@@ -2066,6 +2079,11 @@ impl SceneState {
             shelf_tab: self.shelf_tab,
             assign: self.assign.clone(),
             counter: self.counter,
+            arena: self.arena.clone(),
+            arena_env: self.arena_env.clone(),
+            arena_playing: self.arena_playing,
+            phys: self.phys.clone(),
+            arena_start: self.arena_start.clone(),
         }
     }
 
@@ -2089,6 +2107,11 @@ impl SceneState {
             shelf_tab: f.shelf_tab,
             assign: f.assign,
             counter: f.counter,
+            arena: f.arena,
+            arena_env: f.arena_env,
+            arena_playing: f.arena_playing,
+            phys: f.phys,
+            arena_start: f.arena_start,
             ..Self::new()
         };
         Ok(())

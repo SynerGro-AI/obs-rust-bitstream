@@ -34,7 +34,8 @@ eframe = { version = "0.32", optional = true }
 image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png"] }
 egui-phosphor = { version = "0.10", optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
-serde_json = { version = "1", optional = true }
+# float_roundtrip: project files must reload f64 state bit-for-bit
+serde_json = { version = "1", optional = true, features = ["float_roundtrip"] }
 ureq = { version = "2", optional = true, default-features = false, features = ["tls", "json"] }
 ab_glyph = { version = "0.2", optional = true }
 epaint_default_fonts = { version = "0.32", optional = true }

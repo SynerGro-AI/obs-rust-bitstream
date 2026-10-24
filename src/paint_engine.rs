@@ -430,30 +430,113 @@ impl PaintLayer {
 
     /// Move the pixels by the offset and reset it (before crop/paint).
     pub fn bake_offset(&mut self) {
-        if self.offset == (0, 0) {
+        let (w, h) = (self.raster.width, self.raster.height);
+        self.bake_to(w, h);
+    }
+
+    /// Make the raster exactly `w` × `h` at offset (0, 0), keeping what
+    /// lies inside the document. Undoes [`PaintLayer::trim`] before tools
+    /// that work in document coordinates.
+    pub fn bake_to(&mut self, w: u32, h: u32) {
+        if self.offset == (0, 0) && (self.raster.width, self.raster.height) == (w, h) {
             return;
         }
-        let (dx, dy) = self.offset;
         let src = self.raster.clone();
-        let mut out = Raster::new(src.width, src.height);
-        for y in 0..src.height as i32 {
-            let sy = y - dy;
-            if sy < 0 || sy >= src.height as i32 {
+        let (dx, dy) = self.offset;
+        let mut out = Raster::new(w, h);
+        let (sw, sh) = (src.width as i64, src.height as i64);
+        for y in 0..h as i64 {
+            let sy = y - dy as i64;
+            if sy < 0 || sy >= sh {
                 continue;
             }
-            for x in 0..src.width as i32 {
-                let sx = x - dx;
-                if sx < 0 || sx >= src.width as i32 {
-                    continue;
-                }
-                let s = ((sy as usize) * (src.width as usize) + sx as usize) * 4;
-                let d = ((y as usize) * (src.width as usize) + x as usize) * 4;
-                out.data[d..d + 4].copy_from_slice(&src.data[s..s + 4]);
+            let x0 = (dx as i64).max(0);
+            let x1 = (dx as i64 + sw).min(w as i64);
+            if x0 >= x1 {
+                continue;
             }
+            let s = ((sy * sw + (x0 - dx as i64)) * 4) as usize;
+            let d = ((y * w as i64 + x0) * 4) as usize;
+            let n = ((x1 - x0) * 4) as usize;
+            out.data[d..d + n].copy_from_slice(&src.data[s..s + n]);
         }
         self.raster = Arc::new(out);
         self.offset = (0, 0);
     }
+
+    /// Shrink the raster to the box holding every non-zero byte, moving the
+    /// offset so the document looks the same. Lossless; text layers (which
+    /// re-render at document size) are left alone. Returns true if trimmed.
+    pub fn trim(&mut self) -> bool {
+        if self.text.is_some() {
+            return false;
+        }
+        let r = &self.raster;
+        let (w, h) = (r.width as usize, r.height as usize);
+        let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
+        for y in 0..h {
+            let row = &r.data[y * w * 4..(y + 1) * w * 4];
+            let px = row.as_chunks::<4>().0;
+            let Some(first) = px.iter().position(|p| *p != [0; 4]) else {
+                continue;
+            };
+            let last = px.iter().rposition(|p| *p != [0; 4]).unwrap();
+            x0 = x0.min(first);
+            x1 = x1.max(last + 1);
+            y0 = y0.min(y);
+            y1 = y + 1;
+        }
+        if x0 >= x1 {
+            if w * h == 0 {
+                return false;
+            }
+            self.raster = Arc::new(Raster::new(0, 0));
+            self.offset = (0, 0);
+            return true;
+        }
+        let (bw, bh) = (x1 - x0, y1 - y0);
+        // Not worth a copy unless it frees at least a quarter.
+        if bw * bh * 4 > w * h * 3 {
+            return false;
+        }
+        let mut out = Raster::new(bw as u32, bh as u32);
+        for y in 0..bh {
+            let s = ((y0 + y) * w + x0) * 4;
+            out.data[y * bw * 4..(y + 1) * bw * 4].copy_from_slice(&r.data[s..s + bw * 4]);
+        }
+        self.raster = Arc::new(out);
+        self.offset = (self.offset.0 + x0 as i32, self.offset.1 + y0 as i32);
+        true
+    }
+}
+
+/// Thumbnail of a layer as it sits in a `w` × `h` document (honours
+/// trimming and offsets; nearest neighbour).
+pub fn layer_thumbnail(l: &PaintLayer, w: u32, h: u32, max: u32) -> Raster {
+    if w == 0 || h == 0 {
+        return Raster::new(1, 1);
+    }
+    let s = (max as f32 / w.max(h) as f32).min(1.0);
+    let tw = ((w as f32 * s).round() as u32).max(1);
+    let th = ((h as f32 * s).round() as u32).max(1);
+    let mut out = Raster::new(tw, th);
+    let r = &l.raster;
+    for ty in 0..th {
+        let dy = (ty as u64 * h as u64 / th as u64) as i64 - l.offset.1 as i64;
+        if dy < 0 || dy >= r.height as i64 {
+            continue;
+        }
+        for tx in 0..tw {
+            let dx = (tx as u64 * w as u64 / tw as u64) as i64 - l.offset.0 as i64;
+            if dx < 0 || dx >= r.width as i64 {
+                continue;
+            }
+            let si = ((dy * r.width as i64 + dx) * 4) as usize;
+            let di = ((ty * tw + tx) * 4) as usize;
+            out.data[di..di + 4].copy_from_slice(&r.data[si..si + 4]);
+        }
+    }
+    out
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -880,6 +963,36 @@ pub fn union_rect(a: Option<PixelRect>, b: Option<PixelRect>) -> Option<PixelRec
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn trimming_a_layer_is_lossless() {
+        let mut r = Raster::new(300, 200);
+        for y in 40..90 {
+            for x in 120..170 {
+                let k = (y * 300 + x) * 4;
+                r.data[k..k + 4].copy_from_slice(&[x as u8, y as u8, 0, (x + y) as u8]);
+            }
+        }
+        r.data[(150 * 300 + 10) * 4 + 3] = 1; // a lone, nearly clear pixel
+        let mut l = PaintLayer::new(1, "a", r.clone());
+        l.offset = (5, -3);
+        let mut full = l.clone();
+        full.bake_to(300, 200);
+        assert!(l.trim());
+        assert!(l.raster.width < 300 && l.raster.height < 200);
+        let mut back = l.clone();
+        back.bake_to(300, 200);
+        assert_eq!(back.raster.data, full.raster.data);
+        let thumb = layer_thumbnail(&l, 300, 200, 44);
+        assert_eq!(thumb.width, 44);
+        // an empty layer trims to nothing and bakes back to clear pixels
+        let mut e = PaintLayer::new(2, "e", Raster::new(64, 64));
+        assert!(e.trim());
+        assert_eq!((e.raster.width, e.raster.height), (0, 0));
+        e.bake_to(64, 64);
+        assert!(e.raster.data.iter().all(|&b| b == 0) && e.raster.data.len() == 64 * 64 * 4);
+    }
+
     use super::*;
 
     fn solid(w: u32, h: u32, c: [u8; 4]) -> Raster {

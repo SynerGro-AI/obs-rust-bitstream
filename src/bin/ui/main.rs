@@ -20,6 +20,7 @@ mod materials;
 mod maya;
 mod output;
 mod paint;
+mod paint_undo;
 mod prefs;
 mod project;
 mod scene;

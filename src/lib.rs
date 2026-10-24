@@ -1007,6 +1007,7 @@ pub mod mesh3d;
 pub mod paint_engine;
 pub mod psd_pixels;
 pub mod stream_inspect;
+pub mod tile_undo;
 pub mod ui_canvas;
 pub use add_noise::{AddNoise, NoiseError};
 pub use ae_tools::{AeTool, AeTools};

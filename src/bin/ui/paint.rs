@@ -12,16 +12,17 @@ use crate::{resolve_asset, ToastKind, Toasts};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::paint_engine::{
-    blur_mask, clone_dab, composite_into, dab_rect, gradient_fill, heal_dab, paint_dab,
-    spaced_dab_points, thumbnail, tone_dab, union_rect, LayerGroup, LayerMask, PaintLayer,
-    Selection, TextSpec,
+    blur_mask, clone_dab, composite_into, dab_rect, gradient_fill, heal_dab, layer_thumbnail,
+    paint_dab, spaced_dab_points, thumbnail, tone_dab, union_rect, LayerGroup, LayerMask,
+    PaintLayer, Selection, TextSpec,
 };
 use obs_rust_bitstream::psd_pixels::{LayerKind, PsdLayerPixels, PsdPixels};
+use obs_rust_bitstream::tile_undo::{budget_from_env, DeltaHistory};
 use obs_rust_bitstream::ui_canvas::{
-    save_target, zoom_step, BlendMode, Brush, Filter, History, PixelRect, Raster, ViewTransform,
+    save_target, zoom_step, BlendMode, Brush, Filter, PixelRect, Raster, ViewTransform,
 };
 use obs_rust_bitstream::Psd;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -276,6 +277,10 @@ impl PaintDoc {
     }
 }
 
+/// Undo step limit; the byte budget (`SERAPHINA_UNDO_MB`, default 512 MB)
+/// usually binds first on big documents.
+pub const UNDO_STEPS: usize = 200;
+
 pub struct TextDraft {
     pub x: f32,
     pub y: f32,
@@ -286,7 +291,9 @@ pub struct TextDraft {
 
 pub struct PaintState {
     pub doc: PaintDoc,
-    history: History<PaintDoc>,
+    history: DeltaHistory<PaintDoc>,
+    /// Layer rasters (by `Arc` address) already trimmed to their content.
+    settled: HashSet<usize>,
     coalesce: Option<String>,
     /// Bumped by every document edit, undo and redo (dirty tracking).
     pub edits: u64,
@@ -552,7 +559,8 @@ impl PaintState {
         let psd = None;
         let mut s = Self {
             doc,
-            history: History::new(40),
+            history: DeltaHistory::new(UNDO_STEPS, budget_from_env()),
+            settled: HashSet::new(),
             coalesce: None,
             edits: 0,
             tool: Tool::Brush,
@@ -618,9 +626,27 @@ impl PaintState {
         self.dirty = union_rect(self.dirty, r);
     }
 
+    /// Trim layers edited since the last step to their content, so a layer
+    /// holding a small drawing on a big canvas costs only the drawing.
+    pub(crate) fn settle(&mut self) {
+        if self.stroking {
+            return;
+        }
+        let mut keep = HashSet::with_capacity(self.doc.layers.len());
+        for l in &mut self.doc.layers {
+            let k = Arc::as_ptr(&l.raster) as usize;
+            if !self.settled.contains(&k) {
+                l.trim();
+            }
+            keep.insert(Arc::as_ptr(&l.raster) as usize);
+        }
+        self.settled = keep;
+    }
+
     fn checkpoint(&mut self) {
         self.edits += 1;
-        self.history.push(self.doc.clone());
+        self.settle();
+        self.history.push(&self.doc);
         self.coalesce = None;
     }
 
@@ -628,7 +654,8 @@ impl PaintState {
     fn checkpoint_coalesced(&mut self, key: String) {
         self.edits += 1;
         if self.coalesce.as_deref() != Some(key.as_str()) {
-            self.history.push(self.doc.clone());
+            self.settle();
+            self.history.push(&self.doc);
             self.coalesce = Some(key);
         }
     }
@@ -663,6 +690,7 @@ impl PaintState {
     }
 
     pub fn undo(&mut self) -> bool {
+        self.settle();
         match self.history.undo(self.doc.clone()) {
             Some(prev) => {
                 self.restore(prev);
@@ -673,6 +701,7 @@ impl PaintState {
     }
 
     pub fn redo(&mut self) -> bool {
+        self.settle();
         match self.history.redo(self.doc.clone()) {
             Some(next) => {
                 self.restore(next);
@@ -761,7 +790,7 @@ impl PaintState {
         self.editable(i)?;
         let l = &mut self.doc.layers[i];
         l.text = None;
-        l.bake_offset();
+        l.bake_to(self.doc.width, self.doc.height);
         Ok(i)
     }
 
@@ -850,8 +879,9 @@ impl PaintState {
             .clamped(self.doc.width, self.doc.height)
             .ok_or("crop box is outside the canvas")?;
         self.checkpoint();
+        let (dw, dh) = (self.doc.width, self.doc.height);
         for l in &mut self.doc.layers {
-            l.bake_offset();
+            l.bake_to(dw, dh);
             if let Some(c) = l.raster.cropped(r) {
                 l.raster = Arc::new(c);
             }
@@ -1964,7 +1994,7 @@ impl PaintState {
             for l in &self.doc.layers {
                 let stale = self.thumbs.get(&l.id).map(|t| t.0 != gen).unwrap_or(true);
                 if stale {
-                    let img = color_image(&thumbnail(&l.raster, 44));
+                    let img = color_image(&layer_thumbnail(l, self.doc.width, self.doc.height, 44));
                     match self.thumbs.get_mut(&l.id) {
                         Some(t) => {
                             t.1.set(img, egui::TextureOptions::LINEAR);
@@ -2857,6 +2887,50 @@ impl PaintState {
         }
     }
 
+    /// Undo memory: (steps, redo steps, delta bytes, budget bytes).
+    pub fn undo_stats(&self) -> (usize, usize, usize, usize) {
+        (
+            self.history.undo_len(),
+            self.history.redo_len(),
+            self.history.delta_bytes(),
+            self.history.budget(),
+        )
+    }
+
+    /// Bytes held by the document plus its undo history: distinct pixel
+    /// buffers of the live document and both history anchors, plus every
+    /// stored delta (which may double-count shared buffers, so this errs high).
+    pub fn retained_bytes(&self) -> usize {
+        let mut seen = HashSet::new();
+        let (u, r) = self.history.anchors();
+        let mut n = 0;
+        for d in [Some(&self.doc), u, r].into_iter().flatten() {
+            for l in &d.layers {
+                if seen.insert(Arc::as_ptr(&l.raster) as usize) {
+                    n += l.raster.data.len();
+                }
+                if let Some(m) = &l.mask {
+                    if seen.insert(Arc::as_ptr(&m.data) as usize) {
+                        n += m.data.len();
+                    }
+                }
+            }
+            n += d.selection.as_ref().map_or(0, |s| s.mask.len());
+        }
+        n + self.history.delta_bytes()
+    }
+
+    /// Bytes of distinct layer pixels in the document.
+    pub fn pixel_bytes(&self) -> usize {
+        let mut seen = HashSet::new();
+        self.doc
+            .layers
+            .iter()
+            .filter(|l| seen.insert(Arc::as_ptr(&l.raster) as usize))
+            .map(|l| l.raster.data.len())
+            .sum()
+    }
+
     fn history_top_selection(&self) -> Option<Selection> {
         self.history.peek().and_then(|d| d.selection.clone())
     }
@@ -3599,6 +3673,18 @@ impl PaintState {
             "Document Size:",
             format!("{:.1} MB", bytes as f64 / 1_048_576.0),
         );
+        let (steps, _, held, budget) = self.undo_stats();
+        theme::prop(
+            ui,
+            p,
+            "Undo Memory:",
+            format!(
+                "{:.1} / {} MB, {} steps",
+                held as f64 / 1_048_576.0,
+                budget >> 20,
+                steps
+            ),
+        );
         theme::prop(ui, p, "Bit Depth:", "8-bit/Channel");
         theme::prop(ui, p, "Channels:", "RGB + Alpha");
         theme::prop(
@@ -3785,7 +3871,8 @@ impl PaintState {
             selected: f.selected,
             next_id: f.next_id,
         };
-        self.history = History::new(40);
+        self.history.clear();
+        self.settled.clear();
         self.restore(doc);
         self.flat = Raster::new(w, h);
         self.tex = None;

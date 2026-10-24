@@ -5,11 +5,14 @@ use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::Clock;
 use crate::{ToastKind, Toasts};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
-use obs_rust_bitstream::ui_canvas::{Brush, History, Raster, ViewTransform};
+use obs_rust_bitstream::tile_undo::{budget_from_env, DeltaHistory};
+use obs_rust_bitstream::ui_canvas::{Brush, Raster, ViewTransform};
 
 pub const W: u32 = 640;
 pub const H: u32 = 360;
 const MAX_FRAMES: usize = 48;
+/// Undo steps (was 6 whole copies; now tile deltas under the byte budget).
+pub const UNDO_STEPS: usize = 100;
 
 pub struct AnimState {
     pub frames: Vec<Raster>,
@@ -22,7 +25,7 @@ pub struct AnimState {
     pub erase: bool,
     pub onion: bool,
     pub onion_range: usize,
-    history: History<Vec<Raster>>,
+    history: DeltaHistory<Vec<Raster>>,
     last_dab: Option<(f32, f32)>,
     /// Bumped by every frame edit, undo and redo (dirty tracking).
     pub edits: u64,
@@ -49,7 +52,7 @@ impl AnimState {
             erase: false,
             onion: true,
             onion_range: 1,
-            history: History::new(6),
+            history: DeltaHistory::new(UNDO_STEPS, budget_from_env()),
             last_dab: None,
             edits: 0,
         }
@@ -81,7 +84,7 @@ impl AnimState {
 
     fn snapshot(&mut self) {
         self.edits += 1;
-        self.history.push(self.frames.clone());
+        self.history.push(&self.frames);
     }
 
     pub fn restore(&mut self, frames: Vec<Raster>) {
@@ -605,7 +608,7 @@ impl AnimState {
                 MAX_FRAMES
             ));
         }
-        self.history = History::new(6);
+        self.history.clear();
         self.last_dab = None;
         self.fps = f.fps.clamp(1.0, 60.0);
         self.restore(frames);

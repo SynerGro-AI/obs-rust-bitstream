@@ -30,9 +30,11 @@ fn non_test(src: &str) -> &str {
     src.split("#[cfg(test)]").next().unwrap_or(src)
 }
 
-/// `src` with `//` and `/* */` comments blanked, so a module named only in
-/// a comment does not count as used. String and char literals are kept.
-fn strip_comments(src: &str) -> String {
+/// `src` with `//` and `/* */` comments dropped and the contents of string
+/// and char literals emptied (the quotes stay), so a module named only in a
+/// comment or inside a string does not count as used. The exception is a
+/// serde attribute path (`deserialize_with = "m::f"`), which is code.
+fn code_only(src: &str) -> String {
     let b = src.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -60,11 +62,10 @@ fn strip_comments(src: &str) -> String {
             out.push(b' ');
         } else if b[i..].starts_with(b"'\"'") || b[i..].starts_with(b"'\\\"'") {
             // A '"' char literal does not open a string.
-            let n = if b[i + 1] == b'\\' { 4 } else { 3 };
-            out.extend_from_slice(&b[i..i + n]);
-            i += n;
+            out.extend_from_slice(b"''");
+            i += if b[i + 1] == b'\\' { 4 } else { 3 };
         } else if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"' | b'#')) {
-            // Raw string r#"…"#: copy it whole.
+            // Raw string r#"…"#: keep the delimiters, drop the contents.
             let hashes = b[i + 1..].iter().take_while(|&&c| c == b'#').count();
             if b.get(i + 1 + hashes) != Some(&b'"') {
                 out.push(b[i]);
@@ -74,23 +75,27 @@ fn strip_comments(src: &str) -> String {
             let close: Vec<u8> = std::iter::once(b'"')
                 .chain(std::iter::repeat_n(b'#', hashes))
                 .collect();
-            let start = i;
+            out.extend_from_slice(&b[i..i + 2 + hashes]);
             i += 2 + hashes;
             while i < b.len() && !b[i..].starts_with(&close) {
                 i += 1;
             }
+            out.extend_from_slice(&b[i..(i + close.len()).min(b.len())]);
             i = (i + close.len()).min(b.len());
-            out.extend_from_slice(&b[start..i]);
         } else if b[i] == b'"' {
-            out.push(b[i]);
+            // serde's `with = "path"` and `default = "path"` name real code.
+            let before = String::from_utf8_lossy(&out[out.len().saturating_sub(32)..]);
+            let before = before.trim_end();
+            let path = ["with =", "default ="].iter().any(|k| before.ends_with(k));
+            let start = i;
             i += 1;
             while i < b.len() && b[i] != b'"' {
-                if b[i] == b'\\' && i + 1 < b.len() {
-                    out.push(b[i]);
-                    i += 1;
-                }
-                out.push(b[i]);
-                i += 1;
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+            if path {
+                out.extend_from_slice(&b[start..i.min(b.len())]);
+            } else {
+                out.push(b'"');
             }
             if i < b.len() {
                 out.push(b[i]);
@@ -101,7 +106,7 @@ fn strip_comments(src: &str) -> String {
             i += 1;
         }
     }
-    String::from_utf8(out).expect("comment stripping keeps UTF-8")
+    String::from_utf8(out).expect("dropping whole comments and literals keeps UTF-8")
 }
 
 /// Every .rs file under `dir`, comments stripped. A directory that can't be
@@ -118,7 +123,7 @@ fn rs_files(dir: &std::path::Path, out: &mut Vec<String>) {
         } else if p.extension().is_some_and(|x| x == "rs") {
             let src =
                 std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
-            out.push(strip_comments(&src));
+            out.push(code_only(&src));
         }
     }
 }
@@ -211,7 +216,7 @@ fn every_library_module_is_reached_from_a_binary_or_example() {
     let mut reached: Vec<&str> = mods.iter().copied().filter(|m| refers(&roots, m)).collect();
     let mut i = 0;
     while i < reached.len() {
-        let src = strip_comments(
+        let src = code_only(
             &std::fs::read_to_string(root.join(format!("src/{}.rs", reached[i])))
                 .expect("read module"),
         );
@@ -329,24 +334,35 @@ fn planned_tables_have_target_dates_or_after_v0_2_0() {
 }
 
 #[test]
-fn strip_comments_drops_comments_and_keeps_literals() {
+fn code_only_drops_comments_and_literal_contents() {
     let src = "a::x(); // b::y\n/* c::z /* nested */ d::w */ e::v;\n\
-               let s = \"// f::u\"; let q = '\"'; g::t();\n\
+               let s = \"// f::u \\\" j::q\"; let q = '\"'; g::t();\n\
                let r = r#\"/* h::s \"# ; i::r();";
-    let out = strip_comments(src);
+    let out = code_only(src);
     for kept in [
         "a::x",
         "e::v",
-        "\"// f::u\"",
+        "let s = \"\";",
+        "''",
         "g::t",
-        "r#\"/* h::s \"#",
+        "r#\"\"#",
         "i::r",
     ] {
         assert!(out.contains(kept), "lost {kept}: {out}");
     }
-    for gone in ["b::y", "c::z", "d::w"] {
+    for gone in ["b::y", "c::z", "d::w", "f::u", "j::q", "h::s"] {
         assert!(!out.contains(gone), "kept {gone}: {out}");
     }
+}
+
+/// A module whose name appears only inside a string literal in a binary
+/// is not reached.
+#[test]
+fn a_module_named_only_in_a_string_is_not_used() {
+    let bin = code_only("fn main() { println!(\"see lonely::probe()\"); }");
+    assert!(!bin.contains("lonely::"), "{bin}");
+    let attr = code_only("#[serde(deserialize_with = \"crate::helper::f\")] x: u8,");
+    assert!(attr.contains("crate::helper::f"), "{attr}");
 }
 
 #[test]

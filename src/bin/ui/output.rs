@@ -2676,7 +2676,7 @@ mod tests {
             height: 180,
             fps: 30,
             source: Source::Camera,
-            camera_device: "Fake Cam".into(),
+            camera_device: "Recorded Cam".into(),
             ..Default::default()
         };
         let _ = std::fs::remove_file(path);
@@ -2719,16 +2719,10 @@ mod tests {
         assert!(!o.camera_recheck_due(t + Duration::from_millis(700), true));
     }
 
-    fn fake_camera(ok: Option<u32>) -> crate::camera::Feed {
-        crate::camera::Feed::from_reader(
-            "Fake Cam",
-            crate::camera::tests::Fake {
-                rgba: [200, 40, 40, 255],
-                size: (320, 180),
-                ok,
-            },
-        )
-        .unwrap()
+    /// A camera playing tests/fixtures/camera/red_320x180.mjpeg.
+    fn recorded_camera(ok: Option<u32>) -> crate::camera::Feed {
+        let cam = crate::camera::tests::Recorded::red_mjpeg(ok);
+        crate::camera::Feed::from_reader("Recorded Cam", cam).unwrap()
     }
 
     /// The middle pixel of the file's frame at `t` seconds, as RGB.
@@ -2745,7 +2739,7 @@ mod tests {
     }
 
     /// The Camera source records what the camera sends, not the canvas:
-    /// the canvas slot gets a blue frame, the (fake) camera a red one, and
+    /// the canvas slot gets a blue frame, the (recorded) camera a red one, and
     /// the file must be red.
     #[test]
     #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
@@ -2753,7 +2747,7 @@ mod tests {
         let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
         let path = std::env::temp_dir().join(format!("seraphina_cam_{}.mp4", std::process::id()));
         let mut o = camera_test_output(&path);
-        o.camera = Some(fake_camera(None));
+        o.camera = Some(recorded_camera(None));
         o.push_frame(Arc::new(Raster::filled(320, 180, [20, 40, 220, 255])));
         o.start_record(Some(path.clone())).unwrap();
         let t0 = Instant::now();
@@ -2761,7 +2755,7 @@ mod tests {
             assert!(o.tick().is_empty());
             std::thread::sleep(Duration::from_millis(30));
         }
-        assert!(o.context().contains("(Fake Cam)"), "{}", o.context());
+        assert!(o.context().contains("(Recorded Cam)"), "{}", o.context());
         o.stop_record().unwrap();
         assert!(o.camera.is_none(), "camera closed once nothing uses it");
         let [r, g, b] = pixel_at(&ff, &path, "0.7");
@@ -2781,7 +2775,7 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("seraphina_cam_fail_{}.mp4", std::process::id()));
         let mut o = camera_test_output(&path);
-        o.camera = Some(fake_camera(Some(40)));
+        o.camera = Some(recorded_camera(Some(40)));
         o.start_record(Some(path.clone())).unwrap();
         let t0 = Instant::now();
         let mut toasts = Vec::new();

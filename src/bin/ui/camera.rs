@@ -256,7 +256,8 @@ impl Drop for Feed {
     }
 }
 
-/// Something that produces camera frames: [`Camera`], or a test fake.
+/// Something that produces camera frames: [`Camera`], or recorded frames
+/// in tests.
 pub trait Read {
     fn next_frame(&mut self, timeout: Duration) -> Result<Raster, String>;
 }
@@ -324,6 +325,41 @@ pub fn yuyv_to_rgba(src: &[u8], width: u32, height: u32, stride: usize) -> Resul
         height,
         data,
     })
+}
+
+/// How a camera packs a frame: what V4L2 captures in, and what the
+/// recorded test frames in tests/fixtures/camera use.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug)]
+pub enum Packing {
+    Yuyv {
+        width: u32,
+        height: u32,
+        stride: usize,
+    },
+    Mjpeg,
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// One captured frame to RGBA.
+pub fn decode(packing: Packing, bytes: &[u8]) -> Result<Raster, String> {
+    match packing {
+        Packing::Yuyv {
+            width,
+            height,
+            stride,
+        } => yuyv_to_rgba(bytes, width, height, stride),
+        Packing::Mjpeg => image::load_from_memory_with_format(bytes, image::ImageFormat::Jpeg)
+            .map(|i| {
+                let i = i.to_rgba8();
+                Raster {
+                    width: i.width(),
+                    height: i.height(),
+                    data: i.into_raw(),
+                }
+            })
+            .map_err(|e| format!("bad MJPEG frame: {e}")),
+    }
 }
 
 #[cfg(any(windows, test))]
@@ -785,20 +821,16 @@ mod v4l2 {
             let used = (b.bytesused as usize).min(m.len);
             // SAFETY: the buffer is dequeued, so the driver isn't writing it.
             let bytes = unsafe { std::slice::from_raw_parts(m.ptr as *const u8, used) };
-            let frame = if self.pixfmt == PIX_YUYV {
-                super::yuyv_to_rgba(bytes, self.width, self.height, self.stride)
+            let packing = if self.pixfmt == PIX_YUYV {
+                super::Packing::Yuyv {
+                    width: self.width,
+                    height: self.height,
+                    stride: self.stride,
+                }
             } else {
-                image::load_from_memory_with_format(bytes, image::ImageFormat::Jpeg)
-                    .map(|i| {
-                        let i = i.to_rgba8();
-                        Raster {
-                            width: i.width(),
-                            height: i.height(),
-                            data: i.into_raw(),
-                        }
-                    })
-                    .map_err(|e| format!("{path}: bad MJPEG frame: {e}"))
+                super::Packing::Mjpeg
             };
+            let frame = super::decode(packing, bytes).map_err(|e| format!("{path}: {e}"));
             xioctl(self.fd.0, QBUF, &mut b).map_err(|e| format!("{path}: VIDIOC_QBUF: {e}"))?;
             frame
         }
@@ -1089,13 +1121,74 @@ pub(crate) mod tests {
         assert!(bgrx_to_rgba(&src[..10], 1, 2, 8).is_err(), "short frame");
     }
 
-    /// Solid frames, failing after `ok` of them (never, if `None`).
-    pub(crate) struct Fake {
-        pub rgba: [u8; 4],
-        pub size: (u32, u32),
+    /// Frames recorded from a camera (tests/fixtures/camera), decoded by
+    /// [`decode`] like a V4L2 capture and played in a loop. After `ok`
+    /// frames (never, if `None`) it fails with "unplugged".
+    pub(crate) struct Recorded {
+        packing: Packing,
+        frames: Vec<&'static [u8]>,
+        next: usize,
         pub ok: Option<u32>,
     }
-    impl Read for Fake {
+
+    const RED_MJPEG: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/camera/red_320x180.mjpeg"
+    ));
+    const TESTSRC_YUYV: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/camera/testsrc_64x48.yuyv"
+    ));
+
+    impl Recorded {
+        /// Solid red (200, 40, 40) 320x180 MJPEG, as a webcam sends it.
+        pub(crate) fn red_mjpeg(ok: Option<u32>) -> Recorded {
+            Recorded {
+                packing: Packing::Mjpeg,
+                frames: jpeg_frames(RED_MJPEG),
+                next: 0,
+                ok,
+            }
+        }
+
+        /// ffmpeg's test pattern, 64x48 packed YUYV.
+        pub(crate) fn testsrc_yuyv(ok: Option<u32>) -> Recorded {
+            let packing = Packing::Yuyv {
+                width: 64,
+                height: 48,
+                stride: 128,
+            };
+            let (frames, rest) = TESTSRC_YUYV.as_chunks::<{ 128 * 48 }>();
+            assert!(rest.is_empty(), "truncated YUYV fixture");
+            Recorded {
+                packing,
+                frames: frames.iter().map(|f| f.as_slice()).collect(),
+                next: 0,
+                ok,
+            }
+        }
+
+        pub(crate) fn decoded(&self) -> Vec<Raster> {
+            self.frames
+                .iter()
+                .map(|f| decode(self.packing, f).unwrap())
+                .collect()
+        }
+    }
+
+    /// Splits a `-f mjpeg` stream into its JPEGs: each ends at the EOI
+    /// marker (FF D9), which byte stuffing keeps out of the image data.
+    fn jpeg_frames(mut s: &'static [u8]) -> Vec<&'static [u8]> {
+        let mut out = Vec::new();
+        while let Some(end) = s.windows(2).position(|w| w == [0xFF, 0xD9]) {
+            out.push(&s[..end + 2]);
+            s = &s[end + 2..];
+        }
+        assert!(s.is_empty() && !out.is_empty(), "truncated MJPEG fixture");
+        out
+    }
+
+    impl Read for Recorded {
         fn next_frame(&mut self, _: Duration) -> Result<Raster, String> {
             std::thread::sleep(Duration::from_millis(10));
             match &mut self.ok {
@@ -1103,23 +1196,43 @@ pub(crate) mod tests {
                 Some(n) => *n -= 1,
                 None => {}
             }
-            Ok(Raster::filled(self.size.0, self.size.1, self.rgba))
+            let f = self.frames[self.next % self.frames.len()];
+            self.next += 1;
+            decode(self.packing, f)
         }
     }
 
     #[test]
+    fn recorded_frames_decode_to_the_recorded_picture() {
+        let red = Recorded::red_mjpeg(None).decoded();
+        assert_eq!(red.len(), 5);
+        for r in &red {
+            assert_eq!((r.width, r.height), (320, 180));
+            for px in r.data.as_chunks::<4>().0 {
+                let d = px
+                    .iter()
+                    .zip([200u8, 40, 40, 255])
+                    .map(|(a, b)| a.abs_diff(b));
+                assert!(d.max().unwrap() <= 3, "{px:?}");
+            }
+        }
+        // testsrc's top-left corner is in a solid colour block; YUYV
+        // leaves luma per pixel, so its first two pixels match.
+        let yuyv = Recorded::testsrc_yuyv(None).decoded();
+        assert_eq!(yuyv.len(), 10);
+        assert_eq!((yuyv[0].width, yuyv[0].height), (64, 48));
+        assert_eq!(yuyv[0].data[..4], yuyv[0].data[4..8]);
+        assert_ne!(yuyv[0].data, yuyv[9].data, "the pattern moves");
+    }
+
+    #[test]
     fn feed_reports_size_keeps_newest_frame_and_records_errors() {
-        let f = Feed::from_reader(
-            "fake",
-            Fake {
-                rgba: [9, 8, 7, 255],
-                size: (64, 48),
-                ok: Some(20),
-            },
-        )
-        .unwrap();
+        let cam = Recorded::testsrc_yuyv(Some(20));
+        let frames = cam.decoded();
+        let f = Feed::from_reader("recorded", cam).unwrap();
         assert_eq!(f.size, (64, 48));
-        assert_eq!(f.latest().unwrap().data[..4], [9, 8, 7, 255]);
+        let latest = f.latest().unwrap();
+        assert!(frames.iter().any(|r| r.data == latest.data));
         let t0 = std::time::Instant::now();
         while f.error().is_none() && t0.elapsed() < Duration::from_secs(5) {
             std::thread::sleep(Duration::from_millis(10));
@@ -1130,15 +1243,11 @@ pub(crate) mod tests {
 
     #[test]
     fn feed_start_fails_loudly_when_the_camera_cannot_open_or_send() {
-        let e = Feed::spawn::<Fake>(dev("Gone", "x"), || Err("busy".into()))
+        let e = Feed::spawn::<Recorded>(dev("Gone", "x"), || Err("busy".into()))
             .err()
             .unwrap();
         assert_eq!(e, CameraError::Failed("camera 'Gone': busy".into()));
-        let silent = Fake {
-            rgba: [0; 4],
-            size: (2, 2),
-            ok: Some(0),
-        };
+        let silent = Recorded::red_mjpeg(Some(0));
         let e = Feed::from_reader("Mute", silent).err().unwrap();
         assert_eq!(e, CameraError::Failed("camera 'Mute': unplugged".into()));
     }

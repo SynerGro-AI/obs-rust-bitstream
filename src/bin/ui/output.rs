@@ -1168,7 +1168,16 @@ pub struct Output {
     /// Settings ▸ Output preview is showing the camera.
     pub camera_preview: bool,
     /// Last camera enumeration (Settings ▸ Output ▸ Refresh).
-    pub cameras: Option<Result<Vec<crate::camera::Device>, String>>,
+    pub cameras: Option<Result<Vec<crate::camera::Device>, crate::camera::CameraError>>,
+    /// A camera is there but the system blocks access (why); Settings ▸
+    /// Output shows Approve and checks again until it opens.
+    pub camera_blocked: Option<String>,
+    /// Approve was pressed on Linux: show the video-group fix.
+    camera_fix_shown: bool,
+    /// When blocked access was last checked, and whether the window had
+    /// focus then (regaining focus checks at once).
+    camera_checked: Option<Instant>,
+    was_focused: bool,
     preview_tex: Option<(usize, egui::TextureHandle)>,
     preview_error: Option<String>,
 }
@@ -1201,6 +1210,10 @@ impl Output {
             camera: None,
             camera_preview: false,
             cameras: None,
+            camera_blocked: None,
+            camera_fix_shown: false,
+            camera_checked: None,
+            was_focused: true,
             preview_tex: None,
             preview_error: None,
         }
@@ -1342,7 +1355,22 @@ impl Output {
         // close first: a camera can only be opened once
         self.camera = None;
         let (w, h) = self.cfg.size();
-        let feed = crate::camera::Feed::start(want, w, h)?;
+        let feed = match crate::camera::Feed::start(want, w, h) {
+            Ok(f) => f,
+            Err(e) => {
+                if let crate::camera::CameraError::Blocked(m) = &e {
+                    self.camera_blocked = Some(m.clone());
+                }
+                return Err(e.into());
+            }
+        };
+        if self.camera_blocked.take().is_some() {
+            self.camera_fix_shown = false;
+            self.events.push((
+                ToastKind::Success,
+                "Camera access approved; the camera opens now.".into(),
+            ));
+        }
         Ok(self.camera.insert(feed).frames.clone())
     }
 
@@ -1368,7 +1396,38 @@ impl Output {
     }
 
     pub fn refresh_cameras(&mut self) {
-        self.cameras = Some(crate::camera::list());
+        let r = crate::camera::list();
+        match &r {
+            Err(crate::camera::CameraError::Blocked(m)) => self.camera_blocked = Some(m.clone()),
+            // no camera at all: nothing to approve
+            Ok(l) if l.is_empty() => self.camera_blocked = None,
+            _ => {}
+        }
+        self.cameras = Some(r);
+    }
+
+    /// While camera access is blocked: check again every 2 s, and at once
+    /// when the window regains focus (back from Settings or a terminal).
+    pub fn camera_recheck_due(&mut self, now: Instant, focused: bool) -> bool {
+        let regained = focused && !self.was_focused;
+        self.was_focused = focused;
+        self.camera_blocked.is_some()
+            && (regained
+                || self
+                    .camera_checked
+                    .is_none_or(|t| now.duration_since(t) >= Duration::from_secs(2)))
+    }
+
+    /// Check blocked camera access again: re-scan, and if a camera is
+    /// listed, try opening it (Windows only refuses at open). Closes it
+    /// again unless something uses it.
+    pub fn recheck_camera_access(&mut self) {
+        self.camera_checked = Some(Instant::now());
+        self.refresh_cameras();
+        if self.camera_blocked.is_some() && matches!(&self.cameras, Some(Ok(l)) if !l.is_empty()) {
+            let _ = self.camera_frames();
+            self.release_camera();
+        }
     }
 
     fn default_record_path(&self) -> PathBuf {
@@ -1916,6 +1975,42 @@ impl Output {
         });
     }
 
+    /// Blocked camera access: the reason, Approve, and a check again every
+    /// 2 s (and on regaining focus) until the camera opens.
+    fn camera_access_ui(&mut self, ui: &mut egui::Ui, p: &Palette, why: &str) {
+        ui.add(egui::Label::new(egui::RichText::new(why).size(11.0).color(p.danger)).wrap());
+        let approve = crate::camera::approve();
+        if let Some(a) = approve {
+            if ui.add(theme::toggle_button(p, "Approve", false)).clicked() {
+                match a {
+                    crate::camera::Approve::OpenSettings(uri) => {
+                        if let Err(e) = crate::camera::settings_command(uri).spawn() {
+                            self.preview_error = Some(format!("can't open {uri}: {e}"));
+                        }
+                    }
+                    crate::camera::Approve::ShowFix { .. } => self.camera_fix_shown = true,
+                }
+            }
+        }
+        if let (true, Some(crate::camera::Approve::ShowFix { command, then })) =
+            (self.camera_fix_shown, approve)
+        {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(theme::muted(p, "Run"));
+                ui.code(command);
+                ui.label(theme::muted(p, then));
+            });
+            if ui.add(theme::toggle_button(p, "Re-scan", false)).clicked() {
+                self.recheck_camera_access();
+            }
+        }
+        let focused = ui.ctx().input(|i| i.viewport().focused.unwrap_or(true));
+        if self.camera_recheck_due(Instant::now(), focused) {
+            self.recheck_camera_access();
+        }
+        ui.ctx().request_repaint_after(Duration::from_secs(2));
+    }
+
     /// Camera picker and live preview (Settings ▸ Output, Camera source).
     fn camera_ui(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         const FIRST: &str = "First camera found";
@@ -1955,8 +2050,11 @@ impl Output {
                 device: Some(d),
             });
         }
+        if let Some(why) = self.camera_blocked.clone() {
+            self.camera_access_ui(ui, p, &why);
+        }
         match &self.cameras {
-            Some(Err(e)) => {
+            Some(Err(crate::camera::CameraError::Failed(e))) => {
                 ui.add(egui::Label::new(egui::RichText::new(e).size(11.0).color(p.danger)).wrap());
             }
             Some(Ok(l)) if l.is_empty() => {
@@ -2572,6 +2670,26 @@ mod tests {
         };
         let _ = std::fs::remove_file(path);
         Output::new(cfg, String::new())
+    }
+
+    /// Blocked camera access is checked again every 2 s, and at once when
+    /// the window regains focus; never while nothing is blocked.
+    #[test]
+    fn blocked_camera_access_is_rechecked_on_a_timer_and_on_focus() {
+        let mut o = Output::new(OutputConfig::default(), String::new());
+        let t = Instant::now();
+        assert!(!o.camera_recheck_due(t, true), "nothing blocked");
+        o.camera_blocked = Some("Permission denied on /dev/video0".into());
+        assert!(o.camera_recheck_due(t, true), "never checked yet");
+        o.camera_checked = Some(t);
+        assert!(!o.camera_recheck_due(t + Duration::from_millis(1900), true));
+        assert!(o.camera_recheck_due(t + Duration::from_secs(2), true));
+        assert!(!o.camera_recheck_due(t + Duration::from_millis(500), false));
+        assert!(
+            o.camera_recheck_due(t + Duration::from_millis(600), true),
+            "focus came back"
+        );
+        assert!(!o.camera_recheck_due(t + Duration::from_millis(700), true));
     }
 
     fn fake_camera(ok: Option<u32>) -> crate::camera::Feed {

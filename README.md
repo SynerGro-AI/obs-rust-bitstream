@@ -202,7 +202,27 @@ the Camera source pipes a webcam the same way (`src/bin/ui/camera.rs`: V4L2
 mmap streaming on Linux, YUYV or MJPEG; Media Foundation's source reader on
 Windows). A camera that stops sending ends the recording or stream with the
 reason; it never freezes on the last frame. macOS cameras (AVFoundation) are
-refused as unsupported for now. Encoding is
+refused as unsupported for now.
+
+**Blocked camera access** (spec). When a camera exists but the system won't
+let the app use it, Settings ▸ Output says why and offers **Approve**;
+"No camera found" appears only when there is no camera at all. Blocked means
+permission denied on the `/dev/videoN` node on Linux (the user isn't in the
+`video` group), or E_ACCESSDENIED when Media Foundation activates the camera
+on Windows (Settings ▸ Privacy & security ▸ Camera has desktop-app access
+off). Approve on Windows opens that page (`cmd /C start "" ms-settings:privacy-webcam`);
+on Linux it shows the fix, `sudo usermod -aG video $USER`, then log out and
+back in, plus *Re-scan*. While access is blocked and the panel is open, the
+app checks again every 2 s and as soon as the window regains focus (re-scan,
+then a test open, since Windows only refuses at open), and says so once the
+camera opens. macOS: planned with AVFoundation. Tests:
+`v4l2_list_reports_a_node_it_is_not_allowed_to_open` (a real mode-000 node
+is blocked, an empty folder is "no camera"),
+`windows_access_denied_at_activation_is_blocked_access`,
+`approve_on_windows_opens_the_camera_privacy_page`,
+`blocked_camera_access_is_rechecked_on_a_timer_and_on_focus`.
+
+Encoding is
 libx264 (veryfast, zerolatency) + AAC (silent track by default); recordings are
 MP4, live output is FLV over RTMP. `-progress` output drives the status bar.
 A dropped live connection is retried with backoff (`Reconnect`, default 2 s,

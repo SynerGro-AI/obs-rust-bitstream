@@ -18,6 +18,102 @@ pub struct Device {
     pub path: String,
 }
 
+/// Why cameras can't be listed or a camera can't be opened.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CameraError {
+    /// A camera is there but the system won't let the app use it: Linux
+    /// device permissions (the video group) or the Windows camera privacy
+    /// setting. Settings ▸ Output offers Approve (see [`approve`]).
+    Blocked(String),
+    Failed(String),
+}
+
+impl CameraError {
+    fn prefixed(self, p: &str) -> Self {
+        match self {
+            Self::Blocked(m) => Self::Blocked(format!("{p}: {m}")),
+            Self::Failed(m) => Self::Failed(format!("{p}: {m}")),
+        }
+    }
+}
+
+impl std::fmt::Display for CameraError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Blocked(m) | Self::Failed(m) => f.write_str(m),
+        }
+    }
+}
+
+impl From<String> for CameraError {
+    fn from(m: String) -> Self {
+        Self::Failed(m)
+    }
+}
+
+impl From<&str> for CameraError {
+    fn from(m: &str) -> Self {
+        Self::Failed(m.into())
+    }
+}
+
+impl From<CameraError> for String {
+    fn from(e: CameraError) -> Self {
+        e.to_string()
+    }
+}
+
+/// What Approve does for blocked camera access.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Approve {
+    /// Open this Settings page (Windows camera privacy).
+    OpenSettings(&'static str),
+    /// Show the command that fixes it and what to do after.
+    ShowFix {
+        command: &'static str,
+        then: &'static str,
+    },
+}
+
+/// Windows Settings ▸ Privacy & security ▸ Camera.
+pub const WINDOWS_CAMERA_PRIVACY: &str = "ms-settings:privacy-webcam";
+
+/// Approve on this OS; `None` where cameras aren't supported yet (macOS).
+pub fn approve() -> Option<Approve> {
+    if cfg!(windows) {
+        Some(Approve::OpenSettings(WINDOWS_CAMERA_PRIVACY))
+    } else if cfg!(target_os = "linux") {
+        Some(Approve::ShowFix {
+            command: "sudo usermod -aG video $USER",
+            then: "then log out and back in; the app checks again by itself",
+        })
+    } else {
+        None
+    }
+}
+
+/// Opens a Settings URI the way Explorer would (`start` hands it to its
+/// registered handler).
+pub fn settings_command(uri: &str) -> std::process::Command {
+    let mut c = std::process::Command::new("cmd");
+    c.args(["/C", "start", "", uri]);
+    c
+}
+
+/// A Media Foundation activation failure: E_ACCESSDENIED is the camera
+/// privacy setting refusing desktop apps.
+#[cfg(any(windows, test))]
+fn activate_error(name: &str, hresult: i32, msg: &str) -> CameraError {
+    const E_ACCESSDENIED: i32 = 0x8007_0005_u32 as i32;
+    if hresult == E_ACCESSDENIED {
+        CameraError::Blocked(format!(
+            "Windows camera privacy settings block {name} (Let desktop apps access your camera is off)"
+        ))
+    } else {
+        CameraError::Failed(format!("{name}: activate: {msg}"))
+    }
+}
+
 /// Pick the device named by `want` (its path, or its name ignoring case);
 /// empty means the first one.
 pub fn choose<'a>(devices: &'a [Device], want: &str) -> Result<&'a Device, String> {
@@ -59,7 +155,7 @@ pub struct Feed {
 impl Feed {
     /// Open the camera named by `want` (see [`choose`]) at about
     /// `width`×`height` and start reading. Fails if it can't be opened.
-    pub fn start(want: &str, width: u32, height: u32) -> Result<Feed, String> {
+    pub fn start(want: &str, width: u32, height: u32) -> Result<Feed, CameraError> {
         let devices = list()?;
         let device = choose(&devices, want)?.clone();
         let dev = device.clone();
@@ -70,8 +166,8 @@ impl Feed {
     /// thread that made them) and keep reading frames until dropped.
     fn spawn<C: Read>(
         device: Device,
-        open: impl FnOnce() -> Result<C, String> + Send + 'static,
-    ) -> Result<Feed, String> {
+        open: impl FnOnce() -> Result<C, CameraError> + Send + 'static,
+    ) -> Result<Feed, CameraError> {
         let frames: FrameSlot = Arc::new(Mutex::new(None));
         let read = Arc::new(AtomicU64::new(0));
         let error = Arc::new(Mutex::new(None));
@@ -91,7 +187,7 @@ impl Feed {
                 first
                     .as_ref()
                     .map(|r| (r.width, r.height))
-                    .map_err(|e| e.clone()),
+                    .map_err(|e| CameraError::Failed(e.clone())),
             );
             let Ok(first) = first else { return };
             *f.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(first));
@@ -110,10 +206,10 @@ impl Feed {
             }
         });
         let size = match rx.recv_timeout(Duration::from_secs(15)) {
-            Ok(r) => r.map_err(|e| format!("camera '{}': {e}", device.name))?,
+            Ok(r) => r.map_err(|e| e.prefixed(&format!("camera '{}'", device.name)))?,
             Err(_) => {
                 stop.store(true, Ordering::Relaxed);
-                return Err(format!("camera '{}' did not start in 15 s", device.name));
+                return Err(format!("camera '{}' did not start in 15 s", device.name).into());
             }
         };
         Ok(Feed {
@@ -174,7 +270,7 @@ impl Read for Camera {
 #[cfg(test)]
 impl Feed {
     /// A feed whose frames come from `cam` instead of a device.
-    pub fn from_reader<C: Read + Send + 'static>(name: &str, cam: C) -> Result<Feed, String> {
+    pub fn from_reader<C: Read + Send + 'static>(name: &str, cam: C) -> Result<Feed, CameraError> {
         let device = Device {
             name: name.into(),
             path: name.into(),
@@ -277,7 +373,7 @@ const UNSUPPORTED: &str =
     "Camera capture isn't supported on this OS yet (Windows and Linux only). Pick Canvas or Screen in Settings ▸ Output.";
 
 #[cfg(not(any(target_os = "linux", windows)))]
-pub fn list() -> Result<Vec<Device>, String> {
+pub fn list() -> Result<Vec<Device>, CameraError> {
     Err(UNSUPPORTED.into())
 }
 
@@ -287,7 +383,7 @@ pub enum Camera {}
 
 #[cfg(not(any(target_os = "linux", windows)))]
 impl Camera {
-    pub fn open(_dev: &Device, _width: u32, _height: u32) -> Result<Camera, String> {
+    pub fn open(_dev: &Device, _width: u32, _height: u32) -> Result<Camera, CameraError> {
         Err(UNSUPPORTED.into())
     }
     pub fn read(&mut self, _timeout: Duration) -> Result<Raster, String> {
@@ -301,7 +397,7 @@ mod v4l2 {
     //! layouts follow `<linux/videodev2.h>`; ioctl numbers are derived
     //! from the struct sizes, like the C macros.
 
-    use super::{Device, Raster};
+    use super::{CameraError, Device, Raster};
     use std::ffi::CString;
     use std::os::raw::{c_int, c_ulong, c_void};
     use std::time::Duration;
@@ -452,8 +548,8 @@ mod v4l2 {
         }
     }
 
-    fn open_fd(path: &str) -> Result<Fd, String> {
-        let c = CString::new(path).map_err(|_| format!("bad device path {path:?}"))?;
+    fn open_fd(path: &str) -> std::io::Result<Fd> {
+        let c = CString::new(path).map_err(|_| std::io::ErrorKind::InvalidInput)?;
         // SAFETY: valid NUL-terminated path.
         let fd = unsafe {
             libc::open(
@@ -462,10 +558,7 @@ mod v4l2 {
             )
         };
         if fd < 0 {
-            return Err(format!(
-                "can't open {path}: {}",
-                std::io::Error::last_os_error()
-            ));
+            return Err(std::io::Error::last_os_error());
         }
         Ok(Fd(fd))
     }
@@ -493,24 +586,60 @@ mod v4l2 {
 
     /// Every `/dev/videoN` that can stream video capture (metadata and
     /// output nodes are skipped).
-    pub fn list() -> Result<Vec<Device>, String> {
-        let mut nodes: Vec<(u32, String)> = std::fs::read_dir("/dev")
-            .map_err(|e| format!("can't read /dev: {e}"))?
+    pub fn list() -> Result<Vec<Device>, CameraError> {
+        list_in(std::path::Path::new("/dev"))
+    }
+
+    /// Why `path` didn't open: a permission error means the camera is
+    /// there but this user may not use it.
+    pub(super) fn open_error(path: &str, e: std::io::Error) -> CameraError {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            CameraError::Blocked(format!(
+                "Permission denied on {path}: your user isn't allowed to use cameras (not in the video group)"
+            ))
+        } else {
+            CameraError::Failed(format!("can't open {path}: {e}"))
+        }
+    }
+
+    /// [`list`] over the `videoN` nodes in `dir`. A node that can't be
+    /// opened is not skipped silently: with no usable camera the error
+    /// names it, as `Blocked` if any node was refused for permissions.
+    pub(super) fn list_in(dir: &std::path::Path) -> Result<Vec<Device>, CameraError> {
+        let mut nodes: Vec<(u32, String)> = std::fs::read_dir(dir)
+            .map_err(|e| format!("can't read {}: {e}", dir.display()))?
             .filter_map(|e| {
                 let name = e.ok()?.file_name().into_string().ok()?;
                 let n = name.strip_prefix("video")?.parse().ok()?;
-                Some((n, format!("/dev/{name}")))
+                Some((n, dir.join(&name).to_string_lossy().into_owned()))
             })
             .collect();
         nodes.sort();
-        Ok(nodes
-            .into_iter()
-            .filter_map(|(_, path)| {
-                let fd = open_fd(&path).ok()?;
-                let name = query(&fd, &path).ok()?;
-                Some(Device { name, path })
-            })
-            .collect())
+        let mut found = Vec::new();
+        let mut failed = Vec::new();
+        for (_, path) in nodes {
+            match open_fd(&path) {
+                Ok(fd) => {
+                    if let Ok(name) = query(&fd, &path) {
+                        found.push(Device { name, path });
+                    }
+                }
+                Err(e) => failed.push(open_error(&path, e)),
+            }
+        }
+        if !found.is_empty() || failed.is_empty() {
+            return Ok(found);
+        }
+        let msg = failed
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        if failed.iter().any(|e| matches!(e, CameraError::Blocked(_))) {
+            Err(CameraError::Blocked(msg))
+        } else {
+            Err(CameraError::Failed(msg))
+        }
     }
 
     struct Map {
@@ -532,12 +661,16 @@ mod v4l2 {
     impl Camera {
         /// Open `dev` asking for `width`×`height` YUYV (MJPEG if the camera
         /// has no YUYV); the driver picks the nearest size it supports.
-        pub fn open(dev: &Device, width: u32, height: u32) -> Result<Camera, String> {
+        pub fn open(dev: &Device, width: u32, height: u32) -> Result<Camera, CameraError> {
             Self::open_path(&dev.path, width, height)
         }
 
-        pub(super) fn open_path(path: &str, width: u32, height: u32) -> Result<Camera, String> {
-            let fd = open_fd(path)?;
+        pub(super) fn open_path(
+            path: &str,
+            width: u32,
+            height: u32,
+        ) -> Result<Camera, CameraError> {
+            let fd = open_fd(path).map_err(|e| open_error(path, e))?;
             query(&fd, path)?;
             let mut f: Format = zeroed();
             for want in [PIX_YUYV, PIX_MJPEG] {
@@ -563,7 +696,8 @@ mod v4l2 {
                 return Err(format!(
                     "{path} offers neither YUYV nor MJPEG (it chose {})",
                     String::from_utf8_lossy(&cc)
-                ));
+                )
+                .into());
             }
             let mut req = RequestBuffers {
                 count: 4,
@@ -573,7 +707,7 @@ mod v4l2 {
             };
             xioctl(fd.0, REQBUFS, &mut req).map_err(|e| format!("{path}: VIDIOC_REQBUFS: {e}"))?;
             if req.count == 0 {
-                return Err(format!("{path}: the driver gave no capture buffers"));
+                return Err(format!("{path}: the driver gave no capture buffers").into());
             }
             let mut cam = Camera {
                 fd,
@@ -600,7 +734,7 @@ mod v4l2 {
                     )
                 };
                 if ptr == libc::MAP_FAILED {
-                    return Err(format!("{path}: mmap: {}", std::io::Error::last_os_error()));
+                    return Err(format!("{path}: mmap: {}", std::io::Error::last_os_error()).into());
                 }
                 cam.maps.push(Map {
                     ptr,
@@ -688,7 +822,7 @@ mod mf {
     //! turned on, so every camera (YUY2, NV12, MJPEG) arrives as RGB32.
     //! COM is initialised (multithreaded) on the thread that uses it.
 
-    use super::{Device, Raster};
+    use super::{CameraError, Device, Raster};
     use std::time::Duration;
     use windows::core::{Interface, GUID, PWSTR};
     use windows::Win32::Media::MediaFoundation::*;
@@ -769,13 +903,14 @@ mod mf {
 
     /// Video capture devices. Runs on its own thread so the caller's COM
     /// apartment (the UI thread is single-threaded) doesn't matter.
-    pub fn list() -> Result<Vec<Device>, String> {
-        std::thread::spawn(|| {
+    pub fn list() -> Result<Vec<Device>, CameraError> {
+        std::thread::spawn(|| -> Result<Vec<Device>, String> {
             let _mf = Mf::start()?;
             Ok(devices()?.into_iter().map(|(d, _)| d).collect())
         })
         .join()
         .map_err(|_| "camera enumeration panicked".to_string())?
+        .map_err(CameraError::Failed)
     }
 
     /// An open camera. Use it on the thread that opened it.
@@ -795,7 +930,7 @@ mod mf {
     impl Camera {
         /// Open `dev` (matched by symbolic link) asking for RGB32 at
         /// `width`×`height`; the video processor scales if needed.
-        pub fn open(dev: &Device, width: u32, height: u32) -> Result<Camera, String> {
+        pub fn open(dev: &Device, width: u32, height: u32) -> Result<Camera, CameraError> {
             let mf = Mf::start()?;
             let (_, act) = devices()?
                 .into_iter()
@@ -805,7 +940,7 @@ mod mf {
             unsafe {
                 let source: IMFMediaSource = act
                     .ActivateObject()
-                    .map_err(|e| format!("{}: activate: {e}", dev.name))?;
+                    .map_err(|e| super::activate_error(&dev.name, e.code().0, &e.to_string()))?;
                 let mut attr = None;
                 MFCreateAttributes(&mut attr, 1).map_err(|e| format!("MFCreateAttributes: {e}"))?;
                 let attr = attr.ok_or("MFCreateAttributes returned nothing")?;
@@ -998,14 +1133,14 @@ pub(crate) mod tests {
         let e = Feed::spawn::<Fake>(dev("Gone", "x"), || Err("busy".into()))
             .err()
             .unwrap();
-        assert_eq!(e, "camera 'Gone': busy");
+        assert_eq!(e, CameraError::Failed("camera 'Gone': busy".into()));
         let silent = Fake {
             rgba: [0; 4],
             size: (2, 2),
             ok: Some(0),
         };
         let e = Feed::from_reader("Mute", silent).err().unwrap();
-        assert_eq!(e, "camera 'Mute': unplugged");
+        assert_eq!(e, CameraError::Failed("camera 'Mute': unplugged".into()));
     }
 
     #[cfg(target_os = "linux")]
@@ -1046,13 +1181,96 @@ pub(crate) mod tests {
         let e = v4l2::Camera::open_path("/dev/null", 640, 480)
             .err()
             .unwrap();
-        assert!(e.starts_with("/dev/null is not a V4L2 device ("), "{e}");
+        assert!(
+            e.to_string()
+                .starts_with("/dev/null is not a V4L2 device ("),
+            "{e}"
+        );
         let e = v4l2::Camera::open_path("/nonexistent/video9", 640, 480)
             .err()
             .unwrap();
-        assert!(e.starts_with("can't open /nonexistent/video9"), "{e}");
+        assert!(
+            matches!(&e, CameraError::Failed(m) if m.starts_with("can't open /nonexistent/video9")),
+            "{e:?}"
+        );
         // enumeration works (and is empty without a camera)
         assert!(list().is_ok());
+    }
+
+    /// A videoN node the user may not open is reported, not skipped: with
+    /// no usable camera the error names the node and the fix. A readable
+    /// node that is not a camera is still skipped quietly.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn v4l2_list_reports_a_node_it_is_not_allowed_to_open() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::test_dir::TestDir::new("v4l2_nodes");
+        let locked = dir.path().join("video0");
+        std::fs::write(&locked, b"").unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        std::fs::write(dir.path().join("video1"), b"").unwrap();
+        std::fs::write(dir.path().join("videoX"), b"").unwrap();
+        if std::fs::File::open(&locked).is_ok() {
+            // root ignores file modes, so there is nothing to refuse
+            eprintln!(
+                "skipped: running as root, {} opens anyway",
+                locked.display()
+            );
+            return;
+        }
+        let why = format!(
+            "Permission denied on {}: your user isn't allowed to use cameras (not in the video group)",
+            locked.display()
+        );
+        // blocked, not absent: listing and opening both say why
+        assert_eq!(
+            v4l2::list_in(dir.path()),
+            Err(CameraError::Blocked(why.clone()))
+        );
+        let opened = Camera::open_path(&locked.to_string_lossy(), 64, 48).err();
+        assert_eq!(opened, Some(CameraError::Blocked(why)));
+        // absent: nothing to approve, just "No camera found"
+        std::fs::remove_file(&locked).unwrap();
+        assert_eq!(v4l2::list_in(dir.path()), Ok(vec![]));
+    }
+
+    #[test]
+    fn windows_access_denied_at_activation_is_blocked_access() {
+        let denied = 0x8007_0005_u32 as i32;
+        assert_eq!(
+            activate_error("USB Cam", denied, "Access is denied."),
+            CameraError::Blocked(
+                "Windows camera privacy settings block USB Cam (Let desktop apps access your camera is off)"
+                    .into()
+            )
+        );
+        let e_fail = 0x8000_4005_u32 as i32;
+        assert_eq!(
+            activate_error("USB Cam", e_fail, "busy"),
+            CameraError::Failed("USB Cam: activate: busy".into())
+        );
+    }
+
+    #[test]
+    fn approve_on_windows_opens_the_camera_privacy_page() {
+        let c = settings_command(WINDOWS_CAMERA_PRIVACY);
+        assert_eq!(c.get_program(), "cmd");
+        let args: Vec<_> = c.get_args().collect();
+        assert_eq!(args, ["/C", "start", "", "ms-settings:privacy-webcam"]);
+        let here = approve();
+        if cfg!(windows) {
+            assert_eq!(
+                here,
+                Some(Approve::OpenSettings("ms-settings:privacy-webcam"))
+            );
+        } else if cfg!(target_os = "linux") {
+            assert!(
+                matches!(here, Some(Approve::ShowFix { command, .. }) if command == "sudo usermod -aG video $USER"),
+                "{here:?}"
+            );
+        } else {
+            assert_eq!(here, None);
+        }
     }
 
     /// Needs a real V4L2 node: `sudo modprobe v4l2loopback devices=1` and a

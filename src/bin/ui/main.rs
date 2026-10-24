@@ -405,6 +405,13 @@ pub struct App {
     pub crash_notice: Option<crash::CrashNotice>,
     /// Settings read before the window opens (renderer, UI scale).
     pub app_settings: settings::AppSettings,
+    /// The window is too small for the chosen UI scale right now.
+    pub ui_scale_capped: bool,
+    /// UI zoom seen last frame, and passes left before re-fitting the
+    /// canvas (egui's first pass after a zoom change has a bogus screen
+    /// size, so a fit then would zoom the canvas to ~600%).
+    ui_zoom_seen: f32,
+    refit_in: u8,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -507,6 +514,9 @@ impl App {
             project: workspace::ProjectState::new(project::Session::default()),
             crash_notice: None,
             app_settings: settings::AppSettings::default(),
+            ui_scale_capped: false,
+            ui_zoom_seen: 1.0,
+            refit_in: 0,
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
             app.toasts.push(ToastKind::Warn, &w);
@@ -829,6 +839,17 @@ impl App {
             C::SetTheme { dark } => {
                 self.set_dark(*dark);
                 Ok(format!("{} theme", if *dark { "dark" } else { "light" }))
+            }
+            C::SetUiScale { percent } => {
+                if !percent.is_finite() {
+                    return Err("percent must be a number".into());
+                }
+                let ctx = self.ctx.clone();
+                self.set_ui_scale(&ctx, percent / 100.0);
+                Ok(format!(
+                    "UI scale {:.0}%",
+                    self.app_settings.scale() * 100.0
+                ))
             }
             C::TogglePanel { panel, visible } => {
                 let key = panel.trim().to_lowercase();
@@ -2044,10 +2065,13 @@ impl App {
 
         let mut open = self.show_settings;
         egui::Window::new("Settings").open(&mut open).collapsible(false).resizable(false).default_width(420.0).anchor(egui::Align2::RIGHT_TOP, Vec2::new(-SP_LG, 64.0)).show(ctx, |ui| {
+            let max_h = (ctx.screen_rect().height() - 150.0).max(200.0);
+            egui::ScrollArea::vertical().max_height(max_h).show(ui, |ui| {
             ui.label(theme::section(&p, "Appearance"));
             if let Some(i) = theme::segmented(ui, &p, "theme-seg", &["Dark", "Light"], if self.dark { 0 } else { 1 }, 80.0) {
                 self.bus.push(AppCommand::SetTheme { dark: i == 0 });
             }
+            self.ui_scale_ui(ui, &p);
             ui.add_space(SP_SM);
             self.graphics_settings_ui(ui, &p);
             ui.add_space(SP_SM);
@@ -2073,6 +2097,7 @@ impl App {
                         self.bus.push(AppCommand::TogglePanel { panel: name.into(), visible: Some(!on) });
                     }
                 }
+            });
             });
         });
         self.show_settings = open;
@@ -2460,6 +2485,7 @@ impl App {
 
     /// One frame of UI. Separate from eframe so tests can drive it.
     pub fn frame(&mut self, ctx: &egui::Context) {
+        self.fit_ui_scale(ctx);
         let now = ctx.input(|i| i.time);
         let dt = self
             .last_time
@@ -2774,6 +2800,97 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// Settings ▸ Appearance ▸ UI scale (H3). Applied when the slider is
+    /// let go, so the layout doesn't jump around under the pointer.
+    fn ui_scale_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        let id = egui::Id::new("ui-scale-pct");
+        let saved = (self.app_settings.scale() * 100.0).round();
+        let mut pct: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(saved);
+        let mut apply = None;
+        ui.horizontal(|ui| {
+            ui.label(theme::muted(p, "UI scale"));
+            let r = ui.add(
+                egui::Slider::new(
+                    &mut pct,
+                    settings::MIN_SCALE * 100.0..=settings::MAX_SCALE * 100.0,
+                )
+                .step_by(5.0)
+                .suffix("%"),
+            );
+            if r.drag_stopped() || (r.changed() && !r.dragged()) {
+                apply = Some(pct);
+            }
+            if saved != 100.0 && ui.small_button("100%").clicked() {
+                apply = Some(100.0);
+            }
+        });
+        if self.ui_scale_capped {
+            ui.label(theme::muted(
+                p,
+                &format!(
+                    "Showing {:.0}% until the window is bigger.",
+                    ui.ctx().zoom_factor() * 100.0
+                ),
+            ));
+        }
+        match apply {
+            Some(v) => {
+                ui.data_mut(|d| d.remove::<f32>(id));
+                self.set_ui_scale(ui.ctx(), v / 100.0);
+            }
+            None => ui.data_mut(|d| d.insert_temp(id, pct)),
+        }
+    }
+
+    /// Keep the chosen UI scale from shrinking the layout below the
+    /// window's minimum size (1180x700 points): on a small window or
+    /// screen the zoom is capped until there's room again.
+    fn fit_ui_scale(&mut self, ctx: &egui::Context) {
+        let want = self.app_settings.scale();
+        let z = ctx.zoom_factor();
+        let fit = if want <= 1.0 {
+            want
+        } else {
+            // window size in DPI-scaled points, independent of our zoom
+            let size = ctx.screen_rect().size() * z;
+            if size.x < 100.0 || size.y < 100.0 {
+                return; // minimised
+            }
+            let room = (size.x / MIN_W).min(size.y / MIN_H);
+            ((room * 20.0).floor() / 20.0).clamp(1.0, want)
+        };
+        self.ui_scale_capped = fit < want - 0.001;
+        if (fit - z).abs() > 0.001 {
+            ctx.set_zoom_factor(fit);
+        }
+        if z != self.ui_zoom_seen {
+            self.ui_zoom_seen = z;
+            self.refit_in = 2;
+        }
+        if self.refit_in > 0 {
+            self.refit_in -= 1;
+            if self.refit_in == 0 {
+                self.paint.fit();
+            }
+            ctx.request_repaint();
+        }
+    }
+
+    pub fn set_ui_scale(&mut self, ctx: &egui::Context, scale: f32) {
+        self.app_settings.ui_scale = scale;
+        let s = self.app_settings.scale();
+        self.app_settings.ui_scale = s;
+        ctx.set_zoom_factor(s);
+        // tests must not touch the real settings file
+        if cfg!(test) {
+            return;
+        }
+        if let Err(e) = self.app_settings.save() {
+            self.toasts
+                .push(ToastKind::Error, &format!("Couldn't save settings: {}", e));
+        }
+    }
+
     /// Settings ▸ Graphics: renderer choice (D2), applied on the next launch.
     fn graphics_settings_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
         ui.label(theme::section(p, "Graphics"));
@@ -2803,6 +2920,10 @@ impl App {
         ui.add(egui::Label::new(theme::muted(p, "If the chosen renderer can't start, the other one is used automatically. SERAPHINA_RENDERER=wgpu|glow overrides this.")).wrap());
     }
 }
+
+/// Smallest window (points) the layout is designed for.
+const MIN_W: f32 = 1180.0;
+const MIN_H: f32 = 700.0;
 
 /// Everything the app creator needs; cloned for each renderer attempt.
 #[derive(Clone)]
@@ -2926,7 +3047,7 @@ fn main() -> eframe::Result<()> {
             viewport: egui::ViewportBuilder::default()
                 .with_title("Seraphina Studio")
                 .with_inner_size([1600.0, 940.0])
-                .with_min_inner_size([1180.0, 700.0])
+                .with_min_inner_size([MIN_W, MIN_H])
                 .with_decorations(cfg.native),
             ..Default::default()
         };
@@ -3864,6 +3985,23 @@ mod tests {
                 },
                 Origin::User
             )
+            .is_err());
+    }
+
+    #[test]
+    fn ui_scale_command_zooms_and_clamps() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        for (pct, want) in [(150.0, 1.5), (500.0, 2.0), (10.0, 0.8), (100.0, 1.0)] {
+            app.dispatch(&AppCommand::SetUiScale { percent: pct }, Origin::User)
+                .unwrap();
+            // egui applies a new zoom at the start of the next pass
+            let _ = ctx.run(egui::RawInput::default(), |_| {});
+            assert_eq!(ctx.zoom_factor(), want, "{pct}");
+            assert_eq!(app.app_settings.ui_scale, want);
+        }
+        assert!(app
+            .dispatch(&AppCommand::SetUiScale { percent: f32::NAN }, Origin::User)
             .is_err());
     }
 

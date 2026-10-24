@@ -23,6 +23,10 @@ pub enum AppCommand {
     SetTheme {
         dark: bool,
     },
+    /// Whole-UI scale, 80..=200 percent (saved).
+    SetUiScale {
+        percent: f32,
+    },
     TogglePanel {
         panel: String,
         visible: Option<bool>,
@@ -430,6 +434,7 @@ impl AppCommand {
                 | AppCommand::NbodyPlay { .. }
                 | AppCommand::NbodyMeasurePrecession
                 | AppCommand::SetTheme { .. }
+                | AppCommand::SetUiScale { .. }
                 | AppCommand::TogglePanel { .. }
                 | AppCommand::SavePsd { .. }
                 | AppCommand::ExportPng { .. }
@@ -517,6 +522,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
     vec![
         ToolSpec { name: "switch_mode", description: "Switch workspace mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["paint", "composite", "3d", "animate", "stream", "materials"] } }), &["mode"]) },
         ToolSpec { name: "set_theme", description: "Dark or light appearance.", params: obj(json!({ "dark": b("true for dark") }), &["dark"]) },
+        ToolSpec { name: "set_ui_scale", description: "Make the whole interface bigger or smaller (saved for next time).", params: obj(json!({ "percent": n("80 to 200; 100 is normal") }), &["percent"]) },
         ToolSpec { name: "toggle_panel", description: "Show or hide a panel.", params: obj(json!({ "panel": { "type": "string", "enum": ["tools", "inspector", "timeline", "assistant", "videogen", "shelf"] }, "visible": b("omit to toggle") }), &["panel"]) },
         ToolSpec { name: "select_tool", description: "Pick a Paint tool.", params: obj(json!({ "tool": { "type": "string", "enum": ["move", "marquee", "lasso", "quick_select", "crop", "healing", "clone", "brush", "eraser", "gradient", "dodge", "burn", "pen", "type", "hand", "zoom", "eyedropper"] } }), &["tool"]) },
         ToolSpec { name: "set_brush", description: "Brush parameters. Any subset.", params: obj(json!({ "size": n("diameter px 1-500"), "hardness": n("0-100 %"), "flow": n("1-100 %"), "color": s("#RRGGBB"), "exposure": n("dodge/burn exposure 1-100 %") }), &[]) },

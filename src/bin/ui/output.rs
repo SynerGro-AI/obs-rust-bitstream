@@ -116,7 +116,12 @@ pub fn studio_dir() -> PathBuf {
 }
 
 impl OutputConfig {
+    /// Unit tests save to a per-process temp file, never the user's.
     pub fn path() -> PathBuf {
+        if cfg!(test) {
+            return std::env::temp_dir()
+                .join(format!("seraphina_test_output_{}.json", std::process::id()));
+        }
         studio_dir().join("output.json")
     }
     /// Settings and, if output.json was damaged, a message saying where

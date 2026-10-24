@@ -285,10 +285,13 @@ impl App {
     fn content_hash(&self) -> u64 {
         let mut scratch = Assets::default();
         let to = |v: Result<Value, serde_json::Error>| v.unwrap_or(Value::Null);
+        // the orbit view's auto-zoom grows as it is drawn: view state
+        let mut lab = self.lab.to_file();
+        lab.rel.extent = 0.0;
         hash_sections(&[
             to(serde_json::to_value(self.scene.to_file())),
             to(serde_json::to_value(self.materials.to_file())),
-            to(serde_json::to_value(self.lab.to_file())),
+            to(serde_json::to_value(lab)),
             to(serde_json::to_value(self.comp.to_file(&mut scratch))),
             to(serde_json::to_value(self.stream.to_file(&mut scratch))),
             to(serde_json::to_value(self.output.project_cfg())),
@@ -1433,6 +1436,19 @@ mod tests {
         }
         assert_eq!(a.lab.rel.nb, b.lab.rel.nb);
         assert_eq!(a.lab.rel.peri_moved, b.lab.rel.peri_moved);
+    }
+
+    #[test]
+    fn looking_at_the_lab_does_not_mark_the_project_unsaved() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        let h = a.content_hash();
+        // switching lab tabs and the orbit view's auto-zoom are view state
+        a.lab.tab = 4;
+        a.lab.rel.extent = 4.6e10;
+        assert_eq!(a.content_hash(), h);
+        a.lab.rel.beta = 0.5;
+        assert_ne!(a.content_hash(), h);
     }
 
     #[test]

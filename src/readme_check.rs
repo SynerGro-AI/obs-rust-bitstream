@@ -30,16 +30,95 @@ fn non_test(src: &str) -> &str {
     src.split("#[cfg(test)]").next().unwrap_or(src)
 }
 
+/// `src` with `//` and `/* */` comments blanked, so a module named only in
+/// a comment does not count as used. String and char literals are kept.
+fn strip_comments(src: &str) -> String {
+    let b = src.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i..].starts_with(b"//") {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+        } else if b[i..].starts_with(b"/*") {
+            let mut depth = 0;
+            while i < b.len() {
+                if b[i..].starts_with(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if b[i..].starts_with(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+            out.push(b' ');
+        } else if b[i..].starts_with(b"'\"'") || b[i..].starts_with(b"'\\\"'") {
+            // A '"' char literal does not open a string.
+            let n = if b[i + 1] == b'\\' { 4 } else { 3 };
+            out.extend_from_slice(&b[i..i + n]);
+            i += n;
+        } else if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"' | b'#')) {
+            // Raw string r#"…"#: copy it whole.
+            let hashes = b[i + 1..].iter().take_while(|&&c| c == b'#').count();
+            if b.get(i + 1 + hashes) != Some(&b'"') {
+                out.push(b[i]);
+                i += 1;
+                continue;
+            }
+            let close: Vec<u8> = std::iter::once(b'"')
+                .chain(std::iter::repeat_n(b'#', hashes))
+                .collect();
+            let start = i;
+            i += 2 + hashes;
+            while i < b.len() && !b[i..].starts_with(&close) {
+                i += 1;
+            }
+            i = (i + close.len()).min(b.len());
+            out.extend_from_slice(&b[start..i]);
+        } else if b[i] == b'"' {
+            out.push(b[i]);
+            i += 1;
+            while i < b.len() && b[i] != b'"' {
+                if b[i] == b'\\' && i + 1 < b.len() {
+                    out.push(b[i]);
+                    i += 1;
+                }
+                out.push(b[i]);
+                i += 1;
+            }
+            if i < b.len() {
+                out.push(b[i]);
+                i += 1;
+            }
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).expect("comment stripping keeps UTF-8")
+}
+
+/// Every .rs file under `dir`, comments stripped. A directory that can't be
+/// read fails the test instead of being skipped.
 fn rs_files(dir: &std::path::Path, out: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for e in entries.flatten() {
-        let p = e.path();
+    let entries =
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()));
+    for e in entries {
+        let p = e
+            .unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+            .path();
         if p.is_dir() {
             rs_files(&p, out);
         } else if p.extension().is_some_and(|x| x == "rs") {
-            out.push(std::fs::read_to_string(&p).expect("read source file"));
+            let src =
+                std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+            out.push(strip_comments(&src));
         }
     }
 }
@@ -132,8 +211,10 @@ fn every_library_module_is_reached_from_a_binary_or_example() {
     let mut reached: Vec<&str> = mods.iter().copied().filter(|m| refers(&roots, m)).collect();
     let mut i = 0;
     while i < reached.len() {
-        let src = std::fs::read_to_string(root.join(format!("src/{}.rs", reached[i])))
-            .expect("read module");
+        let src = strip_comments(
+            &std::fs::read_to_string(root.join(format!("src/{}.rs", reached[i])))
+                .expect("read module"),
+        );
         for m in &mods {
             if !reached.contains(m) && refers(non_test(&src), m) {
                 reached.push(m);
@@ -237,4 +318,34 @@ fn planned_tables_have_target_dates_or_after_v0_2_0() {
         );
         checked_dates(text);
     }
+}
+
+#[test]
+fn strip_comments_drops_comments_and_keeps_literals() {
+    let src = "a::x(); // b::y\n/* c::z /* nested */ d::w */ e::v;\n\
+               let s = \"// f::u\"; let q = '\"'; g::t();\n\
+               let r = r#\"/* h::s \"# ; i::r();";
+    let out = strip_comments(src);
+    for kept in [
+        "a::x",
+        "e::v",
+        "\"// f::u\"",
+        "g::t",
+        "r#\"/* h::s \"#",
+        "i::r",
+    ] {
+        assert!(out.contains(kept), "lost {kept}: {out}");
+    }
+    for gone in ["b::y", "c::z", "d::w"] {
+        assert!(!out.contains(gone), "kept {gone}: {out}");
+    }
+}
+
+#[test]
+#[should_panic(expected = "read_dir")]
+fn an_unreadable_source_directory_fails_the_walk() {
+    rs_files(
+        std::path::Path::new("/nonexistent/seraphina-src"),
+        &mut Vec::new(),
+    );
 }

@@ -308,13 +308,13 @@ impl Meter {
         let spent = self.last_24h_usd();
         if spent >= self.cap_usd {
             return Err(format!(
-                "Spend cap reached (${:.2} of ${:.2} in the last 24 h), so nothing was sent to xAI. Raise or turn off the cap in Settings → Seraphina.",
+                "Spend cap reached (${:.2} of ${:.2} in the last 24 h), so nothing was sent to xAI. Raise or turn off the cap in Settings → xAI spending.",
                 spent, self.cap_usd
             ));
         }
         if spent + next_usd > self.cap_usd {
             return Err(format!(
-                "This would pass your spend cap (${:.2} of ${:.2} used in the last 24 h; this call costs about ${:.2}), so nothing was sent to xAI. Raise or turn off the cap in Settings → Seraphina.",
+                "This would pass your spend cap (${:.2} of ${:.2} used in the last 24 h; this call costs about ${:.2}), so nothing was sent to xAI. Raise or turn off the cap in Settings → xAI spending.",
                 spent, self.cap_usd, next_usd
             ));
         }

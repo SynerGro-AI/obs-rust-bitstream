@@ -1,8 +1,7 @@
 //! Safe pure MayaShelves (Maya shelf layout).
 //!
 //! Shelves match Maya menu sets: Modeling, Rigging,
-//! Animation, FX, Rendering. Buttons map to suite
-//! modules where present. No unwraps.
+//! Animation, FX, Rendering. No unwraps.
 //!
 //! Differential: a different shelf has a different count.
 
@@ -42,7 +41,6 @@ impl MayaShelf {
 pub struct MayaButton {
     pub name: &'static str,
     pub shelf: MayaShelf,
-    pub module: Option<&'static str>,
 }
 
 pub struct MayaShelves;
@@ -53,62 +51,50 @@ impl MayaShelves {
             MayaButton {
                 name: "Polygon Cube",
                 shelf: MayaShelf::Modeling,
-                module: None,
             },
             MayaButton {
                 name: "NURBS",
                 shelf: MayaShelf::Modeling,
-                module: Some("nurbs"),
             },
             MayaButton {
                 name: "Subdivision",
                 shelf: MayaShelf::Modeling,
-                module: Some("subdiv"),
             },
             MayaButton {
                 name: "Joint",
                 shelf: MayaShelf::Rigging,
-                module: Some("joint_hierarchy"),
             },
             MayaButton {
                 name: "IK/FK",
                 shelf: MayaShelf::Rigging,
-                module: Some("ik_fk"),
             },
             MayaButton {
                 name: "Key",
                 shelf: MayaShelf::Animation,
-                module: Some("keyframes"),
             },
             MayaButton {
                 name: "Blend Shape",
                 shelf: MayaShelf::Animation,
-                module: Some("blend_shape"),
             },
             MayaButton {
                 name: "Particles",
                 shelf: MayaShelf::Fx,
-                module: Some("particles"),
             },
             MayaButton {
                 name: "Fluids",
                 shelf: MayaShelf::Fx,
-                module: Some("fluid"),
             },
             MayaButton {
                 name: "Light",
                 shelf: MayaShelf::Rendering,
-                module: Some("light"),
             },
             MayaButton {
                 name: "Camera",
                 shelf: MayaShelf::Rendering,
-                module: Some("camera"),
             },
             MayaButton {
                 name: "Shader",
                 shelf: MayaShelf::Rendering,
-                module: Some("shader"),
             },
         ]
     }
@@ -151,14 +137,10 @@ mod tests {
     }
 
     #[test]
-    fn maps_modules() {
+    fn has_named_buttons() {
         let buttons = MayaShelves::buttons();
-        assert!(buttons
-            .iter()
-            .any(|b| b.name == "IK/FK" && b.module == Some("ik_fk")));
-        assert!(buttons
-            .iter()
-            .any(|b| b.name == "Camera" && b.module == Some("camera")));
+        assert!(buttons.iter().any(|b| b.name == "IK/FK"));
+        assert!(buttons.iter().any(|b| b.name == "Camera"));
     }
 
     #[test]

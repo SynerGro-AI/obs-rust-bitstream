@@ -1,7 +1,7 @@
 //! Safe pure AeTools (After Effects tools panel).
 //!
 //! Tools and hotkeys match the AE tools panel.
-//! Maps to suite modules where present. No unwraps.
+//! No unwraps.
 //!
 //! Differential: the panel has more tools than a single group.
 
@@ -9,7 +9,6 @@
 pub struct AeTool {
     pub name: &'static str,
     pub hotkey: &'static str,
-    pub module: Option<&'static str>,
 }
 
 pub struct AeTools;
@@ -20,72 +19,58 @@ impl AeTools {
             AeTool {
                 name: "Selection",
                 hotkey: "V",
-                module: Some("selection"),
             },
             AeTool {
                 name: "Hand",
                 hotkey: "H",
-                module: Some("hand"),
             },
             AeTool {
                 name: "Zoom",
                 hotkey: "Z",
-                module: None,
             },
             AeTool {
                 name: "Rotation",
                 hotkey: "W",
-                module: None,
             },
             AeTool {
                 name: "Pan Behind",
                 hotkey: "Y",
-                module: None,
             },
             AeTool {
                 name: "Camera",
                 hotkey: "C",
-                module: Some("camera"),
             },
             AeTool {
                 name: "Shape",
                 hotkey: "Q",
-                module: Some("shape"),
             },
             AeTool {
                 name: "Pen",
                 hotkey: "G",
-                module: None,
             },
             AeTool {
                 name: "Text",
                 hotkey: "Ctrl+T",
-                module: None,
             },
             AeTool {
                 name: "Brush",
                 hotkey: "Ctrl+B",
-                module: Some("brush"),
             },
             AeTool {
                 name: "Clone Stamp",
                 hotkey: "Ctrl+B",
-                module: Some("clone_stamp"),
             },
             AeTool {
                 name: "Eraser",
                 hotkey: "Ctrl+B",
-                module: Some("eraser"),
             },
             AeTool {
                 name: "Roto Brush",
                 hotkey: "Alt+W",
-                module: None,
             },
             AeTool {
                 name: "Puppet Pin",
                 hotkey: "Ctrl+P",
-                module: None,
             },
         ]
     }
@@ -117,9 +102,7 @@ mod tests {
             .iter()
             .any(|t| t.name == "Selection" && t.hotkey == "V"));
         assert!(tools.iter().any(|t| t.name == "Pen" && t.hotkey == "G"));
-        assert!(tools
-            .iter()
-            .any(|t| t.name == "Camera" && t.module == Some("camera")));
+        assert!(tools.iter().any(|t| t.name == "Camera"));
     }
 
     #[test]

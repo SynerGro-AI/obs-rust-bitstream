@@ -1,7 +1,7 @@
 //! Safe pure ToonTools (ToonBoom Harmony tools toolbar).
 //!
 //! Tools match the Harmony Tools toolbar and Onion Skin
-//! toolbar. Maps to suite modules where present.
+//! toolbar.
 //! No unwraps.
 //!
 //! Differential: onion skin tools are a subset.
@@ -26,7 +26,6 @@ pub struct ToonTool {
     pub name: &'static str,
     pub hotkey: &'static str,
     pub group: ToonGroup,
-    pub module: Option<&'static str>,
 }
 
 pub struct ToonTools;
@@ -38,73 +37,61 @@ impl ToonTools {
                 name: "Select",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: Some("selection"),
             },
             ToonTool {
                 name: "Brush",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: Some("brush"),
             },
             ToonTool {
                 name: "Pencil",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: None,
             },
             ToonTool {
                 name: "Eraser",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: Some("eraser"),
             },
             ToonTool {
                 name: "Hand",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: Some("hand"),
             },
             ToonTool {
                 name: "Zoom",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: None,
             },
             ToonTool {
                 name: "Rotate View",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: None,
             },
             ToonTool {
                 name: "Transform",
                 hotkey: "",
                 group: ToonGroup::Tools,
-                module: None,
             },
             ToonTool {
                 name: "Onion Skin",
                 hotkey: "Alt+O",
                 group: ToonGroup::Tools,
-                module: Some("onion_viewer"),
             },
             ToonTool {
                 name: "Show Key Drawings",
                 hotkey: "",
                 group: ToonGroup::Onion,
-                module: Some("onion_viewer"),
             },
             ToonTool {
                 name: "Show Breakdown",
                 hotkey: "",
                 group: ToonGroup::Onion,
-                module: Some("onion_viewer"),
             },
             ToonTool {
                 name: "Show In-between",
                 hotkey: "",
                 group: ToonGroup::Onion,
-                module: Some("onion_viewer"),
             },
         ]
     }
@@ -135,9 +122,7 @@ mod tests {
         assert!(tools
             .iter()
             .any(|t| t.name == "Onion Skin" && t.hotkey == "Alt+O"));
-        assert!(tools
-            .iter()
-            .any(|t| t.name == "Brush" && t.module == Some("brush")));
+        assert!(tools.iter().any(|t| t.name == "Brush"));
     }
 
     #[test]

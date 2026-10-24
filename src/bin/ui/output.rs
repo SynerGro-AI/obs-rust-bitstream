@@ -138,28 +138,21 @@ impl OutputConfig {
     }
 }
 
-pub fn key_path() -> PathBuf {
-    studio_dir().join("stream_key")
-}
-
+/// The saved stream key (Credential Manager on Windows, a 0600 file
+/// elsewhere; see `secrets`). Unit tests never read the user's store.
 pub fn load_key() -> String {
-    std::fs::read_to_string(key_path())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default()
+    if cfg!(test) {
+        return String::new();
+    }
+    crate::secrets::Store::user().load(crate::secrets::Secret::StreamKey)
 }
 
-pub fn save_key(key: &str) -> Result<(), String> {
-    std::fs::create_dir_all(studio_dir()).map_err(|e| e.to_string())?;
-    let mut o = std::fs::OpenOptions::new();
-    o.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        o.mode(0o600);
-    }
-    let mut f = o.open(key_path()).map_err(|e| e.to_string())?;
-    f.write_all(key.trim().as_bytes())
-        .map_err(|e| e.to_string())
+pub fn save_key(key: &str) -> Result<crate::secrets::Where, String> {
+    crate::secrets::Store::user().save(crate::secrets::Secret::StreamKey, key)
+}
+
+pub fn key_location() -> crate::secrets::Where {
+    crate::secrets::Store::user().location(crate::secrets::Secret::StreamKey)
 }
 
 /// What the UI shows instead of the key.
@@ -843,6 +836,8 @@ pub struct Output {
     /// UI only: show the key in clear text.
     pub reveal_key: bool,
     pub key_edit: String,
+    /// Where the saved key lives (looked up lazily for Settings).
+    key_place: Option<crate::secrets::Where>,
 }
 
 impl Output {
@@ -868,6 +863,7 @@ impl Output {
             events: Vec::new(),
             reveal_key: false,
             key_edit: String::new(),
+            key_place: None,
         }
     }
 
@@ -896,16 +892,21 @@ impl Output {
     pub fn set_key(&mut self, key: &str, persist: bool) -> Result<String, String> {
         self.key = key.trim().to_string();
         crate::crash::register_secret(&self.key);
+        let mut place = crate::secrets::Where::None;
         if persist {
-            save_key(&self.key)?;
+            place = save_key(&self.key)?;
+            self.key_place = Some(place);
         }
         Ok(if self.key.is_empty() {
             "stream key cleared".into()
-        } else {
+        } else if persist {
             format!(
-                "stream key saved ({} characters, stored locally)",
-                self.key.chars().count()
+                "stream key saved ({} characters, in {})",
+                self.key.chars().count(),
+                place.label()
             )
+        } else {
+            format!("stream key set ({} characters)", self.key.chars().count())
         })
     }
 
@@ -1616,7 +1617,34 @@ impl Output {
                 });
                 ui.end_row();
             });
-        ui.label(theme::muted(p, "The key is stored only in ~/.seraphina/studio/stream_key and is never shown to Seraphina or written to logs."));
+        let place = *self.key_place.get_or_insert_with(|| {
+            if cfg!(test) {
+                crate::secrets::Where::None
+            } else {
+                key_location()
+            }
+        });
+        let note = match place {
+            crate::secrets::Where::CredentialManager => {
+                "The key is stored in Windows Credential Manager (SeraphinaStudio/stream_key)"
+            }
+            crate::secrets::Where::File => {
+                "The key is stored in a private file (~/.seraphina/studio/stream_key, owner-only)"
+            }
+            crate::secrets::Where::None if cfg!(windows) => {
+                "A saved key goes to Windows Credential Manager"
+            }
+            crate::secrets::Where::None => {
+                "A saved key goes to a private file (~/.seraphina/studio/stream_key, owner-only)"
+            }
+        };
+        ui.label(theme::muted(
+            p,
+            &format!(
+                "{}. It is never shown to Seraphina or written to logs.",
+                note
+            ),
+        ));
         self.cfg != before
     }
 }

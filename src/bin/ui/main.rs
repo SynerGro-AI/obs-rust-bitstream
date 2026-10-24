@@ -25,6 +25,7 @@ mod paint_undo;
 mod prefs;
 mod project;
 mod scene;
+mod secrets;
 mod settings;
 mod stream;
 mod text_raster;

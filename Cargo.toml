@@ -48,7 +48,7 @@ windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win3
 
 [target.'cfg(windows)'.dependencies]
 # UI only: crash message box, Credential Manager, single-instance focus
-windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Credentials", "Win32_UI_WindowsAndMessaging"] }
 
 [features]
 default = []

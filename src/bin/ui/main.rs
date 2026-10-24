@@ -34,6 +34,7 @@ mod text_raster;
 mod theme;
 mod tiled_tex;
 mod timeline;
+mod usage;
 mod videogen;
 mod workspace;
 
@@ -420,6 +421,8 @@ pub struct App {
     xai_test_rx: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
     /// The key in use, looked up once (not every frame) and on change.
     xai_cache: Option<Option<(String, secrets::KeySource)>>,
+    /// xAI tokens and cost, and the spend cap (C3).
+    pub meter: usage::Meter,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -443,6 +446,7 @@ impl App {
         app.start_session(project::autosave_dir());
         app.crash_notice = crash::CrashNotice::check();
         app.app_settings = settings::AppSettings::load().0;
+        app.meter = usage::Meter::load(app.app_settings.spend_cap_usd);
         if let Some(why) = crash::take_fallback_note() {
             app.toasts.push_for(
                 ToastKind::Warn,
@@ -527,6 +531,7 @@ impl App {
             refit_in: 0,
             xai_edit: String::new(),
             xai_test_rx: None,
+            meter: usage::Meter::ephemeral(0.0),
             xai_cache: None,
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
@@ -959,16 +964,22 @@ impl App {
             C::VideoGenerate { prompt, duration } => {
                 self.show_assistant = true;
                 self.dock_tab = 1;
+                let cost = self.video.video_cost(*duration);
+                self.cap_allows(cost, self.video.provider.is_some())?;
                 self.video.generate(prompt, *duration)
             }
             C::VideoExtend { clip, prompt } => {
                 self.show_assistant = true;
                 self.dock_tab = 1;
+                let cost = self.video.extend_cost();
+                self.cap_allows(cost, self.video.provider.is_some())?;
                 self.video.extend(*clip, prompt)
             }
             C::GenerateImage { prompt } => {
                 self.show_assistant = true;
                 self.dock_tab = 1;
+                let cost = self.video.image_cost();
+                self.cap_allows(cost, self.video.imager.is_some())?;
                 self.video.generate_image(prompt)
             }
             C::VideoStitch { clips } => {
@@ -1486,16 +1497,41 @@ impl App {
     }
 
     pub fn pump_assistant(&mut self) {
+        self.assistant.blocked = self.meter.check(0.0).err();
         if self.assistant.want_send {
             let ctx = self.app_context();
             let w = self.workspace_ctx();
             self.assistant.start(&ctx, &w);
         }
         self.assistant.poll();
+        self.pump_usage();
         if let Some(calls) = self.assistant.take_tool_calls() {
             self.run_tool_calls(calls);
         }
         self.handle_panel_requests();
+    }
+
+    /// Count what the workers spent and toast a round the cap held back.
+    fn pump_usage(&mut self) {
+        self.video.tick_spent();
+        for u in std::mem::take(&mut self.assistant.spent)
+            .into_iter()
+            .chain(std::mem::take(&mut self.video.spent))
+        {
+            self.meter.record(&u);
+        }
+        if let Some(why) = self.assistant.cap_hit.take() {
+            self.toasts.push(ToastKind::Warn, &why);
+        }
+    }
+
+    /// Spend-cap check before a billed Imagine job.
+    fn cap_allows(&self, usd: f64, configured: bool) -> Result<(), String> {
+        if configured {
+            self.meter.check(usd)
+        } else {
+            Ok(())
+        }
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -1894,6 +1930,28 @@ impl App {
                         }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if self.meter.session.calls > 0 || self.meter.cap_usd > 0.0 {
+                            let capped = self.meter.check(0.0).is_err();
+                            let col = if capped { p.warn } else { p.muted };
+                            let r = ui
+                                .add(
+                                    egui::Label::new(
+                                        egui::RichText::new(format!(
+                                            "{} {}",
+                                            ic::COINS,
+                                            self.meter.label()
+                                        ))
+                                        .size(11.5)
+                                        .color(col),
+                                    )
+                                    .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text(self.meter.tooltip());
+                            if r.clicked() {
+                                self.show_settings = true;
+                            }
+                            theme::vdivider(ui, &p, 14.0);
+                        }
                         let st = self.output.status();
                         let live = self.output.is_live();
                         let rec = self.output.is_recording();
@@ -2095,6 +2153,8 @@ impl App {
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Grok Imagine"));
             theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
+            ui.add_space(SP_SM);
+            self.spending_ui(ui, &p);
             ui.add_space(SP_SM);
             if self.output.settings_ui(ui, &p, &mut self.bus) {
                 if let Err(e) = self.output.save_config() {
@@ -2919,6 +2979,52 @@ impl App {
     /// Settings ▸ Seraphina ▸ xAI API key (C7). The key is saved to
     /// Credential Manager on Windows; env vars still take precedence.
     /// Nothing here ever shows, logs or toasts the key itself.
+    /// Settings ▸ xAI spending: the meter and the 24 h spend cap (C3).
+    fn spending_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        ui.label(theme::section(p, "xAI spending"));
+        theme::kv(ui, p, "This session", self.meter.session.summary());
+        theme::kv(ui, p, "This project", self.meter.project.summary());
+        theme::kv(
+            ui,
+            p,
+            "Last 24 h",
+            format!("${:.4}", self.meter.last_24h_usd()),
+        );
+        let mut cap = self.meter.cap_usd;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Spend cap").color(p.muted));
+            ui.add(
+                egui::DragValue::new(&mut cap)
+                    .range(0.0..=10_000.0)
+                    .speed(0.1)
+                    .prefix("$")
+                    .suffix(" / 24 h")
+                    .max_decimals(2),
+            )
+            .on_hover_text("Seraphina stops sending chat, image and video requests to xAI once this much has been spent in the last 24 hours. 0 = no cap.");
+            if cap > 0.0 && ui.small_button("Off").clicked() {
+                cap = 0.0;
+            }
+        });
+        if (cap - self.meter.cap_usd).abs() > f64::EPSILON {
+            self.meter.cap_usd = cap;
+            self.app_settings.spend_cap_usd = cap;
+            if let Err(e) = self.app_settings.save() {
+                self.toasts.push(
+                    ToastKind::Error,
+                    &format!("Couldn't save the spend cap: {}", e),
+                );
+            }
+        }
+        ui.add(
+            egui::Label::new(theme::muted(
+                p,
+                "Costs are xAI's own figures where it reports them, otherwise estimates from the public price list (video is estimated). A job xAI already accepted is billed even if you press Stop.",
+            ))
+            .wrap(),
+        );
+    }
+
     fn xai_key_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
         if let Some(rx) = &self.xai_test_rx {
             if let Ok(r) = rx.try_recv() {
@@ -4840,6 +4946,7 @@ mod tests {
             LlmReply {
                 content: "Done: the mist is softer and the sky is hidden.".into(),
                 tool_calls: vec![],
+                usage: None,
             },
             LlmReply {
                 content: String::new(),
@@ -4855,6 +4962,7 @@ mod tests {
                     call("export_png", "{}"),
                     call("no_such_tool", "{}"),
                 ],
+                usage: None,
             },
         ];
         let mock = Arc::new(MockProvider::new(replies));
@@ -4909,10 +5017,12 @@ mod tests {
             LlmReply {
                 content: "Press Run to go live.".into(),
                 tool_calls: vec![],
+                usage: None,
             },
             LlmReply {
                 content: String::new(),
                 tool_calls: vec![call("set_streaming", r#"{"live":true}"#)],
+                usage: None,
             },
         ];
         let mut app = app_with(&ctx, Some(Arc::new(MockProvider::new(replies))));
@@ -4951,6 +5061,7 @@ mod tests {
                 "set_layer_opacity",
                 r#"{"layer":"Mist Overlay","opacity":10}"#,
             )],
+            usage: None,
         }];
         let mock = Arc::new(MockProvider::new(replies));
         *mock.delay.lock().unwrap() = Some(std::time::Duration::from_secs(30));
@@ -4984,6 +5095,7 @@ mod tests {
         mock.replies.lock().unwrap().push(LlmReply {
             content: "Okay.".into(),
             tool_calls: vec![],
+            usage: None,
         });
         app.assistant.input = "never mind".into();
         app.assistant.want_send = true;
@@ -4991,8 +5103,148 @@ mod tests {
         assert!(app.assistant.items.iter().any(|i| i.text.contains("Okay.")));
     }
 
-    /// Live: real xAI tool calling through the bus. Skips without a key.
+    fn billed_mock(replies: Vec<LlmReply>) -> Arc<MockProvider> {
+        let mut m = MockProvider::new(replies);
+        m.billed = Some("grok-4.7".into());
+        Arc::new(m)
+    }
+
+    fn dollars(usd: f64) -> usage::Usage {
+        usage::Usage {
+            ticks: (usd * usage::TICKS_PER_USD) as u64,
+            ..Default::default()
+        }
+    }
+
     #[test]
+    fn rounds_are_metered_with_xai_costs_or_estimates() {
+        let ctx = egui::Context::default();
+        let replies = vec![
+            LlmReply {
+                content: "Second.".into(),
+                tool_calls: vec![],
+                usage: None,
+            },
+            LlmReply {
+                content: "First.".into(),
+                tool_calls: vec![],
+                usage: Some(usage::Usage {
+                    prompt_tokens: 900,
+                    completion_tokens: 10,
+                    ticks: 20_000_000,
+                    estimated: false,
+                }),
+            },
+        ];
+        let mut app = app_with(&ctx, Some(billed_mock(replies)));
+        for msg in ["one", "two"] {
+            app.assistant.input = msg.into();
+            app.assistant.want_send = true;
+            wait_idle(&mut app, &ctx, 10);
+        }
+        run(&mut app, &ctx, 2, 0.0);
+        let s = &app.meter.session;
+        assert_eq!((s.calls, s.estimated_calls), (2, 1), "{s:?}");
+        assert!(s.usd_ticks > 20_000_000 && s.prompt_tokens > 900);
+        assert_eq!(&app.meter.project, s);
+        // saved with the project, cleared by New
+        let c = app.to_container(false, None);
+        assert_eq!(c.manifest["usage"]["calls"], 2);
+        app.new_project();
+        assert_eq!(app.meter.project, usage::Totals::default());
+        assert_eq!(app.meter.session.calls, 2, "the session keeps counting");
+        // an unbilled provider is not metered
+        let mut app = app_with(&ctx, Some(Arc::new(MockProvider::new(vec![]))));
+        app.assistant.input = "free".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert_eq!(app.meter.session.calls, 0);
+    }
+
+    #[test]
+    fn spend_cap_blocks_chat_and_imagine_with_a_toast() {
+        let ctx = egui::Context::default();
+        let mock = billed_mock(vec![LlmReply {
+            content: "should not be sent".into(),
+            ..Default::default()
+        }]);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.meter.cap_usd = 0.50;
+        app.meter.record(&dollars(0.60));
+        app.assistant.input = "make it pop".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 5);
+        assert!(mock.seen.lock().unwrap().is_empty(), "nothing went to xAI");
+        assert!(app
+            .toasts
+            .items
+            .iter()
+            .any(|t| matches!(t.kind, ToastKind::Warn)
+                && t.text.starts_with("Spend cap reached ($0.60 of $0.50")));
+        assert!(app
+            .assistant
+            .items
+            .iter()
+            .any(|i| i.text.contains("Settings")));
+
+        struct Free;
+        impl videogen::VideoGenProvider for Free {
+            fn name(&self) -> String {
+                "free".into()
+            }
+            fn start_generate(
+                &self,
+                _: &str,
+                _: u32,
+                _: &std::sync::atomic::AtomicBool,
+            ) -> Result<String, String> {
+                Err("must not be called".into())
+            }
+            fn start_extend(
+                &self,
+                _: &str,
+                _: &str,
+                _: &std::sync::atomic::AtomicBool,
+            ) -> Result<String, String> {
+                Err("must not be called".into())
+            }
+            fn poll(
+                &self,
+                _: &str,
+                _: &std::sync::atomic::AtomicBool,
+            ) -> Result<videogen::JobStatus, String> {
+                Ok(videogen::JobStatus::Pending)
+            }
+        }
+        app.video.provider = Some(Arc::new(Free));
+        let e = app
+            .dispatch(
+                &AppCommand::VideoGenerate {
+                    prompt: "a cat".into(),
+                    duration: Some(1),
+                },
+                Origin::User,
+            )
+            .unwrap_err();
+        assert!(e.starts_with("Spend cap reached"), "{e}");
+        assert!(app.video.clips.is_empty());
+        // raising the cap lets work through again
+        app.meter.cap_usd = 5.0;
+        assert!(app
+            .dispatch(
+                &AppCommand::VideoGenerate {
+                    prompt: "a cat".into(),
+                    duration: Some(1),
+                },
+                Origin::User
+            )
+            .is_ok());
+    }
+
+    /// Live, billed: real xAI tool calling through the bus. Run with
+    /// `cargo test --features ui --bin ui -- --ignored live_xai_tool_calling_smoke`.
+    #[test]
+    #[ignore]
     fn live_xai_tool_calling_smoke() {
         let Some(p) = llm::OpenAiCompat::from_env() else {
             eprintln!("SKIPPED live_xai_tool_calling_smoke: no XAI_API_KEY");

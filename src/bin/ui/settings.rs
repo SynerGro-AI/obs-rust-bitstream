@@ -42,6 +42,8 @@ pub struct AppSettings {
     pub auto_fallback: Option<RendererPref>,
     /// Whole-UI scale on top of the monitor's DPI scale (H3), 0.8..=2.0.
     pub ui_scale: f32,
+    /// Most xAI spend allowed in any 24 hours, in USD; 0 = no cap (C3).
+    pub spend_cap_usd: f64,
 }
 
 impl Default for AppSettings {
@@ -50,6 +52,7 @@ impl Default for AppSettings {
             renderer: RendererPref::Auto,
             auto_fallback: None,
             ui_scale: 1.0,
+            spend_cap_usd: 0.0,
         }
     }
 }

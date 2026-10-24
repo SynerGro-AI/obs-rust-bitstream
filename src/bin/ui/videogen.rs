@@ -12,6 +12,7 @@
 use crate::commands::AppCommand;
 use crate::net::{self, Cancel};
 use crate::theme::{self, Palette, SP_SM};
+use crate::usage::{self, Usage};
 use eframe::egui;
 use egui_phosphor::regular as ic;
 use serde_json::{json, Value};
@@ -28,6 +29,8 @@ const POLL_EVERY: Duration = Duration::from_secs(5);
 const POLLS: u32 = 180;
 /// Consecutive failed polls tolerated before a clip is marked failed.
 const POLL_FAILURES: u32 = 3;
+/// Length of an extension.
+const EXTEND_SECONDS: u32 = 6;
 
 /// Shown when the user stops a job.
 pub const STOPPED_NOTE: &str =
@@ -57,6 +60,10 @@ pub trait VideoGenProvider: Send + Sync {
         cancel: &AtomicBool,
     ) -> Result<String, String>;
     fn poll(&self, request_id: &str, cancel: &AtomicBool) -> Result<JobStatus, String>;
+    /// About what a job of this many seconds costs.
+    fn estimate(&self, _seconds: u32) -> Usage {
+        Usage::default()
+    }
 }
 
 pub struct GrokImagine {
@@ -128,13 +135,25 @@ impl GrokImagine {
     pub const DEFAULT_MODEL: &'static str = "grok-imagine-video-1.5";
     pub const DEFAULT_IMAGE_MODEL: &'static str = "grok-imagine-image-2.0";
 
-    /// Text-to-image; returns encoded image bytes (PNG/JPEG).
-    pub fn generate_image(&self, prompt: &str, cancel: &AtomicBool) -> Result<Vec<u8>, String> {
+    /// Text-to-image; returns encoded image bytes (PNG/JPEG) and what
+    /// the call cost.
+    pub fn generate_image(
+        &self,
+        prompt: &str,
+        cancel: &AtomicBool,
+    ) -> Result<(Vec<u8>, Usage), String> {
         let v = self.post(
             "/images/generations",
             json!({ "model": self.image_model, "prompt": prompt, "n": 1, "response_format": "b64_json" }),
             cancel,
         )?;
+        let cost = usage::parse_usage(&v)
+            .filter(|u| !u.estimated)
+            .unwrap_or_else(|| usage::image_estimate(&self.image_model));
+        self.image_bytes(&v, cancel).map(|b| (b, cost))
+    }
+
+    fn image_bytes(&self, v: &Value, cancel: &AtomicBool) -> Result<Vec<u8>, String> {
         let d = v.pointer("/data/0").ok_or_else(|| {
             format!(
                 "no image in response: {}",
@@ -280,13 +299,17 @@ impl VideoGenProvider for GrokImagine {
     ) -> Result<String, String> {
         let v = self.post(
             "/videos/extensions",
-            json!({ "model": self.model, "prompt": prompt, "video": { "url": video_url }, "duration": 6 }),
+            json!({ "model": self.model, "prompt": prompt, "video": { "url": video_url }, "duration": EXTEND_SECONDS }),
             cancel,
         )?;
         v.get("request_id")
             .and_then(|r| r.as_str())
             .map(String::from)
             .ok_or_else(|| format!("no request_id in {}", v))
+    }
+
+    fn estimate(&self, seconds: u32) -> Usage {
+        usage::video_estimate(&self.model, &self.resolution, seconds)
     }
 
     fn poll(&self, id: &str, cancel: &AtomicBool) -> Result<JobStatus, String> {
@@ -338,6 +361,10 @@ pub struct VideoGenPanel {
     stitch_rx: Option<Receiver<Result<String, String>>>,
     /// Time between status polls (tests shorten it).
     pub poll_every: Duration,
+    /// Costs of accepted jobs; the app drains `spent` into its meter.
+    spent_tx: std::sync::mpsc::Sender<Usage>,
+    spent_rx: Receiver<Usage>,
+    pub spent: Vec<Usage>,
 }
 
 pub fn videos_dir() -> PathBuf {
@@ -401,23 +428,9 @@ fn run_concat(list: &std::path::Path, out: &std::path::Path, n: usize) -> Result
 
 impl VideoGenPanel {
     pub fn new() -> Self {
-        let imager = GrokImagine::from_env().map(std::sync::Arc::new);
-        let provider = imager
-            .clone()
-            .map(|g| g as std::sync::Arc<dyn VideoGenProvider>);
-        Self {
-            provider,
-            prompt: String::new(),
-            duration: 6,
-            clips: Vec::new(),
-            extend_prompt: String::new(),
-            log: Vec::new(),
-            imager,
-            image_rx: None,
-            image_cancel: net::cancel_flag(),
-            stitch_rx: None,
-            poll_every: POLL_EVERY,
-        }
+        let mut s = Self::unconfigured();
+        s.reload_provider();
+        s
     }
 
     /// Pick up a key saved in Settings without losing clips.
@@ -430,6 +443,7 @@ impl VideoGenPanel {
     }
 
     pub fn unconfigured() -> Self {
+        let (spent_tx, spent_rx) = channel();
         Self {
             provider: None,
             prompt: String::new(),
@@ -442,6 +456,9 @@ impl VideoGenPanel {
             image_cancel: net::cancel_flag(),
             stitch_rx: None,
             poll_every: POLL_EVERY,
+            spent_tx,
+            spent_rx,
+            spent: Vec::new(),
         }
     }
 
@@ -465,8 +482,13 @@ impl VideoGenPanel {
         let p2 = pr.clone();
         let cancel = net::cancel_flag();
         self.image_cancel = cancel.clone();
+        let spent = self.spent_tx.clone();
         std::thread::spawn(move || {
-            let _ = tx.send(g.generate_image(&p2, &cancel).map(|b| (p2, b)));
+            let r = g.generate_image(&p2, &cancel).map(|(b, u)| {
+                let _ = spent.send(u);
+                (p2, b)
+            });
+            let _ = tx.send(r);
         });
         self.image_rx = Some(rx);
         Ok(format!(
@@ -477,6 +499,29 @@ impl VideoGenPanel {
                 .map(|g| g.image_model.clone())
                 .unwrap_or_default()
         ))
+    }
+
+    /// About what generating a clip would cost (USD), for the spend cap.
+    pub fn video_cost(&self, duration: Option<u32>) -> f64 {
+        let d = duration.unwrap_or(self.duration).clamp(1, 15);
+        self.provider
+            .as_ref()
+            .map(|p| p.estimate(d).usd())
+            .unwrap_or(0.0)
+    }
+
+    pub fn extend_cost(&self) -> f64 {
+        self.provider
+            .as_ref()
+            .map(|p| p.estimate(EXTEND_SECONDS).usd())
+            .unwrap_or(0.0)
+    }
+
+    pub fn image_cost(&self) -> f64 {
+        self.imager
+            .as_ref()
+            .map(|g| usage::image_estimate(&g.image_model).usd())
+            .unwrap_or(0.0)
     }
 
     /// Stop button for the image job.
@@ -520,7 +565,7 @@ impl VideoGenPanel {
         Some(r)
     }
 
-    fn spawn(&mut self, prompt: String, start: StartJob) -> Result<String, String> {
+    fn spawn(&mut self, prompt: String, seconds: u32, start: StartJob) -> Result<String, String> {
         let p = self.provider.clone().ok_or(
             "Grok Imagine isn't configured: add an xAI API key in Settings (or set XAI_API_KEY)",
         )?;
@@ -529,9 +574,14 @@ impl VideoGenPanel {
         let cancel = net::cancel_flag();
         let stop = cancel.clone();
         let every = self.poll_every;
+        let spent = self.spent_tx.clone();
         std::thread::spawn(move || {
             let id = match start(p.as_ref(), &stop) {
-                Ok(id) => id,
+                Ok(id) => {
+                    // accepted: xAI bills it from here, Stop or not
+                    let _ = spent.send(p.estimate(seconds));
+                    id
+                }
                 Err(e) => {
                     let _ = tx.send((JobStatus::Failed(e), None));
                     return;
@@ -621,7 +671,7 @@ impl VideoGenPanel {
         let d = duration.unwrap_or(self.duration).clamp(1, 15);
         let pr = prompt.trim().to_string();
         let p2 = pr.clone();
-        self.spawn(pr, Box::new(move |p, c| p.start_generate(&p2, d, c)))
+        self.spawn(pr, d, Box::new(move |p, c| p.start_generate(&p2, d, c)))
     }
 
     pub fn extend(&mut self, clip: usize, prompt: &str) -> Result<String, String> {
@@ -633,6 +683,7 @@ impl VideoGenPanel {
         let p2 = prompt.to_string();
         self.spawn(
             format!("extend #{}: {}", clip, prompt),
+            EXTEND_SECONDS,
             Box::new(move |p, c| p.start_extend(&url, &p2, c)),
         )
     }
@@ -711,7 +762,13 @@ impl VideoGenPanel {
         }
     }
 
+    /// Collect costs reported by workers into `spent`.
+    pub fn tick_spent(&mut self) {
+        self.spent.extend(self.spent_rx.try_iter());
+    }
+
     pub fn tick(&mut self) -> bool {
+        self.tick_spent();
         let mut busy = false;
         for c in &mut self.clips {
             if let Some(rx) = &c.rx {
@@ -1151,7 +1208,8 @@ mod tests {
                 "A gold gem logo on a near-black background, minimal, crisp",
                 &AtomicBool::new(false),
             )
-            .expect("image");
+            .expect("image")
+            .0;
         let im = image::load_from_memory(&img).expect("decodes");
         std::fs::write(out.join("live_grok_imagine_image.jpg"), &img).unwrap();
         eprintln!(

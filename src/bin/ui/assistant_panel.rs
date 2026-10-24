@@ -87,6 +87,14 @@ pub struct AssistantPanel {
     cancel: crate::net::Cancel,
     /// Latest status line from the worker (retry notices).
     pub status: Option<String>,
+    /// Costs reported by workers (outlives Stop); the app drains `spent`.
+    spent_tx: std::sync::mpsc::Sender<crate::usage::Usage>,
+    spent_rx: Receiver<crate::usage::Usage>,
+    pub spent: Vec<crate::usage::Usage>,
+    /// Set by the app each frame: why billed rounds may not go out now.
+    pub blocked: Option<String>,
+    /// A round the spend cap held back (the app toasts it).
+    pub cap_hit: Option<String>,
 }
 
 pub fn persona() -> &'static str {
@@ -114,6 +122,7 @@ impl AssistantPanel {
             Some(p) => format!("Hi, I'm Seraphina. I'm connected to {} and can operate every mode for you: ask for an edit, and you can undo anything I do with one click.", p.name()),
             None => "Hi, I'm Seraphina. No language model is configured yet (add an xAI API key in Settings, set XAI_API_KEY, or SERAPHINA_BASE_URL for another OpenAI-compatible server), so I'm running as the offline stub: built-in tips only, no actions.".to_string(),
         };
+        let (spent_tx, spent_rx) = std::sync::mpsc::channel();
         Self {
             provider,
             cli: None,
@@ -139,6 +148,11 @@ impl AssistantPanel {
             remember_rx: None,
             cancel: crate::net::cancel_flag(),
             status: None,
+            spent_tx,
+            spent_rx,
+            spent: Vec::new(),
+            blocked: None,
+            cap_hit: None,
         }
     }
 
@@ -298,6 +312,15 @@ impl AssistantPanel {
         while start > 0 && self.convo[start].role != "user" {
             start -= 1;
         }
+        if let (Some(_), Some(why)) = (p.billing_model(), self.blocked.clone()) {
+            self.items.push(ChatItem {
+                kind: ItemKind::Note,
+                text: why.clone(),
+                rated: None,
+            });
+            self.cap_hit = Some(why);
+            return;
+        }
         let mut msgs = vec![self.system(app_ctx)];
         msgs.extend(self.convo[start..].iter().cloned());
         self.rx_source = p.name();
@@ -310,6 +333,7 @@ impl AssistantPanel {
             tools_json(),
             self.cli.clone(),
             self.cancel.clone(),
+            self.spent_tx.clone(),
         ));
     }
 
@@ -380,6 +404,7 @@ impl AssistantPanel {
                 self.remember_rx = None;
             }
         }
+        self.spent.extend(self.spent_rx.try_iter());
         let mut done = None;
         if let Some(rx) = &self.rx {
             while let Ok(ev) = rx.try_recv() {

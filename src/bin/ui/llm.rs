@@ -66,10 +66,17 @@ impl ChatMsg {
 pub struct LlmReply {
     pub content: String,
     pub tool_calls: Vec<ToolCall>,
+    /// Tokens and cost as reported by the provider, if it did.
+    pub usage: Option<crate::usage::Usage>,
 }
 
 pub trait LlmProvider: Send + Sync {
     fn name(&self) -> String;
+    /// The model to price calls with, when calls cost money (a key is
+    /// attached). None for local or offline providers.
+    fn billing_model(&self) -> Option<String> {
+        None
+    }
     /// Blocking call (run it off the UI thread). `on_token` receives
     /// streamed content deltas when the provider streams; `on_note` gets
     /// status lines such as retry notices. Raising `cancel` ends the call
@@ -130,6 +137,7 @@ pub fn parse_completion(body: &Value) -> Result<LlmReply, String> {
     Ok(LlmReply {
         content,
         tool_calls,
+        usage: crate::usage::parse_usage(body),
     })
 }
 
@@ -160,6 +168,11 @@ impl SseAccumulator {
                 .and_then(|m| m.as_str())
                 .unwrap_or("stream error")
                 .to_string());
+        }
+        // With stream_options.include_usage the last chunk carries usage
+        // (and no choices).
+        if let Some(u) = crate::usage::parse_usage(&v) {
+            self.reply.usage = Some(u);
         }
         let Some(delta) = v.pointer("/choices/0/delta") else {
             return Ok(None);
@@ -290,6 +303,10 @@ impl LlmProvider for OpenAiCompat {
         format!("{} · {}", self.model, host)
     }
 
+    fn billing_model(&self) -> Option<String> {
+        self.key.as_ref().map(|_| self.model.clone())
+    }
+
     fn complete(
         &self,
         messages: &[ChatMsg],
@@ -304,6 +321,9 @@ impl LlmProvider for OpenAiCompat {
             "temperature": 0.2,
             "stream": self.stream,
         });
+        if self.stream {
+            body["stream_options"] = json!({ "include_usage": true });
+        }
         if tools.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
             body["tools"] = tools.clone();
             body["tool_choice"] = json!("auto");
@@ -481,6 +501,7 @@ pub fn spawn_round(
     tools: Value,
     cli: Option<SeraphinaCli>,
     cancel: crate::net::Cancel,
+    spent: Sender<crate::usage::Usage>,
 ) -> Receiver<AgentEvent> {
     let (tx, rx): (Sender<AgentEvent>, Receiver<AgentEvent>) = channel();
     std::thread::spawn(move || {
@@ -494,7 +515,9 @@ pub fn spawn_round(
             }
         }
         let tx2 = tx.clone();
-        let mut on_tok = move |t: &str| {
+        let streamed = std::cell::Cell::new(0usize);
+        let mut on_tok = |t: &str| {
+            streamed.set(streamed.get() + t.len());
             let _ = tx2.send(AgentEvent::Token(t.to_string()));
         };
         let tx3 = tx.clone();
@@ -502,9 +525,47 @@ pub fn spawn_round(
             let _ = tx3.send(AgentEvent::Note(t.to_string()));
         };
         let r = provider.complete(&messages, &tools, &mut on_tok, &mut on_note, &cancel);
+        if let Some(model) = provider.billing_model() {
+            if let Some(u) = round_usage(&model, &messages, &tools, &r, streamed.get()) {
+                // a separate channel, so a cost is counted even after Stop
+                let _ = spent.send(u);
+            }
+        }
         let _ = tx.send(AgentEvent::Done(r));
     });
     rx
+}
+
+/// What a finished (or stopped) round cost. Uses xAI's figures when the
+/// reply has them; otherwise estimates from the text that went each way.
+/// A round that failed before any output is assumed not billed, except a
+/// Stop, which is counted (the request may already have been received).
+pub fn round_usage(
+    model: &str,
+    messages: &[ChatMsg],
+    tools: &Value,
+    r: &Result<LlmReply, String>,
+    streamed: usize,
+) -> Option<crate::usage::Usage> {
+    let prompt = messages.iter().map(|m| m.content.len()).sum::<usize>() + tools.to_string().len();
+    match r {
+        Ok(reply) => Some(match reply.usage {
+            Some(u) => crate::usage::priced(u, model),
+            None => {
+                let out = reply.content.len()
+                    + reply
+                        .tool_calls
+                        .iter()
+                        .map(|c| c.name.len() + c.arguments.len())
+                        .sum::<usize>();
+                crate::usage::chat_estimate(model, prompt, out)
+            }
+        }),
+        Err(e) if e == crate::net::STOPPED || streamed > 0 => {
+            Some(crate::usage::chat_estimate(model, prompt, streamed))
+        }
+        Err(_) => None,
+    }
 }
 
 /// Run a CLI intent on a worker thread.
@@ -518,6 +579,7 @@ pub fn spawn_cli(cli: SeraphinaCli, text: String) -> Receiver<AgentEvent> {
                 s
             },
             tool_calls: Vec::new(),
+            usage: None,
         });
         let _ = tx.send(AgentEvent::Done(r));
     });
@@ -539,6 +601,8 @@ pub struct MockProvider {
     pub seen: std::sync::Mutex<Vec<Vec<ChatMsg>>>,
     /// Simulated latency (honours Stop).
     pub delay: std::sync::Mutex<Option<std::time::Duration>>,
+    /// Pretend calls are billed at this model's price.
+    pub billed: Option<String>,
 }
 
 #[cfg(test)]
@@ -548,6 +612,7 @@ impl MockProvider {
             replies: std::sync::Mutex::new(replies),
             seen: std::sync::Mutex::new(Vec::new()),
             delay: std::sync::Mutex::new(None),
+            billed: None,
         }
     }
 }
@@ -556,6 +621,10 @@ impl MockProvider {
 impl LlmProvider for MockProvider {
     fn name(&self) -> String {
         "mock".into()
+    }
+
+    fn billing_model(&self) -> Option<String> {
+        self.billed.clone()
     }
 
     fn complete(
@@ -676,8 +745,8 @@ mod tests {
     }
 
     /// End to end against the real `seraphina` CLI when it is installed
-    /// (skipped otherwise). Uses a temp SERAPHINA_HOME. `plan-grok` runs
-    /// live only when an xAI key is in the environment.
+    /// (skipped otherwise). Uses a temp SERAPHINA_HOME. `plan-grok` (billed)
+    /// runs only with SERAPHINA_LIVE_TESTS=1 and a key.
     #[test]
     fn real_cli_intents_end_to_end() {
         let Some(mut cli) = SeraphinaCli::detect() else {
@@ -707,11 +776,8 @@ mod tests {
         let t = cli.intent("triad keep the layers tidy").unwrap();
         assert!(t.contains("consensus:") && t.contains("response:"), "{}", t);
         assert!(cli.intent("build glyph 179").is_err());
-        if std::env::var("XAI_API_KEY")
-            .or_else(|_| std::env::var("SERAPHINA_GROK_API_KEY"))
-            .map(|k| !k.trim().is_empty())
-            .unwrap_or(false)
-        {
+        // plan-grok is a billed xAI call: opt in with SERAPHINA_LIVE_TESTS=1.
+        if std::env::var("SERAPHINA_LIVE_TESTS").as_deref() == Ok("1") {
             let p = cli
                 .intent("plan-grok three steps to add a gold vignette")
                 .unwrap();
@@ -724,8 +790,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// Live smoke test: runs only when XAI_API_KEY / SERAPHINA_GROK_API_KEY is set.
+    /// Live, billed: run with `-- --ignored live_xai_smoke`; needs a key.
+    /// Also checks that a streamed reply reports its usage.
     #[test]
+    #[ignore]
     fn live_xai_smoke_test_if_key_present() {
         let Some(p) = OpenAiCompat::from_env().filter(|p| p.key.is_some()) else {
             eprintln!(
@@ -744,6 +812,55 @@ mod tests {
             &mut |_| {},
             &AtomicBool::new(false),
         );
-        assert!(r.is_ok(), "{:?}", r);
+        let r = r.expect("live call");
+        let u = r.usage.expect("xAI reports usage");
+        eprintln!(
+            "LIVE usage: {} in / {} out tokens, ${:.6}{}",
+            u.prompt_tokens,
+            u.completion_tokens,
+            u.usd(),
+            if u.estimated { " (estimated)" } else { "" }
+        );
+        assert!(u.prompt_tokens > 0);
+    }
+
+    #[test]
+    fn stream_usage_chunk_is_read() {
+        let mut acc = SseAccumulator::default();
+        acc.feed(r#"data: {"choices":[{"delta":{"content":"OK"}}]}"#)
+            .unwrap();
+        acc.feed(r#"data: {"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":1,"cost_in_usd_ticks":31000}}"#)
+            .unwrap();
+        acc.feed("data: [DONE]").unwrap();
+        assert_eq!(acc.reply.content, "OK");
+        let u = acc.reply.usage.unwrap();
+        assert_eq!(
+            (u.prompt_tokens, u.completion_tokens, u.ticks),
+            (12, 1, 31000)
+        );
+    }
+
+    #[test]
+    fn a_stopped_round_is_counted_but_a_refused_one_is_not() {
+        let msgs = vec![ChatMsg::new("user", &"x".repeat(400))];
+        let stopped = round_usage(
+            "grok-4.7",
+            &msgs,
+            &json!([]),
+            &Err(crate::net::STOPPED.into()),
+            40,
+        )
+        .unwrap();
+        assert!(
+            stopped.estimated && stopped.prompt_tokens >= 100 && stopped.completion_tokens == 10
+        );
+        assert!(round_usage(
+            "grok-4.7",
+            &msgs,
+            &json!([]),
+            &Err("xAI rejected the key".into()),
+            0
+        )
+        .is_none());
     }
 }

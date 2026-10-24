@@ -749,6 +749,7 @@ pub struct Output {
 
 impl Output {
     pub fn new(cfg: OutputConfig, key: String) -> Self {
+        crate::crash::register_secret(&key);
         let mut reconnect = Reconnect::new();
         reconnect.set_settings(cfg.retry_max, cfg.retry_sec);
         Self {
@@ -796,6 +797,7 @@ impl Output {
 
     pub fn set_key(&mut self, key: &str, persist: bool) -> Result<String, String> {
         self.key = key.trim().to_string();
+        crate::crash::register_secret(&self.key);
         if persist {
             save_key(&self.key)?;
         }

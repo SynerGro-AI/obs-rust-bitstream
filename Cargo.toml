@@ -46,9 +46,13 @@ dirs = { version = "6", optional = true }
 rfd = { version = "0.17", optional = true, default-features = false, features = ["xdg-portal"] }
 windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Foundation"], optional = true }
 
+[target.'cfg(windows)'.dependencies]
+# UI only: crash message box, Credential Manager, single-instance focus
+windows-sys = { version = "0.61", optional = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
 [features]
 default = []
-ui = ["eframe", "image", "dep:egui-phosphor", "dep:serde", "dep:serde_json", "dep:ureq", "dep:ab_glyph", "dep:epaint_default_fonts", "dep:zip", "dep:rfd", "dep:dirs"]
+ui = ["eframe", "image", "dep:egui-phosphor", "dep:serde", "dep:serde_json", "dep:ureq", "dep:ab_glyph", "dep:epaint_default_fonts", "dep:zip", "dep:rfd", "dep:dirs", "dep:windows-sys"]
 avfoundation = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-av-foundation", "dep:objc2-core-video", "dep:objc2-core-media", "dep:dispatch2"]
 audio = ["dep:cpal"]
 windows = ["dep:windows"]

@@ -221,6 +221,9 @@ impl OpenAiCompat {
     /// custom base URL is set.
     pub fn from_env() -> Option<Self> {
         let key = env("SERAPHINA_GROK_API_KEY").or_else(|| env("XAI_API_KEY"));
+        if let Some(k) = &key {
+            crate::crash::register_secret(k);
+        }
         let base = env("SERAPHINA_BASE_URL");
         let endpoint = env("SERAPHINA_GROK_ENDPOINT").or_else(|| {
             base.as_ref()

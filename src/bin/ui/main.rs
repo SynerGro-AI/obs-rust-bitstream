@@ -14,6 +14,7 @@ mod animate;
 mod assistant_panel;
 mod commands;
 mod composite;
+mod crash;
 mod lab;
 mod llm;
 mod materials;
@@ -391,6 +392,8 @@ pub struct App {
     last_time: Option<f64>,
     /// `.seraphina` file, dirty state, autosave and recovery.
     pub project: workspace::ProjectState,
+    /// Crash reports from an earlier run, shown once (D1).
+    pub crash_notice: Option<crash::CrashNotice>,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -412,6 +415,7 @@ impl App {
         );
         app.project.native_dialogs = project::native_dialogs_available();
         app.start_session(project::autosave_dir());
+        app.crash_notice = crash::CrashNotice::check();
         app
     }
 
@@ -478,6 +482,7 @@ impl App {
             toasts,
             last_time: None,
             project: workspace::ProjectState::new(project::Session::default()),
+            crash_notice: None,
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
             app.toasts.push(ToastKind::Warn, &w);
@@ -2713,6 +2718,7 @@ impl App {
             });
         self.windows(ctx);
         self.project_modals(ctx);
+        self.crash_modal(ctx);
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
@@ -2728,7 +2734,11 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if crash::CRASH_TEST.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            panic!("crash test requested with --crash-test");
+        }
         self.frame(ctx);
+        crash::FIRST_FRAME.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -2737,12 +2747,16 @@ impl eframe::App for App {
 }
 
 fn main() -> eframe::Result<()> {
+    crash::install_hook();
     let start_mode = std::env::var("SERAPHINA_MODE").ok();
     // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
     let args: Vec<String> = std::env::args().collect();
     let open_arg = args.get(1).filter(|a| !a.starts_with('-')).cloned();
     // `--allow-file-commands`: let a `--run` script save and open projects
     let script_files = args.iter().any(|a| a == "--allow-file-commands");
+    if args.iter().any(|a| a == "--crash-test") {
+        crash::CRASH_TEST.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
     // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
     let run_script = args
         .iter()
@@ -2759,7 +2773,8 @@ fn main() -> eframe::Result<()> {
             .with_decorations(native),
         ..Default::default()
     };
-    eframe::run_native(
+    crash::set_renderer("OpenGL (glow)");
+    let res = eframe::run_native(
         "Seraphina Studio",
         options,
         Box::new(move |cc| {
@@ -2793,7 +2808,20 @@ fn main() -> eframe::Result<()> {
             }
             Ok(Box::new(app))
         }),
-    )
+    );
+    if let Err(e) = &res {
+        let path = crash::write_report("crash", &format!("Startup failed: {}", e), "");
+        crash::message_box(
+            "Seraphina Studio couldn't start",
+            &format!(
+                "{}\n\n{}",
+                e,
+                path.map(|p| format!("Details: {}", p.display()))
+                    .unwrap_or_default()
+            ),
+        );
+    }
+    res
 }
 
 #[cfg(test)]

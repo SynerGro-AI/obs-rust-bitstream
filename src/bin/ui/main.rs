@@ -3514,33 +3514,65 @@ mod tests {
 
     /// The release zip ships out.obsr and out.h264 next to
     /// SeraphinaStudio.exe: Stream mode opens out.obsr at startup and
-    /// out.h264 is the default path in its Open box. Unzipped anywhere and
-    /// started from another folder, they must resolve next to the exe.
+    /// out.h264 is the default path in its Open box. Every file the Open
+    /// hint names must ship too. In-repo zip lists: the windows-ui artifact
+    /// in ci.yml and packaging/windows/README.txt. Unzipped anywhere and
+    /// started from another folder, each must resolve next to the exe.
     #[test]
     fn stream_samples_resolve_next_to_the_exe_in_the_zip_layout() {
+        let hinted = stream::files_named_in(stream::OPEN_HINT);
+        assert!(!hinted.is_empty(), "the Open hint names no files");
+        let mut names = vec![stream::STARTUP_SAMPLE, stream::DEFAULT_OPEN];
+        names.extend(
+            hinted
+                .iter()
+                .filter(|n| !names.contains(n))
+                .collect::<Vec<_>>(),
+        );
+        let ci = include_str!("../../../.github/workflows/ci.yml");
+        let readme = include_str!("../../../packaging/windows/README.txt");
+        for name in &names {
+            assert!(
+                ci.lines().any(|l| l.trim() == *name),
+                "{name} is used or named by Stream mode but not in ci.yml's windows-ui artifact"
+            );
+            assert!(
+                readme.contains(name),
+                "{name} is used or named by Stream mode but packaging/windows/README.txt does not list it"
+            );
+        }
         let root =
             std::env::temp_dir().join(format!("seraphina_zip_layout_{}", std::process::id()));
         let app = root.join("SeraphinaStudio");
         std::fs::create_dir_all(&app).unwrap();
-        for name in ["out.obsr", "out.h264"] {
+        let exe = app.join("SeraphinaStudio.exe");
+        for name in &names {
             assert!(
-                std::fs::metadata(name).unwrap().len() > 0,
+                std::fs::metadata(name).map(|m| m.len()).unwrap_or(0) > 0,
                 "{name} must be a non-empty file in the repo root"
             );
-            std::fs::copy(name, app.join(name)).unwrap();
-        }
-        let exe = app.join("SeraphinaStudio.exe");
-        for name in ["out.obsr", "out.h264"] {
             // A name that is not in the working directory, so only the
             // next-to-the-exe lookup can find it.
             let unique = format!("zip_layout_{}_{name}", std::process::id());
-            std::fs::rename(app.join(name), app.join(&unique)).unwrap();
+            std::fs::copy(name, app.join(&unique)).unwrap();
             assert!(!std::path::Path::new(&unique).exists());
             let found = resolve_asset_from(&unique, Some(exe.clone()));
             assert_eq!(found, app.join(&unique), "{name} not found next to the exe");
             assert!(std::fs::metadata(&found).unwrap().len() > 0);
         }
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn files_named_in_finds_file_names_only() {
+        assert_eq!(
+            stream::files_named_in("Try out.h264, out.avbn or out.obsr from the repo root."),
+            ["out.h264", "out.avbn", "out.obsr"]
+        );
+        assert_eq!(
+            stream::files_named_in(stream::OPEN_HINT),
+            ["out.h264", "out.obsr"]
+        );
     }
 
     fn input(t: f64) -> egui::RawInput {

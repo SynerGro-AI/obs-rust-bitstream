@@ -1035,9 +1035,9 @@ pub fn heat_to_failure(
 pub fn max_clock(name: &str, t: f64) -> Result<f64, String> {
     let (src, expected) = program(name).ok_or("unknown program")?;
     let lib = Library::at(t);
-    let (mut lo, mut hi) = (1e7, 1e11);
+    let (mut lo, mut hi): (f64, f64) = (1e7, 1e11);
     for _ in 0..30 {
-        let mid = (lo * hi as f64).sqrt();
+        let mid = (lo * hi).sqrt();
         if run_with(&lib, src, expected, mid)?.correct {
             lo = mid
         } else {

@@ -105,6 +105,12 @@ impl LearningPipeline {
     }
 }
 
+impl Default for LearningPipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -35,7 +35,7 @@ impl Crop {
             return Err(CropError::OutOfBounds);
         }
         let mut out = VideoFrame::new(VideoFormat::Y800, w, h).ok_or(CropError::OutOfBounds)?;
-        if let (Some(src), Some(dst)) = (frame.planes.get(0), out.planes.get_mut(0)) {
+        if let (Some(src), Some(dst)) = (frame.planes.first(), out.planes.get_mut(0)) {
             for row in 0..h {
                 for col in 0..w {
                     let si = ((y + row) * frame.width + (x + col)) as usize;
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
-        f.planes[0][1 * 4 + 1] = 200;
+        f.planes[0][4 + 1] = 200;
         let c = Crop::apply(&f, 1, 1, 2, 2).unwrap();
         assert_eq!(c.width, 2);
         assert_eq!(c.height, 2);

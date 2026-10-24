@@ -187,7 +187,7 @@ pub fn packbits_decode(src: &[u8], want: usize) -> Result<Vec<u8>, String> {
             let k = 1 - n as isize;
             let b = *src.get(i).ok_or("truncated RLE run")?;
             i += 1;
-            out.extend(std::iter::repeat(b).take(k as usize));
+            out.extend(std::iter::repeat_n(b, k as usize));
         }
     }
     if out.len() < want {
@@ -233,7 +233,7 @@ fn planes(rgba: &[u8], n: usize) -> [Vec<u8>; 4] {
         Vec::with_capacity(n),
         Vec::with_capacity(n),
     ];
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         for c in 0..4 {
             p[c].push(px[c]);
         }
@@ -260,7 +260,7 @@ fn tagged(key: &[u8; 4], data: &[u8]) -> Vec<u8> {
     out.extend_from_slice(b"8BIM");
     out.extend_from_slice(key);
     let mut d = data.to_vec();
-    while d.len() % 4 != 0 {
+    while !d.len().is_multiple_of(4) {
         d.push(0);
     }
     be32(&mut out, d.len() as u32);
@@ -588,7 +588,9 @@ impl PsdPixels {
                                 let n = u32::from_be_bytes([data[0], data[1], data[2], data[3]])
                                     as usize;
                                 let units: Vec<u16> = data[4..]
-                                    .chunks_exact(2)
+                                    .as_chunks::<2>()
+                                    .0
+                                    .iter()
                                     .take(n)
                                     .map(|c| u16::from_be_bytes([c[0], c[1]]))
                                     .collect();
@@ -704,7 +706,7 @@ impl PsdPixels {
                 _ => return Err("merged image compression not supported".into()),
             }
             if channels < 4 {
-                for px in rgba.chunks_exact_mut(4) {
+                for px in rgba.as_chunks_mut::<4>().0 {
                     px[3] = 255;
                 }
             }
@@ -804,7 +806,7 @@ mod tests {
     fn sample() -> PsdPixels {
         let (w, h) = (40u32, 30u32);
         let mut bg = vec![0u8; (w * h * 4) as usize];
-        for (i, px) in bg.chunks_exact_mut(4).enumerate() {
+        for (i, px) in bg.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             px.copy_from_slice(&[(i % 251) as u8, 100, 200, 255]);
         }
         let mut dot = vec![0u8; (w * h * 4) as usize];

@@ -63,11 +63,19 @@ mod tests {
             color: [255, 0, 0],
         };
         let r = render(&t, 80, 80);
-        let n = r.data.chunks_exact(4).filter(|p| p[3] > 128).count();
+        let n = r
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 128)
+            .count();
         assert!(n > 40, "{}", n);
         assert!(r
             .data
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|p| p[3] > 0)
             .all(|p| p[0] == 255));
     }

@@ -40,6 +40,12 @@ impl FlightReplay {
     }
 }
 
+impl Default for FlightReplay {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

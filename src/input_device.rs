@@ -49,6 +49,12 @@ impl InputDevice {
     }
 }
 
+impl Default for InputDevice {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

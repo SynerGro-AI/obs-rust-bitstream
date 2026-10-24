@@ -24,7 +24,7 @@ impl Codec {
         if frame.format != VideoFormat::Y800 {
             return Err(CodecError::WrongFormat);
         }
-        let plane = frame.planes.get(0).ok_or(CodecError::WrongFormat)?;
+        let plane = frame.planes.first().ok_or(CodecError::WrongFormat)?;
         let mut out = Vec::new();
         out.extend_from_slice(&frame.width.to_le_bytes());
         out.extend_from_slice(&frame.height.to_le_bytes());

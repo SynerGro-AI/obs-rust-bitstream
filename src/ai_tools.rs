@@ -105,7 +105,7 @@ impl AiTools {
     /// Suggest a magic-wand tolerance.
     pub fn suggest_tolerance(ai: &AiAssistant, frame: &VideoFrame) -> (u8, String) {
         let avg = Self::average(frame);
-        let tol = if avg < 64 || avg > 192 { 20 } else { 10 };
+        let tol = if !(64..=192).contains(&avg) { 20 } else { 10 };
         let reason = ai.assist(&format!("tolerance for avg {}", avg));
         (tol, reason)
     }

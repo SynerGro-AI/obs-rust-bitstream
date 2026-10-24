@@ -409,9 +409,9 @@ impl PolyMesh {
         let mut mid: HashMap<(usize, usize), usize> = HashMap::new();
         for &(u, v) in &ring {
             let k = ekey(u, v);
-            if !mid.contains_key(&k) {
+            if let std::collections::hash_map::Entry::Vacant(e) = mid.entry(k) {
                 self.verts.push(lerp(self.verts[u], self.verts[v], t));
-                mid.insert(k, self.verts.len() - 1);
+                e.insert(self.verts.len() - 1);
             }
         }
         let mut new_faces = Vec::new();
@@ -1190,7 +1190,7 @@ pub struct Frame3d {
 impl Frame3d {
     pub fn new(w: usize, h: usize, bg: [u8; 3]) -> Self {
         let mut rgba = vec![255u8; w * h * 4];
-        for px in rgba.chunks_exact_mut(4) {
+        for px in rgba.as_chunks_mut::<4>().0 {
             px[0] = bg[0];
             px[1] = bg[1];
             px[2] = bg[2];

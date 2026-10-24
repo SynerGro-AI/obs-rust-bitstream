@@ -255,7 +255,7 @@ mod tests {
     fn differential() {
         let mut cd = Calldata::new();
         cd.set_bool("flag", true).unwrap();
-        assert_eq!(cd.get_bool("flag").unwrap(), true);
+        assert!(cd.get_bool("flag").unwrap());
         assert_eq!(cd.type_of("flag"), Some(CallType::Bool));
     }
 

@@ -32,7 +32,7 @@ impl Matte {
         if frame.width != matte.width || frame.height != matte.height {
             return Err(MatteError::SizeMismatch);
         }
-        if let (Some(dst), Some(m)) = (frame.planes.get_mut(0), matte.planes.get(0)) {
+        if let (Some(dst), Some(m)) = (frame.planes.get_mut(0), matte.planes.first()) {
             for (d, mv) in dst.iter_mut().zip(m.iter()) {
                 if *mv < threshold {
                     *d = 0;

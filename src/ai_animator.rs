@@ -62,7 +62,7 @@ fn parse_keys(s: &str) -> Vec<(f32, f32, f32, f32)> {
     let mut out = Vec::new();
     for line in s.lines() {
         let parts: Vec<f32> = line
-            .split(|c: char| c == ',' || c == ' ')
+            .split([',', ' '])
             .filter_map(|p| p.trim().parse().ok())
             .collect();
         if parts.len() >= 4 {

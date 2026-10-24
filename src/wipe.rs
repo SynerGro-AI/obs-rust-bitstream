@@ -30,7 +30,7 @@ impl Wipe {
             VideoFrame::new(VideoFormat::Y800, a.width, a.height).ok_or(WipeError::SizeMismatch)?;
         let cut = (progress.clamp(0.0, 1.0) * a.width as f32) as u32;
         if let (Some(pa), Some(pb), Some(dst)) =
-            (a.planes.get(0), b.planes.get(0), out.planes.get_mut(0))
+            (a.planes.first(), b.planes.first(), out.planes.get_mut(0))
         {
             for y in 0..a.height {
                 for x in 0..a.width {

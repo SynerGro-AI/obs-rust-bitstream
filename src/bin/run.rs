@@ -211,8 +211,8 @@ fn main() {
                                     if let Some(loop_payload) =
                                         ShellLoopSocket::payload(&loop_actions)
                                     {
-                                        if let Some(loop_listener) =
-                                            std::net::TcpListener::bind("127.0.0.1:0").ok()
+                                        if let Ok(loop_listener) =
+                                            std::net::TcpListener::bind("127.0.0.1:0")
                                         {
                                             if let Ok(loop_addr) = loop_listener.local_addr() {
                                                 let (ltx, lrx) = std::sync::mpsc::channel();

@@ -2619,18 +2619,16 @@ impl PaintState {
                     self.pan += Vec2::new(pointer.x - after.0, pointer.y - after.1);
                 }
             }
-            Tool::Eyedropper => {
-                if clicked {
-                    if let Some((x, y)) = pointer_img {
-                        if let Some(px) = self.flat.pixel(x.max(0.0) as u32, y.max(0.0) as u32) {
-                            bus.push(AppCommand::SetBrush {
-                                size: None,
-                                hardness: None,
-                                flow: None,
-                                color: Some(format!("#{:02X}{:02X}{:02X}", px[0], px[1], px[2])),
-                                exposure: None,
-                            });
-                        }
+            Tool::Eyedropper if clicked => {
+                if let Some((x, y)) = pointer_img {
+                    if let Some(px) = self.flat.pixel(x.max(0.0) as u32, y.max(0.0) as u32) {
+                        bus.push(AppCommand::SetBrush {
+                            size: None,
+                            hardness: None,
+                            flow: None,
+                            color: Some(format!("#{:02X}{:02X}{:02X}", px[0], px[1], px[2])),
+                            exposure: None,
+                        });
                     }
                 }
             }
@@ -3382,7 +3380,7 @@ impl PaintState {
                             .rect_stroke(r, Rounding::ZERO, Stroke::new(1.0_f32, p.line));
                     }
                     ui.vertical(|ui| {
-                        theme::prop(ui, p, "Mask", format!("{}", name));
+                        theme::prop(ui, p, "Mask", name.to_string());
                         theme::prop(ui, p, "Kind", "Pixel · Grayscale");
                         theme::prop(ui, p, "Invert", if m.invert { "On" } else { "Off" });
                     });

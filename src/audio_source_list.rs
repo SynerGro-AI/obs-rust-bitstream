@@ -115,6 +115,12 @@ impl AudioSourceList {
     }
 }
 
+impl Default for AudioSourceList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

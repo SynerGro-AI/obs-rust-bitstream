@@ -1239,7 +1239,7 @@ mod tests {
             + 0.04 * SIGMA * area * (288.15f64.powi(4) - 600f64.powi(4));
         let dt_expect = q * DT as f64 / (b.mass as f64 * 385.0);
         assert!(
-            ((b.temp as f64 - 600.0) - dt_expect).abs() < 1e-4,
+            ((b.temp - 600.0) - dt_expect).abs() < 1e-4,
             "{} vs {}",
             b.temp - 600.0,
             dt_expect

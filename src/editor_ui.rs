@@ -251,6 +251,12 @@ impl EditorUi {
     }
 }
 
+impl Default for EditorUi {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

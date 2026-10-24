@@ -58,7 +58,7 @@ const RESERVED: &[&str] = &[
 ];
 
 fn is_reserved(name: &str) -> bool {
-    RESERVED.iter().any(|r| *r == name)
+    RESERVED.contains(&name)
 }
 
 fn parse_type(tok: &str) -> Option<CallType> {

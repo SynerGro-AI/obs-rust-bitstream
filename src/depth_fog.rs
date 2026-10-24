@@ -31,7 +31,7 @@ impl DepthFog {
         if frame.width != depth.width || frame.height != depth.height {
             return Err(DepthError::SizeMismatch);
         }
-        if let (Some(dst), Some(d)) = (frame.planes.get_mut(0), depth.planes.get(0)) {
+        if let (Some(dst), Some(d)) = (frame.planes.get_mut(0), depth.planes.first()) {
             for (p, dv) in dst.iter_mut().zip(d.iter()) {
                 let fade = (*dv as u16 * density as u16) / 255;
                 let v = (*p as u16).saturating_sub(fade);

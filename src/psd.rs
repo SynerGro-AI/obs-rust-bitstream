@@ -93,7 +93,7 @@ impl Psd {
             let padded = (name_bytes.len() + 1 + 3) & !3;
             layer_section.push(name_bytes.len() as u8);
             layer_section.extend_from_slice(name_bytes);
-            layer_section.extend(std::iter::repeat(0).take(padded - name_bytes.len() - 1));
+            layer_section.extend(std::iter::repeat_n(0, padded - name_bytes.len() - 1));
         }
         let layer_len = layer_section.len() as u32;
         out.extend_from_slice(&(layer_len + 4).to_be_bytes());

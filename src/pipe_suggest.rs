@@ -34,7 +34,7 @@ impl PipeSuggest {
         Self::glow(ai, frame, weights);
         let avg = frame
             .planes
-            .get(0)
+            .first()
             .map(|p| {
                 let sum: u32 = p.iter().map(|v| *v as u32).sum();
                 sum / p.len().max(1) as u32

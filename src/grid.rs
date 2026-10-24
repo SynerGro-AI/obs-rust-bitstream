@@ -60,7 +60,7 @@ mod tests {
         let mut f = VideoFrame::new(VideoFormat::Y800, 8, 8).unwrap();
         Grid::apply(&mut f, 4, 200).unwrap();
         assert_eq!(f.planes[0][0], 200);
-        assert_eq!(f.planes[0][1 * 8 + 1], 0);
+        assert_eq!(f.planes[0][8 + 1], 0);
     }
 
     #[test]

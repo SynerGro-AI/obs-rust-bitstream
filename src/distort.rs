@@ -101,7 +101,7 @@ mod tests {
         f.planes[0][0] = 255;
         Distort::apply(&mut f, DistortKind::Wave, 4).unwrap();
         // some pixel differs from a flat zero frame
-        assert!(f.planes[0].iter().any(|p| *p == 255));
+        assert!(f.planes[0].contains(&255));
     }
 
     #[test]

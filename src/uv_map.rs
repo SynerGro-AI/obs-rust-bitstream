@@ -59,7 +59,7 @@ impl UvMap {
         let i = (y * frame.width + x) as usize;
         frame
             .planes
-            .get(0)
+            .first()
             .and_then(|p| p.get(i))
             .copied()
             .ok_or(UvError::Missing)

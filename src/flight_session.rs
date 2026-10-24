@@ -61,6 +61,12 @@ impl FlightSession {
     }
 }
 
+impl Default for FlightSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

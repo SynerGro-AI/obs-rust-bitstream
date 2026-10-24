@@ -289,7 +289,7 @@ impl NBody {
         }
         self.time += h;
         self.steps += 1;
-        if self.trail_every > 0 && self.steps % self.trail_every == 0 {
+        if self.trail_every > 0 && self.steps.is_multiple_of(self.trail_every) {
             for b in &mut self.bodies {
                 b.trail.push(b.pos);
                 if b.trail.len() > TRAIL_MAX {

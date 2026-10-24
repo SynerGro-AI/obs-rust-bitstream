@@ -41,6 +41,12 @@ impl Subdivision {
     }
 }
 
+impl Default for Subdivision {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

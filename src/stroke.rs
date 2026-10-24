@@ -52,8 +52,8 @@ mod tests {
     #[test]
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
-        f.planes[0][1 * 4 + 1] = 255;
+        f.planes[0][4 + 1] = 255;
         Stroke::apply(&mut f, 200).unwrap();
-        assert_eq!(f.planes[0][1 * 4 + 2], 200);
+        assert_eq!(f.planes[0][4 + 2], 200);
     }
 }

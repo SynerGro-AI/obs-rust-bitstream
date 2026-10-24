@@ -14,17 +14,9 @@ pub enum AssignmentError {
     NotClaimed,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Assignment {
     claims: BTreeMap<String, String>, // resource -> member
-}
-
-impl Default for Assignment {
-    fn default() -> Self {
-        Self {
-            claims: BTreeMap::new(),
-        }
-    }
 }
 
 impl Assignment {

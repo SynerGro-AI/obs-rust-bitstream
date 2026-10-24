@@ -79,6 +79,6 @@ mod tests {
         assert_eq!(f.format, VideoFormat::Y800);
         let y = f.planes[0][0];
         assert!(y > 50); // red is not black
-        assert_eq!(f.planes[0].iter().all(|p| *p == y), true);
+        assert!(f.planes[0].iter().all(|p| *p == y));
     }
 }

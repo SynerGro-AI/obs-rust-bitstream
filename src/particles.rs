@@ -71,6 +71,12 @@ impl Particles {
     }
 }
 
+impl Default for Particles {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -335,9 +335,7 @@ impl StatusHistory {
         let pattern = format!("\"{}\":", key);
         let start = json.find(&pattern)? + pattern.len();
         let rest = &json[start..];
-        let end = rest
-            .find(|c: char| c == ',' || c == '}')
-            .unwrap_or(rest.len());
+        let end = rest.find([',', '}']).unwrap_or(rest.len());
         Some(rest[..end].trim_matches('"').to_string())
     }
 

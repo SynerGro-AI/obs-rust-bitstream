@@ -93,7 +93,7 @@ mod tests {
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 8, 8).unwrap();
         Shape::rect(&mut f, 1, 1, 2, 2, 200).unwrap();
-        assert_eq!(f.planes[0][1 * 8 + 1], 200);
+        assert_eq!(f.planes[0][8 + 1], 200);
         Shape::ellipse(&mut f, 4, 4, 2, 2, 100).unwrap();
         assert_eq!(f.planes[0][4 * 8 + 4], 100);
     }

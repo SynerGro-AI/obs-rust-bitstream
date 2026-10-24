@@ -67,7 +67,7 @@ impl Selection {
                 }
             }
             xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            for pair in xs.chunks_exact(2) {
+            for pair in xs.as_chunks::<2>().0 {
                 let a = pair[0].round().clamp(0.0, width as f32) as u32;
                 let b = pair[1].round().clamp(0.0, width as f32) as u32;
                 let row = (y as usize) * (width as usize);

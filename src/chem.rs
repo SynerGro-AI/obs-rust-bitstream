@@ -418,8 +418,7 @@ fn parse_side(side: &str) -> Result<Vec<Term>, ChemError> {
 /// Without coefficients the equation is balanced automatically.
 pub fn parse_equation(src: &str) -> Result<Equation, ChemError> {
     let s = src
-        .replace('→', "->")
-        .replace('⇌', "->")
+        .replace(['→', '⇌'], "->")
         .replace("<=>", "->")
         .replace("<->", "->")
         .replace("=>", "->");
@@ -1211,7 +1210,7 @@ mod tests {
             parse_equation("H2 + O2 -> H2O + 1 O2"),
             Err(ChemError::Unbalanced(_))
         ));
-        assert!(matches!(parse_equation("2 H2 + O2 -> 2 H2O"), Ok(_)));
+        assert!(parse_equation("2 H2 + O2 -> 2 H2O").is_ok());
         assert!(parse_equation("H2 + O2").is_err());
         assert!(parse_equation("Xy2 -> X").is_err());
         // fractional coefficients

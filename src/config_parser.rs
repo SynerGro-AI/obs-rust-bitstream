@@ -25,12 +25,12 @@ pub fn parse_config_string(input: &str) -> Config {
         // Section: [ name ]
         if toks[i].text == "[" {
             if let Some(name_tok) = toks.get(i + 1) {
-                if name_tok.kind == CfTokenType::Name {
-                    if toks.get(i + 2).map(|t| t.text == "]").unwrap_or(false) {
-                        current_section = name_tok.text.to_string();
-                        i += 3;
-                        continue;
-                    }
+                if name_tok.kind == CfTokenType::Name
+                    && toks.get(i + 2).map(|t| t.text == "]").unwrap_or(false)
+                {
+                    current_section = name_tok.text.to_string();
+                    i += 3;
+                    continue;
                 }
             }
         }

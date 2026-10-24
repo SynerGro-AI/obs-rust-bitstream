@@ -17,19 +17,10 @@ pub enum CameraRigError {
     Missing,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CameraRig {
     cameras: HashMap<String, Camera>,
     active: Option<String>,
-}
-
-impl Default for CameraRig {
-    fn default() -> Self {
-        Self {
-            cameras: HashMap::new(),
-            active: None,
-        }
-    }
 }
 
 impl CameraRig {

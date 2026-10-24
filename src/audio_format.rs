@@ -124,6 +124,6 @@ mod tests {
     #[test]
     fn differential() {
         let sz = audio_size(AudioFormat::F32, SpeakerLayout::Mono, 480).unwrap();
-        assert_equal(sz, 4 * 1 * 480, "audio size");
+        assert_equal(sz, 4 * 480, "audio size");
     }
 }

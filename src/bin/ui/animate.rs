@@ -86,7 +86,7 @@ impl AnimState {
         self.ink = self
             .frames
             .iter()
-            .map(|f| f.data.chunks_exact(4).any(|p| p[3] > 0))
+            .map(|f| f.data.as_chunks::<4>().0.iter().any(|p| p[3] > 0))
             .collect();
         self.texs = vec![None; n];
         self.dirty = vec![true; n];
@@ -175,7 +175,7 @@ impl AnimState {
             return;
         }
         self.snapshot();
-        let ink = r.data.chunks_exact(4).any(|p| p[3] > 0);
+        let ink = r.data.as_chunks::<4>().0.iter().any(|p| p[3] > 0);
         self.frames.insert(at, r);
         self.ink.insert(at, ink);
         self.texs.insert(at, None);
@@ -256,7 +256,12 @@ impl AnimState {
             }
             self.dirty[i] = false;
             if self.erase {
-                self.ink[i] = self.frames[i].data.chunks_exact(4).any(|p| p[3] > 0);
+                self.ink[i] = self.frames[i]
+                    .data
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|p| p[3] > 0);
             }
         }
         self.texs[i].as_ref().map(|t| t.id())

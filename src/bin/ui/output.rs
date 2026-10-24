@@ -440,7 +440,7 @@ fn parse_progress(line: &str, s: &mut Stats) {
 /// alpha composited over black).
 pub fn letterbox(src: Option<&Raster>, w: u32, h: u32) -> Vec<u8> {
     let mut out = vec![0u8; (w * h * 4) as usize];
-    for px in out.chunks_exact_mut(4) {
+    for px in out.as_chunks_mut::<4>().0 {
         px[3] = 255;
     }
     let Some(r) = src.filter(|r| r.width > 0 && r.height > 0) else {
@@ -460,7 +460,7 @@ pub fn letterbox(src: Option<&Raster>, w: u32, h: u32) -> Vec<u8> {
         let srow = &r.data[sy * r.width as usize * 4..(sy + 1) * r.width as usize * 4];
         let drow =
             &mut out[((oy + y) * w + ox) as usize * 4..((oy + y) * w + ox + dw) as usize * 4];
-        for (d, &sx) in drow.chunks_exact_mut(4).zip(&xs) {
+        for (d, &sx) in drow.as_chunks_mut::<4>().0.iter_mut().zip(&xs) {
             let p = &srow[sx * 4..sx * 4 + 4];
             let a = p[3] as u16;
             d[0] = (p[0] as u16 * a / 255) as u8;

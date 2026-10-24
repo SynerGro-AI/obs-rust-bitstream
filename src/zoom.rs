@@ -63,6 +63,12 @@ impl Zoom {
     }
 }
 
+impl Default for Zoom {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -61,8 +61,8 @@ mod tests {
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
         Draw::rect(&mut f, 1, 1, 2, 2, 200).unwrap();
-        assert_eq!(f.planes[0][1 * 4 + 1], 200);
-        assert_eq!(f.planes[0][1 * 4 + 2], 200);
+        assert_eq!(f.planes[0][4 + 1], 200);
+        assert_eq!(f.planes[0][4 + 2], 200);
         assert_eq!(f.planes[0][2 * 4 + 1], 200);
         assert_eq!(f.planes[0][0], 0);
     }

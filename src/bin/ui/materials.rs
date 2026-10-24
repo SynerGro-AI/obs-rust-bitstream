@@ -1556,7 +1556,7 @@ mod tests {
         );
         assert!(!matches(al, "Fe"));
         let mut m = MaterialsState::new();
-        assert_eq!(
+        assert!(
             m.apply(&AppCommand::MaterialsSearch {
                 query: "ium".into()
             })
@@ -1567,8 +1567,7 @@ mod tests {
             .unwrap()
             .parse::<usize>()
             .unwrap()
-                > 40,
-            true
+                > 40
         );
         assert!(m
             .apply(&AppCommand::MaterialsSelect {

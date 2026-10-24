@@ -19,7 +19,7 @@ impl Eyedropper {
         if x >= frame.width || y >= frame.height {
             return None;
         }
-        let plane = frame.planes.get(0)?;
+        let plane = frame.planes.first()?;
         let idx = (y * frame.width + x) as usize;
         plane.get(idx).copied()
     }

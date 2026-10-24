@@ -1978,6 +1978,55 @@ impl SceneState {
     }
 }
 
+/// Energy books of the running arena: stocks change by exactly the flows.
+fn energy_ledger(ui: &mut egui::Ui, p: &Palette, a: &obs_rust_bitstream::arena::Arena) {
+    let Some(e0) = a.ledger.start else { return };
+    let e = a.energy();
+    let l = &a.ledger;
+    let kj = |j: f64| {
+        if j.abs() >= 1e6 {
+            format!("{:+.3} MJ", j / 1e6)
+        } else {
+            format!("{:+.2} kJ", j / 1e3)
+        }
+    };
+    egui::CollapsingHeader::new(
+        egui::RichText::new("Energy ledger")
+            .size(11.0)
+            .color(p.text),
+    )
+    .id_salt("energy-ledger")
+    .default_open(true)
+    .show(ui, |ui| {
+        let row = |ui: &mut egui::Ui, k: &str, v: String| theme::kv(ui, p, k, v);
+        row(ui, "Kinetic", kj(e.kinetic));
+        row(ui, "Potential", kj(e.potential));
+        row(
+            ui,
+            "Δ Thermal",
+            kj(e.internal - (e0 - a.ledger_start_mech())),
+        );
+        row(ui, "Heaters in", kj(l.heater_in));
+        row(ui, "Air / radiation", kj(l.exchange_in));
+        row(ui, "Drag work", kj(l.drag_work));
+        row(ui, "Impacts → heat", kj(l.dissipated));
+        row(ui, "Conducted", kj(l.conducted));
+        let r = a.energy_residual();
+        ui.label(
+            egui::RichText::new(format!("Residual {:+.3} J (stocks − start − flows)", r))
+                .size(10.5)
+                .color(
+                    if r.abs() < 1e-3 * (1.0 + e.kinetic + l.heater_in.abs() + l.exchange_in.abs())
+                    {
+                        p.success
+                    } else {
+                        p.warn
+                    },
+                ),
+        );
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2250,53 +2299,4 @@ mod tests {
             "wireframe draws no faces"
         );
     }
-}
-
-/// Energy books of the running arena: stocks change by exactly the flows.
-fn energy_ledger(ui: &mut egui::Ui, p: &Palette, a: &obs_rust_bitstream::arena::Arena) {
-    let Some(e0) = a.ledger.start else { return };
-    let e = a.energy();
-    let l = &a.ledger;
-    let kj = |j: f64| {
-        if j.abs() >= 1e6 {
-            format!("{:+.3} MJ", j / 1e6)
-        } else {
-            format!("{:+.2} kJ", j / 1e3)
-        }
-    };
-    egui::CollapsingHeader::new(
-        egui::RichText::new("Energy ledger")
-            .size(11.0)
-            .color(p.text),
-    )
-    .id_salt("energy-ledger")
-    .default_open(true)
-    .show(ui, |ui| {
-        let row = |ui: &mut egui::Ui, k: &str, v: String| theme::kv(ui, p, k, v);
-        row(ui, "Kinetic", kj(e.kinetic));
-        row(ui, "Potential", kj(e.potential));
-        row(
-            ui,
-            "Δ Thermal",
-            kj(e.internal - (e0 - a.ledger_start_mech())),
-        );
-        row(ui, "Heaters in", kj(l.heater_in));
-        row(ui, "Air / radiation", kj(l.exchange_in));
-        row(ui, "Drag work", kj(l.drag_work));
-        row(ui, "Impacts → heat", kj(l.dissipated));
-        row(ui, "Conducted", kj(l.conducted));
-        let r = a.energy_residual();
-        ui.label(
-            egui::RichText::new(format!("Residual {:+.3} J (stocks − start − flows)", r))
-                .size(10.5)
-                .color(
-                    if r.abs() < 1e-3 * (1.0 + e.kinetic + l.heater_in.abs() + l.exchange_in.abs())
-                    {
-                        p.success
-                    } else {
-                        p.warn
-                    },
-                ),
-        );
-    });
 }

@@ -56,6 +56,12 @@ impl OnionViewer {
     }
 }
 
+impl Default for OnionViewer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

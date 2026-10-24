@@ -22,8 +22,7 @@ pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
     }
     #[cfg(target_os = "linux")]
     {
-        return crate::linux_audio::LinuxAudio::open(48000, 1)
-            .map(|a| Box::new(a) as Box<dyn AudioCapture>);
+        crate::linux_audio::LinuxAudio::open(48000, 1).map(|a| Box::new(a) as Box<dyn AudioCapture>)
     }
     #[cfg(windows)]
     {
@@ -52,7 +51,7 @@ pub fn backend_name() -> &'static str {
     {
         #[cfg(target_os = "linux")]
         {
-            return "alsa";
+            "alsa"
         }
         #[cfg(windows)]
         {

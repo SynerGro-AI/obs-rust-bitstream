@@ -47,6 +47,12 @@ impl QualitySlider {
     }
 }
 
+impl Default for QualitySlider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

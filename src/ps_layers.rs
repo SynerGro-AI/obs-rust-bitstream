@@ -13,7 +13,7 @@ pub struct PsLayers;
 impl PsLayers {
     /// One line per layer, top first: "eye opacity% blend name"
     pub fn panel(stack: &LayerStack) -> Vec<String> {
-        stack.layers().iter().rev().map(|l| Self::line(l)).collect()
+        stack.layers().iter().rev().map(Self::line).collect()
     }
 
     fn line(layer: &Layer) -> String {

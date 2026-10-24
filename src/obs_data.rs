@@ -317,7 +317,7 @@ mod tests {
         d.set_bool("visible", true).unwrap();
         assert_eq!(d.get_string("name").unwrap(), "cam");
         assert_eq!(d.get_int("width").unwrap(), 1920);
-        assert_eq!(d.get_bool("visible").unwrap(), true);
+        assert!(d.get_bool("visible").unwrap());
     }
 
     #[test]
@@ -427,7 +427,7 @@ mod tests {
         let parsed = ObsData::from_json(&d.to_json()).unwrap();
         assert_eq!(parsed.get_string("name").unwrap(), "cam");
         assert_eq!(parsed.get_int("w").unwrap(), 1280);
-        assert_eq!(parsed.get_bool("on").unwrap(), false);
+        assert!(!parsed.get_bool("on").unwrap());
     }
 
     #[test]
@@ -447,6 +447,6 @@ mod tests {
         base.apply(&patch);
         assert_eq!(base.get_string("name").unwrap(), "new");
         assert_eq!(base.get_int("w").unwrap(), 1280);
-        assert_eq!(base.get_bool("on").unwrap(), true);
+        assert!(base.get_bool("on").unwrap());
     }
 }

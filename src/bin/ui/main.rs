@@ -941,9 +941,7 @@ impl App {
                 self.mode = Mode::Scene;
                 let want = playing.unwrap_or(!self.scene.arena_playing);
                 if want && self.scene.arena.is_none() {
-                    if let Err(e) = self.arena_build() {
-                        return Err(e);
-                    }
+                    self.arena_build()?;
                 }
                 self.scene.arena_playing = want && self.scene.arena.is_some();
                 Ok(if self.scene.arena_playing {
@@ -2037,7 +2035,13 @@ impl App {
             Mode::Scene => self.scene.frame.clone(),
             Mode::Animate => self.anim.frames.get(self.anim.current()).map(|r| {
                 let mut out = Raster::filled(r.width, r.height, [250, 248, 242, 255]);
-                for (d, s) in out.data.chunks_exact_mut(4).zip(r.data.chunks_exact(4)) {
+                for (d, s) in out
+                    .data
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(r.data.chunks_exact(4))
+                {
                     let a = s[3] as u32;
                     for c in 0..3 {
                         d[c] = ((s[c] as u32 * a + d[c] as u32 * (255 - a)) / 255) as u8;
@@ -3471,12 +3475,20 @@ mod tests {
         let colours: std::collections::HashSet<[u8; 3]> = base
             .raster
             .data
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .step_by(7)
             .map(|p| [p[0], p[1], p[2]])
             .collect();
         assert!(colours.len() > 2000, "{} colours", colours.len());
-        assert!(base.raster.data.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(base
+            .raster
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| p[3] == 255));
         // properties survive
         let mist = find("Mist Overlay");
         assert_eq!(mist.blend, BlendMode::Screen);
@@ -3484,7 +3496,9 @@ mod tests {
         assert!(
             mist.raster
                 .data
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .take(1000)
                 .all(|p| p[3] == 0),
             "mask baked into alpha at the top"
@@ -3609,7 +3623,9 @@ mod tests {
         assert!(app.paint.doc.layers[pi]
             .raster
             .data
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|p| p[3] > 0));
         app.mode = Mode::Paint;
         run(&mut app, &ctx, 2, 0.0);

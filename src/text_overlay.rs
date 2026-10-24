@@ -88,7 +88,7 @@ impl TextOverlay {
         // Draw into a temporary copy, then blend.
         let mut tmp = frame.clone();
         let drawn = Self::draw(&mut tmp, x, y, text, text_lum)?;
-        if let (Some(dst), Some(src)) = (frame.planes.get_mut(0), tmp.planes.get(0)) {
+        if let (Some(dst), Some(src)) = (frame.planes.get_mut(0), tmp.planes.first()) {
             for (d, s) in dst.iter_mut().zip(src.iter()) {
                 if *s != *d {
                     let blended =

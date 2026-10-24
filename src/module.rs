@@ -105,6 +105,6 @@ mod tests {
     fn differential() {
         let mut m = Module::new("core").unwrap();
         m.register_filter("gain_filter").unwrap();
-        assert!(m.has_source("gain_filter") == false);
+        assert!(!m.has_source("gain_filter"));
     }
 }

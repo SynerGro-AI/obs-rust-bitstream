@@ -51,6 +51,12 @@ impl LayerStackPixels {
     }
 }
 
+impl Default for LayerStackPixels {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

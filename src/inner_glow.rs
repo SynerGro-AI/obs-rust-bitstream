@@ -52,8 +52,8 @@ mod tests {
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
         f.planes[0].fill(32);
-        f.planes[0][1 * 4 + 1] = 200;
+        f.planes[0][4 + 1] = 200;
         InnerGlow::apply(&mut f, 50).unwrap();
-        assert!(f.planes[0][1 * 4 + 1] > 200);
+        assert!(f.planes[0][4 + 1] > 200);
     }
 }

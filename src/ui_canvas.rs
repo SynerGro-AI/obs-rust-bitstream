@@ -28,7 +28,7 @@ impl Raster {
     /// Solid colour raster.
     pub fn filled(width: u32, height: u32, rgba: [u8; 4]) -> Self {
         let mut r = Self::new(width, height);
-        for px in r.data.chunks_exact_mut(4) {
+        for px in r.data.as_chunks_mut::<4>().0 {
             px.copy_from_slice(&rgba);
         }
         r
@@ -239,14 +239,14 @@ impl Filter {
             Filter::None => {}
             Filter::Levels => {
                 let gain = strength.max(0.0);
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     for c in px.iter_mut().take(3) {
                         *c = ((*c as f32 - 10.0).max(0.0) * gain).clamp(0.0, 255.0) as u8;
                     }
                 }
             }
             Filter::Curves => {
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     for c in px.iter_mut().take(3) {
                         let v = *c as f32 / 255.0;
                         *c = (v * v * 255.0).round() as u8;
@@ -254,7 +254,7 @@ impl Filter {
                 }
             }
             Filter::Grayscale => {
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     let l = (0.299 * px[0] as f32 + 0.587 * px[1] as f32 + 0.114 * px[2] as f32)
                         .round() as u8;
                     px[0] = l;
@@ -263,7 +263,7 @@ impl Filter {
                 }
             }
             Filter::Invert => {
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     for c in px.iter_mut().take(3) {
                         *c = 255 - *c;
                     }
@@ -320,7 +320,13 @@ pub fn composite(layers: &[ImageLayer], width: u32, height: u32, background: [u8
 /// Blend `top` over `base` (same size) with mode and opacity.
 pub fn blend_into(base: &mut Raster, top: &Raster, mode: BlendMode, opacity: f32) {
     let op = opacity.clamp(0.0, 1.0);
-    for (b, t) in base.data.chunks_exact_mut(4).zip(top.data.chunks_exact(4)) {
+    for (b, t) in base
+        .data
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(top.data.chunks_exact(4))
+    {
         let a = (t[3] as f32 / 255.0) * op;
         if a <= 0.0 {
             continue;

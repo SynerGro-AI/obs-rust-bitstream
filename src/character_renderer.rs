@@ -57,6 +57,12 @@ impl CharacterRenderer {
     }
 }
 
+impl Default for CharacterRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

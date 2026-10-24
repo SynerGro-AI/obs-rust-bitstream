@@ -53,6 +53,12 @@ impl TimeRemap {
     }
 }
 
+impl Default for TimeRemap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct TimelineRest;
 
 impl TimelineRest {

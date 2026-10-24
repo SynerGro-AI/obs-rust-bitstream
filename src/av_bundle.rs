@@ -134,6 +134,12 @@ impl AvBundle {
     }
 }
 
+impl Default for AvBundle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

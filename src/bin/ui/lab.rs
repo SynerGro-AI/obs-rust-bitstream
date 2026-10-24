@@ -425,7 +425,7 @@ fn run_circuit(preset: &str, pr: &CircParams) -> Result<CircRun, String> {
             while c.time < tend {
                 c.step(h).map_err(e)?;
                 k += 1;
-                let keep = k % 10 == 0;
+                let keep = k.is_multiple_of(10);
                 if let circuit::Elem::R {
                     thermal: Some(th), ..
                 } = &c.elems[wi]

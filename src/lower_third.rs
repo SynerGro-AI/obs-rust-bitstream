@@ -46,6 +46,12 @@ impl LowerThird {
     }
 }
 
+impl Default for LowerThird {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

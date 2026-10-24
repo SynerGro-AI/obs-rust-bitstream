@@ -139,7 +139,7 @@ impl AnimationTimeline {
 
 fn parse_xyz(s: &str) -> Option<(f32, f32, f32)> {
     let parts: Vec<f32> = s
-        .split(|c: char| c == ',' || c == ' ' || c == '\n')
+        .split([',', ' ', '\n'])
         .filter_map(|p| p.trim().parse().ok())
         .collect();
     if parts.len() >= 3 {

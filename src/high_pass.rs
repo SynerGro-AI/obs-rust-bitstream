@@ -23,7 +23,7 @@ impl HighPass {
         }
         let mut blurred = frame.clone();
         BoxBlur::apply(&mut blurred).map_err(|_| HighPassError::WrongFormat)?;
-        if let (Some(dst), Some(blur)) = (frame.planes.get_mut(0), blurred.planes.get(0)) {
+        if let (Some(dst), Some(blur)) = (frame.planes.get_mut(0), blurred.planes.first()) {
             for (d, b) in dst.iter_mut().zip(blur.iter()) {
                 let v = 128 + (*d as i16 - *b as i16);
                 *d = v.clamp(0, 255) as u8;
@@ -41,8 +41,8 @@ mod tests {
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
         f.planes[0].fill(64);
-        f.planes[0][1 * 4 + 1] = 200;
+        f.planes[0][4 + 1] = 200;
         HighPass::apply(&mut f).unwrap();
-        assert!(f.planes[0][1 * 4 + 1] > 128);
+        assert!(f.planes[0][4 + 1] > 128);
     }
 }

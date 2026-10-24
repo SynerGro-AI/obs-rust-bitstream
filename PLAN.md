@@ -116,7 +116,10 @@ learner and no second store.
 
 Only lessons whose weight means something to another user are shared,
 keyed by names from compiled allow-lists (`Mode::ALL` and the AppCommand
-names in `docs/AI_TOOLS.md`). This is allow-list revision 1.
+names in `docs/AI_TOOLS.md`). This is allow-list revision 1. Allow-list
+revisions, their wire grammar and import modes are defined only in
+`docs/LESSON_PACK.md` ("Allow-list revisions"); this table restates how
+Studio computes and imports the revision 1 values.
 
 | Shared key (on the wire) | Weight sent | Imported as |
 |---|---|---|
@@ -238,7 +241,10 @@ Only then is the pack parsed and verified.
 the window. The app binds no sockets. Gossip is user-driven: a pack you
 imported can be passed on with "Share again", which is a new,
 user-approved share that writes the original pack unchanged, with the
-original signature (re-sharing is pending owner confirmation).
+original signature (re-sharing is pending owner confirmation). The
+sequence belongs to the origin key, so once a newer relayed pack from a
+sender is imported, that sender's older direct pack is refused as a
+replay (`docs/LESSON_PACK.md`, "Re-sharing").
 
 **C7.2 (the release after v0.2.0): LAN, with the Auditor's hardening.**
 It has its own toggle, off by default.
@@ -330,10 +336,12 @@ OS mesh.
   1. file size through `take(1 MiB + 1)`, for files only;
   2. PNG structure and CRCs, for files only;
   3. pack size;
-  4. layout and key order;
+  4. layout (including `created` on a whole UTC day) and key order;
   5. key grammar and allow-list;
   6. weight range;
-  7. signature (`verify_strict`);
+  7. signature: the strict checks listed in `docs/LESSON_PACK.md`
+     (canonical key, no small-order key or `R`, `S` < L), then
+     `verify_strict`;
   8. replay;
   9. trust.
 * **Import limit:** at most 20 approved imports per hour, so clicking
@@ -435,8 +443,10 @@ Every test uses real files, and the C7.2 tests use real sockets on
 | `png_structure_rules_are_enforced` | `IHDR` not first, a non-letter chunk type byte, two `seLp` chunks, `seLp` after `IDAT`, and bytes after `IEND` are each refused |
 | `replayed_pack_is_refused` | the same file imported twice, including after a restart, is refused the second time |
 | `older_sequence_is_refused` | after `a_seq2`, `a_seq1` is refused |
+| `relayed_newer_pack_makes_older_direct_pack_a_replay` | after `a_seq2` arrives relayed through another peer, the direct `a_seq1` is refused as older, and the ledger holds one entry for key A |
 | `sender_sequence_survives_a_crash` | the process is killed between persisting the counter and writing the file; the next export uses a fresh, higher sequence |
-| `bad_signature_is_refused` | another key's signature, a zeroed signature, a non-canonical `S` and the old domain string are refused |
+| `bad_signature_is_refused` | another key's signature, a zeroed signature, `bad_noncanonical_s.bin`, `bad_small_order_key.bin`, a key with `y` ≥ p and the old domain string are refused, each for the reason named in `docs/LESSON_PACK.md` |
+| `created_not_whole_day_is_refused` | `bad_created_not_whole_day.bin` is refused (`created`) |
 | `unknown_key_needs_explicit_trust` | a valid pack from an unknown key changes nothing until it is trusted; a blocked key is refused |
 | `out_of_range_weight_is_refused` | `bad_weight_10001.bin` is refused |
 | `import_delta_is_clamped` | one pack moves a key by 0.05 at most; one origin stops at 0.15 |
@@ -473,10 +483,12 @@ Two more are manual Windows checks: `public_profile_refuses_lan` and
 * **Seraphina.AGI (later)** reads and teaches lessons through
   `LessonStore`, under the same allow-list. It gets no extra rights: its
   imports go through the same preview.
-* **RWN:** the `{key, weight_q, evidence}` unit maps onto RWN's
-  per-source reliability with an evidence count. A later allow-list
-  revision may add an `rwn.source.<id>` family. Raw model weights do not
-  fit this unit.
+* **RWN:** the `{key, weight_q, evidence}` unit carries RWN's probe
+  verdicts and threshold in the `observe` families of allow-list
+  revision 2 (planned), defined in `docs/LESSON_PACK.md`. Studio stays
+  at revision 1 in v0.2.0 and refuses those packs whole.
+  `rwn.source.<id>` is reserved there and is in no revision. Raw model
+  weights do not fit this unit.
 * **Glyph OS mesh (later):** the pack is the payload unit, and its
   domain is product-neutral, so Studio and Glyph OS trade the same
   bytes.
@@ -492,8 +504,11 @@ design, **pending user confirmation**:
 1. **Trust:** TOFU, with the fingerprint always shown and an optional
    "Compare fingerprints" step. Only verified peers count toward any
    convergence gate.
-2. **Key families:** none beyond allow-list revision 1 in v1. An
-   `rwn.source.<id>` family comes when Seraphina.AGI wires up RWN.
+2. **Key families:** Studio uses only allow-list revision 1 in v1.
+   Revision 2 (planned, the RWN `observe` families `rwn.probe.*` and
+   `rwn.<profile>.threshold`) is defined in `docs/LESSON_PACK.md` and
+   arrives with Seraphina.AGI's RWN milestone. `rwn.source.<id>` stays
+   reserved.
 3. **Automatic gossip:** only after C7.2 ships and a convergence metric
    is specified, tied to Seraphina's mesh milestone.
 4. **Visual glyph:** a label only in v1. The data rides in the PNG

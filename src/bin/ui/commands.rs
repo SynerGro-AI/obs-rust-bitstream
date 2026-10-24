@@ -654,8 +654,8 @@ mod tests {
         let specs = tool_specs();
         let mut md = format!(
             "# AI tools\n\nGenerated from `tool_specs()` in `src/bin/ui/commands.rs`; \
-             `cargo test --features ui --bin ui ai_tools_doc` checks it. \
-             Regenerate with `cargo test --features ui --bin ui -- --ignored \
+             `cargo test --bin ui ai_tools_doc` checks it. \
+             Regenerate with `cargo test --bin ui -- --ignored \
              regenerate_ai_tools_doc`.\n\n{} tools.\n\n| Tool | What it does |\n|------|--------------|\n",
             specs.len()
         );

@@ -1204,7 +1204,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Live, billed: run explicitly with `cargo test --features ui --bin ui -- --ignored live_imagine`.
+    /// Live, billed: run explicitly with `cargo test --bin ui -- --ignored live_imagine`.
     /// Writes into SERAPHINA_LIVE_OUT (default: temp dir).
     #[test]
     #[ignore = "live, billed: needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"]

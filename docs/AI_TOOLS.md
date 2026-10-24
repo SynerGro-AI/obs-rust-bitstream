@@ -1,6 +1,6 @@
 # AI tools
 
-Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --features ui --bin ui ai_tools_doc` checks it. Regenerate with `cargo test --features ui --bin ui -- --ignored regenerate_ai_tools_doc`.
+Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --bin ui ai_tools_doc` checks it. Regenerate with `cargo test --bin ui -- --ignored regenerate_ai_tools_doc`.
 
 101 tools.
 

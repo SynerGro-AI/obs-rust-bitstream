@@ -1276,7 +1276,7 @@ pub(crate) mod tests {
     /// Needs a real V4L2 node: `sudo modprobe v4l2loopback devices=1` and a
     /// producer such as `ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=30
     /// -pix_fmt yuyv422 -f v4l2 /dev/video0`, then
-    /// `SERAPHINA_TEST_CAMERA=/dev/video0 cargo test --features ui -- --ignored v4l2_reads`.
+    /// `SERAPHINA_TEST_CAMERA=/dev/video0 cargo test --bin ui -- --ignored v4l2_reads`.
     #[cfg(target_os = "linux")]
     #[test]
     #[ignore = "needs a V4L2 device (v4l2loopback); the dev box's Firecracker kernel has no media support"]

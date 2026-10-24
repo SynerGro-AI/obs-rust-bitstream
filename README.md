@@ -365,7 +365,7 @@ missing; they never pass silently.
   `a_dead_relay_ends_the_delayed_stream` (the relay can't connect, so the
   encoder must be killed and the error reported) use it too, as do
   `concat_runs_off_thread` (stitches two clips) and
-  `stream_commands_and_status` (records through the command bus) need it too.
+  `stream_commands_and_status` (records through the command bus).
 * **mediamtx** at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) is required on
   Linux by `streams_to_local_rtmp_and_reconnects_with_backoff`: it streams to a
   local RTMP server, confirms receipt under the stream key, kills the server

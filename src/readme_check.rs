@@ -430,6 +430,40 @@ fn a_module_named_only_in_a_string_is_not_used() {
     }
 }
 
+/// `ui` is a default feature, so current docs and comments give commands
+/// without naming that feature. docs/UI_AUDIT.md is a dated record and keeps
+/// the commands it ran.
+#[test]
+fn current_docs_do_not_ask_for_the_default_ui_feature() {
+    fn walk(p: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        if p.is_dir() {
+            let entries =
+                std::fs::read_dir(p).unwrap_or_else(|e| panic!("read_dir {}: {e}", p.display()));
+            for e in entries {
+                walk(&e.expect("dir entry").path(), out);
+            }
+        } else {
+            out.push(p.to_path_buf());
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    for d in ["src", "examples", "docs", ".github"] {
+        walk(&root.join(d), &mut files);
+    }
+    for f in ["README.md", "CONTRIBUTING.md", "PLAN.md", "TOOLS.md"] {
+        files.push(root.join(f));
+    }
+    let needle = ["--features", " ui"].concat();
+    let stale: Vec<String> = files
+        .iter()
+        .filter(|f| !f.ends_with("docs/UI_AUDIT.md"))
+        .filter(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains(&needle)))
+        .map(|f| f.strip_prefix(root).unwrap_or(f).display().to_string())
+        .collect();
+    assert!(stale.is_empty(), "still say {needle}: {stale:?}");
+}
+
 #[test]
 #[should_panic(expected = "read_dir")]
 fn an_unreadable_source_directory_fails_the_walk() {

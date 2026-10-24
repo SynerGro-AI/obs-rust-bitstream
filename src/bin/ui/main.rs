@@ -4052,7 +4052,7 @@ mod tests {
 
     /// UI frame time with a heavy arena playing, before (M1: all-pairs
     /// contacts stepped inside the frame) and after (A8: sweep-and-prune on
-    /// the worker). `cargo test --release --features ui --bin ui -- --ignored
+    /// the worker). `cargo test --release --bin ui -- --ignored
     /// measure_ui_frame_time --nocapture` (SERAPHINA_BENCH_BODIES, default 1500).
     #[test]
     #[ignore = "benchmark: run with --release and --nocapture"]
@@ -5734,7 +5734,7 @@ mod tests {
     }
 
     /// Live, billed: real xAI tool calling through the bus. Run with
-    /// `cargo test --features ui --bin ui -- --ignored live_xai_tool_calling_smoke`.
+    /// `cargo test --bin ui -- --ignored live_xai_tool_calling_smoke`.
     #[test]
     #[ignore = "live, billed: needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"]
     fn live_xai_tool_calling_smoke() {

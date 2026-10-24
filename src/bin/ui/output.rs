@@ -143,14 +143,6 @@ pub fn studio_dir() -> PathBuf {
 }
 
 impl OutputConfig {
-    /// Unit tests save to a per-process temp file, never the user's.
-    pub fn path() -> PathBuf {
-        if cfg!(test) {
-            return std::env::temp_dir()
-                .join(format!("seraphina_test_output_{}.json", std::process::id()));
-        }
-        studio_dir().join("output.json")
-    }
     /// Settings and, if output.json was damaged, a message saying where
     /// the damaged copy was kept.
     pub fn load_from(path: &std::path::Path) -> (Self, Option<String>) {
@@ -159,9 +151,6 @@ impl OutputConfig {
     pub fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
         let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         crate::project::write_atomic(path, s.as_bytes()).map_err(|e| e.to_string())
-    }
-    pub fn save(&self) -> Result<(), String> {
-        self.save_to(&Self::path())
     }
     /// Even dimensions (yuv420p), sane bounds.
     /// The stream delay for a session of this kind, if one applies.
@@ -1168,6 +1157,11 @@ pub struct Output {
     /// Settings ▸ Output preview is showing the camera.
     pub camera_preview: bool,
     /// Last camera enumeration (Settings ▸ Output ▸ Refresh).
+    /// Where settings are saved: output.json in the studio folder; in unit
+    /// tests a temp folder of this Output's own, removed when it drops.
+    cfg_path: PathBuf,
+    #[cfg(test)]
+    _cfg_dir: crate::test_dir::TestDir,
     pub cameras: Option<Result<Vec<crate::camera::Device>, crate::camera::CameraError>>,
     /// A camera is there but the system blocks access (why); Settings ▸
     /// Output shows Approve and checks again until it opens.
@@ -1187,8 +1181,17 @@ impl Output {
         crate::crash::register_secret(&key);
         let mut reconnect = Reconnect::new();
         reconnect.set_settings(cfg.retry_max, cfg.retry_sec);
+        #[cfg(test)]
+        let cfg_dir = crate::test_dir::TestDir::new("output_cfg");
+        #[cfg(test)]
+        let cfg_path = cfg_dir.path().join("output.json");
+        #[cfg(not(test))]
+        let cfg_path = studio_dir().join("output.json");
         Self {
             cfg,
+            cfg_path,
+            #[cfg(test)]
+            _cfg_dir: cfg_dir,
             key,
             ffmpeg: None,
             ffmpeg_error: None,
@@ -1220,8 +1223,10 @@ impl Output {
     }
 
     pub fn load() -> Self {
-        let (cfg, warning) = OutputConfig::load_from(&OutputConfig::path());
-        let mut o = Self::new(cfg, load_key());
+        let mut o = Self::new(OutputConfig::default(), load_key());
+        let (cfg, warning) = OutputConfig::load_from(&o.cfg_path);
+        o.cfg = cfg;
+        o.reconnect.set_settings(o.cfg.retry_max, o.cfg.retry_sec);
         if let Some(w) = warning {
             o.events.push((ToastKind::Warn, w));
         }
@@ -1281,7 +1286,7 @@ impl Output {
     pub fn save_config(&mut self) -> Result<(), String> {
         self.reconnect
             .set_settings(self.cfg.retry_max, self.cfg.retry_sec);
-        self.cfg.save()
+        self.cfg.save_to(&self.cfg_path)
     }
 
     pub fn ffmpeg(&mut self) -> Result<PathBuf, String> {
@@ -2676,6 +2681,22 @@ mod tests {
         };
         let _ = std::fs::remove_file(path);
         Output::new(cfg, String::new())
+    }
+
+    /// A test Output saves settings into its own temp folder, and dropping
+    /// it (even in a failing test) removes them.
+    #[test]
+    fn a_test_output_removes_its_settings_file_when_dropped() {
+        let mut o = Output::new(OutputConfig::default(), String::new());
+        o.save_config().unwrap();
+        let path = o.cfg_path.clone();
+        assert!(path.is_file(), "{} saved", path.display());
+        assert!(path.starts_with(std::env::temp_dir()), "{}", path.display());
+        let other = Output::new(OutputConfig::default(), String::new());
+        assert_ne!(other.cfg_path, path, "each test Output has its own file");
+        drop(o);
+        assert!(!path.exists(), "{} left behind", path.display());
+        assert!(!path.parent().unwrap().exists());
     }
 
     /// Blocked camera access is checked again every 2 s, and at once when

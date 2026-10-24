@@ -332,19 +332,41 @@ pub fn screen_grab(ffmpeg: &Path) -> Grab {
 }
 
 /// Full ffmpeg argument list for a session.
-/// Capture-device audio needs a device ffmpeg can open. DirectShow has no
-/// default device, so an empty name on Windows is refused up front with a
-/// clear message (Linux uses PulseAudio's `default` source). A device that
-/// can't be opened makes ffmpeg exit, which surfaces as an error toast; the
-/// app never swaps in a synthetic or silent track.
-pub fn check_audio(cfg: &OutputConfig, windows: bool) -> Result<(), String> {
-    if windows && cfg.audio == Audio::Device && cfg.audio_device.trim().is_empty() {
-        return Err("Audio is set to Capture device but no DirectShow device is named. Enter it in Settings ▸ Output (e.g. \"Microphone (Realtek Audio)\"; `ffmpeg -list_devices true -f dshow -i dummy` lists them), or pick Silent AAC track / No audio.".into());
-    }
-    Ok(())
+/// Which capture API "Capture device" audio goes through on this OS.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AudioBackend {
+    /// Linux: PulseAudio (or PipeWire's pulse server); empty name = `default`.
+    Pulse,
+    /// Windows: DirectShow; there is no default device, a name is required.
+    DirectShow,
+    /// macOS and others: not implemented; refused with a clear error.
+    Unsupported,
 }
 
-pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> Vec<String> {
+impl AudioBackend {
+    pub fn host() -> Self {
+        if cfg!(windows) {
+            AudioBackend::DirectShow
+        } else if cfg!(target_os = "linux") {
+            AudioBackend::Pulse
+        } else {
+            AudioBackend::Unsupported
+        }
+    }
+}
+
+/// ffmpeg arguments for one session. Errors when the audio settings can't
+/// work (no DirectShow device named, or an OS without capture support):
+/// the app never swaps in a synthetic or silent track. A device that exists
+/// by name but can't be opened makes ffmpeg exit, which surfaces as an
+/// error toast.
+pub fn build_args(
+    cfg: &OutputConfig,
+    kind: Kind,
+    target: &str,
+    grab: Grab,
+    backend: AudioBackend,
+) -> Result<Vec<String>, String> {
     let (w, h) = cfg.size();
     let fps = cfg.fps.clamp(1, 120);
     let mut a: Vec<String> = [
@@ -421,10 +443,15 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> V
             "-i",
             "anullsrc=channel_layout=stereo:sample_rate=48000",
         ]),
-        Audio::Device => {
-            if cfg!(windows) {
-                push(&["-f", "dshow", "-i", &format!("audio={}", cfg.audio_device)]);
-            } else {
+        Audio::Device => match backend {
+            AudioBackend::DirectShow => {
+                let dev = cfg.audio_device.trim();
+                if dev.is_empty() {
+                    return Err("Audio is set to Capture device but no DirectShow device is named. Enter it in Settings ▸ Output (e.g. \"Microphone (Realtek Audio)\"; `ffmpeg -list_devices true -f dshow -i dummy` lists them), or pick Silent AAC track / No audio.".into());
+                }
+                push(&["-f", "dshow", "-i", &format!("audio={dev}")]);
+            }
+            AudioBackend::Pulse => {
                 let dev = if cfg.audio_device.trim().is_empty() {
                     "default"
                 } else {
@@ -432,7 +459,10 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> V
                 };
                 push(&["-f", "pulse", "-i", dev]);
             }
-        }
+            AudioBackend::Unsupported => {
+                return Err("Capture-device audio isn't supported on this OS yet (Windows and Linux only). Pick Silent AAC track or No audio in Settings ▸ Output.".into());
+            }
+        },
     }
     push(&["-map", "0:v"]);
     if has_audio {
@@ -483,7 +513,7 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> V
         Kind::Record => push(&["-movflags", "+faststart", "-f", "mp4", "-y", target]),
         Kind::Live => push(&["-f", "flv", target]),
     }
-    a
+    Ok(a)
 }
 
 #[derive(Clone, Debug, Default)]
@@ -621,14 +651,14 @@ impl Session {
         target: &str,
         secret: &str,
         frames: FrameSlot,
+        backend: AudioBackend,
     ) -> Result<Session, String> {
-        check_audio(cfg, cfg!(windows))?;
         let grab = if cfg.source == Source::Screen {
             screen_grab(ffmpeg)
         } else {
             Grab::X11
         };
-        let args = build_args(cfg, kind, target, grab);
+        let args = build_args(cfg, kind, target, grab, backend)?;
         let mut cmd = Command::new(ffmpeg);
         cmd.args(&args)
             .stdin(Stdio::piped())
@@ -857,6 +887,8 @@ pub struct Output {
     pub key_edit: String,
     /// Where the saved key lives (looked up lazily for Settings).
     key_place: Option<crate::secrets::Where>,
+    /// Capture API for "Capture device" audio; `AudioBackend::host()`.
+    pub audio_backend: AudioBackend,
 }
 
 impl Output {
@@ -883,6 +915,7 @@ impl Output {
             reveal_key: false,
             key_edit: String::new(),
             key_place: None,
+            audio_backend: AudioBackend::host(),
         }
     }
 
@@ -1022,6 +1055,7 @@ impl Output {
             &path.to_string_lossy(),
             "",
             self.frames.clone(),
+            self.audio_backend,
         )?;
         self.rec = Some(s);
         self.rec_error = None;
@@ -1069,6 +1103,7 @@ impl Output {
             &target,
             &self.key,
             self.frames.clone(),
+            self.audio_backend,
         )?;
         self.live = Some(s);
         Ok(())
@@ -1599,23 +1634,15 @@ impl Output {
                     });
                 ui.end_row();
                 if self.cfg.audio == Audio::Device {
-                    ui.label(theme::muted(
-                        p,
-                        if cfg!(windows) {
-                            "DirectShow device"
-                        } else {
-                            "Pulse source"
-                        },
-                    ));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.cfg.audio_device).hint_text(
-                            if cfg!(windows) {
-                                "Microphone (Realtek Audio)"
-                            } else {
-                                "default"
-                            },
-                        ),
-                    );
+                    let (label, hint) = match self.audio_backend {
+                        AudioBackend::DirectShow => {
+                            ("DirectShow device", "Microphone (Realtek Audio)")
+                        }
+                        AudioBackend::Pulse => ("Pulse source", "default"),
+                        AudioBackend::Unsupported => ("Not supported on this OS", ""),
+                    };
+                    ui.label(theme::muted(p, label));
+                    ui.add(egui::TextEdit::singleline(&mut self.cfg.audio_device).hint_text(hint));
                     ui.end_row();
                 }
                 ui.label(theme::muted(p, "Record folder"));
@@ -1679,7 +1706,15 @@ mod tests {
             height: 359,
             ..Default::default()
         };
-        let a = build_args(&c, Kind::Record, "/tmp/x.mp4", Grab::X11).join(" ");
+        let a = build_args(
+            &c,
+            Kind::Record,
+            "/tmp/x.mp4",
+            Grab::X11,
+            AudioBackend::Pulse,
+        )
+        .expect("args")
+        .join(" ");
         assert!(
             a.contains("-f rawvideo -pix_fmt rgba -s 640x358 -framerate 30 -i pipe:0"),
             "{}",
@@ -1695,10 +1730,26 @@ mod tests {
         );
         c.audio = Audio::None;
         c.source = Source::Screen;
-        let a = build_args(&c, Kind::Live, "rtmp://h/app/k", Grab::Gdigrab).join(" ");
+        let a = build_args(
+            &c,
+            Kind::Live,
+            "rtmp://h/app/k",
+            Grab::Gdigrab,
+            AudioBackend::DirectShow,
+        )
+        .expect("args")
+        .join(" ");
         assert!(a.contains("-f gdigrab -framerate 30 -draw_mouse 1 -i desktop"));
         assert!(!a.contains("hwdownload"));
-        let a = build_args(&c, Kind::Live, "rtmp://h/app/k", Grab::X11).join(" ");
+        let a = build_args(
+            &c,
+            Kind::Live,
+            "rtmp://h/app/k",
+            Grab::X11,
+            AudioBackend::Pulse,
+        )
+        .expect("args")
+        .join(" ");
         assert!(a.contains("-f x11grab"));
         assert!(!a.contains("-c:a") && !a.contains("1:a") && a.contains("scale=640:358"));
         assert!(a.ends_with("-f flv rtmp://h/app/k"));
@@ -1731,7 +1782,15 @@ mod tests {
             fps: 60,
             ..Default::default()
         };
-        let a = build_args(&c, Kind::Record, "o.mp4", Grab::Ddagrab).join(" ");
+        let a = build_args(
+            &c,
+            Kind::Record,
+            "o.mp4",
+            Grab::Ddagrab,
+            AudioBackend::DirectShow,
+        )
+        .expect("args")
+        .join(" ");
         assert!(
             a.contains("-f lavfi -i ddagrab=output_idx=0:framerate=60:draw_mouse=1"),
             "{}",
@@ -2239,23 +2298,49 @@ mod tests {
         let _ = server.wait();
     }
 
+    /// Goes through Output::start_record → Session::spawn → build_args, the
+    /// path the Record button uses. ffmpeg is a path that doesn't exist, so
+    /// nothing runs: if the refusal were missing, spawning would fail with
+    /// "could not start ffmpeg" instead of the device message.
     #[test]
-    fn windows_capture_device_must_be_named() {
-        let mut c = OutputConfig {
+    fn record_refuses_capture_audio_without_a_usable_device() {
+        let cfg = OutputConfig {
             audio: Audio::Device,
             ..Default::default()
         };
-        let e = check_audio(&c, true).unwrap_err();
+        let start = |backend: AudioBackend, device: &str| {
+            let mut o = Output::new(
+                OutputConfig {
+                    audio_device: device.into(),
+                    ..cfg.clone()
+                },
+                String::new(),
+            );
+            o.ffmpeg = Some(PathBuf::from("/nonexistent/seraphina-test-ffmpeg"));
+            o.audio_backend = backend;
+            let r = o.start_record(Some(std::env::temp_dir().join("seraphina_never.mp4")));
+            assert!(o.rec.is_none());
+            r
+        };
+        let e = start(AudioBackend::DirectShow, "  ").unwrap_err();
         assert!(e.contains("no DirectShow device is named"), "{e}");
-        assert!(
-            check_audio(&c, false).is_ok(),
-            "Linux falls back to pulse 'default'"
+        let e = start(AudioBackend::Unsupported, "x").unwrap_err();
+        assert!(e.contains("isn't supported on this OS"), "{e}");
+        // A named device and Pulse's `default` get as far as starting ffmpeg.
+        for (b, d) in [(AudioBackend::DirectShow, "Mic"), (AudioBackend::Pulse, "")] {
+            let e = start(b, d).unwrap_err();
+            assert!(e.starts_with("could not start ffmpeg"), "{b:?}: {e}");
+        }
+        assert_eq!(
+            AudioBackend::host(),
+            if cfg!(windows) {
+                AudioBackend::DirectShow
+            } else if cfg!(target_os = "linux") {
+                AudioBackend::Pulse
+            } else {
+                AudioBackend::Unsupported
+            }
         );
-        c.audio_device = "Microphone (Realtek Audio)".into();
-        assert!(check_audio(&c, true).is_ok());
-        c.audio_device.clear();
-        c.audio = Audio::Silent;
-        assert!(check_audio(&c, true).is_ok());
     }
 
     fn pactl(args: &[&str]) -> std::process::Output {

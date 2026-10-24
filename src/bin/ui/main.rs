@@ -14,6 +14,7 @@ mod animate;
 mod assistant_panel;
 mod commands;
 mod composite;
+mod crash;
 mod lab;
 mod llm;
 mod materials;
@@ -24,6 +25,9 @@ mod paint_undo;
 mod prefs;
 mod project;
 mod scene;
+mod secrets;
+mod settings;
+mod single;
 mod stream;
 mod text_raster;
 mod theme;
@@ -77,6 +81,8 @@ pub struct Toast {
     pub kind: ToastKind,
     pub text: String,
     pub born: f64,
+    /// Seconds on screen.
+    pub life: f64,
 }
 
 #[derive(Default)]
@@ -89,10 +95,16 @@ impl Toasts {
     const LIFE: f64 = 3.6;
 
     pub fn push(&mut self, kind: ToastKind, text: &str) {
+        self.push_for(kind, text, Self::LIFE);
+    }
+
+    /// A toast that stays up for `life` seconds (startup notices).
+    pub fn push_for(&mut self, kind: ToastKind, text: &str, life: f64) {
         self.items.push(Toast {
             kind,
             text: text.to_string(),
             born: self.now,
+            life,
         });
         if self.items.len() > 4 {
             self.items.remove(0);
@@ -101,7 +113,7 @@ impl Toasts {
 
     fn show(&mut self, ctx: &egui::Context, p: &Palette) {
         let now = self.now;
-        self.items.retain(|t| now - t.born < Self::LIFE);
+        self.items.retain(|t| now - t.born < t.life);
         if self.items.is_empty() {
             return;
         }
@@ -112,7 +124,7 @@ impl Toasts {
             .show(ctx, |ui| {
                 for t in &self.items {
                     let age = now - t.born;
-                    let a = ((age / 0.18).min(1.0) * ((Self::LIFE - age) / 0.35).min(1.0))
+                    let a = ((age / 0.18).min(1.0) * ((t.life - age) / 0.35).min(1.0))
                         .clamp(0.0, 1.0) as f32;
                     let dot = match t.kind {
                         ToastKind::Info => p.accent,
@@ -391,6 +403,22 @@ pub struct App {
     last_time: Option<f64>,
     /// `.seraphina` file, dirty state, autosave and recovery.
     pub project: workspace::ProjectState,
+    /// Crash reports from an earlier run, shown once (D1).
+    pub crash_notice: Option<crash::CrashNotice>,
+    /// Settings read before the window opens (renderer, UI scale).
+    pub app_settings: settings::AppSettings,
+    /// The window is too small for the chosen UI scale right now.
+    pub ui_scale_capped: bool,
+    /// UI zoom seen last frame, and passes left before re-fitting the
+    /// canvas (egui's first pass after a zoom change has a bogus screen
+    /// size, so a fit then would zoom the canvas to ~600%).
+    ui_zoom_seen: f32,
+    refit_in: u8,
+    /// Settings ▸ xAI API key (C7): the text box and a running key test.
+    xai_edit: String,
+    xai_test_rx: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
+    /// The key in use, looked up once (not every frame) and on change.
+    xai_cache: Option<Option<(String, secrets::KeySource)>>,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -412,6 +440,19 @@ impl App {
         );
         app.project.native_dialogs = project::native_dialogs_available();
         app.start_session(project::autosave_dir());
+        app.crash_notice = crash::CrashNotice::check();
+        app.app_settings = settings::AppSettings::load().0;
+        if let Some(why) = crash::take_fallback_note() {
+            app.toasts.push_for(
+                ToastKind::Warn,
+                &format!(
+                    "Using {} because the other renderer couldn't start ({}). Change it in Settings > Graphics.",
+                    crash::renderer(),
+                    why
+                ),
+                15.0,
+            );
+        }
         app
     }
 
@@ -478,6 +519,14 @@ impl App {
             toasts,
             last_time: None,
             project: workspace::ProjectState::new(project::Session::default()),
+            crash_notice: None,
+            app_settings: settings::AppSettings::default(),
+            ui_scale_capped: false,
+            ui_zoom_seen: 1.0,
+            refit_in: 0,
+            xai_edit: String::new(),
+            xai_test_rx: None,
+            xai_cache: None,
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
             app.toasts.push(ToastKind::Warn, &w);
@@ -800,6 +849,17 @@ impl App {
             C::SetTheme { dark } => {
                 self.set_dark(*dark);
                 Ok(format!("{} theme", if *dark { "dark" } else { "light" }))
+            }
+            C::SetUiScale { percent } => {
+                if !percent.is_finite() {
+                    return Err("percent must be a number".into());
+                }
+                let ctx = self.ctx.clone();
+                self.set_ui_scale(&ctx, percent / 100.0);
+                Ok(format!(
+                    "UI scale {:.0}%",
+                    self.app_settings.scale() * 100.0
+                ))
             }
             C::TogglePanel { panel, visible } => {
                 let key = panel.trim().to_lowercase();
@@ -2015,16 +2075,22 @@ impl App {
 
         let mut open = self.show_settings;
         egui::Window::new("Settings").open(&mut open).collapsible(false).resizable(false).default_width(420.0).anchor(egui::Align2::RIGHT_TOP, Vec2::new(-SP_LG, 64.0)).show(ctx, |ui| {
+            let max_h = (ctx.screen_rect().height() - 150.0).max(200.0);
+            egui::ScrollArea::vertical().max_height(max_h).show(ui, |ui| {
             ui.label(theme::section(&p, "Appearance"));
             if let Some(i) = theme::segmented(ui, &p, "theme-seg", &["Dark", "Light"], if self.dark { 0 } else { 1 }, 80.0) {
                 self.bus.push(AppCommand::SetTheme { dark: i == 0 });
             }
+            self.ui_scale_ui(ui, &p);
+            ui.add_space(SP_SM);
+            self.graphics_settings_ui(ui, &p);
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Seraphina"));
             theme::kv(ui, &p, "Language model", self.assistant.backend_label());
             theme::kv(ui, &p, "Seraphina.AGI CLI", self.assistant.cli.as_ref().map(|c| c.version.clone()).unwrap_or_else(|| "not found".into()));
             theme::kv(ui, &p, "Learning updates", format!("{}", self.assistant.prefs.bank.updates));
-            ui.add(egui::Label::new(theme::muted(&p, "Key: XAI_API_KEY (or SERAPHINA_GROK_API_KEY). Endpoint: SERAPHINA_BASE_URL / SERAPHINA_GROK_ENDPOINT. Model: SERAPHINA_MODEL / SERAPHINA_GROK_MODEL (default grok-4.7). Video: SERAPHINA_VIDEO_MODEL (grok-imagine-video-1.5) / SERAPHINA_VIDEO_RESOLUTION; image: SERAPHINA_IMAGE_MODEL. Restart after changing.")).wrap());
+            self.xai_key_ui(ui, &p);
+            ui.add(egui::Label::new(theme::muted(&p, "Env: XAI_API_KEY / SERAPHINA_GROK_API_KEY override the saved key. Endpoint: SERAPHINA_BASE_URL / SERAPHINA_GROK_ENDPOINT. Model: SERAPHINA_MODEL / SERAPHINA_GROK_MODEL (default grok-4.7). Video: SERAPHINA_VIDEO_MODEL (grok-imagine-video-1.5) / SERAPHINA_VIDEO_RESOLUTION; image: SERAPHINA_IMAGE_MODEL. Restart after changing.")).wrap());
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Grok Imagine"));
             theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
@@ -2042,6 +2108,7 @@ impl App {
                         self.bus.push(AppCommand::TogglePanel { panel: name.into(), visible: Some(!on) });
                     }
                 }
+            });
             });
         });
         self.show_settings = open;
@@ -2429,6 +2496,7 @@ impl App {
 
     /// One frame of UI. Separate from eframe so tests can drive it.
     pub fn frame(&mut self, ctx: &egui::Context) {
+        self.fit_ui_scale(ctx);
         let now = ctx.input(|i| i.time);
         let dt = self
             .last_time
@@ -2469,6 +2537,11 @@ impl App {
         }
         if self.video.tick() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        match self.video.take_stitch() {
+            Some(Ok(m)) => self.toasts.push(ToastKind::Success, &m),
+            Some(Err(e)) => self.toasts.push(ToastKind::Error, &e),
+            None => {}
         }
         self.pump_assistant();
         self.handle_keys(ctx);
@@ -2713,6 +2786,7 @@ impl App {
             });
         self.windows(ctx);
         self.project_modals(ctx);
+        self.crash_modal(ctx);
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
@@ -2728,7 +2802,20 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        crash::GPU_INIT.store(false, std::sync::atomic::Ordering::SeqCst);
+        if crash::CRASH_TEST.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            panic!("crash test requested with --crash-test");
+        }
+        single::set_context(ctx);
+        if single::FOCUS_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            self.toasts
+                .push(ToastKind::Info, "Seraphina Studio is already open here");
+        }
         self.frame(ctx);
+        crash::FIRST_FRAME.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -2736,64 +2823,414 @@ impl eframe::App for App {
     }
 }
 
+impl App {
+    /// Settings ▸ Appearance ▸ UI scale (H3). Applied when the slider is
+    /// let go, so the layout doesn't jump around under the pointer.
+    fn ui_scale_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        let id = egui::Id::new("ui-scale-pct");
+        let saved = (self.app_settings.scale() * 100.0).round();
+        let mut pct: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(saved);
+        let mut apply = None;
+        ui.horizontal(|ui| {
+            ui.label(theme::muted(p, "UI scale"));
+            let r = ui.add(
+                egui::Slider::new(
+                    &mut pct,
+                    settings::MIN_SCALE * 100.0..=settings::MAX_SCALE * 100.0,
+                )
+                .step_by(5.0)
+                .suffix("%"),
+            );
+            if r.drag_stopped() || (r.changed() && !r.dragged()) {
+                apply = Some(pct);
+            }
+            if saved != 100.0 && ui.small_button("100%").clicked() {
+                apply = Some(100.0);
+            }
+        });
+        if self.ui_scale_capped {
+            ui.label(theme::muted(
+                p,
+                &format!(
+                    "Showing {:.0}% until the window is bigger.",
+                    ui.ctx().zoom_factor() * 100.0
+                ),
+            ));
+        }
+        match apply {
+            Some(v) => {
+                ui.data_mut(|d| d.remove::<f32>(id));
+                self.set_ui_scale(ui.ctx(), v / 100.0);
+            }
+            None => ui.data_mut(|d| d.insert_temp(id, pct)),
+        }
+    }
+
+    /// Keep the chosen UI scale from shrinking the layout below the
+    /// window's minimum size (1180x700 points): on a small window or
+    /// screen the zoom is capped until there's room again.
+    fn fit_ui_scale(&mut self, ctx: &egui::Context) {
+        let want = self.app_settings.scale();
+        let z = ctx.zoom_factor();
+        let fit = if want <= 1.0 {
+            want
+        } else {
+            // window size in DPI-scaled points, independent of our zoom
+            let size = ctx.screen_rect().size() * z;
+            if size.x < 100.0 || size.y < 100.0 {
+                return; // minimised
+            }
+            let room = (size.x / MIN_W).min(size.y / MIN_H);
+            ((room * 20.0).floor() / 20.0).clamp(1.0, want)
+        };
+        self.ui_scale_capped = fit < want - 0.001;
+        if (fit - z).abs() > 0.001 {
+            ctx.set_zoom_factor(fit);
+        }
+        if z != self.ui_zoom_seen {
+            self.ui_zoom_seen = z;
+            self.refit_in = 2;
+        }
+        if self.refit_in > 0 {
+            self.refit_in -= 1;
+            if self.refit_in == 0 {
+                self.paint.fit();
+            }
+            ctx.request_repaint();
+        }
+    }
+
+    pub fn set_ui_scale(&mut self, ctx: &egui::Context, scale: f32) {
+        self.app_settings.ui_scale = scale;
+        let s = self.app_settings.scale();
+        self.app_settings.ui_scale = s;
+        ctx.set_zoom_factor(s);
+        // tests must not touch the real settings file
+        if cfg!(test) {
+            return;
+        }
+        if let Err(e) = self.app_settings.save() {
+            self.toasts
+                .push(ToastKind::Error, &format!("Couldn't save settings: {}", e));
+        }
+    }
+
+    /// Settings ▸ Seraphina ▸ xAI API key (C7). The key is saved to
+    /// Credential Manager on Windows; env vars still take precedence.
+    /// Nothing here ever shows, logs or toasts the key itself.
+    fn xai_key_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        if let Some(rx) = &self.xai_test_rx {
+            if let Ok(r) = rx.try_recv() {
+                self.xai_test_rx = None;
+                match r {
+                    Ok(n) => self.toasts.push(
+                        ToastKind::Success,
+                        &format!("xAI key works ({} models available)", n),
+                    ),
+                    Err(e) => self
+                        .toasts
+                        .push(ToastKind::Error, &format!("xAI key test failed: {}", e)),
+                }
+            } else {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(200));
+            }
+        }
+        let current = self.xai_cache.get_or_insert_with(secrets::xai_key).clone();
+        let env = matches!(current, Some((_, secrets::KeySource::Env)));
+        let status = match &current {
+            Some((k, secrets::KeySource::Env)) => format!("{} from environment", output::mask(k)),
+            Some((k, secrets::KeySource::Saved)) => format!("{} saved", output::mask(k)),
+            None => "not set".into(),
+        };
+        theme::kv(ui, p, "xAI API key", status);
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.xai_edit)
+                    .password(true)
+                    .hint_text("paste a new xAI API key")
+                    .desired_width(200.0),
+            );
+            let typed = !self.xai_edit.trim().is_empty();
+            if ui
+                .add_enabled(typed, theme::toggle_button(p, "Save", false))
+                .clicked()
+            {
+                let r = secrets::Store::user().save(secrets::Secret::XaiKey, &self.xai_edit);
+                self.xai_edit.clear();
+                match r {
+                    Ok(place) => {
+                        self.reload_llm_providers();
+                        let msg = if env {
+                            format!("xAI key saved in {}. XAI_API_KEY / SERAPHINA_GROK_API_KEY is set, so that one stays in use.", place.label())
+                        } else {
+                            format!("xAI key saved in {}. Seraphina and Grok Imagine use it now.", place.label())
+                        };
+                        self.toasts.push_for(ToastKind::Success, &msg, 6.0);
+                    }
+                    Err(e) => self
+                        .toasts
+                        .push(ToastKind::Error, &format!("Couldn't save the xAI key: {}", e)),
+                }
+            }
+            let testing = self.xai_test_rx.is_some();
+            let key = if typed {
+                Some(self.xai_edit.trim().to_string())
+            } else {
+                current.as_ref().map(|(k, _)| k.clone())
+            };
+            if ui
+                .add_enabled(
+                    key.is_some() && !testing,
+                    theme::toggle_button(p, if testing { "Testing…" } else { "Test key" }, false),
+                )
+                .on_hover_text("Lists models at the xAI API with the typed key, or the one in use")
+                .clicked()
+            {
+                if let Some(k) = key {
+                    crash::register_secret(&k);
+                    let base = std::env::var("SERAPHINA_BASE_URL")
+                        .ok()
+                        .filter(|b| !b.trim().is_empty())
+                        .unwrap_or_else(|| llm::OpenAiCompat::DEFAULT_BASE.into());
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        let _ = tx.send(secrets::test_xai_key(&base, &k));
+                    });
+                    self.xai_test_rx = Some(rx);
+                }
+            }
+            if matches!(current, Some((_, secrets::KeySource::Saved)))
+                && ui.add(theme::toggle_button(p, "Forget", false)).clicked()
+            {
+                secrets::Store::user().clear(secrets::Secret::XaiKey);
+                self.reload_llm_providers();
+                self.toasts.push(ToastKind::Info, "Saved xAI key removed");
+            }
+        });
+    }
+
+    /// Rebuild the language-model and Grok Imagine clients after the saved
+    /// key changes (env vars still win).
+    fn reload_llm_providers(&mut self) {
+        self.xai_cache = None;
+        if cfg!(test) {
+            return;
+        }
+        self.assistant.provider = llm::OpenAiCompat::from_env()
+            .map(|p| std::sync::Arc::new(p) as std::sync::Arc<dyn llm::LlmProvider>);
+        self.video.reload_provider();
+    }
+
+    /// Settings ▸ Graphics: renderer choice (D2), applied on the next launch.
+    fn graphics_settings_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        ui.label(theme::section(p, "Graphics"));
+        theme::kv(ui, p, "Renderer in use", crash::renderer());
+        let mut pick = self.app_settings.renderer;
+        egui::ComboBox::from_id_salt("renderer-pref")
+            .selected_text(pick.label())
+            .show_ui(ui, |ui| {
+                for r in settings::RendererPref::ALL {
+                    ui.selectable_value(&mut pick, r, r.label());
+                }
+            });
+        if pick != self.app_settings.renderer {
+            self.app_settings.renderer = pick;
+            // a fresh choice: let Automatic try the preferred renderer again
+            self.app_settings.auto_fallback = None;
+            match self.app_settings.save() {
+                Ok(()) => self.toasts.push(
+                    ToastKind::Info,
+                    "Renderer saved. Restart Seraphina Studio to use it.",
+                ),
+                Err(e) => self
+                    .toasts
+                    .push(ToastKind::Error, &format!("Couldn't save settings: {}", e)),
+            }
+        }
+        ui.add(egui::Label::new(theme::muted(p, "If the chosen renderer can't start, the other one is used automatically. SERAPHINA_RENDERER=wgpu|glow overrides this.")).wrap());
+    }
+}
+
+/// Smallest window (points) the layout is designed for.
+const MIN_W: f32 = 1180.0;
+const MIN_H: f32 = 700.0;
+
+/// Everything the app creator needs; cloned for each renderer attempt.
+#[derive(Clone)]
+struct StartCfg {
+    start_mode: Option<String>,
+    open_arg: Option<String>,
+    script_files: bool,
+    run_script: Option<String>,
+    start_light: bool,
+    native: bool,
+}
+
+fn app_creator(c: StartCfg) -> eframe::AppCreator<'static> {
+    Box::new(move |cc| {
+        let mut app = App::new(&cc.egui_ctx);
+        app.native_frame = c.native;
+        app.continuous = std::env::var("SERAPHINA_CONTINUOUS").is_ok();
+        if let Some(m) = c.start_mode.as_deref().and_then(Mode::parse) {
+            app.mode = m;
+        }
+        if c.start_light {
+            app.set_dark(false);
+        }
+        app.project.script_files = c.script_files;
+        if let Some(path) = c.open_arg {
+            let is_project = std::path::Path::new(&path)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case(project::EXT));
+            app.bus.push(if is_project {
+                // a path typed in a terminal is relative to the shell's
+                // directory, not Documents/Seraphina
+                let abs = std::path::absolute(&path)
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or(path);
+                AppCommand::OpenProject { path: Some(abs) }
+            } else {
+                AppCommand::OpenFile { path }
+            });
+        }
+        if let Some(path) = c.run_script {
+            app.run_script(&path);
+        }
+        Ok(Box::new(app))
+    })
+}
+
+fn panic_text(p: &(dyn std::any::Any + Send)) -> String {
+    p.downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| p.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "panic".into())
+}
+
+/// Start over in a fresh process with `next`: a panic can leave the event
+/// loop unusable, so an in-process retry isn't safe after one.
+fn relaunch_with(next: settings::RendererPref, why: &str) -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let name = match next {
+        settings::RendererPref::Glow => "glow",
+        _ => "wgpu",
+    };
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(std::env::args_os().skip(1))
+        .env("SERAPHINA_RENDERER", name)
+        .env("SERAPHINA_RENDERER_ONLY", "1")
+        .env(
+            "SERAPHINA_RENDERER_FALLBACK",
+            why.chars().take(300).collect::<String>(),
+        );
+    cmd.spawn().is_ok()
+}
+
 fn main() -> eframe::Result<()> {
-    let start_mode = std::env::var("SERAPHINA_MODE").ok();
+    use std::sync::atomic::Ordering;
+    crash::install_hook();
     // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
     let args: Vec<String> = std::env::args().collect();
-    let open_arg = args.get(1).filter(|a| !a.starts_with('-')).cloned();
-    // `--allow-file-commands`: let a `--run` script save and open projects
-    let script_files = args.iter().any(|a| a == "--allow-file-commands");
-    // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
-    let run_script = args
-        .iter()
-        .position(|a| a == "--run")
-        .and_then(|i| args.get(i + 1))
-        .cloned();
-    let start_light = std::env::var("SERAPHINA_LIGHT").is_ok();
-    let native = std::env::var("SERAPHINA_NATIVE_FRAME").is_ok();
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Seraphina Studio")
-            .with_inner_size([1600.0, 940.0])
-            .with_min_inner_size([1180.0, 700.0])
-            .with_decorations(native),
-        ..Default::default()
+    if args.iter().any(|a| a == "--crash-test") {
+        crash::CRASH_TEST.store(true, Ordering::SeqCst);
+    }
+    let cfg = StartCfg {
+        start_mode: std::env::var("SERAPHINA_MODE").ok(),
+        open_arg: args.get(1).filter(|a| !a.starts_with('-')).cloned(),
+        // `--allow-file-commands`: let a `--run` script save and open projects
+        script_files: args.iter().any(|a| a == "--allow-file-commands"),
+        // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
+        run_script: args
+            .iter()
+            .position(|a| a == "--run")
+            .and_then(|i| args.get(i + 1))
+            .cloned(),
+        start_light: std::env::var("SERAPHINA_LIGHT").is_ok(),
+        native: std::env::var("SERAPHINA_NATIVE_FRAME").is_ok(),
     };
-    eframe::run_native(
-        "Seraphina Studio",
-        options,
-        Box::new(move |cc| {
-            let mut app = App::new(&cc.egui_ctx);
-            app.native_frame = native;
-            app.continuous = std::env::var("SERAPHINA_CONTINUOUS").is_ok();
-            if let Some(m) = start_mode.as_deref().and_then(Mode::parse) {
-                app.mode = m;
+    // A second plain launch brings the running window forward instead.
+    if single::defer_to_running(cfg.open_arg.is_some() || cfg.run_script.is_some()) {
+        return Ok(());
+    }
+    // D2: start with the preferred renderer; if it can't start before the
+    // first frame, try the other one instead of dying
+    let (mut prefs, _) = settings::AppSettings::load();
+    let env_r = std::env::var("SERAPHINA_RENDERER").ok();
+    let mut order = prefs.renderer_order(env_r.as_deref(), cfg!(windows));
+    if std::env::var("SERAPHINA_RENDERER_ONLY").is_ok() {
+        order.truncate(1);
+    }
+    if let Ok(why) = std::env::var("SERAPHINA_RENDERER_FALLBACK") {
+        crash::set_fallback_note(&why);
+    }
+    let remember = |prefs: &mut settings::AppSettings, r: settings::RendererPref| {
+        if prefs.renderer == settings::RendererPref::Auto && env_r.is_none() {
+            prefs.auto_fallback = Some(r);
+            let _ = prefs.save();
+        }
+    };
+    let mut failures: Vec<String> = Vec::new();
+    for (i, &r) in order.iter().enumerate() {
+        let next = order.get(i + 1).copied();
+        crash::set_renderer(r.label());
+        crash::GPU_INIT.store(next.is_some(), Ordering::SeqCst);
+        let options = eframe::NativeOptions {
+            renderer: settings::to_eframe(r),
+            viewport: egui::ViewportBuilder::default()
+                .with_title("Seraphina Studio")
+                .with_inner_size([1600.0, 940.0])
+                .with_min_inner_size([MIN_W, MIN_H])
+                .with_decorations(cfg.native),
+            ..Default::default()
+        };
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            eframe::run_native("Seraphina Studio", options, app_creator(cfg.clone()))
+        }));
+        crash::GPU_INIT.store(false, Ordering::SeqCst);
+        let started = crash::FIRST_FRAME.load(Ordering::SeqCst);
+        match (res, next) {
+            (Ok(Ok(())), _) => return Ok(()),
+            (Err(p), Some(next)) if !started => {
+                // the panic hook already wrote a gpu-* report
+                let why = format!("{} panicked: {}", r.label(), panic_text(&*p));
+                remember(&mut prefs, next);
+                if relaunch_with(next, &why) {
+                    return Ok(());
+                }
+                std::panic::resume_unwind(p);
             }
-            if start_light {
-                app.set_dark(false);
+            (Err(p), _) => std::panic::resume_unwind(p),
+            (Ok(Err(e)), Some(next)) if !started => {
+                let why = format!("{} failed: {}", r.label(), e);
+                let _ = crash::write_report("gpu", &why, "");
+                crash::set_fallback_note(&why);
+                failures.push(why);
+                remember(&mut prefs, next);
             }
-            app.project.script_files = script_files;
-            if let Some(path) = open_arg {
-                let is_project = std::path::Path::new(&path)
-                    .extension()
-                    .is_some_and(|e| e.eq_ignore_ascii_case(project::EXT));
-                app.bus.push(if is_project {
-                    // a path typed in a terminal is relative to the shell's
-                    // directory, not Documents/Seraphina
-                    let abs = std::path::absolute(&path)
-                        .map(|p| p.to_string_lossy().into_owned())
-                        .unwrap_or(path);
-                    AppCommand::OpenProject { path: Some(abs) }
-                } else {
-                    AppCommand::OpenFile { path }
-                });
+            (Ok(Err(e)), _) => {
+                failures.push(format!("{} failed: {}", r.label(), e));
+                let path = crash::write_report(
+                    "crash",
+                    &format!("Startup failed: {}", e),
+                    &failures.join("\n"),
+                );
+                crash::message_box(
+                    "Seraphina Studio couldn't start",
+                    &format!(
+                        "The graphics system couldn't be started.\n\n{}\n\n{}\n\nUpdating the graphics driver usually fixes this.",
+                        failures.join("\n"),
+                        path.map(|p| format!("Details: {}", p.display()))
+                            .unwrap_or_default()
+                    ),
+                );
+                return Err(e);
             }
-            if let Some(path) = run_script {
-                app.run_script(&path);
-            }
-            Ok(Box::new(app))
-        }),
-    )
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -3683,6 +4120,23 @@ mod tests {
                 },
                 Origin::User
             )
+            .is_err());
+    }
+
+    #[test]
+    fn ui_scale_command_zooms_and_clamps() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        for (pct, want) in [(150.0, 1.5), (500.0, 2.0), (10.0, 0.8), (100.0, 1.0)] {
+            app.dispatch(&AppCommand::SetUiScale { percent: pct }, Origin::User)
+                .unwrap();
+            // egui applies a new zoom at the start of the next pass
+            let _ = ctx.run(egui::RawInput::default(), |_| {});
+            assert_eq!(ctx.zoom_factor(), want, "{pct}");
+            assert_eq!(app.app_settings.ui_scale, want);
+        }
+        assert!(app
+            .dispatch(&AppCommand::SetUiScale { percent: f32::NAN }, Origin::User)
             .is_err());
     }
 

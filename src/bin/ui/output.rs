@@ -3,7 +3,9 @@
 //! * Canvas source: the active mode's composite is letterboxed to the output
 //!   size and piped as raw RGBA frames to ffmpeg's stdin at a fixed rate. A
 //!   tick that cannot be written in time is counted as a dropped frame.
-//! * Screen source: ffmpeg grabs the desktop itself (x11grab / gdigrab).
+//! * Screen source: ffmpeg grabs the desktop itself (x11grab; on Windows
+//!   ddagrab, the DPI-correct Desktop Duplication grabber, with gdigrab as
+//!   the fallback).
 //! * Encode: libx264 (veryfast, zerolatency, yuv420p) + AAC (silent track or a
 //!   capture device). Record writes MP4, live pushes FLV to RTMP.
 //! * `-progress pipe:1` is parsed for fps / bitrate / encoded time / drops.
@@ -136,28 +138,21 @@ impl OutputConfig {
     }
 }
 
-pub fn key_path() -> PathBuf {
-    studio_dir().join("stream_key")
-}
-
+/// The saved stream key (Credential Manager on Windows, a 0600 file
+/// elsewhere; see `secrets`). Unit tests never read the user's store.
 pub fn load_key() -> String {
-    std::fs::read_to_string(key_path())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default()
+    if cfg!(test) {
+        return String::new();
+    }
+    crate::secrets::Store::user().load(crate::secrets::Secret::StreamKey)
 }
 
-pub fn save_key(key: &str) -> Result<(), String> {
-    std::fs::create_dir_all(studio_dir()).map_err(|e| e.to_string())?;
-    let mut o = std::fs::OpenOptions::new();
-    o.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        o.mode(0o600);
-    }
-    let mut f = o.open(key_path()).map_err(|e| e.to_string())?;
-    f.write_all(key.trim().as_bytes())
-        .map_err(|e| e.to_string())
+pub fn save_key(key: &str) -> Result<crate::secrets::Where, String> {
+    crate::secrets::Store::user().save(crate::secrets::Secret::StreamKey, key)
+}
+
+pub fn key_location() -> crate::secrets::Where {
+    crate::secrets::Store::user().location(crate::secrets::Secret::StreamKey)
 }
 
 /// What the UI shows instead of the key.
@@ -169,7 +164,8 @@ pub fn mask(key: &str) -> String {
     }
 }
 
-fn no_window(_cmd: &mut Command) {
+/// Keep a console window from flashing up for a child process on Windows.
+pub fn no_window(_cmd: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -267,8 +263,76 @@ pub fn rtmp_target(url: &str, key: &str) -> String {
     }
 }
 
+/// How the Screen source captures the desktop.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Grab {
+    /// Windows Desktop Duplication (ffmpeg >= 6, d3d11): native pixels at
+    /// any DPI scale, GPU copy, primary monitor.
+    Ddagrab,
+    /// Windows GDI: works everywhere, slower, whole virtual desktop.
+    Gdigrab,
+    X11,
+}
+
+/// Set once a ddagrab session dies before its first frame (Remote
+/// Desktop, old driver, no D3D11): later sessions use gdigrab.
+static DDA_BROKEN: AtomicBool = AtomicBool::new(false);
+static DDA_PROBE: Mutex<Option<(PathBuf, bool)>> = Mutex::new(None);
+
+/// Whether this ffmpeg build has the ddagrab filter (cached per path).
+fn has_ddagrab(ffmpeg: &Path) -> bool {
+    if let Ok(g) = DDA_PROBE.lock() {
+        if let Some((p, ok)) = g.as_ref() {
+            if p == ffmpeg {
+                return *ok;
+            }
+        }
+    }
+    let mut cmd = Command::new(ffmpeg);
+    cmd.args(["-hide_banner", "-filters"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    no_window(&mut cmd);
+    let ok = cmd
+        .output()
+        .map(|o| filters_have_ddagrab(&String::from_utf8_lossy(&o.stdout)))
+        .unwrap_or(false);
+    if let Ok(mut g) = DDA_PROBE.lock() {
+        *g = Some((ffmpeg.to_path_buf(), ok));
+    }
+    ok
+}
+
+/// `ffmpeg -filters` lines look like ` ... ddagrab  |->V  Grab Windows Desktop...`.
+pub fn filters_have_ddagrab(list: &str) -> bool {
+    list.lines()
+        .any(|l| l.split_whitespace().nth(1) == Some("ddagrab"))
+}
+
+/// Pick the grabber. `SERAPHINA_SCREEN_GRAB=gdigrab|ddagrab` overrides.
+pub fn choose_grab(windows: bool, env: Option<&str>, has_dda: bool, dda_broken: bool) -> Grab {
+    if !windows {
+        return Grab::X11;
+    }
+    match env.map(|e| e.trim().to_ascii_lowercase()).as_deref() {
+        Some("gdigrab" | "gdi") => Grab::Gdigrab,
+        Some("ddagrab" | "dda") => Grab::Ddagrab,
+        _ if has_dda && !dda_broken => Grab::Ddagrab,
+        _ => Grab::Gdigrab,
+    }
+}
+
+pub fn screen_grab(ffmpeg: &Path) -> Grab {
+    let env = std::env::var("SERAPHINA_SCREEN_GRAB").ok();
+    let broken = DDA_BROKEN.load(Ordering::SeqCst);
+    // only probe on Windows: elsewhere it's always x11grab
+    let has = cfg!(windows) && env.is_none() && !broken && has_ddagrab(ffmpeg);
+    choose_grab(cfg!(windows), env.as_deref(), has, broken)
+}
+
 /// Full ffmpeg argument list for a session.
-pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
+pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> Vec<String> {
     let (w, h) = cfg.size();
     let fps = cfg.fps.clamp(1, 120);
     let mut a: Vec<String> = [
@@ -298,19 +362,24 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
                 "pipe:0",
             ]);
         }
-        Source::Screen => {
-            if cfg!(windows) {
-                push(&[
-                    "-f",
-                    "gdigrab",
-                    "-framerate",
-                    &fps.to_string(),
-                    "-draw_mouse",
-                    "1",
-                    "-i",
-                    "desktop",
-                ]);
-            } else {
+        Source::Screen => match grab {
+            Grab::Ddagrab => push(&[
+                "-f",
+                "lavfi",
+                "-i",
+                &format!("ddagrab=output_idx=0:framerate={}:draw_mouse=1", fps),
+            ]),
+            Grab::Gdigrab => push(&[
+                "-f",
+                "gdigrab",
+                "-framerate",
+                &fps.to_string(),
+                "-draw_mouse",
+                "1",
+                "-i",
+                "desktop",
+            ]),
+            Grab::X11 => {
                 let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into());
                 push(&[
                     "-f",
@@ -323,7 +392,7 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
                     &display,
                 ]);
             }
-        }
+        },
     }
     let has_audio = cfg.audio != Audio::None;
     match cfg.audio {
@@ -352,7 +421,13 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str) -> Vec<String> {
         push(&["-map", "1:a"]);
     }
     if cfg.source == Source::Screen {
-        push(&["-vf", &format!("scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2", w = w, h = h)]);
+        // ddagrab hands over D3D11 GPU frames; bring them to system memory first
+        let pre = if grab == Grab::Ddagrab {
+            "hwdownload,format=bgra,"
+        } else {
+            ""
+        };
+        push(&["-vf", &format!("{pre}scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2", pre = pre, w = w, h = h)]);
     }
     let kb = cfg.video_kbps.clamp(200, 50_000);
     push(&[
@@ -486,6 +561,7 @@ pub struct Session {
     stop: Arc<AtomicBool>,
     writer: Option<JoinHandle<()>>,
     finished: bool,
+    grab: Grab,
 }
 
 /// `rtmp://user:pass@host/app/KEY?token=x` → `rtmp://host/app`.
@@ -528,7 +604,12 @@ impl Session {
         secret: &str,
         frames: FrameSlot,
     ) -> Result<Session, String> {
-        let args = build_args(cfg, kind, target);
+        let grab = if cfg.source == Source::Screen {
+            screen_grab(ffmpeg)
+        } else {
+            Grab::X11
+        };
+        let args = build_args(cfg, kind, target, grab);
         let mut cmd = Command::new(ffmpeg);
         cmd.args(&args)
             .stdin(Stdio::piped())
@@ -647,6 +728,7 @@ impl Session {
             stop,
             writer: Some(writer),
             finished: false,
+            grab,
         })
     }
 
@@ -656,6 +738,15 @@ impl Session {
 
     pub fn elapsed(&self) -> f64 {
         self.started.elapsed().as_secs_f64()
+    }
+
+    /// A ddagrab session that died before producing anything: Desktop
+    /// Duplication isn't available here, so switch to gdigrab from now on.
+    /// Returns true the first time that happens.
+    pub fn note_grab_failure(&self) -> bool {
+        self.grab == Grab::Ddagrab
+            && self.stats().out_time <= 0.0
+            && !DDA_BROKEN.swap(true, Ordering::SeqCst)
     }
 
     /// `Some(success)` once ffmpeg has exited.
@@ -745,10 +836,13 @@ pub struct Output {
     /// UI only: show the key in clear text.
     pub reveal_key: bool,
     pub key_edit: String,
+    /// Where the saved key lives (looked up lazily for Settings).
+    key_place: Option<crate::secrets::Where>,
 }
 
 impl Output {
     pub fn new(cfg: OutputConfig, key: String) -> Self {
+        crate::crash::register_secret(&key);
         let mut reconnect = Reconnect::new();
         reconnect.set_settings(cfg.retry_max, cfg.retry_sec);
         Self {
@@ -769,6 +863,7 @@ impl Output {
             events: Vec::new(),
             reveal_key: false,
             key_edit: String::new(),
+            key_place: None,
         }
     }
 
@@ -796,16 +891,22 @@ impl Output {
 
     pub fn set_key(&mut self, key: &str, persist: bool) -> Result<String, String> {
         self.key = key.trim().to_string();
+        crate::crash::register_secret(&self.key);
+        let mut place = crate::secrets::Where::None;
         if persist {
-            save_key(&self.key)?;
+            place = save_key(&self.key)?;
+            self.key_place = Some(place);
         }
         Ok(if self.key.is_empty() {
             "stream key cleared".into()
-        } else {
+        } else if persist {
             format!(
-                "stream key saved ({} characters, stored locally)",
-                self.key.chars().count()
+                "stream key saved ({} characters, in {})",
+                self.key.chars().count(),
+                place.label()
             )
+        } else {
+            format!("stream key set ({} characters)", self.key.chars().count())
         })
     }
 
@@ -1068,8 +1169,15 @@ impl Output {
                         "ffmpeg exited with an error".into()
                     }
                 });
+                let dda = s.note_grab_failure();
                 self.last_record = s.path.clone();
                 self.rec = None;
+                if dda {
+                    self.events.push((
+                        ToastKind::Warn,
+                        "Desktop Duplication capture isn't available here; switched to GDI capture. Start the recording again.".into(),
+                    ));
+                }
                 self.rec_error = Some(err.clone());
                 self.events
                     .push((ToastKind::Error, format!("Recording stopped: {}", err)));
@@ -1078,6 +1186,12 @@ impl Output {
         let mut dead = None;
         if let Some(s) = self.live.as_mut() {
             if s.exited().is_some() {
+                if s.note_grab_failure() {
+                    self.events.push((
+                        ToastKind::Warn,
+                        "Desktop Duplication capture isn't available here; retrying with GDI capture.".into(),
+                    ));
+                }
                 dead = Some(
                     s.stats()
                         .last_error
@@ -1503,7 +1617,34 @@ impl Output {
                 });
                 ui.end_row();
             });
-        ui.label(theme::muted(p, "The key is stored only in ~/.seraphina/studio/stream_key and is never shown to Seraphina or written to logs."));
+        let place = *self.key_place.get_or_insert_with(|| {
+            if cfg!(test) {
+                crate::secrets::Where::None
+            } else {
+                key_location()
+            }
+        });
+        let note = match place {
+            crate::secrets::Where::CredentialManager => {
+                "The key is stored in Windows Credential Manager (SeraphinaStudio/stream_key)"
+            }
+            crate::secrets::Where::File => {
+                "The key is stored in a private file (~/.seraphina/studio/stream_key, owner-only)"
+            }
+            crate::secrets::Where::None if cfg!(windows) => {
+                "A saved key goes to Windows Credential Manager"
+            }
+            crate::secrets::Where::None => {
+                "A saved key goes to a private file (~/.seraphina/studio/stream_key, owner-only)"
+            }
+        };
+        ui.label(theme::muted(
+            p,
+            &format!(
+                "{}. It is never shown to Seraphina or written to logs.",
+                note
+            ),
+        ));
         self.cfg != before
     }
 }
@@ -1519,7 +1660,7 @@ mod tests {
             height: 359,
             ..Default::default()
         };
-        let a = build_args(&c, Kind::Record, "/tmp/x.mp4").join(" ");
+        let a = build_args(&c, Kind::Record, "/tmp/x.mp4", Grab::X11).join(" ");
         assert!(
             a.contains("-f rawvideo -pix_fmt rgba -s 640x358 -framerate 30 -i pipe:0"),
             "{}",
@@ -1535,12 +1676,54 @@ mod tests {
         );
         c.audio = Audio::None;
         c.source = Source::Screen;
-        let a = build_args(&c, Kind::Live, "rtmp://h/app/k").join(" ");
-        assert!(a.contains(if cfg!(windows) { "gdigrab" } else { "x11grab" }));
+        let a = build_args(&c, Kind::Live, "rtmp://h/app/k", Grab::Gdigrab).join(" ");
+        assert!(a.contains("-f gdigrab -framerate 30 -draw_mouse 1 -i desktop"));
+        assert!(!a.contains("hwdownload"));
+        let a = build_args(&c, Kind::Live, "rtmp://h/app/k", Grab::X11).join(" ");
+        assert!(a.contains("-f x11grab"));
         assert!(!a.contains("-c:a") && !a.contains("1:a") && a.contains("scale=640:358"));
         assert!(a.ends_with("-f flv rtmp://h/app/k"));
         assert_eq!(rtmp_target("rtmp://h/app/", " k "), "rtmp://h/app/k");
         assert_eq!(rtmp_target("rtmp://h/app", ""), "rtmp://h/app");
+    }
+
+    #[test]
+    fn ddagrab_is_preferred_on_windows_with_gdigrab_fallback() {
+        assert_eq!(choose_grab(false, None, true, false), Grab::X11);
+        assert_eq!(choose_grab(true, None, true, false), Grab::Ddagrab);
+        assert_eq!(choose_grab(true, None, false, false), Grab::Gdigrab);
+        assert_eq!(choose_grab(true, None, true, true), Grab::Gdigrab);
+        assert_eq!(
+            choose_grab(true, Some("GDIGRAB"), true, false),
+            Grab::Gdigrab
+        );
+        assert_eq!(
+            choose_grab(true, Some("ddagrab"), false, false),
+            Grab::Ddagrab
+        );
+        let list = " ... abuffer           |->A       Buffer audio frames\n ... ddagrab           |->V       Grab Windows Desktop images using Desktop Duplication API.\n";
+        assert!(filters_have_ddagrab(list));
+        assert!(!filters_have_ddagrab(" ... gdigrabx |->V x\n"));
+        let c = OutputConfig {
+            source: Source::Screen,
+            audio: Audio::None,
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            ..Default::default()
+        };
+        let a = build_args(&c, Kind::Record, "o.mp4", Grab::Ddagrab).join(" ");
+        assert!(
+            a.contains("-f lavfi -i ddagrab=output_idx=0:framerate=60:draw_mouse=1"),
+            "{}",
+            a
+        );
+        assert!(
+            a.contains("-vf hwdownload,format=bgra,scale=1920:1080:"),
+            "{}",
+            a
+        );
+        assert!(!a.contains("gdigrab"));
     }
 
     #[test]

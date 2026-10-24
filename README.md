@@ -228,6 +228,16 @@ MP4, live output is FLV over RTMP. `-progress` output drives the status bar.
 A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
 10 attempts); *Retry now* reconnects immediately.
 
+**Retry now stays dormant once live** (spec). *Retry now* is disabled as
+soon as the stream is confirmed live (ffmpeg reports progress; with a stream
+delay, the encoder is feeding the delay queue, so this holds inside the delay
+window too). It becomes active again only on a real failure: a dropped
+connection waiting to reconnect, a stream that gave up with an error, or a
+stream that is up but not flowing. `retry_stream` from the AI gets "nothing
+to retry" while live and never restarts a healthy stream. Tests:
+`retry_now_during_the_delay_keeps_a_healthy_stream`,
+`retry_now_reenables_after_a_real_drop`.
+
 **Stream delay** (Settings ▸ Output, 0–300 s, off by default) holds the live
 stream back, as OBS's stream delay does. The encoder then writes FLV to its
 stdout instead of RTMP; `encoder_packet` splits it into tags,

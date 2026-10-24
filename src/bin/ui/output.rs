@@ -1561,23 +1561,29 @@ impl Output {
         }
     }
 
+    /// Whether Retry now has anything to do: a reconnect is pending, the
+    /// stream gave up, or it is up but hasn't shown it is flowing yet. Once
+    /// the stream is confirmed live (with a stream delay: the encoder is
+    /// feeding the delay queue) Retry stays dormant until a real failure.
+    pub fn retry_available(&self) -> bool {
+        match &self.live {
+            Some(s) => self.reconnect_at.is_some() || s.progress() <= 0.0,
+            None => self.reconnect_at.is_some() || self.live_error.is_some(),
+        }
+    }
+
     /// Retry now: reconnect immediately if a reconnect is pending or the
-    /// stream gave up; restart the stream if it is up but unhealthy.
+    /// stream gave up; restart the stream if it is up but not flowing.
     pub fn retry(&mut self) -> Result<String, String> {
-        if self.live.is_some() && self.reconnect_at.is_none() {
-            let healthy = self
-                .live
-                .as_ref()
-                .map(|s| s.progress() > 0.0)
-                .unwrap_or(false);
-            if healthy {
-                return Ok("stream is connected; nothing to retry".into());
-            }
-            if let Some(mut s) = self.live.take() {
-                s.kill();
-            }
-        } else if self.live.is_none() && self.reconnect_at.is_none() && self.live_error.is_none() {
-            return Err("not live; use Go live".into());
+        if !self.retry_available() {
+            return if self.live.is_some() {
+                Ok("stream is live; nothing to retry".into())
+            } else {
+                Err("not live; use Go live".into())
+            };
+        }
+        if let Some(mut s) = self.live.take() {
+            s.kill();
         }
         self.reconnect_at = None;
         self.reconnect.success();
@@ -1927,7 +1933,7 @@ impl Output {
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .add_enabled(
-                        self.is_live() || self.live_error.is_some(),
+                        self.retry_available(),
                         theme::toggle_button(p, "Retry now", false),
                     )
                     .clicked()
@@ -2958,11 +2964,40 @@ mod tests {
         let s = o.live.as_ref().expect("live");
         assert_eq!(s.on_air(), 0.0, "nothing should be on air inside the delay");
         let pid = s.child.id();
+        assert!(!o.retry_available(), "Retry now must be dormant once live");
         let msg = o.retry().expect("retry");
         assert!(msg.contains("nothing to retry"), "{msg}");
         let s = o.live.as_ref().expect("still live");
         assert_eq!(s.child.id(), pid, "Retry now restarted a healthy stream");
         assert!(o.is_live());
+        o.stop_live().expect("stop live");
+    }
+
+    /// Retry now wakes up again after a real drop: a reconnect is pending
+    /// and Retry now makes it happen at once.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn retry_now_reenables_after_a_real_drop() {
+        find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let mut o = delayed_output(5);
+        o.start_live().expect("start live");
+        tick_until(
+            &mut o,
+            Duration::from_secs(8),
+            "the stream is flowing",
+            |o| o.live.as_ref().is_some_and(|s| s.progress() > 1.0),
+        );
+        assert!(!o.retry_available(), "dormant while live");
+        assert!(o.drop_connection());
+        tick_until(
+            &mut o,
+            Duration::from_secs(4),
+            "the drop was noticed",
+            |o| o.reconnect_at.is_some(),
+        );
+        assert!(o.retry_available(), "Retry now must be active after a drop");
+        assert_eq!(o.retry(), Ok("reconnecting now".into()));
+        assert!(o.reconnect_at.is_none() && o.live.is_some());
         o.stop_live().expect("stop live");
     }
 

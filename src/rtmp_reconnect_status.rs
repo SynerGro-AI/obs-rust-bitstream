@@ -37,16 +37,22 @@ impl RtmpReconnectStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encoder_context::EncoderType;
-    use crate::encoder_packet::EncoderPacket;
-    use crate::rtmp_reconnect::RtmpReconnect;
+
+    fn status(active: bool, packets: usize) -> RtmpStatus {
+        RtmpStatus {
+            active,
+            packets,
+            bytes: packets as u64,
+            url: String::new(),
+        }
+    }
 
     #[test]
     fn reports_success() {
-        let packets = vec![EncoderPacket::new(EncoderType::Video, 0, 0, vec![1])];
         let mut r = Reconnect::new();
-        let st = RtmpReconnect::feed("live.twitch.tv", "abc", &packets, &mut r).unwrap();
-        let rs = RtmpReconnectStatus::from(&st, &r);
+        r.start();
+        r.success();
+        let rs = RtmpReconnectStatus::from(&status(true, 1), &r);
         assert!(rs.active);
         assert_eq!(rs.attempts, 0);
         assert!(rs.one_line().contains("attempts=0"));
@@ -55,14 +61,8 @@ mod tests {
     #[test]
     fn reports_failure() {
         let mut r = Reconnect::new();
-        let _ = RtmpReconnect::feed("", "abc", &[], &mut r);
-        let empty = RtmpStatus {
-            active: false,
-            packets: 0,
-            bytes: 0,
-            url: String::new(),
-        };
-        let rs = RtmpReconnectStatus::from(&empty, &r);
+        r.start();
+        let rs = RtmpReconnectStatus::from(&status(false, 0), &r);
         assert!(!rs.active);
         assert_eq!(rs.attempts, 1);
     }
@@ -71,17 +71,11 @@ mod tests {
     fn differential() {
         let mut a = Reconnect::new();
         let mut b = Reconnect::new();
-        let _ = RtmpReconnect::feed("", "k", &[], &mut a);
-        let _ = RtmpReconnect::feed("", "k", &[], &mut b);
-        let _ = RtmpReconnect::feed("", "k", &[], &mut b);
-        let empty = RtmpStatus {
-            active: false,
-            packets: 0,
-            bytes: 0,
-            url: String::new(),
-        };
-        let sa = RtmpReconnectStatus::from(&empty, &a);
-        let sb = RtmpReconnectStatus::from(&empty, &b);
+        a.start();
+        b.start();
+        b.start();
+        let sa = RtmpReconnectStatus::from(&status(false, 0), &a);
+        let sb = RtmpReconnectStatus::from(&status(false, 0), &b);
         assert!(sb.attempts > sa.attempts);
     }
 }

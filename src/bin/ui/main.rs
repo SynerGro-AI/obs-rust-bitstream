@@ -1579,7 +1579,7 @@ impl App {
                 ui.set_width(500.0);
                 ui.label(egui::RichText::new("Send your chat outside this PC?").size(16.0).strong().color(p.text));
                 ui.add_space(SP_SM);
-                ui.add(egui::Label::new(egui::RichText::new(format!("Seraphina's chat runs on {}, outside this PC. Each message you send goes there over HTTPS together with:", to)).color(p.text)).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(format!("Seraphina's chat runs on {}, outside this PC. Each message you send goes there together with:", to)).color(p.text)).wrap());
                 ui.add_space(SP_SM);
                 for line in [
                     "• this conversation (your messages, Seraphina's replies and the results of her actions)",

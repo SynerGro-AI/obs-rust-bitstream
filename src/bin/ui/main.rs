@@ -5589,6 +5589,80 @@ mod tests {
     }
 
     #[test]
+    fn opening_a_project_cancels_the_round_in_flight() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(vec![LlmReply {
+            content: "too late".into(),
+            ..Default::default()
+        }]));
+        *mock.delay.lock().unwrap() = Some(std::time::Duration::from_secs(30));
+        let idle = Arc::strong_count(&mock);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let path = project::test_dir("cancelopen").join("p.seraphina");
+        app.save_project_to(&path).unwrap();
+        app.assistant.input = "make it moodier".into();
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 1, 0.0);
+        assert!(app.assistant.is_busy());
+        let working = Arc::strong_count(&mock);
+        app.open_project_from(&path).unwrap();
+        assert!(!app.assistant.is_busy());
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while Arc::strong_count(&mock) >= working {
+            assert!(
+                std::time::Instant::now() < end,
+                "the old round kept running"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(
+            Arc::strong_count(&mock),
+            idle + 1,
+            "only the panel holds it"
+        );
+        assert!(
+            mock.seen.lock().unwrap().is_empty(),
+            "no billed call went out"
+        );
+    }
+
+    #[test]
+    fn a_reopened_chat_tells_the_model_what_was_done() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(vec![LlmReply {
+            content: "It is at 40 %.".into(),
+            ..Default::default()
+        }]));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.assistant.load_file(assistant_panel::ChatFile {
+            items: vec![
+                assistant_panel::ChatItemFile {
+                    role: "user".into(),
+                    source: None,
+                    text: "dim the glow".into(),
+                    rated: None,
+                },
+                assistant_panel::ChatItemFile {
+                    role: "note".into(),
+                    source: None,
+                    text: "Seraphina ran: Done · Opacity of Glow → 40 %".into(),
+                    rated: None,
+                },
+            ],
+        });
+        app.assistant.input = "what is the glow at?".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        let seen = mock.seen.lock().unwrap();
+        let sent: String = seen[0].iter().map(|m| m.content.as_str()).collect();
+        assert!(sent.contains("User: dim the glow"), "{sent}");
+        assert!(
+            sent.contains("Note: Seraphina ran: Done · Opacity of Glow → 40 %"),
+            "{sent}"
+        );
+    }
+
+    #[test]
     fn the_tool_round_limit_ends_a_runaway_turn() {
         let ctx = egui::Context::default();
         let rounds = assistant_panel::MAX_ROUNDS as usize;

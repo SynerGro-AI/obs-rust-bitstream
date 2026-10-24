@@ -130,24 +130,29 @@ impl AssistantPanel {
         s
     }
 
-    pub fn with_provider(provider: Option<Arc<dyn LlmProvider>>, prefs: Prefs) -> Self {
-        let hello = match &provider {
+    /// The opening message of a fresh conversation.
+    fn greeting(provider: &Option<Arc<dyn LlmProvider>>) -> ChatItem {
+        let text = match provider {
             Some(p) => format!("Hi, I'm Seraphina. I'm connected to {} and can operate every mode for you: ask for an edit, and you can undo anything I do with one click.", p.name()),
             None => "Hi, I'm Seraphina. No language model is configured yet (add an xAI API key in Settings, set XAI_API_KEY, or SERAPHINA_BASE_URL for another OpenAI-compatible server), so I'm running in offline help mode: built-in tips only, no actions.".to_string(),
         };
+        ChatItem {
+            kind: ItemKind::Assistant {
+                source: "Seraphina".into(),
+            },
+            text,
+            rated: Some(true),
+        }
+    }
+
+    pub fn with_provider(provider: Option<Arc<dyn LlmProvider>>, prefs: Prefs) -> Self {
         let (spent_tx, spent_rx) = std::sync::mpsc::channel();
         Self {
+            items: vec![Self::greeting(&provider)],
             provider,
             cli: None,
             cli_rx: None,
             prefs,
-            items: vec![ChatItem {
-                kind: ItemKind::Assistant {
-                    source: "Seraphina".into(),
-                },
-                text: hello,
-                rated: Some(true),
-            }],
             convo: Vec::new(),
             rx: None,
             rx_source: String::new(),
@@ -850,6 +855,9 @@ impl AssistantPanel {
     /// Replace the conversation; the model context is rebuilt from the
     /// user and assistant turns (the greeting is not part of it).
     pub fn load_file(&mut self, f: ChatFile) {
+        // a round still in flight belongs to the old conversation
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         self.rx = None;
         self.pending_calls = None;
         self.streaming.clear();
@@ -880,6 +888,8 @@ impl AssistantPanel {
             .filter_map(|(n, it)| match it.kind {
                 ItemKind::User => Some(format!("User: {}", it.text)),
                 ItemKind::Assistant { .. } if n > 0 => Some(format!("Seraphina: {}", it.text)),
+                // what was done (saved action cards) and other notes
+                ItemKind::Note => Some(format!("Note: {}", it.text)),
                 _ => None,
             })
             .collect();
@@ -892,6 +902,13 @@ impl AssistantPanel {
                 ),
             ));
         }
+    }
+
+    /// Start a fresh conversation (a new project, or one saved without
+    /// its chat).
+    pub fn clear_chat(&mut self) {
+        self.load_file(ChatFile { items: Vec::new() });
+        self.items = vec![Self::greeting(&self.provider)];
     }
 
     pub fn convo_len(&self) -> usize {

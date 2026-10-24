@@ -283,8 +283,8 @@ impl App {
     }
 
     /// Hash of the non-raster document state (3D, materials, composite
-    /// parameters, stream, output settings). Paint and Animate count their
-    /// own edits.
+    /// parameters, stream, output settings, and the chat when projects
+    /// keep it). Paint and Animate count their own edits.
     fn content_hash(&self) -> u64 {
         let mut scratch = Assets::default();
         let to = |v: Result<Value, serde_json::Error>| v.unwrap_or(Value::Null);
@@ -298,6 +298,11 @@ impl App {
             to(serde_json::to_value(self.comp.to_file(&mut scratch))),
             to(serde_json::to_value(self.stream.to_file(&mut scratch))),
             to(serde_json::to_value(self.output.project_cfg())),
+            if self.project.include_chat {
+                to(serde_json::to_value(self.assistant.to_file()))
+            } else {
+                Value::Null
+            },
         ])
     }
 
@@ -426,8 +431,9 @@ impl App {
         if let Some(c) = m.output {
             self.output.load_project_cfg(c);
         }
-        if let Some(c) = m.chat {
-            self.assistant.load_file(c);
+        match m.chat {
+            Some(c) => self.assistant.load_file(c),
+            None => self.assistant.clear_chat(),
         }
         self.meter.project = m.usage.unwrap_or_default();
         if let Some(u) = m.ui {
@@ -501,6 +507,7 @@ impl App {
         self.mat_hist = History::new();
         self.snapshots.clear();
         self.meter.project = crate::usage::Totals::default();
+        self.assistant.clear_chat();
         self.project.path = None;
         self.project.edits += 1;
         self.mark_saved();
@@ -1391,6 +1398,75 @@ pub(crate) mod tests {
         let path = project::test_dir("nochat").join("p.seraphina");
         a.save_project_to(&path).unwrap();
         assert!(project::read(&path).unwrap().manifest.get("chat").is_none());
+    }
+
+    #[test]
+    fn a_chat_only_change_is_unsaved_work_and_is_autosaved() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        let dir = project::test_dir("chatdirty");
+        a.start_session(dir.clone());
+        assert!(!a.check_dirty());
+        edit_chat(&mut a);
+        assert!(
+            a.check_dirty(),
+            "a new chat message marks the project dirty"
+        );
+        a.project.autosave_every = Duration::ZERO;
+        a.autosave_tick();
+        let end = Instant::now() + Duration::from_secs(10);
+        while a.project.autosave_job.is_some() {
+            assert!(Instant::now() < end, "autosave never finished");
+            std::thread::sleep(Duration::from_millis(10));
+            a.autosave_tick();
+        }
+        let saved = project::read(&dir.join(project::AUTOSAVE_FILE)).unwrap();
+        assert!(saved.manifest["chat"]
+            .to_string()
+            .contains("Make the sky bluer"));
+        // a chat the project does not keep is not unsaved work
+        a.save_project_to(&dir.join("p.seraphina")).unwrap();
+        a.project.include_chat = false;
+        a.mark_saved();
+        a.assistant.note("Tip: press B for the brush.");
+        assert!(!a.check_dirty());
+    }
+
+    #[test]
+    fn opening_a_project_without_chat_starts_a_fresh_chat() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        a.project.include_chat = false;
+        let path = project::test_dir("freshchat").join("p.seraphina");
+        a.save_project_to(&path).unwrap();
+        let mut b = test_app(&ctx);
+        edit_chat(&mut b);
+        b.open_project_from(&path).unwrap();
+        assert_eq!(b.assistant.items.len(), 1, "only the greeting");
+        assert_eq!(b.assistant.convo_len(), 0);
+        // so the old chat cannot leak into the next save
+        let c = b.to_container(true, None);
+        assert!(!c.manifest["chat"]
+            .to_string()
+            .contains("Make the sky bluer"));
+    }
+
+    #[test]
+    fn a_new_project_starts_a_fresh_chat() {
+        let ctx = egui::Context::default();
+        let (_, mut b) = round_trip("newchat", edit_chat);
+        assert_eq!(b.assistant.convo_len(), 1);
+        b.new_project();
+        assert_eq!(b.assistant.items.len(), 1, "only the greeting");
+        assert!(matches!(
+            b.assistant.items[0].kind,
+            ItemKind::Assistant { .. }
+        ));
+        assert_eq!(b.assistant.convo_len(), 0);
+        assert_eq!(
+            b.to_container(true, None).manifest["chat"],
+            test_app(&ctx).to_container(true, None).manifest["chat"]
+        );
     }
 
     #[test]

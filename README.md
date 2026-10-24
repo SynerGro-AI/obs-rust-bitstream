@@ -168,6 +168,13 @@ approximate.
   action. All rounds of the turn share one action card, and **Undo** on it
   reverts the whole turn, including any edits you made while it ran. If you
   undo while the turn is still running, later rounds get a new card.
+* **Chat in the project.** The conversation is saved in the `.seraphina`
+  file, in its autosave and in crash recovery. A new message marks the project unsaved. Action cards are saved
+  as notes, because their one-click Undo belongs to the session that ran
+  them. On open, the earlier chat goes back to the model as one fenced
+  transcript (context, not instructions) that includes those notes. Opening
+  a project or starting a new one cancels a reply still in flight; a project
+  saved without its chat opens with a fresh one.
 * **Live learning.** A local `MercyLearningHeart`-style EMA store
   (α = 0.382) is updated incrementally from:
   * your tool and parameter choices;

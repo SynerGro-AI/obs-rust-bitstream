@@ -191,14 +191,16 @@ approximate.
   topics come right after, through speech-to-text). Topics are matched locally
   first; the model is asked only for unclear chat topics, on the chat
   turn already being made. Real sources come first: a live ECCC weather
-  radar map of the place being talked about, or a previewed and
-  licence-checked Wikimedia Commons photo for "sunny" (a beach unless a
-  place is named). A Grok Imagine image is the last resort, and you
+  radar map (precipitation type) of the place being talked about. Photos
+  for topics like "sunny" are pending your decision: a pinned set of
+  Commons photos you review once, or no photos. A Grok Imagine image is
+  the last resort, and you
   approve each one ($0.02 each with `grok-imagine-image`). Seraphina can
   only suggest a background. Changes need a threshold, a cooldown and hysteresis.
   Third-party images carry on-screen credit. "Live" is shown only for
-  radar data under 18 minutes old. A failure keeps the current background
-  and says why. Spec: "E7: Topic backgrounds" in [PLAN.md](PLAN.md).
+  radar data under 18 minutes old. Radar requests follow the MSC usage
+  policy, with a daily request budget per install. A failure keeps the
+  current background and says why. Spec: "E7: Topic backgrounds" in [PLAN.md](PLAN.md).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -425,7 +427,8 @@ that are skipped by default (`#[ignore]`):
 `geomet_live_getmap_returns_a_png_for_edmonton`,
 `geomet_live_valid_time_is_recent`,
 `osm_live_tile_returns_200_with_cache_headers`,
-`commons_live_curated_search_returns_an_allowed_licence` and
+`commons_live_pinned_file_sha1_matches` (only if you pick pinned
+photos) and
 `xai_stt_live_transcribes_a_recorded_wav` (billed). A scheduled CI job
 for them is planned too; it can't run while the organisation's GitHub
 Actions are billing-locked.
@@ -520,7 +523,7 @@ stay out of the code until a real implementation lands with tests.
 | Microphone capture verified on real hardware on Windows (dshow) | after v0.2.0 (needs a run on a Windows PC with a microphone) |
 | Camera source verified on real hardware: a Windows webcam through Media Foundation (`media_foundation_reads_frames_from_a_real_camera`) and a Linux V4L2 device or v4l2loopback (`v4l2_reads_frames_from_a_real_device`); both tests are `#[ignore]` because the dev box has neither | after v0.2.0 (needs a run with a camera) |
 | Team features (organisation, invite, roles, presence) | after v0.2.0 |
-| Topic backgrounds (E7): first a compositor background layer with camera picture-in-picture (none exists today), then topic suggestions from chat (speech right after, via xAI's $0.10/h REST speech-to-text), ECCC radar over switchable OpenStreetMap tiles, curated and previewed Commons photos, per-image-approved Grok Imagine, offline GeoNames places, credit drawn into the frame and an honest live/not-live label (spec: PLAN.md "E7: Topic backgrounds") | after v0.2.0 (E7, its own milestone; dated when M4b merges) |
+| Topic backgrounds (E7): first a compositor background layer with camera picture-in-picture (none exists today), then topic suggestions from chat (speech right after, via xAI's $0.10/h REST speech-to-text), ECCC radar over switchable OpenStreetMap tiles, photos pending your decision (a pinned reviewed set, or none), per-image-approved Grok Imagine, offline GeoNames places, credit drawn into the frame and an honest live/not-live label (spec: PLAN.md "E7: Topic backgrounds") | after v0.2.0 (E7, its own milestone; date pending) |
 
 Removed and not planned, because the app already does the real thing:
 

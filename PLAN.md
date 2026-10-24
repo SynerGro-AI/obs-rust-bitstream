@@ -56,8 +56,8 @@ Everything below comes after v0.2.0 and has no date yet:
 4. OBS sources, scenes and the rest of Stream (E6): M7+.
 5. The rest of the Photoshop / After Effects / Maya tools listed as
    `[ ]` in TOOLS.md: M7+.
-6. Topic backgrounds (E7): its own milestone after v0.2.0, dated when
-   M4b merges.
+6. Topic backgrounds (E7): its own milestone after v0.2.0. The date is
+   pending (the Auditor's round-2 question 1 to the user).
 
 ## E7: Topic backgrounds (spec; planned, not built)
 
@@ -71,8 +71,9 @@ kind of source, and the background changes only when the topic calls for
 it and a setting allows it.
 
 **Milestone:** E7, its own milestone after v0.2.0 (it builds on Stream
-work, E6). It gets a date once M4b merges. This is the Auditor's
-recommendation (BG-8), pending user confirmation. It depends on a compositor
+work, E6). The date is pending: M4b has slipped, and the v0.2.0 date is
+the Auditor's round-2 question 1 to the user (E7-R6). Placing E7 after
+v0.2.0 is the Auditor's recommendation (BG-8), pending user confirmation. It depends on a compositor
 layer that does not exist yet, so step 1 below builds that layer, with
 its own tests, before anything else.
 
@@ -131,8 +132,9 @@ or an image you pick, before any topic logic.
 * **Topic backgrounds:** Off (default), Ask me, or Automatic. Off means
   no suggestion tool, no fetch and no change.
 * **Per-source switches** (all off): Live radar, Photos, Generated.
-* **Photos** always ask, with a preview, even in Automatic mode, until a
-  stronger content filter exists.
+* **Photos** exist only if the owner picks a photo source (pending, see
+  Photos). If they do, they always ask, with a preview, even in
+  Automatic mode.
 * **Generated images** always ask: the **Run** card shows the exact
   prompt, the model and the price for each image.
 * **Background image model:** `grok-imagine-image` by default (its own
@@ -224,7 +226,7 @@ settings say why.
   0.15. Going back to the default needs 3 windows in a row with `none`.
 * **Cooldown:** at least 120 s between automatic changes, and at least
   60 s on screen.
-* **Ask me:** a card ("Switch background to: live radar, rain rate,
+* **Ask me:** a card ("Switch background to: live radar, precipitation type,
   Edmonton, AB?") instead of a change. "Not now" mutes that topic for
   10 minutes.
 * All the numbers are constants in one place, and tests check them.
@@ -244,7 +246,8 @@ settings say why.
   list of the nearest listed cities to pick from. The background stays
   as it is.
 * **No place named:** live topics use the home location, or ask if it is
-  empty. Photo topics use a general search ("beach").
+  empty. Photo topics (only if photos ship) use the topic's general
+  entry, a beach.
 * Nominatim is not used. Its policy caps the whole app's users at 1
   request per second, treats periodic app requests as bulk geocoding,
   licenses its data under ODbL, and has a clause on LLM-built software.
@@ -254,42 +257,71 @@ settings say why.
 **Source:** MSC GeoMet WMS (`https://geo.weather.gc.ca/geomet`).
 NOAA/NWS is cut from v1: the ECCC mosaic already includes the US radars.
 
-**What it covers** (checked in GetCapabilities, GeoMet-Weather 2.40.4,
-Oct 24 2026):
+**One layer, no season rule** (Auditor round 2, E7-R2). The app draws
+`Radar_1km_SfcPrecipType` ("Radar surface precipitation type"). The
+GeoMet radar page lists it as the North American 1 km surface
+precipitation type composite, with its coverage layer
+`Radar-Coverage_SfcPrecipType`, updated every 6 minutes with the last 3
+hours available
+(<https://eccc-msc.github.io/open-data/msc-data/obs_radar/readme_radar_geomet_en/>,
+read Oct 24 2026).
 
-* `RADAR_1KM_RRAI` ("Radar precipitation rate for rain [mm/h]") and
-  `RADAR_1KM_RSNO` ("… for snow [cm/h]") form the North American
-  composite at 1 km. Its abstract says it "includes all the Canadian and
-  American radars available in the network and which can reach a
-  maximum of 180 contributing radars", and that "for the US Nexrad
-  radars, ECCC uses the most similar product from the US Meteorological
-  Service (NOAA)".
-* Bounding box: longitude −170.32 to −50.00, latitude 16.93 to 67.19.
-  The US–Canada border region and the US are therefore inside the
-  mosaic, but within that box only areas in range of a working radar
-  have data.
-* **Actual coverage changes over time**, and the layers
-  `RADAR_COVERAGE_RRAI` and `RADAR_COVERAGE_RSNO` ("Dynamic radar
-  coverage", every 6 minutes) show it. Before drawing, the app asks the
-  coverage layer for the chosen type (`GetFeatureInfo`, JSON) at the
-  place's point.
-* **Outside coverage** (outside the box, or a gap in the coverage
-  layer), the app shows the error "No licensed live radar covers
-  {place}" and keeps the current background (pending confirmation).
+* The radar itself says rain, snow or mixed. The Auditor's live
+  GetCapabilities check (12:30 PM MT, Oct 24 2026) found the time step
+  `PT6M`, the styles `SfcPrecipType_Dis` and `SfcPrecipType_Dis_Fr`, and
+  an abstract saying the layer "can distinguish occurrence and type of
+  precipitation and can recognize several levels of precipitation
+  intensity". A live `GetFeatureInfo` (text/plain) returned a classed
+  value (`310`, `Light Rain`). A point with no precipitation returned
+  "Search returned no results".
+* **The topic word decides only whether radar is shown** (any
+  `live_weather` word in the topic table). It never picks a layer. There
+  is no snow-word list, no rain/snow switch and no season constant.
+* The legend comes from `GetLegendGraphic` with style `SfcPrecipType_Dis`
+  and is drawn on screen with the label "Precipitation type (radar)".
+  `SfcPrecipType_Dis_Fr` is for a French UI, which does not exist today.
+* The rain and snow rate layers (`RADAR_1KM_RRAI`, `RADAR_1KM_RSNO`) and
+  their coverage layers are not used. `RADAR_1KM_RDBR` does not exist and
+  is not used.
 * Time dimension: PT6M steps over the last 3 hours, defaulting to the
-  latest. The layer `RADAR_1KM_RDBR` does not exist and is not used.
+  latest.
+* The bounding box is read from this layer's own capabilities fixture.
+  The rate composite's box (`RADAR_1KM_RRAI`, GeoMet-Weather 2.40.4,
+  Oct 24 2026) was longitude −170.32 to −50.00, latitude 16.93 to 67.19.
+  The `Radar_1km_SfcPrecipType` box is not recorded yet.
 
-**Rain or snow (a fixed rule):**
+**Coverage: one outline per time step, tested locally** (E7-R3):
 
-1. If the topic text says snow (or a snow word from a fixed list), use
-   RSNO. If it says rain, use RRAI.
-2. Otherwise, use RSNO from Nov 1 to Mar 31 at latitudes of 49° N and
-   above, and RRAI otherwise. This season rule is a constant, so it is
-   visible and testable.
-3. The layer is always drawn on screen: "rain rate mm/h" or "snow rate
-   cm/h", with the matching legend (`GetLegendGraphic`, style
-   `Radar-Rain_14colors` or `Radar-Snow_14colors`). A wrong choice is
-   therefore visible.
+* Actual coverage changes over time, and `Radar-Coverage_SfcPrecipType`
+  ("dynamic radar coverage", every 6 minutes) shows it.
+* The Auditor measured that `GetFeatureInfo` (JSON) on the coverage layer
+  `RADAR_COVERAGE_RSNO` returns the whole North American coverage
+  MultiPolygon, whatever the point asked about. That is tens of KB as seen
+  through a web fetch; the byte size was not measured.
+* So the app fetches the `Radar-Coverage_SfcPrecipType` outline **once
+  per time step**, caches it keyed by that step's valid time, and tests
+  the place's point against it locally (point-in-polygon on the CPU).
+  Another place, or another redraw in the same step, makes no new
+  coverage request.
+* Whether `Radar-Coverage_SfcPrecipType` answers the same way as
+  `RADAR_COVERAGE_RSNO` is not verified yet. The captured fixture (below)
+  settles it. If it returns only a local feature, this spec is revised
+  before the code is written.
+* **Outside coverage** (outside the layer's box, or outside the outline),
+  the app shows the error "No licensed live radar covers {place}" and
+  keeps the current background (pending confirmation).
+
+**The point mapping is pinned by a recorded fixture** (E7-R3). One
+EPSG:4326 query near (−95, 50) returned a feature at (−148.36, 60.19)
+(Auditor, round 2). Two explanations fit and neither is verified: WMS
+1.3.0 puts latitude first for EPSG:4326, and a coverage response's
+feature is the whole outline, not the point. Before any point query is
+coded, the capture below records the same point (−95, 50) on
+`Radar_1km_SfcPrecipType` as EPSG:4326 (latitude first), CRS:84
+(longitude first) and EPSG:3857. The test
+`geomet_point_query_fixture_pins_axis_order` checks which request form
+answers for the asked point. The app uses only the form that fixture
+proves.
 
 **"Live" follows the radar's own time:**
 
@@ -300,8 +332,10 @@ Oct 24 2026):
   avoids trusting the local clock. Otherwise the strip says "Not live:
   radar from HH:MM", even after a successful fetch, because a 200
   response can carry an old default time during an ECCC outage.
-* The map refreshes every 6 minutes, on the step. If a refresh fails, the
-  image stays with the "Not live" label and the reason.
+* The map refreshes every 6 minutes, on the step, and only while the
+  radar background is visible (see the MSC usage policy below). If a
+  refresh fails, the image stays with the "Not live" label and the
+  reason.
 
 **Credit, as the ECCC licence words it** (Data Services End-use Licence
 v2.1.1, Aug 2026, s.3). The composite mixes Canadian and NOAA radars, so
@@ -315,6 +349,65 @@ the strip uses the licence's multiple-originator form:
 * There are no ECCC names used as branding, no crests and no logos (s.4),
   and nothing that suggests endorsement (s.5). The `LogoURL` in
   GetCapabilities is ignored.
+* The wording is kept as written (Auditor round 2, 2a). The "NOAA (US
+  radars)" part rests on the `RADAR_1KM_RRAI` abstract. When the
+  `Radar_1km_SfcPrecipType` capabilities fixture is captured, its
+  abstract is checked for the US radars too. If it doesn't name them,
+  the wording goes back to the owner rather than being changed quietly.
+
+**MSC usage policy for GeoMet requests** (E7-R1). This is separate from
+the licence: the MSC Open Data Services Usage Policy,
+<https://eccc-msc.github.io/open-data/usage-policy/readme_en/>, read Oct
+24 2026. The radar usage tips are on the GeoMet radar page linked above.
+
+* **A meaningful User-Agent** on every GeoMet request, the same one as
+  the tiles: `SeraphinaStudio/<version>
+  (+https://github.com/SynerGro-AI/seraphina-studio)`. The policy says:
+  "Add a meaningful HTTP User-Agent header to HTTP requests".
+* **No `no-cache` headers:** never `Cache-Control: no-cache` or `Pragma:
+  no-cache`, as the policy asks.
+* **GetCapabilities is always layer-filtered**, with
+  `&layer=Radar_1km_SfcPrecipType` or `&layer=Radar-Coverage_SfcPrecipType`.
+  That is the vendor extension the policy asks for to get smaller XML.
+  The full capabilities document is never requested.
+* **No bulk or tile-pyramid retrieval:** one GetMap per step for the box
+  on screen, never WMS tiles in bulk and never a local archive. The
+  policy says "Bulk and batch retrieval of WMS tiles is prohibited", and
+  a local archive belongs on MSC Datamart, which the app does not use.
+* **Only while visible:** the radar refreshes only while its background
+  is in the output being recorded or streamed, or in a Stream preview
+  that is on screen. It pauses when the background is hidden or
+  replaced, and when the window is minimised with nothing recording or
+  streaming. (The Auditor wrote "pause when hidden or minimised". A
+  minimised window that is still streaming keeps the radar on viewers'
+  screens, so it keeps refreshing.)
+* **The per-install budget**, computed by `tools/geomet_budget.py`:
+  * one time step is 6 minutes, so there are 240 steps a day;
+  * at most 3 GeoMet requests per step: the layer-filtered
+    GetCapabilities (to learn the newest valid time), one GetMap, and
+    one coverage outline;
+  * the legend PNG at most once a day (one style, cached on disk);
+  * **so the budget is 721 requests per install per day** (3 × 240 + 1).
+    A counter kept per UTC day enforces it. At the limit the app stops
+    fetching, and the strip says "Not live: daily radar request budget
+    reached".
+  * GeoMet requests are counted per session and the count is written to
+    the log when the session ends, so the logs can be reviewed as the
+    policy asks.
+* **When MSC asks to be contacted:** the policy says to contact MSC when
+  an application makes 86,400 requests a day or more (about 1 a second).
+  For the whole app that is:
+  * about 119 installs showing radar around the clock at the full budget
+    (86,400 ÷ 721);
+  * 180 installs if only GetMap plus one other call per step were counted
+    (86,400 ÷ 480), and 360 for GetMap alone (86,400 ÷ 240). That is the
+    Auditor's 180–360 range, which leaves out the third call per step;
+  * about 714 installs if radar is visible 4 hours a day (40 steps × 3 +
+    1 = 121 requests).
+* **Owner action (noted, not done):** before a wide public release, the
+  owner contacts MSC about the expected volume. The owner also subscribes
+  to the GeoMet-Info announcement list, which the policy asks users to
+  follow so layer changes are seen in time.
 
 **Base map: OpenStreetMap tiles (decided), following the Tile Usage
 Policy:**
@@ -335,25 +428,56 @@ Policy:**
   that seek donations, should be especially aware that access may be
   withdrawn at any point." That is why the tile URL can be switched.
 
-### Photos: Wikimedia Commons, curated and previewed
+### Photos: source pending your decision (nothing about photos is built)
 
-* **Curated categories only:** a search is limited to files in
-  "Featured pictures on Wikimedia Commons", "Quality images" or "Valued
-  images" (`incategory:`).
-* **Excluded:**
-  * a file in any category from a fixed blocklist (nudity, people,
-    portraits, swimwear and similar);
-  * a file whose structured data says it depicts a human (Q5).
+The round-1 design does not work. It searched curated Commons
+categories at runtime, used a category blocklist, and refused files that
+depict a human (Q5). The Auditor measured it with `beach_audit.py`
+(round 2) on "Featured pictures of beaches" and "Quality images of
+beaches": 258 unique files ("Valued images of beaches" does not exist).
 
-  A missing statement does not prove there is no person, which is why
-  every photo is previewed.
+* 47 files are licence-eligible (public domain, CC0 or CC BY, no SA).
+  CC BY-SA 4.0: 175; CC BY-SA 3.0: 33.
+* 0 of those 47 have a "depicts" (P180) statement at all, so the Q5 check
+  filters nothing.
+* 4 eligible files are in people categories despite curation. One
+  curated file is in "Nude men in Canada"; it was excluded only because
+  it is CC BY-SA.
+* The people and nudity categories are large and nested, so a blocklist
+  can never be complete.
+
+So the photo source is **pending user decision** (the Auditor's round-2
+question 3). These are the two options from the report. This spec picks
+neither, and photos stay off until the owner decides.
+
+**(A) A pinned set you review once.**
+
+* A local script (like `beach_audit.py`) builds candidates per topic: the
+  licence filter, landscape at least 1280 px wide, and the people/nudity
+  category regex as a backstop. The Auditor's run found about 39 clean
+  beach candidates, for example "Beach Montechiaro.jpg" (CC0) and "Beach
+  of Cape Fiolent, Crimea.jpg" (CC BY 4.0).
+* You review the thumbnails once.
+* The app ships, per photo: title, pageid, sha1, author, licence and the
+  credit line.
+* At runtime it fetches only pinned files and checks the sha1. On a
+  mismatch the photo is refused, the current background stays, and the
+  reason is shown.
+* The Q5 check is dropped. Topics outside the set get the map/radar, or
+  Imagine with approval.
+* Tests: `pinned_photo_sha1_mismatch_is_refused`, and
+  `pin_builder_refuses_sa_and_people_categories` (run against a recorded
+  API fixture).
+
+**(B) No photos.** Topics get the map/radar, or a Grok Imagine image with
+approval. The Photos switch, the Commons fetch and the photo tests are
+removed.
+
+**If photos ship (option A), these rules hold:**
+
 * **Licences:** public domain, CC0, and CC BY 2.0, 2.5, 3.0 and 4.0
   only. CC BY-SA, unknown licences and anything else are refused (no
   CC BY-SA and no Pexels, pending confirmation).
-* **The choice is deterministic:** the query is built from the topic and
-  the resolved place, and the app takes the highest-ranked result that
-  passes every filter. The choice is cached per query for 30 days, so
-  the same topic gives the same photo.
 * **Preview before showing:** always a card with the photo, its credit
   and [Use] [Skip], even in Automatic mode.
 * **A fixed credit line**, drawn into the frame:
@@ -428,7 +552,7 @@ per-site terms check.
 * Every failure shows a toast and a status line with the real reason.
   Failures include:
   * no network, an HTTP error, a 10 s timeout or a decode error;
-  * a refused licence or a filtered photo;
+  * a photo whose sha1 doesn't match its pin (option A only);
   * a place that is unknown, ambiguous or outside coverage;
   * the spend cap, or the setting being off.
 * **The current background stays.** There is no silent fallback to
@@ -444,8 +568,9 @@ generated one.
 
 1. **Live radar and the map:** free ECCC and OSM fetches. Stitching,
    drawing and compositing are done locally with the `image` crate.
-2. **A curated Commons photo:** a free fetch, then local scaling,
-   cropping and drawing of the credit.
+2. **A pinned Commons photo, only if the owner picks option A**
+   (pending): a free fetch, then the sha1 check, local scaling, cropping
+   and drawing of the credit.
 3. **Grok Imagine:** only when no licensed real image fits, or when you
    pick Generated yourself. Each image needs your approval on the Run
    card.
@@ -455,14 +580,17 @@ generated one.
 * the topic and place matching;
 * the GeoNames lookup;
 * the gating rules;
-* the radar time and coverage checks;
+* the radar time check, and the coverage point-in-polygon test against
+  the cached outline;
+* the GeoMet request budget and the per-session request count;
 * tile stitching, compositing and the attribution strip;
-* the Commons filters and the credit line.
+* if option A is picked: the pin builder's licence and category filters
+  (a local script), the sha1 check and the credit line.
 
 **Tests:** no test makes a paid call by default. The only billed test,
 `xai_stt_live_transcribes_a_recorded_wav`, is `#[ignore]` and run by
-hand. The other network tests are free (GeoMet, OSM, Commons) and are
-also skipped by default.
+hand. The other network tests are free (GeoMet, OSM, and Commons if
+option A is picked) and are also skipped by default.
 
 **Paid calls still needed:**
 
@@ -472,13 +600,13 @@ also skipped by default.
 | Grok Imagine, `grok-imagine-image`, $0.02 per image | A background image when no licensed real photo or map fits | Making a new picture needs a large image model and usually a GPU, which the target PCs may not have. It is the last resort, and every image needs approval. |
 | The chat turn you already make (no new call) | Settling unclear topics with `suggest_studio_background` | Understanding free text that the topic table doesn't cover needs a language model. It rides on the existing turn and adds only the tool's schema and arguments, a few hundred tokens. |
 
-GeoMet, the OSM tiles and Commons are free network calls, not paid
-ones.
+GeoMet, the OSM tiles and Commons (option A only) are free network
+calls, not paid ones.
 
 ### Keys
 
-* v1 sources need no key (GeoMet, OSM tiles, Commons, offline
-  GeoNames). Imagine and speech-to-text use the existing xAI key from the
+* v1 sources need no key (GeoMet, OSM tiles, Commons if option A is
+  picked, offline GeoNames). Imagine and speech-to-text use the existing xAI key from the
   OS credential store (`Secret::XaiKey`) or the environment.
 * Any later key (a commercial tile provider) becomes a new `Secret` in
   `secrets.rs`. It is never stored in the project file, the settings, the
@@ -491,14 +619,49 @@ ones.
 with the request URL and the fetch time beside them in
 `tests/fixtures/background/`.
 
-* The box this spec was written on cannot reach `geo.weather.gc.ca`
-  with `curl`: the connection times out or the TLS handshake ends early.
-  A web fetch tool can reach it, and the Auditor saw the same.
-* So the GeoMet fixtures (GetCapabilities XML, a GetMap PNG, a legend
-  PNG and a coverage GetFeatureInfo JSON) must be captured with `curl`
-  from a machine whose network reaches the service, such as the owner's
-  PC. Until then, those tests don't exist. Nothing is faked to stand in
+* This box cannot reach `geo.weather.gc.ca` with `curl`: the connection
+  times out or the TLS handshake ends early. A web fetch tool can reach
+  it, and the Auditor saw the same.
+* **So the GeoMet fixtures must be captured on the owner's Windows PC.**
+  Until then, those tests don't exist, and nothing is faked to stand in
   for them.
+
+**Capture commands.** Type or paste them at a Command Prompt (cmd.exe,
+not PowerShell and not a `.bat` file) on Windows 10 or 11, which ships
+`curl.exe`, from the repository folder. First run:
+
+```
+mkdir tests\fixtures\background\geomet
+cd tests\fixtures\background\geomet
+```
+
+Then run each line below. Each one saves the response, its headers (the
+HTTP `Date` header is the fetch time) in `<name>.headers.txt`, and
+appends the request URL to `requests.txt`:
+
+```
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D caps_precip.headers.txt -o caps_precip.xml -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetCapabilities&layer=Radar_1km_SfcPrecipType" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D caps_coverage.headers.txt -o caps_coverage.xml -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetCapabilities&layer=Radar-Coverage_SfcPrecipType" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D getmap_precip_edmonton_3857.headers.txt -o getmap_precip_edmonton_3857.png -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetMap&layers=Radar_1km_SfcPrecipType&styles=SfcPrecipType_Dis&crs=EPSG:3857&bbox=-12970673,6895320,-12297471,7273995&width=1280&height=720&format=image/png&transparent=true" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D legend_precip_dis.headers.txt -o legend_precip_dis.png -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetLegendGraphic&sld_version=1.1.0&layer=Radar_1km_SfcPrecipType&style=SfcPrecipType_Dis&format=image/png" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D coverage_outline_3857.headers.txt -o coverage_outline_3857.json -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetFeatureInfo&width=101&height=101&i=50&j=50&layers=Radar-Coverage_SfcPrecipType&query_layers=Radar-Coverage_SfcPrecipType&info_format=application/json&crs=EPSG:3857&bbox=-12634577,7084152,-12633567,7085162" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D point_edmonton_3857.headers.txt -o point_edmonton_3857.txt -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetFeatureInfo&width=101&height=101&i=50&j=50&layers=Radar_1km_SfcPrecipType&query_layers=Radar_1km_SfcPrecipType&info_format=text/plain&crs=EPSG:3857&bbox=-12634577,7084152,-12633567,7085162" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D point_odd_epsg4326.headers.txt -o point_odd_epsg4326.json -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetFeatureInfo&width=101&height=101&i=50&j=50&layers=Radar_1km_SfcPrecipType&query_layers=Radar_1km_SfcPrecipType&info_format=application/json&crs=EPSG:4326&bbox=49.99,-95.01,50.01,-94.99" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D point_odd_crs84.headers.txt -o point_odd_crs84.json -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetFeatureInfo&width=101&height=101&i=50&j=50&layers=Radar_1km_SfcPrecipType&query_layers=Radar_1km_SfcPrecipType&info_format=application/json&crs=CRS:84&bbox=-95.01,49.99,-94.99,50.01" >> requests.txt
+curl.exe -sS -A "SeraphinaStudio/fixture-capture (+https://github.com/SynerGro-AI/seraphina-studio)" -D point_odd_3857.headers.txt -o point_odd_3857.json -w "%{url_effective}\n" "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetFeatureInfo&width=101&height=101&i=50&j=50&layers=Radar_1km_SfcPrecipType&query_layers=Radar_1km_SfcPrecipType&info_format=application/json&crs=EPSG:3857&bbox=-10575857,6445771,-10574847,6446781" >> requests.txt
+```
+
+* What the lines capture: the layer-filtered capabilities for
+  `Radar_1km_SfcPrecipType` and `Radar-Coverage_SfcPrecipType`; a
+  `Radar_1km_SfcPrecipType` GetMap (EPSG:3857, transparent PNG, a box
+  about 400 km wide around Edmonton, 1280×720); the `SfcPrecipType_Dis`
+  legend; the coverage outline; a text/plain point query at Edmonton;
+  and the three point-mapping queries at (−95, 50).
+* `python3 tools/geomet_budget.py --check` fails if these lines and the
+  budget numbers in this file drift from the script that computes them.
+* The lines have not been run on Windows: this box has no Windows and
+  can't reach the service. If a line fails, the error is recorded and
+  the line is fixed here, not worked around.
 
 **Step 1, the compositor:**
 
@@ -531,23 +694,44 @@ with the request URL and the fetch time beside them in
 * `geomet_getmap_fixture_decodes_to_a_radar_image`
 * `fresh_fetch_with_old_valid_time_is_not_live`
 * `valid_time_within_18_min_of_server_date_is_live`
-* `rain_snow_rule_picks_the_layer_and_labels_it`
+* `precip_type_legend_fixture_maps_classes`: the recorded legend and
+  point query map class codes to labels (for example `310`, Light
+  Rain).
+* `coverage_outline_is_fetched_once_per_step`: a real local listener
+  counts one coverage request for two places in the same step.
+* `point_in_coverage_outline_fixture`: Edmonton is inside the recorded
+  outline and a mid-Pacific point is outside, computed locally.
+* `geomet_point_query_fixture_pins_axis_order`
 * `place_outside_coverage_gives_the_no_radar_error`
 * `eccc_credit_line_matches_the_licence_wording`
 
-**Tiles, photos and failure** (a real local listener on 127.0.0.1 and
-recorded real responses):
+**MSC usage policy** (a real local listener on 127.0.0.1):
+
+* `geomet_requests_send_user_agent_and_no_no_cache_headers`
+* `geomet_capabilities_requests_are_layer_filtered`
+* `radar_refresh_pauses_when_not_visible`
+* `geomet_daily_budget_stops_at_721_requests`
+* `geomet_session_request_count_is_logged`
+
+**Tiles and failure** (a real local listener on 127.0.0.1 and recorded
+real responses):
 
 * `osm_tiles_send_the_user_agent_and_conditional_requests`
 * `tile_url_setting_is_used`
-* `commons_search_fixture_parses_author_licence_and_url`
-* `commons_filter_refuses_sa_unknown_blocklisted_and_people`
-* `commons_choice_is_deterministic`
-* `commons_credit_strips_html_and_caps_length`
-* `photo_always_needs_preview_even_in_automatic`
 * `fetch_failure_keeps_the_current_background_and_shows_the_reason`: a
   real HTTP 503.
 * `photos_and_generated_images_are_never_labelled_live`
+
+**Photos, only if option A is picked** (pending): the round-1 tests
+`commons_search_fixture_parses_author_licence_and_url`,
+`commons_filter_refuses_sa_unknown_blocklisted_and_people` and
+`commons_choice_is_deterministic` are dropped. Option A's tests are:
+
+* `pinned_photo_sha1_mismatch_is_refused`
+* `pin_builder_refuses_sa_and_people_categories` (a recorded API
+  fixture)
+* `commons_credit_strips_html_and_caps_length`
+* `photo_always_needs_preview_even_in_automatic`
 
 **Imagine and keys:**
 
@@ -577,7 +761,7 @@ in README's Tests section as skipped by default:
 * `geomet_live_getmap_returns_a_png_for_edmonton`
 * `geomet_live_valid_time_is_recent`
 * `osm_live_tile_returns_200_with_cache_headers`
-* `commons_live_curated_search_returns_an_allowed_licence`
+* `commons_live_pinned_file_sha1_matches` (only if option A is picked)
 * `xai_stt_live_transcribes_a_recorded_wav` (billed, run by hand)
 
 A CI job that runs them on a schedule (`cargo test -- --ignored
@@ -591,10 +775,16 @@ The owner answered the four questions about money and schedule (see
 "Decided" above). The Auditor's answers to the others are written in as
 pending confirmation. Still to settle:
 
-1. The blocklist of Commons categories (the exact list is to be reviewed
-   with the owner before photos ship).
-2. The rain/snow season constants (Nov 1 to Mar 31, at 49° N and
-   above).
+1. The photo source: (A) a pinned set you review once, or (B) no photos
+   (the Auditor's round-2 question 3; see Photos). The Commons blocklist
+   question is gone, because neither option uses a blocklist.
+2. The E7 milestone date (the Auditor's round-2 question 1).
+3. Whether the `Radar_1km_SfcPrecipType` abstract names the US radars,
+   which the credit wording relies on. This is checked when the fixtures
+   are captured.
+
+The rain/snow season constants are gone: the precipitation type layer
+replaced them (Auditor round 2, decision 12).
 
 ## Principles
 - Foundation first

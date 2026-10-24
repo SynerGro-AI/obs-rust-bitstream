@@ -49,6 +49,11 @@
       "sha256": "d926da4db202ee5bc617497a3350fa70c2d38139982ad685f917264953be5b6e",
       "verify": "signature"
     },
+    "bad_noncanonical_key.bin": {
+      "bytes": 144,
+      "sha256": "0eda20d2a868532e0736bbafaedf5b55ab3ca4c2857fdd2638649f45b7c2ce1e",
+      "verify": "noncanonical_key"
+    },
     "bad_noncanonical_s.bin": {
       "bytes": 144,
       "sha256": "3efb992094229fa47e7acc4cff5c75b94572cfbb6a0f80f515973f24c9a8be3c",

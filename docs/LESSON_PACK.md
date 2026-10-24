@@ -54,6 +54,12 @@ duplicates.
      `x` is 0 with the sign bit set. Without this, one key would have
      more than one byte form and could dodge the replay ledger and the
      block list, which are keyed by the key bytes.
+     `bad_noncanonical_key.bin` uses `y` = p + 1, a second byte form of
+     the identity point. That key is also small order, so the fixture
+     shows that check 1 runs before check 2. A forgeable non-canonical
+     key that is not small order does not exist: `y` − p is 0 to 18, and
+     a signature can be made without the private key only when `[k]A`
+     vanishes.
   2. `small_order_key`: the origin key is one of the 8 small-order
      points (`[8]A` is the identity). With such a key one signature
      verifies for any content. `bad_small_order_key.bin` uses the
@@ -72,15 +78,15 @@ duplicates.
   the small-order part of 3, 4 and 5. The reader must still check 1
   explicitly (a range check on the key bytes before
   `VerifyingKey::from_bytes`), and `pack_matches_published_vectors`
-  must show that both strict-only fixtures are refused for their
+  must show that the three strict-only fixtures are refused for their
   stated reason. A plain `verify` is not enough.
 
-  Why the explicit checks: the plain equation **holds** for both
-  strict-only fixtures (the script computes it and fails if it ever
-  does not), so only the strict checks refuse them. Python's
-  `cryptography` 43.0.0 with OpenSSL 3.5.7 (measured on Oct 24 2026)
-  **accepts** `bad_small_order_key.bin` and refuses
-  `bad_noncanonical_s.bin`. So OpenSSL is not a strict verifier, and
+  Why the explicit checks: the plain equation **holds** for all three
+  strict-only fixtures (the script computes it, reducing `y` mod p as a
+  permissive decoder does, and fails if it ever does not), so only the
+  strict checks refuse them. Python's `cryptography` 43.0.0 with OpenSSL
+  3.5.7 (measured on Oct 24 2026) **accepts** `bad_small_order_key.bin`
+  and `bad_noncanonical_key.bin`, and refuses `bad_noncanonical_s.bin`. So OpenSSL is not a strict verifier, and
   `tools/lesson_pack_vectors.py` makes every strict check itself with
   plain integer curve arithmetic before it calls OpenSSL.
 * **There is no nonce.** The pair (origin key, sequence) is unique, and
@@ -137,6 +143,12 @@ Each family has an **import mode**:
   v0.2.0, refuses these packs whole on the unknown family. This is the
   intended separation. Revision 2 has no test vectors yet; they are
   added with the RWN milestone.
+* **Not in revision 2:** Seraphina.AGI's proposed
+  `rwn.<profile>.sha.<nn>` family (`nn` = 00 to 15, the policy body
+  hash) is planned and is not part of revision 2. Revision 2 stays at
+  101 keys per profile, with the 2,545 and 3,050 byte pack sizes above.
+  Adding the family needs a new revision defined here,
+  with its own sizes.
 * **Reserved:** `rwn.source.<id>` (per-source reliability, `blend`) is
   reserved and in no revision. Fusing peer reliabilities into a fit
   needs a new RWN API.
@@ -186,6 +198,7 @@ These seeds are public test values. Never use them for a real install.
 | `b_seq1.bin` | 138 | `2c9212c4008e17c1f171d9926d87d47ca435292d0cd5bd95a905ce3fab0187a3` | ok |
 | `bad_created_not_whole_day.bin` | 144 | `e8b0cef4f566a4751ad975b041e16b773a43ac664a4ad1695a985a9415691e5d` | created |
 | `bad_flipped_byte.bin` | 176 | `d926da4db202ee5bc617497a3350fa70c2d38139982ad685f917264953be5b6e` | signature |
+| `bad_noncanonical_key.bin` | 144 | `0eda20d2a868532e0736bbafaedf5b55ab3ca4c2857fdd2638649f45b7c2ce1e` | noncanonical_key |
 | `bad_noncanonical_s.bin` | 144 | `3efb992094229fa47e7acc4cff5c75b94572cfbb6a0f80f515973f24c9a8be3c` | noncanonical_s |
 | `bad_small_order_key.bin` | 144 | `4f6aefdbe64ec721d93a7acbb62669d613585bfa36dd61819597181f599b449b` | small_order_key |
 | `bad_unsorted.bin` | 176 | `de5b1bb9ec06a2e0e0f3d9ccfe86ae94db2178e49b420e5f520994c473654fc0` | order |
@@ -212,6 +225,12 @@ These seeds are public test values. Never use them for a real install.
   SHA-512 of `seraphina small-order key vector`, mod L). The plain
   equation holds for any content, and OpenSSL accepts it. Refused
   `small_order_key`.
+* `bad_noncanonical_key.bin`: origin key bytes = p + 1 as 32
+  little-endian bytes (`eeff…ff7f`), a non-canonical encoding of the
+  identity point, with `R = [S]B` for a fixed `S` (`S` = SHA-512 of
+  `seraphina noncanonical key vector`, mod L). A decoder that reduces
+  `y` mod p sees the identity, so the plain equation holds for any
+  content, and OpenSSL accepts it. Refused `noncanonical_key`.
 * `bad_noncanonical_s.bin`: `a_seq2.bin` with `S` replaced by `S + L`.
   The plain equation still holds. Refused `noncanonical_s`.
 * `bad_created_not_whole_day.bin`: key A, sequence 5, correctly signed,

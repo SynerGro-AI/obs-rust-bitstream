@@ -73,11 +73,15 @@ def pt_encode(a):
     zi = pow(a[2], P - 2, P); x, y = a[0] * zi % P, a[1] * zi % P
     return (y | (x & 1) << 255).to_bytes(32, "little")
 
-def pt_decode(s):
+def pt_decode(s, lax=False):
     """Returns (point, reason). reason is None, or why the encoding is refused:
-    'noncanonical' (y >= p, or x = 0 with the sign bit set) or 'not_on_curve'."""
+    'noncanonical' (y >= p, or x = 0 with the sign bit set) or 'not_on_curve'.
+    lax=True reduces y >= p mod p instead, as a permissive decoder does; it is
+    used only to prove what the strict checks catch."""
     v = int.from_bytes(s, "little"); y, sign = v & (2**255 - 1), v >> 255
-    if y >= P: return None, "noncanonical"
+    if y >= P:
+        if not lax: return None, "noncanonical"
+        y -= P
     x2 = (y * y - 1) * pow(D * y * y + 1, P - 2, P) % P
     x = pow(x2, (P + 3) // 8, P)
     if (x * x - x2) % P: x = x * SQRT_M1 % P
@@ -104,9 +108,9 @@ def strict_reason(pk, sig):
     return None
 
 def lax_equation_holds(pk, sig, msg):
-    """Permissive RFC 8032 check: [S]B == R + [k]A with no S < L and no
-    small-order test. Used only to prove what the strict checks catch."""
-    a, _ = pt_decode(pk); r, _ = pt_decode(sig[:32])
+    """Permissive RFC 8032 check: [S]B == R + [k]A with no S < L, no
+    small-order test, and y >= p reduced mod p. Used only to prove what the strict checks catch."""
+    a, _ = pt_decode(pk, lax=True); r, _ = pt_decode(sig[:32], lax=True)
     if a is None or r is None: return False
     k = int.from_bytes(hashlib.sha512(sig[:32] + pk + msg).digest(), "little") % L
     return pt_eq(pt_mul(int.from_bytes(sig[32:], "little"), BASE), pt_add(r, pt_mul(k, a)))
@@ -156,6 +160,17 @@ def small_order_key_pack(seq, created, entries):
     verifier accepts this one signature for any content."""
     b = body((1).to_bytes(32, "little"), seq, created, entries)
     s = int.from_bytes(hashlib.sha512(b"seraphina small-order key vector").digest(), "little") % L
+    return b + pt_encode(pt_mul(s, BASE)) + s.to_bytes(32, "little")
+
+def noncanonical_key_pack(seq, created, entries):
+    """The identity point again, but encoded with y = p + 1 (a second byte
+    form of y = 1). A permissive decoder reduces y mod p, so R = [S]B again
+    satisfies the plain equation. The key is also small order, so it shows
+    that check 1 runs first; no non-canonical key with a forgeable signature
+    avoids small order (y - p is 0..18, and the only forgeable keys are the
+    ones whose [k]A vanishes)."""
+    b = body((P + 1).to_bytes(32, "little"), seq, created, entries)
+    s = int.from_bytes(hashlib.sha512(b"seraphina noncanonical key vector").digest(), "little") % L
     return b + pt_encode(pt_mul(s, BASE)) + s.to_bytes(32, "little")
 
 def noncanonical_s(p):
@@ -225,6 +240,7 @@ def build():
     files["bad_weight_10001.bin"] = pack(a, 4, t, [("ai.set_layer_blend", 10001, 12)])
     files["bad_small_order_key.bin"] = small_order_key_pack(1, t, [("ai.set_layer_blend", 2500, 12)])
     files["bad_noncanonical_s.bin"] = noncanonical_s(files["a_seq2.bin"])
+    files["bad_noncanonical_key.bin"] = noncanonical_key_pack(1, t, [("ai.set_layer_blend", 2500, 12)])
     files["bad_created_not_whole_day.bin"] = pack(a, 5, t + 3600, [("ai.set_layer_blend", 2500, 12)],
                                                   round_day=False)
     files["glyph_a_seq1.png"] = glyph_png(good)
@@ -275,14 +291,14 @@ def main():
             "bad_flipped_byte.bin": "signature", "bad_wrong_domain.bin": "signature",
             "bad_unsorted.bin": "order", "bad_weight_10001.bin": "weight",
             "bad_small_order_key.bin": "small_order_key", "bad_noncanonical_s.bin": "noncanonical_s",
-            "bad_created_not_whole_day.bin": "created"}
+            "bad_created_not_whole_day.bin": "created", "bad_noncanonical_key.bin": "noncanonical_key"}
     exp = expectations(files)
     for n, w in want.items():
         if exp[n]["verify"] != w: fail(f"{n}: verify gave {exp[n]['verify']}, expected {w}")
     packs = sorted(n for n in exp if "verify" in exp[n])
     if packs != sorted(want):
         fail(f"pack fixtures {packs} do not match the expected results {sorted(want)}")
-    for n in ("bad_small_order_key.bin", "bad_noncanonical_s.bin"):
+    for n in ("bad_small_order_key.bin", "bad_noncanonical_s.bin", "bad_noncanonical_key.bin"):
         p = files[n]
         if not lax_equation_holds(p[8:40], p[-64:], PACK_DOMAIN + p[:-64]):
             fail(f"{n}: the plain RFC 8032 equation does not hold, so it does not prove the strict check")

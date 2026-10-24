@@ -445,7 +445,7 @@ Every test uses real files, and the C7.2 tests use real sockets on
 | `older_sequence_is_refused` | after `a_seq2`, `a_seq1` is refused |
 | `relayed_newer_pack_makes_older_direct_pack_a_replay` | after `a_seq2` arrives relayed through another peer, the direct `a_seq1` is refused as older, and the ledger holds one entry for key A |
 | `sender_sequence_survives_a_crash` | the process is killed between persisting the counter and writing the file; the next export uses a fresh, higher sequence |
-| `bad_signature_is_refused` | another key's signature, a zeroed signature, `bad_noncanonical_s.bin`, `bad_small_order_key.bin`, a key with `y` ≥ p and the old domain string are refused, each for the reason named in `docs/LESSON_PACK.md` |
+| `bad_signature_is_refused` | another key's signature, a zeroed signature, `bad_noncanonical_s.bin`, `bad_small_order_key.bin`, `bad_noncanonical_key.bin` (a key with `y` ≥ p) and the old domain string are refused, each for the reason named in `docs/LESSON_PACK.md` |
 | `created_not_whole_day_is_refused` | `bad_created_not_whole_day.bin` is refused (`created`) |
 | `unknown_key_needs_explicit_trust` | a valid pack from an unknown key changes nothing until it is trusted; a blocked key is refused |
 | `out_of_range_weight_is_refused` | `bad_weight_10001.bin` is refused |

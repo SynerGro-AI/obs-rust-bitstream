@@ -107,12 +107,13 @@ fn serve(l: TcpListener, user: String) {
                 if line.trim_end() != want {
                     continue; // not ours, or another user's launch
                 }
-                let mut w = &s;
-                let _ = writeln!(w, "{}", OK);
+                // Flag first, then answer: the caller may act on the reply at once.
                 FOCUS_REQUESTED.store(true, Ordering::SeqCst);
                 if let Some(c) = CTX.get() {
                     c.request_repaint();
                 }
+                let mut w = &s;
+                let _ = writeln!(w, "{}", OK);
             }
         })
         .ok();

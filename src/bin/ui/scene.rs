@@ -8,7 +8,7 @@ use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::{self, Clock, Track};
 use crate::{ToastKind, Toasts};
-use eframe::egui::{self, Color32, Pos2, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Stroke, Vec2};
 use obs_rust_bitstream::arena::{Arena, Environment};
 use obs_rust_bitstream::material_assign::MaterialAssign;
 use obs_rust_bitstream::mesh3d::{self as m3, BoolOp, Camera, Frame3d, PolyMesh, Surface, V3};
@@ -1682,14 +1682,14 @@ impl SceneState {
             for (i, o) in self.objs.iter().enumerate() {
                 let on = self.selected == Some(i);
                 let second = self.prev_selected == Some(i);
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(if on {
                         p.accent_soft()
                     } else {
                         Color32::TRANSPARENT
                     })
-                    .rounding(Rounding::same(R_SM + 1.0))
-                    .inner_margin(egui::Margin::symmetric(SP_XS, 1.0))
+                    .corner_radius(CornerRadius::same((R_SM + 1.0) as u8))
+                    .inner_margin(egui::Margin::symmetric(SP_XS as i8, 1))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             if o.parent.is_some() {

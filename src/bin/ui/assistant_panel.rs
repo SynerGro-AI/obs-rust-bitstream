@@ -10,7 +10,7 @@ use crate::commands::{tools_json, AppCommand};
 use crate::llm::{self, AgentEvent, ChatMsg, LlmProvider, SeraphinaCli, ToolCall};
 use crate::prefs::Prefs;
 use crate::theme::{self, Palette, R_LG, SP_MD, SP_SM, SP_XS};
-use eframe::egui::{self, Rounding};
+use eframe::egui::{self, CornerRadius};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::assistant::{
     AssistantBackend, ChatMessage, OfflineBackend, Role, WorkspaceContext,
@@ -472,7 +472,7 @@ impl AssistantPanel {
         ui.add_space(SP_XS);
 
         let mut send = false;
-        egui::TopBottomPanel::bottom("assistant-input").frame(egui::Frame::none().inner_margin(egui::Margin::symmetric(0.0, SP_SM))).show_inside(ui, |ui| {
+        egui::TopBottomPanel::bottom("assistant-input").frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(0, SP_SM as i8))).show_inside(ui, |ui| {
             egui::CollapsingHeader::new(theme::section(p, &format!("Online learning · {} updates", self.prefs.bank.updates))).id_salt("learning").show(ui, |ui| {
                 ui.add(egui::Label::new(theme::muted(p, "Each accept, undo, 👍/👎 and tool choice is one golden-ratio EMA step (α 0.382, as in Seraphina.AGI's MercyLearningHeart). Nothing is retrained in bulk; the summary below goes into Seraphina's prompt.")).wrap());
                 ui.add(egui::Label::new(egui::RichText::new(self.prefs.summary()).size(11.5).color(p.text)).wrap());
@@ -489,7 +489,7 @@ impl AssistantPanel {
             ui.add_space(SP_XS);
             ui.horizontal(|ui| {
                 let w = ui.available_width() - 64.0;
-                let r = ui.add_sized([w.max(80.0), 28.0], egui::TextEdit::singleline(&mut self.input).hint_text("Ask Seraphina to edit, explain or automate…").margin(egui::Margin::symmetric(SP_SM, 5.0)));
+                let r = ui.add_sized([w.max(80.0), 28.0], egui::TextEdit::singleline(&mut self.input).hint_text("Ask Seraphina to edit, explain or automate…").margin(egui::Margin::symmetric(SP_SM as i8, 5)));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     send = true;
                     r.request_focus();
@@ -514,13 +514,13 @@ impl AssistantPanel {
                         let user = matches!(it.kind, ItemKind::User);
                         ui.with_layout(egui::Layout::top_down(if user { egui::Align::Max } else { egui::Align::Min }), |ui| {
                             let (fill, fg) = if user { (p.accent, p.accent_text) } else { (p.surface_hi, p.text) };
-                            let mut rounding = Rounding::same(R_LG);
+                            let mut rounding = CornerRadius::same(R_LG as u8);
                             if user {
-                                rounding.se = 3.0
+                                rounding.se = 3
                             } else {
-                                rounding.sw = 3.0
+                                rounding.sw = 3
                             }
-                            egui::Frame::none().fill(fill).rounding(rounding).inner_margin(egui::Margin::symmetric(SP_MD, SP_SM)).show(ui, |ui| {
+                            egui::Frame::NONE.fill(fill).corner_radius(rounding).inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8)).show(ui, |ui| {
                                 ui.set_max_width(max_w);
                                 ui.add(egui::Label::new(egui::RichText::new(&it.text).color(fg).size(12.5)).wrap());
                             });
@@ -547,7 +547,7 @@ impl AssistantPanel {
                         }
                     }
                     ItemKind::Actions { batch, lines, undone, .. } => {
-                        egui::Frame::none().fill(p.surface).stroke(egui::Stroke::new(1.0_f32, p.line)).rounding(Rounding::same(6.0)).inner_margin(egui::Margin::same(SP_SM)).show(ui, |ui| {
+                        egui::Frame::NONE.fill(p.surface).stroke(egui::Stroke::new(1.0_f32, p.line)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(SP_SM as i8)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new(ic::LIGHTNING).color(p.accent));
@@ -589,7 +589,7 @@ impl AssistantPanel {
                 ui.add_space(SP_XS);
             }
             if self.is_busy() {
-                egui::Frame::none().fill(p.surface_hi).rounding(Rounding::same(R_LG)).inner_margin(egui::Margin::symmetric(SP_MD, SP_SM)).show(ui, |ui| {
+                egui::Frame::NONE.fill(p.surface_hi).corner_radius(CornerRadius::same(R_LG as u8)).inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8)).show(ui, |ui| {
                     ui.set_max_width(max_w);
                     if self.streaming.is_empty() {
                         ui.horizontal(|ui| {

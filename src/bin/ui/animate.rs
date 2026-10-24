@@ -4,7 +4,7 @@ use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::timeline::Clock;
 use crate::{ToastKind, Toasts};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use obs_rust_bitstream::ui_canvas::{Brush, History, Raster, ViewTransform};
 
 pub const W: u32 = 640;
@@ -324,7 +324,7 @@ impl AnimState {
         let (resp, painter) =
             ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let rect = resp.rect;
-        painter.rect_filled(rect, Rounding::ZERO, p.canvas);
+        painter.rect_filled(rect, CornerRadius::ZERO, p.canvas);
         let zoom = ViewTransform::fit_zoom(rect.width(), rect.height(), (W, H), 32.0);
         let view = ViewTransform {
             viewport: (rect.min.x, rect.min.y, rect.width(), rect.height()),
@@ -336,10 +336,14 @@ impl AnimState {
         let paper = Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, h));
         painter.rect_filled(
             paper.translate(Vec2::new(0.0, 6.0)),
-            Rounding::same(4.0),
+            CornerRadius::same(4),
             Color32::from_black_alpha(if p.dark { 120 } else { 40 }),
         );
-        painter.rect_filled(paper, Rounding::same(2.0), Color32::from_rgb(250, 249, 245));
+        painter.rect_filled(
+            paper,
+            CornerRadius::same(2),
+            Color32::from_rgb(250, 249, 245),
+        );
         let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
         let cur = self.current();
         if self.onion && !self.clock.playing {
@@ -368,7 +372,12 @@ impl AnimState {
         if let Some(t) = self.tex(&ctx, cur) {
             painter.image(t, paper, uv, Color32::WHITE);
         }
-        painter.rect_stroke(paper, Rounding::same(2.0), Stroke::new(1.0_f32, p.border));
+        painter.rect_stroke(
+            paper,
+            CornerRadius::same(2),
+            Stroke::new(1.0_f32, p.border),
+            egui::StrokeKind::Middle,
+        );
         painter.text(
             paper.left_top() + Vec2::new(0.0, -SP_SM),
             egui::Align2::LEFT_BOTTOM,
@@ -496,7 +505,8 @@ impl AnimState {
                         } else {
                             p.surface_hi
                         };
-                        ui.painter().rect_filled(r, Rounding::same(R_SM), fill);
+                        ui.painter()
+                            .rect_filled(r, CornerRadius::same(R_SM as u8), fill);
                         let fg = if on { p.accent_text } else { p.muted };
                         ui.painter().text(
                             r.center_top() + Vec2::new(0.0, 8.0),

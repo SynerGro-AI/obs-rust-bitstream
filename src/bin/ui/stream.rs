@@ -4,7 +4,7 @@
 use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
 use crate::{resolve_asset, ToastKind, Toasts};
-use eframe::egui::{self, Color32, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::stream_inspect::{sample_stream, to_binary, CounterMode, StreamInspector};
 use obs_rust_bitstream::ui_canvas::Raster;
@@ -212,8 +212,8 @@ impl StreamState {
 
     pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         // Toolbar
-        egui::Frame::none()
-            .inner_margin(egui::Margin::symmetric(SP_MD, SP_SM))
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8))
             .show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(theme::section(p, "Counter"));
@@ -313,8 +313,8 @@ impl StreamState {
         let wrap = self.insp.mode() == CounterMode::Wrap;
 
         // Current byte bit view
-        egui::Frame::none()
-            .inner_margin(egui::Margin::symmetric(SP_MD, SP_SM))
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(theme::section(p, "Cursor"));
@@ -341,9 +341,10 @@ impl StreamState {
                                 };
                                 ui.painter().rect(
                                     r,
-                                    Rounding::same(R_SM - 1.0),
+                                    CornerRadius::same((R_SM - 1.0) as u8),
                                     fill,
                                     Stroke::new(1.0_f32, p.border),
+                                    egui::StrokeKind::Middle,
                                 );
                                 ui.painter().text(
                                     r.center(),
@@ -432,8 +433,11 @@ impl StreamState {
                             (Color32::TRANSPARENT, p.text)
                         };
                         if fill != Color32::TRANSPARENT {
-                            ui.painter()
-                                .rect_filled(r, Rounding::same(R_SM - 2.0), fill);
+                            ui.painter().rect_filled(
+                                r,
+                                CornerRadius::same((R_SM - 2.0) as u8),
+                                fill,
+                            );
                         }
                         ui.painter().text(
                             r.center(),

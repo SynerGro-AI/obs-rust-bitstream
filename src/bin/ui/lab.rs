@@ -6,7 +6,7 @@
 
 use crate::commands::AppCommand;
 use crate::theme::{self, Palette, SP_SM, SP_XS};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::chem::{self, Equation, Reactor, Thermo};
 use obs_rust_bitstream::circuit::{self, Circuit, MosKind, Wave, Wire};
@@ -1925,11 +1925,15 @@ impl LabState {
                 let col = if *ok { p.success } else { p.danger };
                 ui.painter().rect_filled(
                     rect,
-                    Rounding::same(6.0),
+                    CornerRadius::same(6),
                     theme::mix(p.surface, col, 0.12),
                 );
-                ui.painter()
-                    .rect_stroke(rect, Rounding::same(6.0), Stroke::new(1.5_f32, col));
+                ui.painter().rect_stroke(
+                    rect,
+                    CornerRadius::same(6),
+                    Stroke::new(1.5_f32, col),
+                    egui::StrokeKind::Middle,
+                );
                 ui.painter().text(
                     rect.left_top() + Vec2::new(8.0, 6.0),
                     egui::Align2::LEFT_TOP,
@@ -2279,7 +2283,7 @@ impl LabState {
             ui.add_space(SP_SM);
             let (rect, _) = ui.allocate_exact_size(Vec2::new(w, 150.0), egui::Sense::hover());
             let pt = ui.painter_at(rect);
-            pt.rect_filled(rect, Rounding::same(8.0), p.surface);
+            pt.rect_filled(rect, CornerRadius::same(8), p.surface);
             let lab_t = self.rel.clock;
             for (k, (label, t)) in [("lab clock", lab_t), ("moving clock", lab_t / sr.gamma)]
                 .iter()
@@ -2320,7 +2324,7 @@ impl LabState {
             );
             pt.rect_filled(
                 Rect::from_min_size(Pos2::new(x0, y - 6.0), Vec2::new(full, 12.0)),
-                Rounding::same(3.0),
+                CornerRadius::same(3),
                 C_A,
             );
             let l = rel::contracted_length(1.0, self.rel.beta) as f32;
@@ -2339,7 +2343,7 @@ impl LabState {
                     Pos2::new(x0, y + 42.0),
                     Vec2::new((full * l).max(1.0), 12.0),
                 ),
-                Rounding::same(3.0),
+                CornerRadius::same(3),
                 C_B,
             );
             pt.text(
@@ -2361,7 +2365,7 @@ impl LabState {
             let h = (ui.available_height() - 10.0).clamp(380.0, 560.0);
             let (rect, _) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::hover());
             let pt = ui.painter_at(rect);
-            pt.rect_filled(rect, Rounding::same(8.0), Color32::from_rgb(8, 10, 18));
+            pt.rect_filled(rect, CornerRadius::same(8), Color32::from_rgb(8, 10, 18));
             let nb = &self.rel.nb;
             let mut ext: f64 = self.rel.extent;
             for b in &nb.bodies {
@@ -2729,7 +2733,7 @@ pub fn plot(
 ) {
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     let pt = ui.painter_at(rect);
-    pt.rect_filled(rect, Rounding::same(8.0), p.surface);
+    pt.rect_filled(rect, CornerRadius::same(8), p.surface);
     let font = egui::FontId::proportional(11.0);
     let top = if title.is_empty() { 22.0 } else { 36.0 };
     if !title.is_empty() {

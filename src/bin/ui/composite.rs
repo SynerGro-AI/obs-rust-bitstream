@@ -4,7 +4,7 @@ use crate::commands::AppCommand;
 use crate::resolve_asset;
 use crate::theme::{self, Palette, R_MD, R_SM, SP_SM, SP_XS};
 use crate::timeline::{self, Clock, Track};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::ui_canvas::{
     composite, format_clock, BlendMode, ImageLayer, KeyTrack, Raster, ViewTransform,
@@ -258,14 +258,14 @@ impl CompState {
             for i in (0..self.layers.len()).rev() {
                 let on = i == self.selected;
                 let l = &self.layers[i];
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(if on {
                         p.accent_soft()
                     } else {
                         Color32::TRANSPARENT
                     })
-                    .rounding(Rounding::same(R_SM + 1.0))
-                    .inner_margin(egui::Margin::symmetric(SP_XS, 1.0))
+                    .corner_radius(CornerRadius::same((R_SM + 1.0) as u8))
+                    .inner_margin(egui::Margin::symmetric(SP_XS as i8, 1))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             if theme::icon_button(
@@ -317,7 +317,7 @@ impl CompState {
         self.refresh(&ctx);
         let (resp, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::hover());
         let rect = resp.rect;
-        painter.rect_filled(rect, Rounding::ZERO, p.canvas);
+        painter.rect_filled(rect, CornerRadius::ZERO, p.canvas);
         let zoom = ViewTransform::fit_zoom(rect.width(), rect.height() - 24.0, (PW, PH), 32.0);
         let view = ViewTransform {
             viewport: (rect.min.x, rect.min.y, rect.width(), rect.height()),
@@ -329,17 +329,21 @@ impl CompState {
         let r = Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, h));
         painter.rect_filled(
             r.translate(Vec2::new(0.0, 6.0)),
-            Rounding::same(R_MD),
+            CornerRadius::same(R_MD as u8),
             Color32::from_black_alpha(if p.dark { 120 } else { 40 }),
         );
         if let Some(t) = &self.tex {
-            let mut shape =
-                egui::epaint::RectShape::filled(r, Rounding::same(R_MD), Color32::WHITE);
-            shape.fill_texture_id = t.id();
-            shape.uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+            let shape =
+                egui::epaint::RectShape::filled(r, CornerRadius::same(R_MD as u8), Color32::WHITE)
+                    .with_texture(t.id(), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)));
             painter.add(shape);
         }
-        painter.rect_stroke(r, Rounding::same(R_MD), Stroke::new(1.0_f32, p.border));
+        painter.rect_stroke(
+            r,
+            CornerRadius::same(R_MD as u8),
+            Stroke::new(1.0_f32, p.border),
+            egui::StrokeKind::Middle,
+        );
         let tc = format!(
             "PROGRAM  ·  {}:{:02}",
             format_clock(self.clock.time as u64),

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::commands::AppCommand;
 use crate::theme::{self, Palette, SP_SM, SP_XS};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::element_data::{self, Category, ElementData};
 use obs_rust_bitstream::element_props;
@@ -394,12 +394,12 @@ impl MaterialsState {
                 );
                 if on || resp.hovered() {
                     ui.painter()
-                        .rect_filled(r, Rounding::same(4.0), p.surface_hi);
+                        .rect_filled(r, CornerRadius::same(4), p.surface_hi);
                 }
                 let sw =
                     Rect::from_min_size(r.left_center() + Vec2::new(4.0, -5.0), Vec2::splat(10.0));
                 ui.painter()
-                    .rect_filled(sw, Rounding::same(2.0), cat_colour(c));
+                    .rect_filled(sw, CornerRadius::same(2), cat_colour(c));
                 ui.painter().text(
                     sw.right_center() + Vec2::new(8.0, 0.0),
                     egui::Align2::LEFT_CENTER,
@@ -495,9 +495,10 @@ impl MaterialsState {
             let r = cell(3, row);
             painter.rect(
                 r,
-                Rounding::same(4.0),
+                CornerRadius::same(4),
                 p.surface,
                 Stroke::new(1.0_f32, p.border),
+                egui::StrokeKind::Middle,
             );
             painter.text(
                 r.center(),
@@ -549,7 +550,13 @@ impl MaterialsState {
                     theme::mix(p.border, cc, if lit { 0.5 } else { 0.15 }),
                 )
             };
-            painter.rect(r, Rounding::same(4.0), fill, stroke);
+            painter.rect(
+                r,
+                CornerRadius::same(4),
+                fill,
+                stroke,
+                egui::StrokeKind::Middle,
+            );
             let tc = if lit {
                 p.text
             } else {
@@ -590,7 +597,7 @@ impl MaterialsState {
                     r.right_top() + Vec2::new(-14.0, 2.0),
                     Vec2::new(12.0, 11.0),
                 );
-                painter.rect_filled(b, Rounding::same(3.0), p.accent);
+                painter.rect_filled(b, CornerRadius::same(3), p.accent);
                 painter.text(
                     b.center(),
                     egui::Align2::CENTER_CENTER,
@@ -621,12 +628,12 @@ impl MaterialsState {
         let pr = element_props::props(e.z);
         let env = obs_rust_bitstream::material_env::element_env(e.z);
         let cc = cat_colour(e.category);
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(p.panel)
             .stroke(Stroke::new(1.0_f32, p.line))
-            .rounding(Rounding::same(8.0))
-            .inner_margin(egui::Margin::same(12.0))
-            .outer_margin(egui::Margin::symmetric(SP_SM, 0.0))
+            .corner_radius(CornerRadius::same(8))
+            .inner_margin(egui::Margin::same(12))
+            .outer_margin(egui::Margin::symmetric(SP_SM as i8, 0))
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     // big tile
@@ -634,9 +641,10 @@ impl MaterialsState {
                         ui.allocate_exact_size(Vec2::new(112.0, 128.0), egui::Sense::hover());
                     ui.painter().rect(
                         r,
-                        Rounding::same(8.0),
+                        CornerRadius::same(8),
                         theme::mix(p.surface, cc, 0.45),
                         Stroke::new(2.0_f32, p.accent),
+                        egui::StrokeKind::Middle,
                     );
                     ui.painter().text(
                         r.left_top() + Vec2::new(8.0, 6.0),
@@ -1280,9 +1288,10 @@ impl MaterialsState {
                                 let c = pr.pbr.base_color;
                                 ui.painter().rect(
                                     r,
-                                    Rounding::same(3.0),
+                                    CornerRadius::same(3),
                                     Color32::from_rgb(lin8(c[0]), lin8(c[1]), lin8(c[2])),
                                     Stroke::new(1.0_f32, p.line),
+                                    egui::StrokeKind::Middle,
                                 );
                                 ui.label(egui::RichText::new(name).color(p.text));
                                 ui.label(theme::muted(p, &pr.formula));
@@ -1343,6 +1352,7 @@ pub fn sphere_preview(pbr: &Pbr, n: usize) -> egui::ColorImage {
     }
     egui::ColorImage {
         size: [n, n],
+        source_size: Vec2::splat(n as f32),
         pixels: px,
     }
 }

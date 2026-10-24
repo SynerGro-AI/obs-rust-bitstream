@@ -9,7 +9,7 @@ use crate::commands::{parse_hex, AppCommand};
 use crate::text_raster;
 use crate::theme::{self, Palette, SP_SM};
 use crate::{resolve_asset, ToastKind, Toasts};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::paint_engine::{
     blur_mask, clone_dab, composite_into, dab_rect, gradient_fill, heal_dab, paint_dab,
@@ -1822,7 +1822,7 @@ fn checker(painter: &egui::Painter, r: Rect, p: &Palette) {
     } else {
         Color32::from_gray(250)
     };
-    painter.rect_filled(r, Rounding::ZERO, a);
+    painter.rect_filled(r, CornerRadius::ZERO, a);
     let s = 5.0;
     let mut y = r.top();
     let mut row = 0;
@@ -1834,7 +1834,7 @@ fn checker(painter: &egui::Painter, r: Rect, p: &Palette) {
                     Pos2::new(x, y),
                     Pos2::new((x + s).min(r.right()), (y + s).min(r.bottom())),
                 ),
-                Rounding::ZERO,
+                CornerRadius::ZERO,
                 b,
             );
             x += 2.0 * s;
@@ -2008,8 +2008,8 @@ impl PaintState {
         }
         ui.spacing_mut().item_spacing.y = 5.0;
         ui.add_space(SP_SM);
-        egui::Frame::none()
-            .inner_margin(egui::Margin::symmetric(SP_SM, 0.0))
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::symmetric(SP_SM as i8, 0))
             .show(ui, |ui| {
                 ui.label(theme::section(p, "File"));
                 let resp = ui.add(
@@ -2321,7 +2321,7 @@ impl PaintState {
         let avail = ui.available_size();
         let (resp, painter) = ui.allocate_painter(avail, egui::Sense::click_and_drag());
         let rect = resp.rect;
-        painter.rect_filled(rect, Rounding::ZERO, p.canvas);
+        painter.rect_filled(rect, CornerRadius::ZERO, p.canvas);
         let (w, h) = (self.doc.width, self.doc.height);
         if self.fit_pending && rect.width() > 10.0 {
             self.zoom = ViewTransform::fit_zoom(rect.width(), rect.height(), (w, h), 28.0);
@@ -2368,7 +2368,7 @@ impl PaintState {
         let clip = painter.with_clip_rect(rect);
         clip.rect_filled(
             img_rect.translate(Vec2::new(0.0, 5.0)).expand(3.0),
-            Rounding::same(3.0),
+            CornerRadius::same(3),
             Color32::from_black_alpha(if p.dark { 140 } else { 50 }),
         );
         let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
@@ -2377,8 +2377,9 @@ impl PaintState {
         }
         clip.rect_stroke(
             img_rect.expand(0.5),
-            Rounding::ZERO,
+            CornerRadius::ZERO,
             Stroke::new(1.0_f32, p.accent.gamma_multiply(0.85)),
+            egui::StrokeKind::Middle,
         );
         if let Some(t) = &ov.tex {
             clip.image(t.id(), img_rect, uv, Color32::WHITE);
@@ -2658,9 +2659,14 @@ impl PaintState {
                     Pos2::new(img_rect.max.x, r.max.y),
                 ),
             ] {
-                clip.rect_filled(s, Rounding::ZERO, shade);
+                clip.rect_filled(s, CornerRadius::ZERO, shade);
             }
-            clip.rect_stroke(r, Rounding::ZERO, Stroke::new(1.5_f32, p.accent));
+            clip.rect_stroke(
+                r,
+                CornerRadius::ZERO,
+                Stroke::new(1.5_f32, p.accent),
+                egui::StrokeKind::Middle,
+            );
             for k in 1..3 {
                 let fx = r.left() + r.width() * k as f32 / 3.0;
                 let fy = r.top() + r.height() * k as f32 / 3.0;
@@ -2691,9 +2697,10 @@ impl PaintState {
             for q in &pts {
                 clip.rect(
                     Rect::from_center_size(*q, Vec2::splat(7.0)),
-                    Rounding::ZERO,
+                    CornerRadius::ZERO,
                     p.panel,
                     Stroke::new(1.2_f32, p.accent),
+                    egui::StrokeKind::Middle,
                 );
             }
         }
@@ -2830,8 +2837,8 @@ impl PaintState {
             self.layers_open = !self.layers_open;
         }
         if self.layers_open {
-            egui::Frame::none()
-                .inner_margin(egui::Margin::symmetric(SP_SM, 6.0))
+            egui::Frame::NONE
+                .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 4.0;
                     self.layers_ui(ui, p, bus);
@@ -2841,8 +2848,8 @@ impl PaintState {
             self.masks_open = !self.masks_open;
         }
         if self.masks_open {
-            egui::Frame::none()
-                .inner_margin(egui::Margin::symmetric(SP_SM, 6.0))
+            egui::Frame::NONE
+                .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 4.0;
                     self.masks_ui(ui, p, bus);
@@ -2852,8 +2859,8 @@ impl PaintState {
             self.props_open = !self.props_open;
         }
         if self.props_open {
-            egui::Frame::none()
-                .inner_margin(egui::Margin::symmetric(SP_SM, 6.0))
+            egui::Frame::NONE
+                .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 3.0;
                     self.properties_ui(ui, p);
@@ -2952,7 +2959,7 @@ impl PaintState {
             });
         });
         ui.add_space(2.0);
-        egui::Frame::none()
+        egui::Frame::NONE
             .stroke(Stroke::new(1.0_f32, p.border))
             .fill(p.bg)
             .show(ui, |ui| {
@@ -3043,7 +3050,8 @@ impl PaintState {
         let (rect, resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 24.0), egui::Sense::click());
         if resp.hovered() {
-            ui.painter().rect_filled(rect, Rounding::ZERO, p.surface_hi);
+            ui.painter()
+                .rect_filled(rect, CornerRadius::ZERO, p.surface_hi);
         }
         let eye = Rect::from_min_size(rect.min, Vec2::new(24.0, rect.height()));
         let eresp = ui
@@ -3130,12 +3138,13 @@ impl PaintState {
         if selected {
             painter.rect(
                 rect.shrink(1.0),
-                Rounding::same(2.0),
+                CornerRadius::same(2),
                 p.accent_soft(),
                 Stroke::new(1.0_f32, p.accent),
+                egui::StrokeKind::Middle,
             );
         } else if resp.hovered() {
-            painter.rect_filled(rect, Rounding::ZERO, p.surface_hi);
+            painter.rect_filled(rect, CornerRadius::ZERO, p.surface_hi);
         }
         let eye = Rect::from_min_size(rect.min, Vec2::new(24.0, rect.height()));
         painter.text(
@@ -3149,7 +3158,7 @@ impl PaintState {
         let thumb = Rect::from_min_size(Pos2::new(x0, rect.top() + 4.0), Vec2::new(36.0, 24.0));
         checker(painter, thumb, p);
         if is_text {
-            painter.rect_filled(thumb, Rounding::ZERO, p.surface_hi);
+            painter.rect_filled(thumb, CornerRadius::ZERO, p.surface_hi);
             painter.text(
                 thumb.center(),
                 egui::Align2::CENTER_CENTER,
@@ -3168,11 +3177,16 @@ impl PaintState {
                 Color32::WHITE,
             );
         }
-        painter.rect_stroke(thumb, Rounding::ZERO, Stroke::new(1.0_f32, p.border));
+        painter.rect_stroke(
+            thumb,
+            CornerRadius::ZERO,
+            Stroke::new(1.0_f32, p.border),
+            egui::StrokeKind::Middle,
+        );
         let mut nx = thumb.right() + 6.0;
         if has_mask {
             let mr = Rect::from_min_size(Pos2::new(nx, rect.top() + 4.0), Vec2::new(24.0, 24.0));
-            painter.rect_filled(mr, Rounding::ZERO, Color32::BLACK);
+            painter.rect_filled(mr, CornerRadius::ZERO, Color32::BLACK);
             if let Some((_, t)) = self.thumbs.get(&(id | 0x8000_0000)) {
                 painter.image(
                     t.id(),
@@ -3181,7 +3195,12 @@ impl PaintState {
                     Color32::WHITE,
                 );
             }
-            painter.rect_stroke(mr, Rounding::ZERO, Stroke::new(1.0_f32, p.line));
+            painter.rect_stroke(
+                mr,
+                CornerRadius::ZERO,
+                Stroke::new(1.0_f32, p.line),
+                egui::StrokeKind::Middle,
+            );
             nx = mr.right() + 6.0;
         }
         let editing = matches!(&self.rename, Some((k, _)) if *k == i);
@@ -3260,7 +3279,7 @@ impl PaintState {
         resp.context_menu(|ui| {
             if ui.button("Rename…").clicked() {
                 self.rename = Some((i, name.clone()));
-                ui.close_menu();
+                ui.close();
             }
             for (label, cmd) in [
                 (
@@ -3305,7 +3324,7 @@ impl PaintState {
             ] {
                 if ui.button(label).clicked() {
                     bus.push(cmd);
-                    ui.close_menu();
+                    ui.close();
                 }
             }
         });
@@ -3376,8 +3395,12 @@ impl PaintState {
                             Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
                             Color32::WHITE,
                         );
-                        ui.painter()
-                            .rect_stroke(r, Rounding::ZERO, Stroke::new(1.0_f32, p.line));
+                        ui.painter().rect_stroke(
+                            r,
+                            CornerRadius::ZERO,
+                            Stroke::new(1.0_f32, p.line),
+                            egui::StrokeKind::Middle,
+                        );
                     }
                     ui.vertical(|ui| {
                         theme::prop(ui, p, "Mask", name.to_string());

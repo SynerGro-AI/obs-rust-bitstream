@@ -2,7 +2,7 @@
 
 use crate::commands::AppCommand;
 use crate::theme::{self, Palette, R_SM, SP_SM};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::ui_canvas::{format_clock, KeyTrack};
 
@@ -153,7 +153,7 @@ pub fn ruler(
     );
     let x_of = |t: f32| lane.min.x + (t / clock.duration).clamp(0.0, 1.0) * lane.width();
 
-    painter.rect_filled(lane, Rounding::same(R_SM), p.surface);
+    painter.rect_filled(lane, CornerRadius::same(R_SM as u8), p.surface);
     // ticks
     let step = if clock.duration > 20.0 {
         5.0
@@ -192,7 +192,7 @@ pub fn ruler(
             Pos2::new(rect.max.x - SP_SM, y + row_h),
         );
         if tr.selected {
-            painter.rect_filled(row, Rounding::same(R_SM), p.accent_soft());
+            painter.rect_filled(row, CornerRadius::same(R_SM as u8), p.accent_soft());
         }
         let lab = Rect::from_min_max(row.min, Pos2::new(lane.min.x, row.max.y));
         let resp = ui.interact(

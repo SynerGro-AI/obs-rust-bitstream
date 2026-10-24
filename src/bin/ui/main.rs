@@ -30,7 +30,7 @@ mod videogen;
 
 use assistant_panel::{ActionLine, LineStatus, PanelRequest};
 use commands::{parse_tool_call, AppCommand, Origin};
-use eframe::egui::{self, Color32, Key, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Key, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::assistant::WorkspaceContext;
 use obs_rust_bitstream::ui_canvas::{format_clock, BlendMode, KeyTrack, Raster};
@@ -116,17 +116,17 @@ impl Toasts {
                         ToastKind::Warn => p.warn,
                         ToastKind::Error => p.danger,
                     };
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(p.surface.gamma_multiply(a))
                         .stroke(egui::Stroke::new(1.0_f32, p.border.gamma_multiply(a)))
-                        .rounding(Rounding::same(99.0))
+                        .corner_radius(CornerRadius::same(99))
                         .shadow(egui::epaint::Shadow {
-                            offset: Vec2::new(0.0, 6.0),
-                            blur: 18.0,
-                            spread: 0.0,
+                            offset: [0, 6],
+                            blur: 18,
+                            spread: 0,
                             color: Color32::from_black_alpha((60.0 * a) as u8),
                         })
-                        .inner_margin(egui::Margin::symmetric(SP_LG, SP_SM))
+                        .inner_margin(egui::Margin::symmetric(SP_LG as i8, SP_SM as i8))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 let (r, _) =
@@ -1521,9 +1521,9 @@ impl App {
         egui::TopBottomPanel::top("header")
             .exact_height(58.0)
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(SP_MD, 0.0))
+                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 0))
                     .stroke(Stroke::new(1.0_f32, p.line)),
             )
             .show(ctx, |ui| {
@@ -1698,9 +1698,9 @@ impl App {
         egui::TopBottomPanel::bottom("status")
             .exact_height(26.0)
             .frame(
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(SP_MD, 3.0))
+                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 3))
                     .stroke(Stroke::new(1.0_f32, p.line)),
             )
             .show(ctx, |ui| {
@@ -2315,18 +2315,18 @@ impl App {
         self.header(ctx);
         self.status_bar(ctx);
 
-        let side = egui::Frame::none()
+        let side = egui::Frame::NONE
             .fill(p.panel)
             .stroke(Stroke::new(1.0_f32, p.line));
-        let padded = side.inner_margin(egui::Margin::same(SP_MD));
+        let padded = side.inner_margin(egui::Margin::same(SP_MD as i8));
         let wctx = self.workspace_ctx();
 
         if self.mode.has_shelf() {
             egui::TopBottomPanel::bottom("shelf")
                 .frame(
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(p.panel)
-                        .inner_margin(egui::Margin::symmetric(SP_MD, SP_XS))
+                        .inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_XS as i8))
                         .stroke(Stroke::new(1.0_f32, p.line)),
                 )
                 .show_animated(ctx, self.show_shelf, |ui| {
@@ -2392,8 +2392,8 @@ impl App {
                     .show(ui, |ui| match self.mode {
                         Mode::Paint => self.paint.inspector(ui, &p, &mut self.bus),
                         m => {
-                            egui::Frame::none()
-                                .inner_margin(egui::Margin::same(SP_MD))
+                            egui::Frame::NONE
+                                .inner_margin(egui::Margin::same(SP_MD as i8))
                                 .show(ui, |ui| match m {
                                     Mode::Stream => self.stream.inspector(ui, &p),
                                     Mode::Scene => self.scene.inspector(ui, &p, &mut self.bus),
@@ -2430,9 +2430,9 @@ impl App {
             .frame(side)
             .show_animated(ctx, self.show_tools, |ui| {
                 let (badge, tip) = self.mode.style();
-                egui::Frame::none()
+                egui::Frame::NONE
                     .fill(p.surface)
-                    .inner_margin(egui::Margin::symmetric(SP_SM, 6.0))
+                    .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
                     .show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.horizontal(|ui| {
@@ -2459,8 +2459,8 @@ impl App {
                     .show(ui, |ui| match self.mode {
                         Mode::Paint => self.paint.tools(ui, &p, &mut self.bus),
                         m => {
-                            egui::Frame::none()
-                                .inner_margin(egui::Margin::same(SP_MD))
+                            egui::Frame::NONE
+                                .inner_margin(egui::Margin::same(SP_MD as i8))
                                 .show(ui, |ui| match m {
                                     Mode::Stream => {
                                         self.stream.tools(ui, &p, &mut self.toasts);
@@ -2484,37 +2484,37 @@ impl App {
                     });
             });
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(p.bg))
+            .frame(egui::Frame::NONE.fill(p.bg))
             .show(ctx, |ui| match self.mode {
                 Mode::Stream => self.stream.center(ui, &p, &mut self.bus),
                 Mode::Paint => {
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(p.panel)
-                        .inner_margin(egui::Margin::symmetric(SP_MD, 5.0))
+                        .inner_margin(egui::Margin::symmetric(SP_MD as i8, 5))
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             self.paint.options_bar(ui, &p, &mut self.bus);
                         });
-                    egui::Frame::none()
+                    egui::Frame::NONE
                         .fill(p.bg)
                         .inner_margin(egui::Margin {
-                            left: SP_SM,
-                            right: SP_SM,
-                            top: 4.0,
-                            bottom: 0.0,
+                            left: SP_SM as i8,
+                            right: SP_SM as i8,
+                            top: 4,
+                            bottom: 0,
                         })
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                egui::Frame::none()
+                                egui::Frame::NONE
                                     .fill(p.surface)
                                     .stroke(Stroke::new(1.0_f32, p.line))
-                                    .rounding(Rounding {
-                                        nw: 4.0,
-                                        ne: 4.0,
-                                        sw: 0.0,
-                                        se: 0.0,
+                                    .corner_radius(CornerRadius {
+                                        nw: 4,
+                                        ne: 4,
+                                        sw: 0,
+                                        se: 0,
                                     })
-                                    .inner_margin(egui::Margin::symmetric(SP_MD, 4.0))
+                                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 4))
                                     .show(ui, |ui| {
                                         ui.label(
                                             egui::RichText::new(format!(

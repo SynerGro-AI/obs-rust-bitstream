@@ -2,7 +2,9 @@
 //! spacing and the shared widgets (header tabs, tool rows, panel
 //! headers, big tool buttons, pills, cards).
 
-use eframe::egui::{self, Color32, FontId, Pos2, Rect, Rounding, Sense, Stroke, TextStyle, Vec2};
+use eframe::egui::{
+    self, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, TextStyle, Vec2,
+};
 
 pub const SP_XS: f32 = 4.0;
 pub const SP_SM: f32 = 8.0;
@@ -132,8 +134,8 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
     v.hyperlink_color = p.accent;
     v.selection.bg_fill = p.accent_soft();
     v.selection.stroke = Stroke::new(1.0_f32, p.accent);
-    v.window_rounding = Rounding::same(R_LG);
-    v.menu_rounding = Rounding::same(R_MD);
+    v.window_corner_radius = CornerRadius::same(R_LG as u8);
+    v.menu_corner_radius = CornerRadius::same(R_MD as u8);
     v.window_stroke = Stroke::new(1.0_f32, p.line);
     v.slider_trailing_fill = true;
     v.striped = false;
@@ -146,7 +148,7 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
         (&mut w.active, mix(p.surface_hi, p.accent, 0.22)),
         (&mut w.open, p.surface_hi),
     ] {
-        state.rounding = Rounding::same(R_SM);
+        state.corner_radius = CornerRadius::same(R_SM as u8);
         state.bg_fill = fill;
         state.weak_bg_fill = fill;
         state.fg_stroke = Stroke::new(1.0_f32, p.text);
@@ -164,8 +166,8 @@ pub fn apply(ctx: &egui::Context, p: &Palette) {
     style.spacing.button_padding = Vec2::new(8.0, 3.0);
     style.spacing.interact_size.y = 22.0;
     style.spacing.slider_width = 140.0;
-    style.spacing.window_margin = egui::Margin::same(SP_LG);
-    style.spacing.menu_margin = egui::Margin::same(SP_SM);
+    style.spacing.window_margin = egui::Margin::same(SP_LG as i8);
+    style.spacing.menu_margin = egui::Margin::same(SP_SM as i8);
     style.spacing.scroll = egui::style::ScrollStyle::thin();
     style.animation_time = 0.14;
     style.text_styles = [
@@ -256,7 +258,13 @@ pub fn mode_tab(
     } else {
         Stroke::new(1.0_f32, p.border)
     };
-    ui.painter().rect(rect, Rounding::same(R_SM), fill, stroke);
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(R_SM as u8),
+        fill,
+        stroke,
+        egui::StrokeKind::Middle,
+    );
     let col = if active {
         p.accent
     } else if hovered {
@@ -287,11 +295,11 @@ pub fn mode_tab(
 
 /// Small gold outlined badge such as "Ps".
 pub fn badge(ui: &mut egui::Ui, p: &Palette, text: &str) -> egui::Response {
-    egui::Frame::none()
+    egui::Frame::NONE
         .stroke(Stroke::new(1.0_f32, p.accent))
         .fill(mix(p.panel, p.accent, 0.08))
-        .rounding(Rounding::same(3.0))
-        .inner_margin(egui::Margin::symmetric(4.0, 0.0))
+        .corner_radius(CornerRadius::same(3))
+        .inner_margin(egui::Margin::symmetric(4, 0))
         .show(ui, |ui| {
             ui.label(
                 egui::RichText::new(text)
@@ -313,9 +321,9 @@ pub fn panel_header(
     open: bool,
 ) -> bool {
     let mut toggled = false;
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.surface)
-        .inner_margin(egui::Margin::symmetric(SP_SM, 4.0))
+        .inner_margin(egui::Margin::symmetric(SP_SM as i8, 4))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -360,7 +368,7 @@ pub fn section_header(ui: &mut egui::Ui, p: &Palette, title: &str, open: bool) -
     } else {
         p.surface
     };
-    ui.painter().rect_filled(rect, Rounding::ZERO, fill);
+    ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
     ui.painter().hline(
         rect.x_range(),
         rect.bottom(),
@@ -419,14 +427,15 @@ pub fn tool_row(
     let hovered = resp.hovered() && enabled;
     if selected {
         ui.painter()
-            .rect_filled(rect, Rounding::ZERO, p.accent_soft());
+            .rect_filled(rect, CornerRadius::ZERO, p.accent_soft());
         ui.painter().rect_filled(
             Rect::from_min_size(rect.min, Vec2::new(2.0, rect.height())),
-            Rounding::ZERO,
+            CornerRadius::ZERO,
             p.accent,
         );
     } else if hovered {
-        ui.painter().rect_filled(rect, Rounding::ZERO, p.surface_hi);
+        ui.painter()
+            .rect_filled(rect, CornerRadius::ZERO, p.surface_hi);
     }
     let col = if !enabled {
         p.muted.gamma_multiply(0.6)
@@ -490,13 +499,14 @@ pub fn icon_button_sized(
     if on {
         ui.painter().rect(
             rect,
-            Rounding::same(R_SM),
+            CornerRadius::same(R_SM as u8),
             p.accent_soft(),
             Stroke::new(1.0_f32, p.line),
+            egui::StrokeKind::Middle,
         );
     } else if resp.hovered() {
         ui.painter()
-            .rect_filled(rect, Rounding::same(R_SM), p.surface_hi);
+            .rect_filled(rect, CornerRadius::same(R_SM as u8), p.surface_hi);
     }
     let col = if on {
         p.accent
@@ -543,16 +553,18 @@ pub fn big_tool(
     if active {
         ui.painter().rect(
             rect,
-            Rounding::same(R_SM),
+            CornerRadius::same(R_SM as u8),
             p.accent_soft(),
             Stroke::new(1.0_f32, p.accent),
+            egui::StrokeKind::Middle,
         );
     } else if hovered {
         ui.painter().rect(
             rect,
-            Rounding::same(R_SM),
+            CornerRadius::same(R_SM as u8),
             p.surface_hi,
             Stroke::new(1.0_f32, p.line),
+            egui::StrokeKind::Middle,
         );
     }
     let icol = if !enabled {
@@ -602,16 +614,16 @@ pub fn card<R>(
     title: &str,
     add: impl FnOnce(&mut egui::Ui) -> R,
 ) -> R {
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.surface)
         .stroke(Stroke::new(1.0_f32, p.border))
-        .rounding(Rounding::same(R_MD))
-        .inner_margin(egui::Margin::same(SP_SM + 2.0))
+        .corner_radius(CornerRadius::same(R_MD as u8))
+        .inner_margin(egui::Margin::same((SP_SM + 2.0) as i8))
         .outer_margin(egui::Margin {
-            left: 0.0,
-            right: 0.0,
-            top: 0.0,
-            bottom: SP_SM,
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: SP_SM as i8,
         })
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -645,7 +657,7 @@ pub fn primary_button(p: &Palette, text: &str) -> egui::Button<'static> {
     )
     .fill(p.accent)
     .stroke(Stroke::NONE)
-    .rounding(Rounding::same(R_SM))
+    .corner_radius(CornerRadius::same(R_SM as u8))
 }
 
 /// Quiet button that reads as selected when `on`.
@@ -658,16 +670,16 @@ pub fn toggle_button(p: &Palette, text: &str, on: bool) -> egui::Button<'static>
     egui::Button::new(egui::RichText::new(text.to_string()).color(color))
         .fill(fill)
         .stroke(Stroke::new(1.0_f32, if on { p.accent } else { p.border }))
-        .rounding(Rounding::same(R_SM))
+        .corner_radius(CornerRadius::same(R_SM as u8))
 }
 
 /// Status pill: coloured dot plus text.
 pub fn pill(ui: &mut egui::Ui, p: &Palette, color: Color32, text: &str) -> egui::Response {
-    egui::Frame::none()
+    egui::Frame::NONE
         .fill(p.surface_hi)
         .stroke(Stroke::new(1.0_f32, p.border))
-        .rounding(Rounding::same(99.0))
-        .inner_margin(egui::Margin::symmetric(SP_SM, 1.0))
+        .corner_radius(CornerRadius::same(99))
+        .inner_margin(egui::Margin::symmetric(SP_SM as i8, 1))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
@@ -694,9 +706,10 @@ pub fn segmented(
     let painter = ui.painter_at(rect);
     painter.rect(
         rect,
-        Rounding::same(R_SM + 1.0),
+        CornerRadius::same((R_SM + 1.0) as u8),
         p.surface_hi,
         Stroke::new(1.0_f32, p.border),
+        egui::StrokeKind::Middle,
     );
     let t =
         ui.ctx()
@@ -707,9 +720,10 @@ pub fn segmented(
     );
     painter.rect(
         thumb,
-        Rounding::same(R_SM),
+        CornerRadius::same(R_SM as u8),
         p.accent_soft(),
         Stroke::new(1.0_f32, p.accent),
+        egui::StrokeKind::Middle,
     );
     let mut picked = None;
     for (i, label) in labels.iter().enumerate() {

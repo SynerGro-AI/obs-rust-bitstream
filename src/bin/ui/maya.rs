@@ -5,7 +5,7 @@
 use crate::commands::AppCommand;
 use crate::scene::Gizmo;
 use crate::theme::{self, Palette, SP_SM, SP_XS};
-use eframe::egui::{self, Pos2, Rounding, Stroke, Vec2};
+use eframe::egui::{self, CornerRadius, Pos2, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 
 pub const TABS: [&str; 5] = ["Modeling", "Rigging", "Animation", "FX", "Rendering"];
@@ -404,14 +404,15 @@ pub fn shelf(
             if on {
                 ui.painter().rect(
                     r,
-                    Rounding {
-                        nw: 4.0,
-                        ne: 4.0,
-                        sw: 0.0,
-                        se: 0.0,
+                    CornerRadius {
+                        nw: 4,
+                        ne: 4,
+                        sw: 0,
+                        se: 0,
                     },
                     p.surface_hi,
                     Stroke::new(1.0_f32, p.line),
+                    egui::StrokeKind::Middle,
                 );
                 ui.painter().hline(
                     r.x_range(),
@@ -419,7 +420,8 @@ pub fn shelf(
                     Stroke::new(2.0_f32, p.accent),
                 );
             } else if resp.hovered() {
-                ui.painter().rect_filled(r, Rounding::same(4.0), p.surface);
+                ui.painter()
+                    .rect_filled(r, CornerRadius::same(4), p.surface);
             }
             ui.painter().text(
                 r.center(),

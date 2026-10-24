@@ -332,6 +332,18 @@ pub fn screen_grab(ffmpeg: &Path) -> Grab {
 }
 
 /// Full ffmpeg argument list for a session.
+/// Capture-device audio needs a device ffmpeg can open. DirectShow has no
+/// default device, so an empty name on Windows is refused up front with a
+/// clear message (Linux uses PulseAudio's `default` source). A device that
+/// can't be opened makes ffmpeg exit, which surfaces as an error toast; the
+/// app never swaps in a synthetic or silent track.
+pub fn check_audio(cfg: &OutputConfig, windows: bool) -> Result<(), String> {
+    if windows && cfg.audio == Audio::Device && cfg.audio_device.trim().is_empty() {
+        return Err("Audio is set to Capture device but no DirectShow device is named. Enter it in Settings ▸ Output (e.g. \"Microphone (Realtek Audio)\"; `ffmpeg -list_devices true -f dshow -i dummy` lists them), or pick Silent AAC track / No audio.".into());
+    }
+    Ok(())
+}
+
 pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> Vec<String> {
     let (w, h) = cfg.size();
     let fps = cfg.fps.clamp(1, 120);
@@ -349,6 +361,12 @@ pub fn build_args(cfg: &OutputConfig, kind: Kind, target: &str, grab: Grab) -> V
     let mut push = |xs: &[&str]| a.extend(xs.iter().map(|s| s.to_string()));
     match cfg.source {
         Source::Canvas => {
+            if cfg.audio == Audio::Device {
+                // A capture device stamps audio with wall-clock time; stamp the
+                // piped frames the same way, or ffmpeg can't line the two up
+                // and the file stops after a fraction of a second.
+                push(&["-use_wallclock_as_timestamps", "1"]);
+            }
             push(&[
                 "-f",
                 "rawvideo",
@@ -604,6 +622,7 @@ impl Session {
         secret: &str,
         frames: FrameSlot,
     ) -> Result<Session, String> {
+        check_audio(cfg, cfg!(windows))?;
         let grab = if cfg.source == Source::Screen {
             screen_grab(ffmpeg)
         } else {
@@ -2218,5 +2237,182 @@ mod tests {
         assert!(!o.is_live());
         let _ = server.kill();
         let _ = server.wait();
+    }
+
+    #[test]
+    fn windows_capture_device_must_be_named() {
+        let mut c = OutputConfig {
+            audio: Audio::Device,
+            ..Default::default()
+        };
+        let e = check_audio(&c, true).unwrap_err();
+        assert!(e.contains("no DirectShow device is named"), "{e}");
+        assert!(
+            check_audio(&c, false).is_ok(),
+            "Linux falls back to pulse 'default'"
+        );
+        c.audio_device = "Microphone (Realtek Audio)".into();
+        assert!(check_audio(&c, true).is_ok());
+        c.audio_device.clear();
+        c.audio = Audio::Silent;
+        assert!(check_audio(&c, true).is_ok());
+    }
+
+    fn pactl(args: &[&str]) -> std::process::Output {
+        Command::new("pactl")
+            .args(args)
+            .output()
+            .expect("pactl not found: install pulseaudio-utils")
+    }
+
+    /// Fraction of the audio track's energy at `hz` (Goertzel on mono
+    /// 48 kHz PCM decoded by ffmpeg; needs at least 2 s). A pure tone at `hz` gives about 1.0;
+    /// silence or any other tone gives about 0.
+    fn energy_share_at(ff: &Path, file: &Path, hz: f64) -> f64 {
+        let o = Command::new(ff)
+            .args(["-hide_banner", "-loglevel", "error", "-i"])
+            .arg(file)
+            .args([
+                "-map", "0:a", "-ac", "1", "-ar", "48000", "-f", "s16le", "-",
+            ])
+            .output()
+            .expect("decode audio with ffmpeg");
+        let x: Vec<f64> = o
+            .stdout
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|b| f64::from(i16::from_le_bytes(*b)))
+            .collect();
+        assert!(
+            x.len() >= 2 * 48_000,
+            "3 s recorded but only {:.2} s of audio decoded",
+            x.len() as f64 / 48_000.0
+        );
+        let c = 2.0 * (2.0 * std::f64::consts::PI * hz / 48_000.0).cos();
+        let (mut s1, mut s2) = (0.0, 0.0);
+        for &v in &x {
+            let s0 = v + c * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        let power = s1 * s1 + s2 * s2 - c * s1 * s2;
+        let total: f64 = x.iter().map(|v| v * v).sum();
+        if total == 0.0 {
+            return 0.0;
+        }
+        2.0 * power / (x.len() as f64 * total)
+    }
+
+    /// Records with Audio = Capture device from a real PulseAudio source and
+    /// checks the AAC track carries the signal played into it. The source is
+    /// the monitor of a null sink this test creates; a 1234 Hz tone is played
+    /// into the sink with paplay, i.e. through the audio server, never by
+    /// the app. The recording must carry that tone: a silent or synthetic
+    /// stand-in track has almost no energy at 1234 Hz. Fails without a
+    /// PulseAudio server.
+    #[test]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        ignore = "PulseAudio capture is the Linux path; DirectShow needs a real Windows device"
+    )]
+    fn records_audio_from_a_real_pulse_source() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        assert!(
+            pactl(&["info"]).status.success(),
+            "needs a running PulseAudio server (pulseaudio --start)"
+        );
+        let sink = format!("seraphina_mic_test_{}", std::process::id());
+        let m = pactl(&[
+            "load-module",
+            "module-null-sink",
+            &format!("sink_name={sink}"),
+        ]);
+        assert!(m.status.success(), "load null sink: {m:?}");
+        let module = String::from_utf8_lossy(&m.stdout).trim().to_string();
+        let dir = std::env::temp_dir().join(format!("seraphina_mic_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let tone = dir.join("tone.wav");
+        assert!(Command::new(&ff)
+            .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+            .arg("sine=frequency=1234:sample_rate=48000:duration=8")
+            .arg("-y")
+            .arg(&tone)
+            .status()
+            .is_ok_and(|s| s.success()));
+        let mut play = Command::new("paplay")
+            .arg(format!("--device={sink}"))
+            .arg(&tone)
+            .spawn()
+            .expect("paplay not found: install pulseaudio-utils");
+        let cfg = OutputConfig {
+            width: 320,
+            height: 180,
+            audio: Audio::Device,
+            audio_device: format!("{sink}.monitor"),
+            ..Default::default()
+        };
+        let mut o = Output::new(cfg, String::new());
+        let path = dir.join("mic.mp4");
+        o.start_record(Some(path.clone())).expect("start record");
+        let mut ev = Vec::new();
+        let t0 = Instant::now();
+        let mut i = 0;
+        while t0.elapsed() < Duration::from_secs(3) {
+            o.push_frame(moving_frame(i));
+            i += 1;
+            ev.extend(o.tick());
+            std::thread::sleep(Duration::from_millis(33));
+        }
+        let msg = o.stop_record().expect("stop record");
+        let _ = play.kill();
+        let _ = play.wait();
+        let _ = pactl(&["unload-module", &module]);
+        assert!(msg.contains("saved"), "{msg} {ev:?}");
+        assert!(ev.iter().all(|(k, _)| *k != ToastKind::Error), "{ev:?}");
+        let p = probe(&ff, &path.to_string_lossy()).expect("ffprobe");
+        assert!(p.contains("codec_name=aac"), "no audio track: {p}");
+        let share = energy_share_at(&ff, &path, 1234.0);
+        assert!(
+            share > 0.5,
+            "only {share:.3} of the captured energy is the 1234 Hz tone played into the source"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A capture device that doesn't exist must fail loudly: an error
+    /// toast and a status error, not a recording with a stand-in track.
+    #[test]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        ignore = "PulseAudio capture is the Linux path; DirectShow needs a real Windows device"
+    )]
+    fn a_missing_audio_device_fails_loudly() {
+        find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let cfg = OutputConfig {
+            width: 320,
+            height: 180,
+            audio: Audio::Device,
+            audio_device: "seraphina_no_such_source".into(),
+            ..Default::default()
+        };
+        let mut o = Output::new(cfg, String::new());
+        let path = std::env::temp_dir().join(format!("seraphina_nomic_{}.mp4", std::process::id()));
+        o.start_record(Some(path.clone())).expect("ffmpeg starts");
+        let mut ev = Vec::new();
+        let t0 = Instant::now();
+        while o.rec.is_some() && t0.elapsed() < Duration::from_secs(8) {
+            o.push_frame(moving_frame(0));
+            ev.extend(o.tick());
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(o.rec.is_none(), "recording kept running without its device");
+        assert!(
+            ev.iter()
+                .any(|(k, m)| *k == ToastKind::Error && m.starts_with("Recording stopped")),
+            "{ev:?}"
+        );
+        assert!(o.status().error.is_some(), "{:?}", o.status());
+        let _ = std::fs::remove_file(&path);
     }
 }

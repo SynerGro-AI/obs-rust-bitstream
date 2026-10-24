@@ -19,7 +19,7 @@ Linux and macOS.
 | **3D** | Software rasterizer: z-buffered flat/Lambert shading, Shaded / Wireframe / Shaded+wire (keys 5/4/6), selection highlight; orbit/dolly; cube, plane, cylinder, joint, light, camera; extrude, bevel, **Edge Loop, Multi-Cut, Bridge, Boolean union/difference/intersection (BSP, watertight after T-junction repair), Quad Draw**; Select/Move/Rotate/Scale (Q/W/E/R); outliner; keyframed Y; general undo/redo (drags coalesce) | Per-object **materials** (Blinn-Phong, metal vs dielectric, transparency) and the **Physics Arena** (see Materials Lab below). No textures, no smooth shading, no IK/skinning/FX/render-to-file (still "Coming soon") |
 | **Materials** | Periodic table of all 118 elements (search, category filter, detail card); composition builder (formula or protons/neutrons/electrons) with stability and charge analysis; derived PBR and simulation properties; measured presets; save to the library and assign to 3D meshes | Compound/alloy properties are estimates (see below) |
 | **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
-| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas or screen source, status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Audio device capture (pulse/dshow) is wired but untested |
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas or screen source, status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Capture-device audio is tested on Linux (PulseAudio, `records_audio_from_a_real_pulse_source`); Windows DirectShow is not yet verified on hardware. A device that can't be opened stops the recording with an error; the app never substitutes a tone or silence |
 | **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Without a key it runs in offline help mode: a fixed table of tips, no model call and no actions, and it says so |
 | **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
 
@@ -274,6 +274,13 @@ missing; they never pass silently.
   (`Output::start_live` → ffmpeg) must show up in mediamtx's API as ready
   with an H.264 track and read back with ffprobe, and `wrong_key` must be
   refused by the server and reported in the app.
+* `records_audio_from_a_real_pulse_source` creates a PulseAudio null sink,
+  plays a 1234 Hz tone into it with `paplay` and records with Audio =
+  Capture device on its monitor: the MP4's AAC track must last at least 2 s
+  and carry over half its energy at 1234 Hz. `a_missing_audio_device_fails_loudly`
+  checks a nonexistent source stops the recording with an error. Both need
+  ffmpeg; the first also needs a PulseAudio server (`pulseaudio --start`).
+  Each fails, rather than passes, when what it needs is missing.
 
 On Windows (and under Wine) the ffmpeg and mediamtx tests are reported as
 ignored with the reason. Every other opt-in test is `#[ignore]` with its

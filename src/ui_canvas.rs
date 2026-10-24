@@ -586,13 +586,16 @@ pub fn format_clock(secs: u64) -> String {
 pub fn save_target(path: &str) -> String {
     let p = std::path::Path::new(path);
     let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("untitled");
-    let parent = p.parent().map(|d| d.to_path_buf()).unwrap_or_default();
     let name = if stem.ends_with("_edit") {
         format!("{}.psd", stem)
     } else {
         format!("{}_edit.psd", stem)
     };
-    parent.join(name).to_string_lossy().into_owned()
+    // Keep the caller's directory text as-is so the separator style is
+    // unchanged (Path::join would insert `\` on Windows).
+    let file = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+    let dir = path.strip_suffix(file).unwrap_or("");
+    format!("{dir}{name}")
 }
 
 /// Animated scalar: keys sorted by time, linear interpolation,
@@ -966,6 +969,7 @@ mod tests {
             "assets/mountain_spire_edit.psd"
         );
         assert_eq!(save_target("photo.jpg"), "photo_edit.psd");
+        assert_eq!(save_target(r"C:\art\photo.jpg"), r"C:\art\photo_edit.psd");
     }
 
     #[test]

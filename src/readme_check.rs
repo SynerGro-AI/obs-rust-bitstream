@@ -127,10 +127,18 @@ fn code_only(src: &str) -> String {
             out.extend_from_slice(&b[i..(i + close.len()).min(b.len())]);
             i = (i + close.len()).min(b.len());
         } else if b[i] == b'"' {
-            // serde's `with = "path"` and `default = "path"` name real code.
-            let before = String::from_utf8_lossy(&out[out.len().saturating_sub(32)..]);
-            let before = before.trim_end();
-            let path = ["with =", "default ="].iter().any(|k| before.ends_with(k));
+            // serde's `with = "path"` and `default = "path"` name real code,
+            // but only inside an open `#[serde(…)]` attribute (or
+            // `#[cfg_attr(…, serde(…))]`).
+            let tail = String::from_utf8_lossy(&out[out.len().saturating_sub(1024)..]);
+            let in_serde = tail.rfind("#[").is_some_and(|a| {
+                let attr = &tail[a..];
+                !attr.contains(']')
+                    && (attr.starts_with("#[serde(")
+                        || attr.starts_with("#[cfg_attr(") && attr.contains(" serde("))
+            });
+            let before = tail.trim_end();
+            let path = in_serde && ["with =", "default ="].iter().any(|k| before.ends_with(k));
             let start = i;
             i += 1;
             while i < b.len() && b[i] != b'"' {
@@ -407,6 +415,19 @@ fn a_module_named_only_in_a_string_is_not_used() {
     assert!(!bin.contains("lonely::"), "{bin}");
     let attr = code_only("#[serde(deserialize_with = \"crate::helper::f\")] x: u8,");
     assert!(attr.contains("crate::helper::f"), "{attr}");
+    let attr = code_only("#[serde(default = \"a::d\", with = \"b::w\")] x: u8,");
+    assert!(attr.contains("a::d") && attr.contains("b::w"), "{attr}");
+    let attr = code_only("#[cfg_attr(feature = \"ui\", serde(with = \"c::w\"))] x: u8,");
+    assert!(attr.contains("c::w"), "{attr}");
+    // the same words outside a serde attribute are just strings
+    for src in [
+        "#[arg(default = \"lonely::x\")] x: u8,",
+        "let with = \"lonely::y\";",
+        "#[serde(rename = \"n\")] #[arg(with = \"lonely::z\")] x: u8,",
+    ] {
+        let out = code_only(src);
+        assert!(!out.contains("lonely::"), "{out}");
+    }
 }
 
 #[test]

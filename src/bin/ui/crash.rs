@@ -320,48 +320,6 @@ pub fn open_folder(dir: &Path) -> std::io::Result<()> {
         .map(|_| ())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn redacts_registered_secrets_and_xai_keys() {
-        register_secret("live_987654_streamsecret");
-        let s =
-            redact("url rtmp://x/app/live_987654_streamsecret key xai-AbC123def456GHI789 xai-ok");
-        assert!(!s.contains("streamsecret"));
-        assert!(!s.contains("AbC123def456"));
-        assert!(s.contains("xai-****") && s.contains("xai-ok"));
-    }
-
-    #[test]
-    fn reports_are_written_listed_and_marked_seen() {
-        let dir = std::env::temp_dir().join(format!("seraphina-crash-test-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let p = write_report_in(
-            &dir,
-            "crash",
-            "Panic: boom xai-SECRETSECRET123",
-            "Backtrace:\n…",
-        )
-        .unwrap();
-        let body = std::fs::read_to_string(&p).unwrap();
-        assert!(body.contains("Panic: boom") && !body.contains("SECRETSECRET"));
-        write_report_in(&dir, "gpu", "Panic while starting the renderer: x", "").unwrap();
-        let un = unseen_in(&dir);
-        assert_eq!(un, vec![p.clone()], "gpu-* reports are not crash notices");
-        mark_seen(&un);
-        assert!(unseen_in(&dir).is_empty());
-        assert!(p.with_extension("seen.txt").exists());
-        for i in 0..(KEEP + 5) {
-            std::fs::write(dir.join(format!("crash-0000-{:03}.seen.txt", i)), "x").unwrap();
-        }
-        prune(&dir);
-        assert_eq!(list(&dir, |_| true).len(), KEEP);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
-
 // ---- next-launch notice -------------------------------------------------------
 
 use eframe::egui;
@@ -443,5 +401,47 @@ impl crate::App {
                 mark_seen(&n.reports);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redacts_registered_secrets_and_xai_keys() {
+        register_secret("live_987654_streamsecret");
+        let s =
+            redact("url rtmp://x/app/live_987654_streamsecret key xai-AbC123def456GHI789 xai-ok");
+        assert!(!s.contains("streamsecret"));
+        assert!(!s.contains("AbC123def456"));
+        assert!(s.contains("xai-****") && s.contains("xai-ok"));
+    }
+
+    #[test]
+    fn reports_are_written_listed_and_marked_seen() {
+        let dir = std::env::temp_dir().join(format!("seraphina-crash-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let p = write_report_in(
+            &dir,
+            "crash",
+            "Panic: boom xai-SECRETSECRET123",
+            "Backtrace:\n…",
+        )
+        .unwrap();
+        let body = std::fs::read_to_string(&p).unwrap();
+        assert!(body.contains("Panic: boom") && !body.contains("SECRETSECRET"));
+        write_report_in(&dir, "gpu", "Panic while starting the renderer: x", "").unwrap();
+        let un = unseen_in(&dir);
+        assert_eq!(un, vec![p.clone()], "gpu-* reports are not crash notices");
+        mark_seen(&un);
+        assert!(unseen_in(&dir).is_empty());
+        assert!(p.with_extension("seen.txt").exists());
+        for i in 0..(KEEP + 5) {
+            std::fs::write(dir.join(format!("crash-0000-{:03}.seen.txt", i)), "x").unwrap();
+        }
+        prune(&dir);
+        assert_eq!(list(&dir, |_| true).len(), KEEP);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -7,6 +7,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push to the same branch or PR cancels the older run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fmt:
     runs-on: ubuntu-latest
@@ -18,15 +23,17 @@ jobs:
       - run: cargo fmt --all -- --check
 
   clippy:
-    # Advisory only for now (no -D warnings); see the warning count in the log.
+    # Blocking: any warning fails, on Linux and on the Windows target.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --locked --all-targets --features ui
+          targets: x86_64-pc-windows-gnu
+      - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+      - run: cargo clippy --locked --all-targets --features ui -- -D warnings
+      - run: cargo clippy --locked --all-targets --features ui --target x86_64-pc-windows-gnu -- -D warnings
 
   audit:
     # RustSec advisories against Cargo.lock. Unmaintained/yanked crates are

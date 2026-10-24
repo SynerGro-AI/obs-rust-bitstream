@@ -5,6 +5,20 @@ animation, streaming and a materials lab, and the tested library
 behind it.
 **Work smarter, not harder.**
 
+## Local compute first (design principle)
+
+The owner's rule: "Use Python scripts whenever they are more efficient
+than spending API credits, and let the CPU do the work instead of
+burning credits. Prefer local compute over paid API calls wherever the
+CPU can handle it faster or cheaper."
+
+* Each spec has a "Paid calls still needed" list. For every paid call
+  it says what the call is for and why the CPU can't do the job.
+* Tests make no paid calls by default. Billed checks are `#[ignore]` and
+  are run by hand, as `live_xai_*` and `live_imagine` already are.
+* Offline tooling, such as fixtures, test values and doc checks, is a
+  local Python script (for example `tools/lesson_pack_vectors.py`, which computes the shared-learning test values).
+
 ## Where things stand
 
 * The library modules that exist are listed in README.md (the list is
@@ -375,6 +389,33 @@ them into a copy of `Cargo.lock`, with no build.
 
   `SERAPHINA_HOME` moves them.
 
+### Local compute first: all local, no paid calls
+
+Everything in C7.1 runs on your own CPU:
+
+* **Packing:** building the canonical body and writing the PNG chunk.
+* **Signing and verifying:** Ed25519 with `ed25519-dalek`, which takes
+  microseconds per pack.
+* **Checks:** the size, layout, order and weight checks and the PNG
+  chunk walk.
+* **Merging:** the Δ ledger, the caps, revert and compaction.
+
+C7.1 opens no socket and makes no network request of any kind. C7.2's
+LAN transport talks only to peers on your own network, so it uses no
+paid service either.
+
+**Tests:** the tests use fixed test keys, the files in
+`tests/fixtures/lesson_pack/` and temporary folders. None needs a
+network or an API key, and none is billed. The test values are computed
+locally by `tools/lesson_pack_vectors.py` (Python `cryptography`); see
+`docs/LESSON_PACK.md`.
+
+**Paid calls still needed: none.** One thing touches a paid call
+indirectly, and it adds no call of its own: the one-line peer-lesson
+summary (at most 200 characters) is added to the system prompt of a
+chat turn that you are already making. Writing that line takes no model;
+it is a fixed template filled in from the ledger.
+
 ### Adversarial tests (planned)
 
 Every test uses real files, and the C7.2 tests use real sockets on
@@ -412,6 +453,7 @@ Every test uses real files, and the C7.2 tests use real sockets on
 | `seraphina_cannot_share_or_import` | the AI tool list has no share or import command |
 | `peer_lessons_reach_the_prompt_only_as_names_and_numbers` | the summary holds only allow-listed names and numbers |
 | `nothing_is_bound_in_c7_1` | no socket is open with sharing on or off |
+| `shared_learning_code_never_reaches_the_network` | a source scan: the C7.1 modules don't use `net`, `ureq`, `llm` or `videogen`, so they make no network or paid call |
 | `signing_key_is_private` | Unix: the key file is 0600 and scrubbed from crash reports. Windows: it is in Credential Manager (a manual check on a Windows PC) |
 
 **C7.2 (the release after v0.2.0):** `beacon_with_bad_signature_is_ignored`,
@@ -468,6 +510,7 @@ Still open: what the glyph card should look like (layout and colours).
 - Fix the bugs in the safe path
 - Delete before you add: no placeholder modules
 - Every README claim is backed by a test or a measurement
+- Local compute first: the CPU and local Python scripts before paid API calls
 
 ## How to contribute
 Clone, run `cargo test --lib` and `cargo test --features ui --bin ui`,

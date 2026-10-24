@@ -7,6 +7,14 @@ started as a Rust port of OBS's `bitstream_reader` (still here as
 The GitHub repo is [SynerGro-AI/seraphina-studio](https://github.com/SynerGro-AI/seraphina-studio)
 (formerly `obs-rust-bitstream`, which is still the crate's name).
 
+**Local compute first.** The project's rule is to "use Python scripts
+whenever they are more efficient than spending API credits, and let the
+CPU do the work instead of burning credits", and to prefer local compute
+over paid API calls wherever the CPU can handle it faster or cheaper.
+Paid xAI calls happen only when an xAI key is set and you use chat or
+Grok Imagine. Billed tests are opt-in (`#[ignore]`). See
+"Local compute first" in [PLAN.md](PLAN.md).
+
 ## Desktop app: Seraphina Studio
 
 A single egui/eframe window with six workspaces, a gold-on-black theme (plus

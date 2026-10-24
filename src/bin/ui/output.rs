@@ -12,6 +12,13 @@
 //! * Encode: libx264 (veryfast, zerolatency, yuv420p) + AAC (silent track or a
 //!   capture device). Record writes MP4, live pushes FLV to RTMP.
 //! * `-progress pipe:1` is parsed for fps / bitrate / encoded time / drops.
+//! * Stream delay (Settings ▸ Output, 0 = off): the encoder writes FLV to
+//!   its stdout instead of RTMP (progress moves to stderr). Its tags are
+//!   split by `obs_rust_bitstream::encoder_packet`, held in an
+//!   `OutputDelayQueue` for the delay, and written to a second ffmpeg that
+//!   only copies them to the RTMP server. Stopping ends the stream at once:
+//!   the delayed tail is dropped, as in OBS. If either process dies, the
+//!   other is killed and the stream reconnects as a whole.
 //! * Live sessions that die are restarted with exponential backoff
 //!   (`obs_rust_bitstream::Reconnect`).
 //!
@@ -21,14 +28,16 @@
 
 use crate::prefs::seraphina_home;
 use crate::ToastKind;
+use obs_rust_bitstream::encoder_packet::{FlvItem, FlvReader};
+use obs_rust_bitstream::output_delay_queue::OutputDelayQueue;
 use obs_rust_bitstream::ui_canvas::Raster;
 use obs_rust_bitstream::Reconnect;
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -97,7 +106,13 @@ pub struct OutputConfig {
     pub record_dir: String,
     pub retry_sec: u32,
     pub retry_max: u32,
+    /// Live only: viewers see the stream this many seconds late (0 = off,
+    /// at most `MAX_DELAY_SEC`).
+    pub stream_delay_sec: u32,
 }
+
+/// The delay is held in memory: 300 s at 4.5 Mb/s is about 170 MB.
+pub const MAX_DELAY_SEC: u32 = 300;
 
 impl Default for OutputConfig {
     fn default() -> Self {
@@ -118,6 +133,7 @@ impl Default for OutputConfig {
                 .into_owned(),
             retry_sec: 2,
             retry_max: 10,
+            stream_delay_sec: 0,
         }
     }
 }
@@ -148,6 +164,12 @@ impl OutputConfig {
         self.save_to(&Self::path())
     }
     /// Even dimensions (yuv420p), sane bounds.
+    /// The stream delay for a session of this kind, if one applies.
+    pub fn delay(&self, kind: Kind) -> Option<Duration> {
+        let d = self.stream_delay_sec.min(MAX_DELAY_SEC);
+        (kind == Kind::Live && d > 0).then(|| Duration::from_secs(d as u64))
+    }
+
     pub fn size(&self) -> (u32, u32) {
         let e = |v: u32| (v.clamp(64, 3840) / 2) * 2;
         (e(self.width), e(self.height))
@@ -385,13 +407,15 @@ pub fn build_args(
 ) -> Result<Vec<String>, String> {
     let (w, h) = cfg.size();
     let fps = cfg.fps.clamp(1, 120);
+    // with a stream delay stdout carries the FLV, so progress goes to stderr
+    let delayed = cfg.delay(kind).is_some();
     let mut a: Vec<String> = [
         "-hide_banner",
         "-loglevel",
         "warning",
         "-nostats",
         "-progress",
-        "pipe:1",
+        if delayed { "pipe:2" } else { "pipe:1" },
     ]
     .iter()
     .map(|s| s.to_string())
@@ -528,7 +552,7 @@ pub fn build_args(
     }
     match kind {
         Kind::Record => push(&["-movflags", "+faststart", "-f", "mp4", "-y", target]),
-        Kind::Live => push(&["-f", "flv", target]),
+        Kind::Live => push(&["-f", "flv", if delayed { "pipe:1" } else { target }]),
     }
     Ok(a)
 }
@@ -546,6 +570,9 @@ pub struct Stats {
     pub kbps: f32,
     pub out_time: f64,
     pub total_bytes: u64,
+    /// Stream delay only: the stream time (s) of the last packet sent on to
+    /// the RTMP server, i.e. where viewers are.
+    pub sent_time: f64,
     pub last_error: Option<String>,
     pub ended: bool,
 }
@@ -622,6 +649,11 @@ pub struct Session {
     pub path: Option<PathBuf>,
     pub started: Instant,
     child: Child,
+    /// Stream delay: the ffmpeg that copies the delayed FLV to RTMP, and the
+    /// thread that feeds it from the delay queue.
+    relay: Option<(Child, JoinHandle<()>)>,
+    /// The stream delay this session runs with.
+    pub delay: Option<Duration>,
     stats: Arc<Mutex<Stats>>,
     stop: Arc<AtomicBool>,
     writer: Option<JoinHandle<()>>,
@@ -687,43 +719,35 @@ impl Session {
             .map_err(|e| format!("could not start ffmpeg ({}): {}", ffmpeg.display(), e))?;
         let stats = Arc::new(Mutex::new(Stats::default()));
         let stop = Arc::new(AtomicBool::new(false));
-        if let Some(out) = child.stdout.take() {
-            let st = stats.clone();
-            std::thread::spawn(move || {
-                for line in BufReader::new(out).lines().map_while(Result::ok) {
-                    if let Ok(mut s) = st.lock() {
-                        parse_progress(&line, &mut s);
-                    }
-                }
-            });
-        }
+        let delay = cfg.delay(kind);
         if let Some(err) = child.stderr.take() {
-            let st = stats.clone();
-            let secret = secret.to_string();
-            std::thread::spawn(move || {
-                for line in BufReader::new(err).lines().map_while(Result::ok) {
-                    let l = scrub(line.trim(), &secret);
-                    let lower = l.to_lowercase();
-                    let bad = [
-                        "error",
-                        "failed",
-                        "refused",
-                        "invalid",
-                        "could not",
-                        "cannot",
-                        "no such",
-                        "broken pipe",
-                        "timed out",
-                        "unable",
-                    ];
-                    if bad.iter().any(|b| lower.contains(b)) {
+            scan_stderr(err, stats.clone(), secret, delay.is_some());
+        }
+        let out = child.stdout.take();
+        let relay = match (delay, out) {
+            (None, Some(out)) => {
+                let st = stats.clone();
+                std::thread::spawn(move || {
+                    for line in BufReader::new(out).lines().map_while(Result::ok) {
                         if let Ok(mut s) = st.lock() {
-                            s.last_error = Some(l.chars().take(240).collect());
+                            parse_progress(&line, &mut s);
                         }
                     }
+                });
+                None
+            }
+            (Some(d), Some(out)) => {
+                match spawn_relay(ffmpeg, target, secret, out, stats.clone(), stop.clone(), d) {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(e);
+                    }
                 }
-            });
-        }
+            }
+            (_, None) => None,
+        };
         let mut stdin = child.stdin.take().ok_or("ffmpeg stdin unavailable")?;
         let (w, h) = cfg.size();
         let fps = cfg.fps.clamp(1, 120) as f64;
@@ -790,6 +814,8 @@ impl Session {
             path: (kind == Kind::Record).then(|| PathBuf::from(target)),
             started: Instant::now(),
             child,
+            relay,
+            delay,
             stats,
             stop,
             writer: Some(writer),
@@ -815,29 +841,56 @@ impl Session {
             && !DDA_BROKEN.swap(true, Ordering::SeqCst)
     }
 
-    /// `Some(success)` once ffmpeg has exited.
+    /// Where viewers are (s): the delayed position with a stream delay,
+    /// otherwise what ffmpeg has sent.
+    pub fn on_air(&self) -> f64 {
+        let st = self.stats();
+        if self.delay.is_some() {
+            st.sent_time
+        } else {
+            st.out_time
+        }
+    }
+
+    /// `Some(success)` once ffmpeg has exited. With a stream delay both
+    /// processes count: if one dies the other is killed.
     pub fn exited(&mut self) -> Option<bool> {
-        match self.child.try_wait() {
-            Ok(Some(st)) => {
+        let enc = exit_status(&mut self.child);
+        let Some((relay, _)) = self.relay.as_mut() else {
+            self.finished |= enc.is_some();
+            return enc;
+        };
+        let rel = exit_status(relay);
+        match (enc, rel) {
+            (Some(a), Some(b)) => {
                 self.finished = true;
-                Some(st.success())
+                Some(a && b)
             }
-            Ok(None) => None,
-            Err(_) => Some(false),
+            (None, None) => None,
+            _ if self.stop.load(Ordering::Relaxed) => None,
+            _ => {
+                let _ = relay.kill();
+                let _ = relay.wait();
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                self.finished = true;
+                Some(false)
+            }
         }
     }
 
     /// Graceful stop: end the frame pipe (or send `q`), wait for ffmpeg to
-    /// finalise, kill it only after `timeout`.
+    /// finalise, kill it only after `timeout`. A stream delay's unsent tail
+    /// is dropped.
     pub fn stop(&mut self, timeout: Duration) -> Result<(), String> {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(w) = self.writer.take() {
             let _ = w.join();
         }
         let t0 = Instant::now();
-        loop {
+        let result = loop {
             if let Some(ok) = self.exited() {
-                return if ok {
+                break if ok {
                     Ok(())
                 } else {
                     Err(self
@@ -847,19 +900,202 @@ impl Session {
                 };
             }
             if t0.elapsed() > timeout {
-                let _ = self.child.kill();
+                self.kill();
                 let _ = self.child.wait();
+                if let Some((r, _)) = self.relay.as_mut() {
+                    let _ = r.wait();
+                }
                 self.finished = true;
-                return Err("ffmpeg did not finish in time and was killed".into());
+                break Err("ffmpeg did not finish in time and was killed".into());
             }
             std::thread::sleep(Duration::from_millis(30));
+        };
+        if let Some((_, pump)) = self.relay.take() {
+            let _ = pump.join();
         }
+        result
     }
 
     /// Hard kill (the test "drop connection" button).
     pub fn kill(&mut self) {
         let _ = self.child.kill();
+        if let Some((r, _)) = self.relay.as_mut() {
+            let _ = r.kill();
+        }
     }
+}
+
+fn exit_status(c: &mut Child) -> Option<bool> {
+    match c.try_wait() {
+        Ok(Some(st)) => Some(st.success()),
+        Ok(None) => None,
+        Err(_) => Some(false),
+    }
+}
+
+/// Keep the last error-looking stderr line (secret scrubbed); with
+/// `progress`, stderr also carries `-progress` lines.
+fn scan_stderr(
+    err: std::process::ChildStderr,
+    st: Arc<Mutex<Stats>>,
+    secret: &str,
+    progress: bool,
+) {
+    let secret = secret.to_string();
+    std::thread::spawn(move || {
+        for line in BufReader::new(err).lines().map_while(Result::ok) {
+            if progress {
+                if let Ok(mut s) = st.lock() {
+                    parse_progress(&line, &mut s);
+                }
+            }
+            let l = scrub(line.trim(), &secret);
+            let lower = l.to_lowercase();
+            let bad = [
+                "error",
+                "failed",
+                "refused",
+                "invalid",
+                "could not",
+                "cannot",
+                "no such",
+                "broken pipe",
+                "timed out",
+                "unable",
+            ];
+            if bad.iter().any(|b| lower.contains(b)) {
+                if let Ok(mut s) = st.lock() {
+                    s.last_error = Some(l.chars().take(240).collect());
+                }
+            }
+        }
+    });
+}
+
+pub fn relay_args(target: &str) -> Vec<String> {
+    [
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-nostats",
+        "-f",
+        "flv",
+        "-i",
+        "pipe:0",
+        "-c",
+        "copy",
+        "-f",
+        "flv",
+        target,
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// Start the stream delay: a reader thread splits the encoder's FLV into
+/// packets, a pump thread holds them in an [`OutputDelayQueue`] and writes
+/// each one to the relay ffmpeg once it is due.
+fn spawn_relay(
+    ffmpeg: &Path,
+    target: &str,
+    secret: &str,
+    mut flv: ChildStdout,
+    stats: Arc<Mutex<Stats>>,
+    stop: Arc<AtomicBool>,
+    delay: Duration,
+) -> Result<(Child, JoinHandle<()>), String> {
+    let mut cmd = Command::new(ffmpeg);
+    cmd.args(relay_args(target))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    no_window(&mut cmd);
+    let mut child = cmd.spawn().map_err(|e| {
+        format!(
+            "could not start the ffmpeg relay ({}): {}",
+            ffmpeg.display(),
+            e
+        )
+    })?;
+    if let Some(err) = child.stderr.take() {
+        scan_stderr(err, stats.clone(), secret, false);
+    }
+    let Some(mut sink) = child.stdin.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("ffmpeg relay stdin unavailable".into());
+    };
+    let (tx, rx) = mpsc::channel::<Result<FlvItem, String>>();
+    std::thread::spawn(move || {
+        let mut reader = FlvReader::new();
+        let mut buf = vec![0u8; 64 * 1024];
+        let mut ok = true;
+        // keep draining to EOF so the encoder never blocks on its stdout
+        while let Ok(n) = flv.read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+            if !ok {
+                continue;
+            }
+            reader.push(&buf[..n]);
+            loop {
+                match reader.next_item() {
+                    Ok(Some(item)) => {
+                        let _ = tx.send(Ok(item));
+                    }
+                    Ok(None) => break,
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    let pump = std::thread::spawn(move || {
+        let fail = |why: String| {
+            if let Ok(mut s) = stats.lock() {
+                s.last_error.get_or_insert(why);
+            }
+        };
+        let mut queue = OutputDelayQueue::new(delay);
+        while !stop.load(Ordering::Relaxed) {
+            let wait = queue
+                .next_due()
+                .map(|t| t.saturating_duration_since(Instant::now()))
+                .unwrap_or(Duration::MAX)
+                .min(Duration::from_millis(50));
+            match rx.recv_timeout(wait) {
+                Ok(Ok(FlvItem::Header(h))) => {
+                    if sink.write_all(&h).is_err() {
+                        fail("the stream relay stopped accepting data".into());
+                        return;
+                    }
+                }
+                Ok(Ok(FlvItem::Packet(p))) => queue.push(p, Instant::now()),
+                Ok(Err(e)) => {
+                    fail(format!("stream delay: {e}"));
+                    return;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+            while let Some(p) = queue.pop_due(Instant::now()) {
+                if sink.write_all(&p.bytes).is_err() {
+                    fail("the stream relay stopped accepting data".into());
+                    return;
+                }
+                if let Ok(mut s) = stats.lock() {
+                    s.sent_time = p.dts_ms as f64 / 1000.0;
+                }
+            }
+        }
+        // dropping `sink` ends the relay's input; the unsent tail is dropped
+    });
+    Ok((child, pump))
 }
 
 impl Drop for Session {
@@ -1253,7 +1489,7 @@ impl Output {
             let healthy = self
                 .live
                 .as_ref()
-                .map(|s| s.stats().out_time > 0.0)
+                .map(|s| s.on_air() > 0.0)
                 .unwrap_or(false);
             if healthy {
                 return Ok("stream is connected; nothing to retry".into());
@@ -1371,7 +1607,7 @@ impl Output {
                         .last_error
                         .unwrap_or_else(|| "connection closed".into()),
                 );
-            } else if self.reconnect.attempts() > 0 && s.stats().out_time > 2.0 {
+            } else if self.reconnect.attempts() > 0 && s.on_air() > 2.0 {
                 self.reconnect.success();
                 self.events
                     .push((ToastKind::Success, "Stream reconnected.".into()));
@@ -1391,6 +1627,12 @@ impl Output {
         }
         self.release_camera();
         std::mem::take(&mut self.events)
+    }
+
+    /// The running stream's delay and where its viewers are.
+    pub fn live_delay(&self) -> Option<(Duration, f64)> {
+        let s = self.live.as_ref()?;
+        Some((s.delay?, s.on_air()))
     }
 
     pub fn status(&self) -> Status {
@@ -1568,6 +1810,14 @@ impl Output {
             }
             if let Some(t) = st.live {
                 theme::kv(ui, p, "Live", clock(t));
+            }
+            if let Some((d, at)) = self.live_delay() {
+                theme::kv(
+                    ui,
+                    p,
+                    "Stream delay",
+                    format!("{} s · viewers at {}", d.as_secs(), clock(at)),
+                );
             }
             if st.recording.is_some() || st.live.is_some() {
                 theme::kv(
@@ -1893,6 +2143,17 @@ impl Output {
                     );
                 });
                 ui.end_row();
+                ui.label(theme::muted(p, "Stream delay"));
+                ui.add(
+                    egui::DragValue::new(&mut self.cfg.stream_delay_sec)
+                        .range(0..=MAX_DELAY_SEC)
+                        .suffix(" s"),
+                )
+                .on_hover_text(
+                    "Viewers see the stream this many seconds late (0 = off). \
+                     Stopping ends it at once; the delayed part is not sent.",
+                );
+                ui.end_row();
             });
         if self.cfg.source == Source::Camera {
             self.camera_ui(ui, p, bus);
@@ -1989,6 +2250,99 @@ mod tests {
         assert!(a.ends_with("-f flv rtmp://h/app/k"));
         assert_eq!(rtmp_target("rtmp://h/app/", " k "), "rtmp://h/app/k");
         assert_eq!(rtmp_target("rtmp://h/app", ""), "rtmp://h/app");
+    }
+
+    #[test]
+    fn stream_delay_sends_flv_to_stdout_and_progress_to_stderr() {
+        let mut c = OutputConfig {
+            stream_delay_sec: 30,
+            ..Default::default()
+        };
+        assert_eq!(c.delay(Kind::Live), Some(Duration::from_secs(30)));
+        assert_eq!(c.delay(Kind::Record), None, "recordings are never delayed");
+        let live = |c: &OutputConfig| {
+            build_args(
+                c,
+                Kind::Live,
+                "rtmp://h/app/k",
+                Grab::X11,
+                AudioBackend::Pulse,
+            )
+            .expect("args")
+            .join(" ")
+        };
+        let a = live(&c);
+        assert!(
+            a.contains("-progress pipe:2") && a.ends_with("-f flv pipe:1"),
+            "{a}"
+        );
+        assert!(
+            !a.contains("rtmp://"),
+            "the encoder must not reach the server: {a}"
+        );
+        let r = build_args(
+            &c,
+            Kind::Record,
+            "/tmp/x.mp4",
+            Grab::X11,
+            AudioBackend::Pulse,
+        )
+        .expect("args")
+        .join(" ");
+        assert!(r.contains("-progress pipe:1") && r.ends_with("/tmp/x.mp4"));
+        assert_eq!(
+            relay_args("rtmp://h/app/k").join(" "),
+            "-hide_banner -loglevel warning -nostats -f flv -i pipe:0 -c copy -f flv rtmp://h/app/k"
+        );
+        c.stream_delay_sec = 100_000;
+        assert_eq!(
+            c.delay(Kind::Live),
+            Some(Duration::from_secs(MAX_DELAY_SEC as u64))
+        );
+        c.stream_delay_sec = 0;
+        assert_eq!(c.delay(Kind::Live), None);
+        let a = live(&c);
+        assert!(a.contains("-progress pipe:1") && a.ends_with("-f flv rtmp://h/app/k"));
+    }
+
+    /// Settings ▸ Output shows the stream delay with its value.
+    #[test]
+    fn settings_show_the_stream_delay() {
+        let ctx = egui::Context::default();
+        let mut o = Output::new(
+            OutputConfig {
+                stream_delay_sec: 42,
+                ..Default::default()
+            },
+            String::new(),
+        );
+        let mut bus = Vec::new();
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(900.0, 1400.0),
+            )),
+            ..Default::default()
+        };
+        let out = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                o.settings_ui(ui, &Palette::dark(), &mut bus);
+            });
+        });
+        let mut texts = Vec::new();
+        for c in &out.shapes {
+            if let egui::epaint::Shape::Text(t) = &c.shape {
+                texts.push(t.galley.text().to_string());
+            }
+        }
+        assert!(
+            texts.iter().any(|t| t == "Stream delay"),
+            "no Stream delay row in {texts:?}"
+        );
+        assert!(
+            texts.iter().any(|t| t == "42 s"),
+            "delay value not shown: {texts:?}"
+        );
     }
 
     #[test]
@@ -2306,22 +2660,20 @@ mod tests {
         assert!(!a.contains("x11grab") && a.contains("-shortest"), "{a}");
     }
 
-    /// Goes live against `ffmpeg -listen 1` acting as the RTMP server: the
-    /// listener writes what it receives to an FLV, which ffprobe must read
-    /// back as H.264 at the configured size. Needs only ffmpeg; no network
-    /// beyond 127.0.0.1.
-    #[test]
-    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
-    fn goes_live_to_an_ffmpeg_rtmp_listener() {
-        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+    /// A one-shot `ffmpeg -listen 1` RTMP server on 127.0.0.1 that saves
+    /// what it receives under `live/rx_test_key`; returns it, its port and
+    /// the file.
+    fn rtmp_listener(ff: &Path, tag: &str) -> (Child, u16, PathBuf) {
         let port = {
             let l = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a free port");
             l.local_addr().expect("local addr").port()
         };
-        let got =
-            std::env::temp_dir().join(format!("seraphina_rtmp_rx_{}.flv", std::process::id()));
+        let got = std::env::temp_dir().join(format!(
+            "seraphina_rtmp_rx_{tag}_{}.flv",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&got);
-        let mut server = Command::new(&ff)
+        let server = Command::new(ff)
             .args(["-hide_banner", "-loglevel", "error", "-listen", "1", "-i"])
             .arg(format!("rtmp://127.0.0.1:{port}/live/rx_test_key"))
             .args(["-c", "copy", "-y"])
@@ -2349,6 +2701,18 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(50));
         }
+        (server, port, got)
+    }
+
+    /// Goes live against `ffmpeg -listen 1` acting as the RTMP server: the
+    /// listener writes what it receives to an FLV, which ffprobe must read
+    /// back as H.264 at the configured size. Needs only ffmpeg; no network
+    /// beyond 127.0.0.1.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn goes_live_to_an_ffmpeg_rtmp_listener() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let (mut server, port, got) = rtmp_listener(&ff, "plain");
         let cfg = OutputConfig {
             rtmp_url: format!("rtmp://127.0.0.1:{port}/live"),
             width: 320,
@@ -2399,6 +2763,132 @@ mod tests {
             "key leaked into a message"
         );
         let _ = std::fs::remove_file(&got);
+    }
+
+    /// Stream delay: the encoder runs at once, but nothing reaches the RTMP
+    /// server until the delay has passed, and then the whole stream does.
+    /// The relay connects to the server only once it has packets to send,
+    /// so the connection showing up in /proc/net/tcp marks the first data.
+    #[test]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        ignore = "needs ffmpeg and /proc/net/tcp (Windows runners and Wine have no ffmpeg.exe)"
+    )]
+    fn stream_delay_holds_the_stream_back_by_the_delay() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let (mut server, port, got) = rtmp_listener(&ff, "delay");
+        let cfg = OutputConfig {
+            rtmp_url: format!("rtmp://127.0.0.1:{port}/live"),
+            width: 320,
+            height: 180,
+            fps: 30,
+            video_kbps: 600,
+            stream_delay_sec: 4,
+            ..Default::default()
+        };
+        let mut o = Output::new(cfg, String::new());
+        o.set_key("rx_test_key", false).expect("set key");
+        o.push_frame(moving_frame(0));
+        o.start_live().expect("start live");
+        let t0 = Instant::now();
+        let hex = format!(":{port:04X} ");
+        let (mut ev, mut i) = (Vec::new(), 0);
+        let mut connected = None;
+        let mut encoding_while_held = false;
+        while t0.elapsed() < Duration::from_secs(10) {
+            o.push_frame(moving_frame(i));
+            i += 1;
+            ev.extend(o.tick());
+            let s = o.live.as_ref().expect("still live");
+            let held = s.stats().out_time > 0.5 && s.on_air() == 0.0;
+            encoding_while_held |= held && t0.elapsed() < Duration::from_millis(3900);
+            let tcp = std::fs::read_to_string("/proc/net/tcp").expect("read /proc/net/tcp");
+            if connected.is_none() && tcp.lines().any(|l| l.contains(&hex) && l.contains(" 01 ")) {
+                connected = Some(t0.elapsed());
+            }
+            std::thread::sleep(Duration::from_millis(33));
+        }
+        assert!(o.is_live(), "dropped: {:?}", ev);
+        let (delay, viewers_at) = o.live_delay().expect("delay shown while live");
+        let enc = o.live.as_ref().expect("live").stats().out_time;
+        assert_eq!(delay, Duration::from_secs(4));
+        let first = connected.expect("the relay never connected to the RTMP server");
+        assert!(
+            first >= delay,
+            "the server got a connection {first:?} after going live, before the 4 s delay"
+        );
+        assert!(
+            viewers_at > 1.0 && enc - viewers_at > 3.0,
+            "viewers at {viewers_at:.2}s, encoder at {enc:.2}s"
+        );
+        assert!(
+            encoding_while_held,
+            "the encoder never ran while the delay held its output"
+        );
+        o.stop_live().expect("stop live");
+        let t0 = Instant::now();
+        while server.try_wait().expect("listener status").is_none() {
+            assert!(
+                t0.elapsed() < Duration::from_secs(10),
+                "listener did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let p = probe(&ff, &got.to_string_lossy()).expect("ffprobe");
+        assert!(
+            p.contains("codec_name=h264") && p.contains("width=320") && p.contains("height=180"),
+            "listener did not receive the stream: {p}"
+        );
+        let _ = std::fs::remove_file(&got);
+    }
+
+    /// With a stream delay two ffmpegs run; when the relay dies (here: no
+    /// server on the port) the encoder must be killed and the session end
+    /// with the relay's error, so the stream can reconnect as a whole.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn a_dead_relay_ends_the_delayed_stream() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let port = free_port();
+        let cfg = OutputConfig {
+            width: 160,
+            height: 90,
+            stream_delay_sec: 1,
+            ..Default::default()
+        };
+        let frames: FrameSlot = Arc::new(Mutex::new(Some(moving_frame(0))));
+        let target = format!("rtmp://127.0.0.1:{port}/live/secret_key_x");
+        let mut s = Session::spawn(
+            &ff,
+            &cfg,
+            Kind::Live,
+            &target,
+            "secret_key_x",
+            frames,
+            AudioBackend::host(),
+        )
+        .expect("spawn");
+        let t0 = Instant::now();
+        let ok = loop {
+            if let Some(ok) = s.exited() {
+                break ok;
+            }
+            assert!(
+                t0.elapsed() < Duration::from_secs(20),
+                "the session kept running after its relay died"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        assert!(!ok);
+        assert!(
+            s.child.try_wait().expect("encoder status").is_some(),
+            "the encoder was left running"
+        );
+        let err = s.stats().last_error.unwrap_or_default();
+        assert!(
+            !err.is_empty() && !err.contains("secret_key_x"),
+            "error: {err:?}"
+        );
     }
 
     fn mediamtx_bin() -> Option<PathBuf> {

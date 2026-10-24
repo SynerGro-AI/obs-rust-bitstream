@@ -21,7 +21,7 @@ Linux (the CI tests run there). macOS is untested.
 | **3D** | Software rasterizer: z-buffered flat/Lambert shading, Shaded / Wireframe / Shaded+wire (keys 5/4/6), selection highlight; orbit/dolly; cube, plane, cylinder, joint, light, camera; extrude, bevel, **Edge Loop, Multi-Cut, Bridge, Boolean union/difference/intersection (BSP, watertight after T-junction repair), Quad Draw**; Select/Move/Rotate/Scale (Q/W/E/R); outliner; keyframed Y; general undo/redo (drags coalesce) | Per-object **materials** (Blinn-Phong, metal vs dielectric, transparency) and the **Physics Arena** (see Materials Lab below). No textures, no smooth shading, no IK/skinning/FX/render-to-file (still "Coming soon") |
 | **Materials** | Periodic table of all 118 elements (search, category filter, detail card); composition builder (formula or protons/neutrons/electrons) with stability and charge analysis; derived PBR and simulation properties; measured presets; save to the library and assign to 3D meshes | Compound/alloy properties are estimates (see below) |
 | **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
-| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas, screen or camera source (V4L2 on Linux, Media Foundation on Windows), status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Capture-device audio is tested on Linux (PulseAudio, `records_audio_from_a_real_pulse_source`); Windows DirectShow is not yet verified on hardware. On macOS, Capture device is refused as unsupported (`record_refuses_capture_audio_without_a_usable_device`). A device that can't be opened stops the recording with an error; the app never substitutes a tone or silence |
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas, screen or camera source (V4L2 on Linux, Media Foundation on Windows), status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff, optional stream delay (0–300 s) | Needs ffmpeg installed (not bundled). Capture-device audio is tested on Linux (PulseAudio, `records_audio_from_a_real_pulse_source`); Windows DirectShow is not yet verified on hardware. On macOS, Capture device is refused as unsupported (`record_refuses_capture_audio_without_a_usable_device`). A device that can't be opened stops the recording with an error; the app never substitutes a tone or silence |
 | **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Without a key it runs in offline help mode: a fixed table of tips, no model call and no actions, and it says so |
 | **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
 
@@ -208,10 +208,20 @@ MP4, live output is FLV over RTMP. `-progress` output drives the status bar.
 A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
 10 attempts); *Retry now* reconnects immediately.
 
+**Stream delay** (Settings ▸ Output, 0–300 s, off by default) holds the live
+stream back, as OBS's stream delay does. The encoder then writes FLV to its
+stdout instead of RTMP; `encoder_packet` splits it into tags,
+`output_delay_queue` holds each one for the delay, and a second ffmpeg
+(`-c copy`, no re-encode) sends them to the server. Stream mode ▸ Output
+shows where viewers are. Stopping ends the stream at once and drops the
+unsent part. If either ffmpeg dies the other is killed and the whole stream
+reconnects. The delay is held in memory (300 s at 4.5 Mb/s is about
+170 MB). Recordings are never delayed.
+
 * ffmpeg lookup: `SERAPHINA_FFMPEG`, next to the exe (or `./ffmpeg/bin/`), then
   `PATH`. Missing ffmpeg gives a clear error with download links.
 * Settings ▸ Output: RTMP URL, stream key, size, fps, bitrate, audio, record
-  folder, reconnect; with the Camera source, a camera picker (Refresh
+  folder, reconnect, stream delay; with the Camera source, a camera picker (Refresh
   re-scans) and a live preview. Saved in `~/.seraphina/studio/output.json`; the key lives
   alone in `~/.seraphina/studio/stream_key` (0600 on Unix), is shown masked,
   is scrubbed from ffmpeg error text and never reaches the AI context or logs.
@@ -317,6 +327,11 @@ missing; they never pass silently.
   `records_five_seconds_to_mp4_verified_by_ffprobe` (5 s to MP4, checked with
   ffprobe) and `goes_live_to_an_ffmpeg_rtmp_listener` (goes live to
   `ffmpeg -listen 1` on 127.0.0.1 and checks the received FLV with ffprobe).
+  `stream_delay_holds_the_stream_back_by_the_delay` (Linux: the relay must
+  not connect to the listener before the 4 s delay, viewers must trail the
+  encoder, and the listener must receive H.264) and
+  `a_dead_relay_ends_the_delayed_stream` (the relay can't connect, so the
+  encoder must be killed and the error reported) use it too, as do
   `concat_runs_off_thread` (stitches two clips) and
   `stream_commands_and_status` (records through the command bus) need it too.
 * **mediamtx** at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) is required on
@@ -391,6 +406,7 @@ and has unit tests. Two tests hold this list to the code:
 - `computer`: Build a computer: transistors → gates → adder → register → CPU.
 - `element_data`: Physical data for all 118 elements, plus their place in the standard 18-column periodic table.
 - `element_props`: Extended per-element properties (embedded; never fetched at runtime).
+- `encoder_packet`: Encoder packets read from an FLV byte stream (after OBS's encoder_packet).
 - `joint`: Safe pure Joint (skeleton joint tool).
 - `joint_hierarchy`: Safe pure JointHierarchy (named joint tree core).
 - `live_weights`: Safe pure LiveWeights (runtime parameter store).
@@ -401,6 +417,7 @@ and has unit tests. Two tests hold this list to the code:
 - `material_registry`: Safe pure MaterialRegistry (named material store).
 - `materials_lab`: Safe pure MaterialsLab (materials science core).
 - `mesh3d`: Polygon meshes for the 3D workspace.
+- `output_delay_queue`: Hold encoder packets for a fixed delay before they go out (after OBS's obs-output-delay.c).
 - `paint_engine`: Paint engine behind Seraphina Studio's Paint mode.
 - `periodic_table`: Safe pure PeriodicTable (element lookup core).
 - `psd`: Safe pure Psd (Photoshop Document).

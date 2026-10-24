@@ -14,7 +14,9 @@ behind it.
   (`src/bin/ui/output.rs`), tested against a local ffmpeg RTMP listener
   and, on Linux CI, mediamtx. Their source is the canvas, the screen, or a
   webcam (`src/bin/ui/camera.rs`: V4L2 on Linux, Media Foundation on
-  Windows; macOS AVFoundation is planned).
+  Windows; macOS AVFoundation is planned). Live output has an optional
+  stream delay (`encoder_packet` + `output_delay_queue` between the
+  encoder ffmpeg and a copy-only relay ffmpeg).
 * `tools/obs_cpp_to_rust_parser.py` turns an OBS `.c` file into a Rust
   skeleton that documents the lessons in `tools/lessons.json`.
 

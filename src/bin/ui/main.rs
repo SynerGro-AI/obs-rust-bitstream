@@ -1418,10 +1418,11 @@ impl App {
         self.ctx.request_repaint();
     }
 
-    /// Execute Seraphina's tool calls through the Triad gate.
+    /// Execute Seraphina's tool calls through the Triad gate. All rounds of
+    /// a turn share one batch, so one Undo reverts the whole turn.
     pub fn run_tool_calls(&mut self, calls: Vec<llm::ToolCall>) {
-        let batch = self.assistant.alloc_batch();
-        let snap = self.snapshot();
+        let batch = self.assistant.turn_batch();
+        let snap = (!self.snapshots.contains_key(&batch)).then(|| self.snapshot());
         let mut lines = Vec::new();
         let mut results = Vec::new();
         for c in calls {
@@ -1482,13 +1483,17 @@ impl App {
         if lines.iter().any(|l| {
             l.status == LineStatus::Done && l.cmd.as_ref().map(|c| c.mutates()).unwrap_or(false)
         }) {
-            self.snapshots.insert(batch, snap);
+            if let Some(snap) = snap {
+                self.snapshots.insert(batch, snap);
+            }
             // batch ids increase, so the smallest keys are the oldest
             while self.snapshots.len() > MAX_AI_SNAPSHOTS {
                 let oldest = *self.snapshots.keys().min().unwrap();
                 self.snapshots.remove(&oldest);
             }
         }
+        // the round that just ended may have crossed the spend cap
+        self.assistant.blocked = self.meter.check(0.0).err();
         let ctx = self.app_context();
         self.assistant.submit_results(batch, lines, results, &ctx);
     }
@@ -5437,6 +5442,280 @@ mod tests {
         app.assistant.want_send = true;
         wait_idle(&mut app, &ctx, 10);
         assert!(app.assistant.items.iter().any(|i| i.text.contains("Okay.")));
+    }
+
+    fn tool_reply(calls: Vec<ToolCall>) -> LlmReply {
+        LlmReply {
+            content: String::new(),
+            tool_calls: calls,
+            usage: None,
+        }
+    }
+
+    fn actions_cards(app: &App) -> usize {
+        app.assistant
+            .items
+            .iter()
+            .filter(|i| matches!(i.kind, assistant_panel::ItemKind::Actions { .. }))
+            .count()
+    }
+
+    #[test]
+    fn a_multi_step_turn_chains_tool_rounds_and_undoes_as_one() {
+        let ctx = egui::Context::default();
+        // popped from the end: six tool rounds (more than the old limit of 4), then the answer
+        let replies = vec![
+            LlmReply {
+                content: "All six steps are done.".into(),
+                ..Default::default()
+            },
+            tool_reply(vec![call(
+                "set_layer_opacity",
+                r#"{"layer":"Mist Overlay","opacity":70}"#,
+            )]),
+            tool_reply(vec![call(
+                "rename_layer",
+                r#"{"layer":"Glow","name":"Soft Glow"}"#,
+            )]),
+            tool_reply(vec![call(
+                "set_layer_visibility",
+                r#"{"layer":"Sky Gradient","visible":false}"#,
+            )]),
+            tool_reply(vec![call(
+                "set_layer_blend",
+                r#"{"layer":"Glow","mode":"screen"}"#,
+            )]),
+            tool_reply(vec![call(
+                "set_layer_opacity",
+                r#"{"layer":"Glow","opacity":40}"#,
+            )]),
+            tool_reply(vec![call("add_layer", r#"{"name":"Glow"}"#)]),
+        ];
+        let mock = Arc::new(MockProvider::new(replies));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let layers0 = app.paint.doc.layers.len();
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        let sky = app.paint.find_layer(Some("Sky Gradient")).unwrap();
+        let mist0 = app.paint.doc.layers[mist].opacity;
+        app.assistant.input = "add a soft screen glow, hide the sky, lift the mist".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert_eq!(
+            mock.seen.lock().unwrap().len(),
+            7,
+            "six tool rounds and the answer"
+        );
+        let glow = app.paint.find_layer(Some("Soft Glow")).unwrap();
+        assert!((app.paint.doc.layers[glow].opacity - 0.40).abs() < 1e-4);
+        assert!(!app.paint.doc.layers[sky].visible);
+        let lines = action_lines(&app);
+        assert_eq!(lines.len(), 6, "{lines:?}");
+        assert!(lines
+            .iter()
+            .all(|(b, l)| *b == lines[0].0 && l.status == LineStatus::Done));
+        assert_eq!(actions_cards(&app), 1, "one card per turn");
+        assert_eq!(app.snapshots.len(), 1, "one snapshot per turn");
+        let n = app.assistant.items.len();
+        assert!(app.assistant.items[n - 1].text.contains("All six steps"));
+        assert!(matches!(
+            app.assistant.items[n - 2].kind,
+            assistant_panel::ItemKind::Actions { .. }
+        ));
+        // one click reverts the whole turn
+        assert!(app.undo_batch(lines[0].0));
+        assert_eq!(app.paint.doc.layers.len(), layers0);
+        assert!(app.paint.find_layer(Some("Soft Glow")).is_err());
+        assert!(app.paint.doc.layers[sky].visible);
+        assert!((app.paint.doc.layers[mist].opacity - mist0).abs() < 1e-4);
+        // the next turn starts its own batch
+        mock.replies
+            .lock()
+            .unwrap()
+            .push(tool_reply(vec![call("add_layer", "{}")]));
+        app.assistant.input = "one more layer".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert_ne!(action_lines(&app).last().unwrap().0, lines[0].0);
+    }
+
+    #[test]
+    fn undo_during_a_turn_gives_later_rounds_their_own_card() {
+        let ctx = egui::Context::default();
+        let mut m = MockProvider::new(vec![
+            LlmReply {
+                content: "Press Run to go live.".into(),
+                ..Default::default()
+            },
+            tool_reply(vec![call("set_streaming", r#"{"live":true}"#)]),
+            tool_reply(vec![call("add_layer", r#"{"name":"Early"}"#)]),
+        ]);
+        m.delay_after = 1;
+        *m.delay.lock().unwrap() = Some(std::time::Duration::from_millis(800));
+        let mock = Arc::new(m);
+        let mut app = app_with(&ctx, Some(mock));
+        app.assistant.input = "add a layer, then go live".into();
+        app.assistant.want_send = true;
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while action_lines(&app).is_empty() {
+            assert!(std::time::Instant::now() < end, "round 1 never ran");
+            run(&mut app, &ctx, 1, 0.0);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let first = action_lines(&app)[0].0;
+        assert!(app.undo_batch(first), "undo while round 2 is in flight");
+        wait_idle(&mut app, &ctx, 10);
+        assert_eq!(actions_cards(&app), 2);
+        let (second, line) = action_lines(&app).last().unwrap().clone();
+        assert_ne!(first, second);
+        app.assistant.requests.push(PanelRequest::Run {
+            cmd: line.cmd.unwrap(),
+            batch: second,
+            line: 0,
+        });
+        run(&mut app, &ctx, 1, 0.0);
+        let lines = action_lines(&app);
+        assert!(
+            lines.last().unwrap().1.ran,
+            "the Run button marks its own card"
+        );
+        assert!(!lines[0].1.text.contains("RTMP"), "{:?}", lines[0].1);
+    }
+
+    #[test]
+    fn readme_states_the_tool_round_limit() {
+        let readme = include_str!("../../../README.md");
+        let claim = format!("up to {} tool rounds per turn", assistant_panel::MAX_ROUNDS);
+        assert!(readme.contains(&claim), "README must say: {claim}");
+    }
+
+    #[test]
+    fn the_tool_round_limit_ends_a_runaway_turn() {
+        let ctx = egui::Context::default();
+        let rounds = assistant_panel::MAX_ROUNDS as usize;
+        let replies = (0..rounds + 2)
+            .map(|_| tool_reply(vec![call("zoom", r#"{"percent":100}"#)]))
+            .collect();
+        let mock = Arc::new(MockProvider::new(replies));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.assistant.input = "keep zooming".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert_eq!(mock.seen.lock().unwrap().len(), rounds + 1);
+        assert_eq!(
+            mock.replies.lock().unwrap().len(),
+            1,
+            "nothing sent after the limit"
+        );
+        assert_eq!(action_lines(&app).len(), rounds);
+        let stopped = format!("Stopped after {} tool rounds.", rounds);
+        assert!(app.assistant.items.iter().any(|i| i.text == stopped));
+    }
+
+    #[test]
+    fn the_spend_cap_is_checked_before_every_tool_round() {
+        let ctx = egui::Context::default();
+        let mock = billed_mock(vec![
+            LlmReply {
+                content: "should not be sent".into(),
+                ..Default::default()
+            },
+            LlmReply {
+                content: String::new(),
+                tool_calls: vec![call(
+                    "set_layer_opacity",
+                    r#"{"layer":"Mist Overlay","opacity":30}"#,
+                )],
+                usage: Some(usage::Usage {
+                    prompt_tokens: 1000,
+                    completion_tokens: 10,
+                    ticks: dollars(0.60).ticks,
+                    estimated: false,
+                }),
+            },
+        ]);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.meter.cap_usd = 0.50;
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        app.assistant.input = "fade the mist".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        run(&mut app, &ctx, 2, 0.0);
+        assert_eq!(
+            mock.seen.lock().unwrap().len(),
+            1,
+            "the follow-up round was held back"
+        );
+        assert!(
+            (app.paint.doc.layers[mist].opacity - 0.30).abs() < 1e-4,
+            "round 1 still ran"
+        );
+        assert!(app
+            .toasts
+            .items
+            .iter()
+            .any(|t| matches!(t.kind, ToastKind::Warn)
+                && t.text.starts_with("Spend cap reached ($0.60 of $0.50")));
+        assert!(!app.assistant.is_busy());
+    }
+
+    #[test]
+    fn stop_between_tool_rounds_keeps_the_done_steps_and_ends_the_turn() {
+        let ctx = egui::Context::default();
+        let mut m = MockProvider::new(vec![
+            tool_reply(vec![call(
+                "set_layer_visibility",
+                r#"{"layer":"Sky Gradient","visible":false}"#,
+            )]),
+            tool_reply(vec![call(
+                "set_layer_opacity",
+                r#"{"layer":"Mist Overlay","opacity":20}"#,
+            )]),
+        ]);
+        m.delay_after = 1; // round 1 answers at once, round 2 hangs
+        *m.delay.lock().unwrap() = Some(std::time::Duration::from_secs(30));
+        let mock = Arc::new(m);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        let sky = app.paint.find_layer(Some("Sky Gradient")).unwrap();
+        app.assistant.input = "fade the mist, then hide the sky".into();
+        app.assistant.want_send = true;
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while action_lines(&app).is_empty() {
+            assert!(std::time::Instant::now() < end, "round 1 never ran");
+            run(&mut app, &ctx, 1, 0.0);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(app.assistant.is_busy(), "round 2 is in flight");
+        assert!(app.assistant.stop());
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        run(&mut app, &ctx, 3, 0.0);
+        assert_eq!(mock.seen.lock().unwrap().len(), 1, "round 2 never answered");
+        assert!((app.paint.doc.layers[mist].opacity - 0.20).abs() < 1e-4);
+        assert!(
+            app.paint.doc.layers[sky].visible,
+            "round 2's call never ran"
+        );
+        let first = action_lines(&app)[0].0;
+        // the next turn is a new batch: undoing it leaves the stopped turn's step alone
+        *mock.delay.lock().unwrap() = None;
+        {
+            let mut r = mock.replies.lock().unwrap();
+            r.clear();
+            r.push(LlmReply {
+                content: "Added.".into(),
+                ..Default::default()
+            });
+            r.push(tool_reply(vec![call("add_layer", r#"{"name":"Later"}"#)]));
+        }
+        app.assistant.input = "add a layer".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        let second = action_lines(&app).last().unwrap().0;
+        assert_ne!(first, second);
+        assert_eq!(actions_cards(&app), 2);
+        assert!(app.undo_batch(second));
+        assert!(app.paint.find_layer(Some("Later")).is_err());
+        assert!((app.paint.doc.layers[mist].opacity - 0.20).abs() < 1e-4);
     }
 
     fn system_prompt(m: &MockProvider, round: usize) -> String {

@@ -18,7 +18,11 @@ use obs_rust_bitstream::assistant::{
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
-pub const MAX_ROUNDS: u32 = 4;
+/// Tool rounds Seraphina may chain in one turn (act, read the results,
+/// act again). Each round is a full billed request, so the loop is
+/// bounded here, by the provider's per-request timeout, by Stop and by
+/// the spend cap, which is checked again before every round.
+pub const MAX_ROUNDS: u32 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LineStatus {
@@ -78,6 +82,9 @@ pub struct AssistantPanel {
     streaming: String,
     rounds: u32,
     pending_calls: Option<Vec<ToolCall>>,
+    /// The undo batch of the turn in flight: every tool round of one turn
+    /// shares one Actions card and one snapshot.
+    turn_batch: Option<u64>,
     pub input: String,
     pub want_send: bool,
     /// B3 (from Settings ▸ Privacy): what goes into the prompt.
@@ -147,6 +154,7 @@ impl AssistantPanel {
             streaming: String::new(),
             rounds: 0,
             pending_calls: None,
+            turn_batch: None,
             input: String::new(),
             want_send: false,
             share_app_state: true,
@@ -262,6 +270,10 @@ impl AssistantPanel {
             } = &mut it.kind
             {
                 if *b == batch && !*undone {
+                    if self.turn_batch == Some(batch) {
+                        // later rounds of this turn get their own card and batch
+                        self.turn_batch = None;
+                    }
                     *undone = true;
                     *settled = true;
                     names.extend(
@@ -312,6 +324,7 @@ impl AssistantPanel {
             return;
         }
         self.input.clear();
+        self.turn_batch = None;
         self.settle();
         self.items.push(ChatItem {
             kind: ItemKind::User,
@@ -443,7 +456,6 @@ impl AssistantPanel {
                 self.remember_rx = None;
             }
         }
-        self.spent.extend(self.spent_rx.try_iter());
         let mut done = None;
         if let Some(rx) = &self.rx {
             while let Ok(ev) = rx.try_recv() {
@@ -457,6 +469,8 @@ impl AssistantPanel {
                 }
             }
         }
+        // after the round's events: a worker sends its cost before Done
+        self.spent.extend(self.spent_rx.try_iter());
         if let Some(r) = done {
             self.rx = None;
             self.status = None;
@@ -518,13 +532,19 @@ impl AssistantPanel {
         self.pending_calls.take()
     }
 
-    pub fn alloc_batch(&mut self) -> u64 {
+    /// The undo batch for this turn's tool calls (new on the first round).
+    pub fn turn_batch(&mut self) -> u64 {
+        if let Some(b) = self.turn_batch {
+            return b;
+        }
         let b = self.next_batch;
         self.next_batch += 1;
+        self.turn_batch = Some(b);
         b
     }
 
-    /// Record executed tool calls and continue the conversation.
+    /// Record executed tool calls and continue the conversation. A turn's
+    /// rounds share one Actions card, kept below the newest reply.
     pub fn submit_results(
         &mut self,
         batch: u64,
@@ -533,16 +553,28 @@ impl AssistantPanel {
         app_ctx: &str,
     ) {
         if !lines.is_empty() {
-            self.items.push(ChatItem {
-                kind: ItemKind::Actions {
-                    batch,
-                    lines,
+            let card = self.items.iter_mut().find_map(|i| match &mut i.kind {
+                ItemKind::Actions {
+                    batch: b,
+                    lines: all,
                     undone: false,
-                    settled: false,
-                },
-                text: String::new(),
-                rated: None,
+                    ..
+                } if *b == batch => Some(all),
+                _ => None,
             });
+            match card {
+                Some(all) => all.extend(lines),
+                None => self.items.push(ChatItem {
+                    kind: ItemKind::Actions {
+                        batch,
+                        lines,
+                        undone: false,
+                        settled: false,
+                    },
+                    text: String::new(),
+                    rated: None,
+                }),
+            }
         }
         for (id, r) in results {
             self.convo.push(ChatMsg::tool_result(&id, &r));
@@ -550,6 +582,10 @@ impl AssistantPanel {
         self.rounds += 1;
         if let Some(p) = self.provider.clone() {
             self.request(p, app_ctx);
+        }
+        if self.rx.is_none() {
+            // no follow-up round (offline, or held back by the spend cap)
+            self.turn_batch = None;
         }
     }
 

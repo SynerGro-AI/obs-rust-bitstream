@@ -633,6 +633,8 @@ pub struct MockProvider {
     pub seen: std::sync::Mutex<Vec<Vec<ChatMsg>>>,
     /// Simulated latency (honours Stop).
     pub delay: std::sync::Mutex<Option<std::time::Duration>>,
+    /// The delay starts once this many calls were answered.
+    pub delay_after: usize,
     /// Pretend calls are billed at this model's price.
     pub billed: Option<String>,
 }
@@ -644,6 +646,7 @@ impl MockProvider {
             replies: std::sync::Mutex::new(replies),
             seen: std::sync::Mutex::new(Vec::new()),
             delay: std::sync::Mutex::new(None),
+            delay_after: 0,
             billed: None,
         }
     }
@@ -667,7 +670,11 @@ impl LlmProvider for MockProvider {
         _on_note: &mut dyn FnMut(&str),
         cancel: &AtomicBool,
     ) -> Result<LlmReply, String> {
-        if let Some(d) = *self.delay.lock().map_err(|e| e.to_string())? {
+        let answered = self.seen.lock().map_err(|e| e.to_string())?.len();
+        if let (Some(d), true) = (
+            *self.delay.lock().map_err(|e| e.to_string())?,
+            answered >= self.delay_after,
+        ) {
             if !crate::net::sleep_unless(cancel, d) {
                 return Err(crate::net::STOPPED.into());
             }

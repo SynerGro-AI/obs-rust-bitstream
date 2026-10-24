@@ -159,8 +159,15 @@ approximate.
     extend, stitch), going live and starting a recording need the user to
     press **Run** on the action card;
   * dispatch must succeed, and failures are reported back to the model.
-* **Undo.** Each AI turn snapshots the document state, and **Undo** on the
-  action card reverts the whole batch.
+* **Multi-step turns.** The results go back to the model, which may call
+  more tools: up to 8 tool rounds per turn. Each round is a billed request,
+  so the loop also ends on the provider's per-request timeout, on **Stop**
+  (steps already done are kept) and on the spend cap, which is checked again
+  before every round.
+* **Undo.** Each AI turn snapshots the document state once, before its first
+  action. All rounds of the turn share one action card, and **Undo** on it
+  reverts the whole turn, including any edits you made while it ran. If you
+  undo while the turn is still running, later rounds get a new card.
 * **Live learning.** A local `MercyLearningHeart`-style EMA store
   (α = 0.382) is updated incrementally from:
   * your tool and parameter choices;

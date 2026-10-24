@@ -2527,6 +2527,11 @@ impl App {
         if self.video.tick() {
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
+        match self.video.take_stitch() {
+            Some(Ok(m)) => self.toasts.push(ToastKind::Success, &m),
+            Some(Err(e)) => self.toasts.push(ToastKind::Error, &e),
+            None => {}
+        }
         self.pump_assistant();
         self.handle_keys(ctx);
         self.project_frame(ctx);

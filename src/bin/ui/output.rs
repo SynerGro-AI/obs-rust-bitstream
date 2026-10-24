@@ -171,7 +171,8 @@ pub fn mask(key: &str) -> String {
     }
 }
 
-fn no_window(_cmd: &mut Command) {
+/// Keep a console window from flashing up for a child process on Windows.
+pub fn no_window(_cmd: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

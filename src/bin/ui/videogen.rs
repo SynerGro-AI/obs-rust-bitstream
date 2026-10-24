@@ -5,7 +5,8 @@
 //! `request_id`; GET `/v1/videos/{id}` until `status` is `done` (with
 //! `video.url`) or `failed`. Finished clips are downloaded to
 //! `~/.seraphina/studio/videos/`. Stitching writes an ffmpeg concat list
-//! and runs ffmpeg when it is on PATH. `generate_image` covers
+//! and runs ffmpeg (bundled or on PATH) on a worker thread into a new
+//! `stitched_<UTC time>.mp4`. `generate_image` covers
 //! POST `/v1/images/generations` for Paint's "Generate layer".
 
 use crate::commands::AppCommand;
@@ -244,10 +245,67 @@ pub struct VideoGenPanel {
     pub log: Vec<String>,
     pub imager: Option<std::sync::Arc<GrokImagine>>,
     image_rx: Option<Receiver<Result<(String, Vec<u8>), String>>>,
+    /// Running ffmpeg concat (D5: off the UI thread).
+    stitch_rx: Option<Receiver<Result<String, String>>>,
 }
 
 pub fn videos_dir() -> PathBuf {
     crate::prefs::seraphina_home().join("studio").join("videos")
+}
+
+/// `stitched_<stamp>.mp4` in `dir`, never an existing file.
+pub fn stitch_target(dir: &std::path::Path, stamp: &str) -> PathBuf {
+    let mut out = dir.join(format!("stitched_{}.mp4", stamp));
+    let mut n = 2;
+    while out.exists() || out.with_extension("txt").exists() {
+        out = dir.join(format!("stitched_{}_{}.mp4", stamp, n));
+        n += 1;
+    }
+    out
+}
+
+/// ffmpeg concat demuxer, stream copy. Runs on a worker thread.
+fn run_concat(list: &std::path::Path, out: &std::path::Path, n: usize) -> Result<String, String> {
+    let ffmpeg = crate::output::find_ffmpeg().map_err(|e| {
+        format!(
+            "couldn't stitch: {} The concat list is at {}.",
+            e,
+            list.display()
+        )
+    })?;
+    let mut cmd = std::process::Command::new(&ffmpeg);
+    cmd.args([
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-n",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+    ])
+    .arg(list)
+    .args(["-c", "copy"])
+    .arg(out)
+    .stdin(std::process::Stdio::null());
+    crate::output::no_window(&mut cmd);
+    match cmd.output() {
+        Ok(o) if o.status.success() => {
+            let _ = std::fs::remove_file(list);
+            Ok(format!("stitched {} clips → {}", n, out.display()))
+        }
+        Ok(o) => {
+            let err = String::from_utf8_lossy(&o.stderr);
+            let last = err
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("ffmpeg failed");
+            Err(format!("stitching failed: {}", last.trim()))
+        }
+        Err(e) => Err(format!("couldn't run ffmpeg ({}): {}", ffmpeg.display(), e)),
+    }
 }
 
 impl VideoGenPanel {
@@ -265,6 +323,7 @@ impl VideoGenPanel {
             log: Vec::new(),
             imager,
             image_rx: None,
+            stitch_rx: None,
         }
     }
 
@@ -278,6 +337,7 @@ impl VideoGenPanel {
             log: Vec::new(),
             imager: None,
             image_rx: None,
+            stitch_rx: None,
         }
     }
 
@@ -431,9 +491,17 @@ impl VideoGenPanel {
         if files.len() < 2 {
             return Err("need at least 2 downloaded clips to stitch".into());
         }
+        if self.stitch_rx.is_some() {
+            return Err("already stitching; wait for it to finish".into());
+        }
         let dir = videos_dir();
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let list = dir.join("stitch_list.txt");
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let out = stitch_target(&dir, &crate::output::utc_stamp(secs));
+        let list = out.with_extension("txt");
         let body: String = files
             .iter()
             .map(|f| {
@@ -444,16 +512,35 @@ impl VideoGenPanel {
             })
             .collect();
         std::fs::write(&list, body).map_err(|e| e.to_string())?;
-        let out = dir.join("stitched.mp4");
-        let ran = std::process::Command::new("ffmpeg")
-            .args(["-y", "-f", "concat", "-safe", "0", "-i"])
-            .arg(&list)
-            .args(["-c", "copy"])
-            .arg(&out)
-            .output();
-        match ran {
-            Ok(o) if o.status.success() => Ok(format!("stitched {} clips → {}", files.len(), out.display())),
-            _ => Ok(format!("wrote concat list {} (ffmpeg not found; run: ffmpeg -f concat -safe 0 -i stitch_list.txt -c copy out.mp4)", list.display())),
+        let n = files.len();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(run_concat(&list, &out, n));
+        });
+        self.stitch_rx = Some(rx);
+        Ok(format!("stitching {} clips…", n))
+    }
+
+    pub fn stitch_busy(&self) -> bool {
+        self.stitch_rx.is_some()
+    }
+
+    /// The finished stitch, once (for a toast).
+    pub fn take_stitch(&mut self) -> Option<Result<String, String>> {
+        let r = self.stitch_rx.as_ref()?.try_recv();
+        match r {
+            Ok(res) => {
+                self.stitch_rx = None;
+                self.log.push(match &res {
+                    Ok(m) | Err(m) => m.clone(),
+                });
+                Some(res)
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.stitch_rx = None;
+                Some(Err("stitching stopped unexpectedly".into()))
+            }
         }
     }
 
@@ -469,7 +556,7 @@ impl VideoGenPanel {
                 }
             }
         }
-        busy
+        busy || self.stitch_rx.is_some()
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
@@ -624,8 +711,14 @@ impl VideoGenPanel {
                         prompt: self.extend_prompt.clone(),
                     });
                 }
+                let busy = self.stitch_rx.is_some();
+                let label = if busy {
+                    "Stitching…"
+                } else {
+                    "Stitch selected"
+                };
                 if ui
-                    .add(theme::toggle_button(p, "Stitch selected", false))
+                    .add_enabled(!busy, theme::toggle_button(p, label, busy))
                     .clicked()
                 {
                     bus.push(AppCommand::VideoStitch { clips: None });
@@ -696,6 +789,60 @@ mod tests {
             .contains("XAI_API_KEY"));
         assert!(v.stitch(None).is_err());
         assert!(v.extend(1, "more").is_err());
+    }
+
+    #[test]
+    fn concat_runs_off_thread_when_ffmpeg_exists() {
+        let Ok(ff) = crate::output::find_ffmpeg() else {
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!("seraphina-concat-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut body = String::new();
+        for i in 0..2 {
+            let f = dir.join(format!("c{}.mp4", i));
+            let ok = std::process::Command::new(&ff)
+                .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+                .arg("testsrc=size=64x64:rate=10:duration=0.5")
+                .args(["-pix_fmt", "yuv420p"])
+                .arg(&f)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !ok {
+                return;
+            }
+            body.push_str(&format!("file '{}'\n", f.display()));
+        }
+        let out = stitch_target(&dir, "t");
+        let list = out.with_extension("txt");
+        std::fs::write(&list, body).unwrap();
+        let (o2, l2) = (out.clone(), list.clone());
+        let r = std::thread::spawn(move || run_concat(&l2, &o2, 2))
+            .join()
+            .unwrap();
+        assert!(
+            r.as_deref().unwrap_or("").contains("stitched 2 clips"),
+            "{r:?}"
+        );
+        assert!(out.exists() && !list.exists());
+        // A second run never overwrites.
+        assert_ne!(stitch_target(&dir, "t"), out);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stitch_names_never_overwrite() {
+        let dir = std::env::temp_dir().join(format!("seraphina-stitch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = stitch_target(&dir, "2026-10-24_00-00-00Z");
+        assert!(a.ends_with("stitched_2026-10-24_00-00-00Z.mp4"));
+        std::fs::write(&a, b"x").unwrap();
+        let b = stitch_target(&dir, "2026-10-24_00-00-00Z");
+        assert!(b.ends_with("stitched_2026-10-24_00-00-00Z_2.mp4"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Live, billed: run explicitly with `cargo test --features ui --bin ui -- --ignored live_imagine`.

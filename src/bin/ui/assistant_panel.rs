@@ -83,6 +83,10 @@ pub struct AssistantPanel {
     pub requests: Vec<PanelRequest>,
     next_batch: u64,
     remember_rx: Option<Receiver<AgentEvent>>,
+    /// Stop flag for the round in flight.
+    cancel: crate::net::Cancel,
+    /// Latest status line from the worker (retry notices).
+    pub status: Option<String>,
 }
 
 pub fn persona() -> &'static str {
@@ -133,6 +137,8 @@ impl AssistantPanel {
             requests: Vec::new(),
             next_batch: 1,
             remember_rx: None,
+            cancel: crate::net::cancel_flag(),
+            status: None,
         }
     }
 
@@ -296,7 +302,59 @@ impl AssistantPanel {
         msgs.extend(self.convo[start..].iter().cloned());
         self.rx_source = p.name();
         self.streaming.clear();
-        self.rx = Some(llm::spawn_round(p, msgs, tools_json(), self.cli.clone()));
+        self.status = None;
+        self.cancel = crate::net::cancel_flag();
+        self.rx = Some(llm::spawn_round(
+            p,
+            msgs,
+            tools_json(),
+            self.cli.clone(),
+            self.cancel.clone(),
+        ));
+    }
+
+    /// Stop button: cancel the round in flight (or the tool calls waiting
+    /// to run) and free the input. Returns false when nothing was running.
+    pub fn stop(&mut self) -> bool {
+        if !self.is_busy() {
+            return false;
+        }
+        self.cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let remote = self.rx.is_some() && !self.rx_source.contains("local CLI");
+        self.rx = None;
+        self.status = None;
+        let partial = std::mem::take(&mut self.streaming);
+        if !partial.trim().is_empty() {
+            self.items.push(ChatItem {
+                kind: ItemKind::Assistant {
+                    source: format!("{} · stopped", self.rx_source),
+                },
+                text: format!("{} …", partial.trim_end()),
+                rated: None,
+            });
+            if self.provider.is_some() && remote {
+                self.convo.push(ChatMsg::new("assistant", &partial));
+            }
+        }
+        if let Some(calls) = self.pending_calls.take() {
+            for c in &calls {
+                self.convo.push(ChatMsg::tool_result(
+                    &c.id,
+                    "skipped: the user pressed Stop",
+                ));
+            }
+        }
+        self.items.push(ChatItem {
+            kind: ItemKind::Note,
+            text: if remote {
+                "Stopped. Nothing more will be sent for this turn; a request xAI already received may still be billed.".into()
+            } else {
+                "Stopped.".into()
+            },
+            rated: None,
+        });
+        true
     }
 
     /// Drain background events. Returns true while work is in flight.
@@ -327,6 +385,7 @@ impl AssistantPanel {
             while let Ok(ev) = rx.try_recv() {
                 match ev {
                     AgentEvent::Token(t) => self.streaming.push_str(&t),
+                    AgentEvent::Note(t) => self.status = Some(t),
                     AgentEvent::Done(r) => {
                         done = Some(r);
                         break;
@@ -336,6 +395,7 @@ impl AssistantPanel {
         }
         if let Some(r) = done {
             self.rx = None;
+            self.status = None;
             let source = self.rx_source.clone();
             match r {
                 Ok(reply) => {
@@ -497,9 +557,19 @@ impl AssistantPanel {
                     send = true;
                     r.request_focus();
                 }
-                let can = !self.input.trim().is_empty() && !self.is_busy();
-                if ui.add_enabled(can, theme::primary_button(p, "Send")).clicked() {
-                    send = true;
+                if self.is_busy() {
+                    if ui
+                        .add(theme::stop_button(p, &format!("{} Stop", ic::STOP)))
+                        .on_hover_text("Stop this request (and any tool rounds after it)")
+                        .clicked()
+                    {
+                        self.stop();
+                    }
+                } else {
+                    let can = !self.input.trim().is_empty();
+                    if ui.add_enabled(can, theme::primary_button(p, "Send")).clicked() {
+                        send = true;
+                    }
                 }
             });
         });
@@ -594,6 +664,9 @@ impl AssistantPanel {
             if self.is_busy() {
                 egui::Frame::NONE.fill(p.surface_hi).corner_radius(CornerRadius::same(R_LG as u8)).inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8)).show(ui, |ui| {
                     ui.set_max_width(max_w);
+                    if let Some(s) = &self.status {
+                        ui.add(egui::Label::new(egui::RichText::new(s).size(11.0).italics().color(p.warn)).wrap());
+                    }
                     if self.streaming.is_empty() {
                         ui.horizontal(|ui| {
                             for k in 0..3 {

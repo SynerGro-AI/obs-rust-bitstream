@@ -19,6 +19,7 @@ mod lab;
 mod llm;
 mod materials;
 mod maya;
+mod net;
 mod output;
 mod paint;
 mod paint_undo;
@@ -4939,6 +4940,55 @@ mod tests {
         let (_, n, r) = app.log.last().unwrap();
         assert_eq!(n, "set_streaming");
         assert!(r.as_ref().unwrap_err().contains("RTMP URL"), "{:?}", r);
+    }
+
+    #[test]
+    fn stop_cancels_a_slow_round_and_frees_the_input() {
+        let ctx = egui::Context::default();
+        let replies = vec![LlmReply {
+            content: String::new(),
+            tool_calls: vec![call(
+                "set_layer_opacity",
+                r#"{"layer":"Mist Overlay","opacity":10}"#,
+            )],
+        }];
+        let mock = Arc::new(MockProvider::new(replies));
+        *mock.delay.lock().unwrap() = Some(std::time::Duration::from_secs(30));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        let before = app.paint.doc.layers[mist].opacity;
+        app.assistant.input = "fade the mist".into();
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 2, 0.0);
+        assert!(app.assistant.is_busy());
+        let t0 = std::time::Instant::now();
+        assert!(app.assistant.stop());
+        assert!(!app.assistant.is_busy());
+        assert!(!app.assistant.stop(), "nothing left to stop");
+        // the worker notices quickly and nothing it returns is applied
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(t0.elapsed() < std::time::Duration::from_secs(5));
+        assert!((app.paint.doc.layers[mist].opacity - before).abs() < 1e-4);
+        assert!(
+            mock.seen.lock().unwrap().is_empty(),
+            "the mock never answered"
+        );
+        assert!(app
+            .assistant
+            .items
+            .iter()
+            .any(|i| i.text.starts_with("Stopped. Nothing more will be sent")));
+        // the next message goes through normally
+        *mock.delay.lock().unwrap() = None;
+        mock.replies.lock().unwrap().push(LlmReply {
+            content: "Okay.".into(),
+            tool_calls: vec![],
+        });
+        app.assistant.input = "never mind".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(app.assistant.items.iter().any(|i| i.text.contains("Okay.")));
     }
 
     /// Live: real xAI tool calling through the bus. Skips without a key.

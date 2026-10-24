@@ -12,6 +12,7 @@
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
@@ -70,12 +71,16 @@ pub struct LlmReply {
 pub trait LlmProvider: Send + Sync {
     fn name(&self) -> String;
     /// Blocking call (run it off the UI thread). `on_token` receives
-    /// streamed content deltas when the provider streams.
+    /// streamed content deltas when the provider streams; `on_note` gets
+    /// status lines such as retry notices. Raising `cancel` ends the call
+    /// with `Err(net::STOPPED)` as soon as the worker notices.
     fn complete(
         &self,
         messages: &[ChatMsg],
         tools: &Value,
         on_token: &mut dyn FnMut(&str),
+        on_note: &mut dyn FnMut(&str),
+        cancel: &AtomicBool,
     ) -> Result<LlmReply, String>;
 }
 
@@ -244,14 +249,11 @@ impl OpenAiCompat {
     }
 }
 
-fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(15))
-        .timeout_read(std::time::Duration::from_secs(120))
-        .build()
-}
+/// Read timeout per chunk: generous because reasoning models can think
+/// for a while before the first token.
+const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-fn http_error(e: ureq::Error) -> String {
+pub(crate) fn http_error(e: ureq::Error) -> String {
     match e {
         ureq::Error::Status(code, r) => {
             let body = r.into_string().unwrap_or_default();
@@ -293,6 +295,8 @@ impl LlmProvider for OpenAiCompat {
         messages: &[ChatMsg],
         tools: &Value,
         on_token: &mut dyn FnMut(&str),
+        on_note: &mut dyn FnMut(&str),
+        cancel: &AtomicBool,
     ) -> Result<LlmReply, String> {
         let mut body = json!({
             "model": self.model,
@@ -304,19 +308,45 @@ impl LlmProvider for OpenAiCompat {
             body["tools"] = tools.clone();
             body["tool_choice"] = json!("auto");
         }
-        let mut req = agent()
-            .post(&self.endpoint)
-            .set("Content-Type", "application/json");
-        if let Some(k) = &self.key {
-            req = req.set("Authorization", &format!("Bearer {}", k));
-        }
-        let resp = req.send_string(&body.to_string()).map_err(http_error)?;
+        let agent = crate::net::agent(READ_TIMEOUT);
+        let payload = body.to_string();
+        let make = || {
+            let req = agent
+                .post(&self.endpoint)
+                .set("Content-Type", "application/json");
+            match &self.key {
+                Some(k) => req.set("Authorization", &format!("Bearer {}", k)),
+                None => req,
+            }
+        };
+        let resp = crate::net::with_retry(
+            cancel,
+            crate::net::Policy::Transient,
+            make,
+            Some(&payload),
+            &mut |n, wait, why| {
+                on_note(&format!(
+                    "Grok answered {}; retrying in {:.0} s ({}/{})",
+                    why,
+                    wait.as_secs_f64().ceil(),
+                    n,
+                    crate::net::MAX_RETRIES
+                ))
+            },
+        )
+        .map_err(|f| match f {
+            crate::net::Failure::Stopped => crate::net::STOPPED.to_string(),
+            crate::net::Failure::Http(e) => http_error(*e),
+        })?;
         if !self.stream {
             let v: Value = resp.into_json().map_err(|e| format!("bad JSON: {}", e))?;
             return parse_completion(&v);
         }
         let mut acc = SseAccumulator::default();
         for line in BufReader::new(resp.into_reader()).lines() {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(crate::net::STOPPED.into());
+            }
             let line = line.map_err(|e| format!("stream read: {}", e))?;
             if let Some(tok) = acc.feed(&line)? {
                 on_token(&tok);
@@ -438,6 +468,8 @@ impl SeraphinaCli {
 
 pub enum AgentEvent {
     Token(String),
+    /// A status line for the chat (e.g. "retrying in 2 s").
+    Note(String),
     Done(Result<LlmReply, String>),
 }
 
@@ -448,6 +480,7 @@ pub fn spawn_round(
     mut messages: Vec<ChatMsg>,
     tools: Value,
     cli: Option<SeraphinaCli>,
+    cancel: crate::net::Cancel,
 ) -> Receiver<AgentEvent> {
     let (tx, rx): (Sender<AgentEvent>, Receiver<AgentEvent>) = channel();
     std::thread::spawn(move || {
@@ -464,7 +497,11 @@ pub fn spawn_round(
         let mut on_tok = move |t: &str| {
             let _ = tx2.send(AgentEvent::Token(t.to_string()));
         };
-        let r = provider.complete(&messages, &tools, &mut on_tok);
+        let tx3 = tx.clone();
+        let mut on_note = move |t: &str| {
+            let _ = tx3.send(AgentEvent::Note(t.to_string()));
+        };
+        let r = provider.complete(&messages, &tools, &mut on_tok, &mut on_note, &cancel);
         let _ = tx.send(AgentEvent::Done(r));
     });
     rx
@@ -500,6 +537,8 @@ pub fn spawn_detect() -> Receiver<Option<SeraphinaCli>> {
 pub struct MockProvider {
     pub replies: std::sync::Mutex<Vec<LlmReply>>,
     pub seen: std::sync::Mutex<Vec<Vec<ChatMsg>>>,
+    /// Simulated latency (honours Stop).
+    pub delay: std::sync::Mutex<Option<std::time::Duration>>,
 }
 
 #[cfg(test)]
@@ -508,6 +547,7 @@ impl MockProvider {
         Self {
             replies: std::sync::Mutex::new(replies),
             seen: std::sync::Mutex::new(Vec::new()),
+            delay: std::sync::Mutex::new(None),
         }
     }
 }
@@ -523,7 +563,14 @@ impl LlmProvider for MockProvider {
         messages: &[ChatMsg],
         _tools: &Value,
         on_token: &mut dyn FnMut(&str),
+        _on_note: &mut dyn FnMut(&str),
+        cancel: &AtomicBool,
     ) -> Result<LlmReply, String> {
+        if let Some(d) = *self.delay.lock().map_err(|e| e.to_string())? {
+            if !crate::net::sleep_unless(cancel, d) {
+                return Err(crate::net::STOPPED.into());
+            }
+        }
         if let Ok(mut s) = self.seen.lock() {
             s.push(messages.to_vec());
         }
@@ -690,7 +737,13 @@ mod tests {
             ChatMsg::new("system", "Reply with one word."),
             ChatMsg::new("user", "Say OK"),
         ];
-        let r = p.complete(&msgs, &json!([]), &mut |_| {});
+        let r = p.complete(
+            &msgs,
+            &json!([]),
+            &mut |_| {},
+            &mut |_| {},
+            &AtomicBool::new(false),
+        );
         assert!(r.is_ok(), "{:?}", r);
     }
 }

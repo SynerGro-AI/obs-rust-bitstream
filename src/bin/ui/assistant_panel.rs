@@ -108,7 +108,7 @@ impl AssistantPanel {
     pub fn with_provider(provider: Option<Arc<dyn LlmProvider>>, prefs: Prefs) -> Self {
         let hello = match &provider {
             Some(p) => format!("Hi, I'm Seraphina. I'm connected to {} and can operate every mode for you: ask for an edit, and you can undo anything I do with one click.", p.name()),
-            None => "Hi, I'm Seraphina. No language model is configured yet (set XAI_API_KEY, or SERAPHINA_BASE_URL for another OpenAI-compatible server), so I'm running as the offline stub: built-in tips only, no actions.".to_string(),
+            None => "Hi, I'm Seraphina. No language model is configured yet (add an xAI API key in Settings, set XAI_API_KEY, or SERAPHINA_BASE_URL for another OpenAI-compatible server), so I'm running as the offline stub: built-in tips only, no actions.".to_string(),
         };
         Self {
             provider,

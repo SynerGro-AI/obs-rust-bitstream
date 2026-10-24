@@ -1,4 +1,4 @@
-//! Secrets at rest (the stream key).
+//! Secrets at rest: the stream key and the xAI API key.
 //!
 //! On Windows they live in Credential Manager (generic credentials named
 //! `SeraphinaStudio/<name>`, per user, never roaming). Elsewhere, and on
@@ -16,12 +16,14 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Secret {
     StreamKey,
+    XaiKey,
 }
 
 impl Secret {
     fn name(self) -> &'static str {
         match self {
             Secret::StreamKey => "stream_key",
+            Secret::XaiKey => "xai_api_key",
         }
     }
 }
@@ -166,6 +168,76 @@ fn write_private(dir: &Path, p: &Path, v: &str) -> Result<(), String> {
     f.write_all(v.as_bytes()).map_err(|e| e.to_string())
 }
 
+/// Where the xAI key comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeySource {
+    /// SERAPHINA_GROK_API_KEY or XAI_API_KEY (always wins).
+    Env,
+    /// Entered in Settings.
+    Saved,
+}
+
+fn env_key() -> Option<String> {
+    ["SERAPHINA_GROK_API_KEY", "XAI_API_KEY"]
+        .iter()
+        .filter_map(|n| std::env::var(n).ok())
+        .map(|v| v.trim().to_string())
+        .find(|v| !v.is_empty())
+}
+
+/// The xAI key: environment first, then the saved one. Unit tests never
+/// read the user's real store.
+pub fn xai_key() -> Option<(String, KeySource)> {
+    if let Some(k) = env_key() {
+        crate::crash::register_secret(&k);
+        return Some((k, KeySource::Env));
+    }
+    if cfg!(test) {
+        return None;
+    }
+    let k = Store::user().load(Secret::XaiKey);
+    (!k.is_empty()).then_some((k, KeySource::Saved))
+}
+
+#[cfg(test)]
+fn env_overrides_xai() -> bool {
+    env_key().is_some()
+}
+
+/// GET /v1/models with the key. Ok(model count) or a short reason that
+/// never includes the key.
+pub fn test_xai_key(base: &str, key: &str) -> Result<usize, String> {
+    let url = format!("{}/models", base.trim_end_matches('/'));
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout_read(std::time::Duration::from_secs(20))
+        .build();
+    match agent
+        .get(&url)
+        .set("Authorization", &format!("Bearer {}", key.trim()))
+        .call()
+    {
+        Ok(r) => {
+            let v: serde_json::Value = r.into_json().map_err(|e| e.to_string())?;
+            Ok(v["data"].as_array().map(|a| a.len()).unwrap_or(0))
+        }
+        Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
+            Err("the key was rejected (401/403)".into())
+        }
+        // xAI answers 400 "Incorrect API key provided" for a malformed key.
+        Err(ureq::Error::Status(400, r)) => {
+            let body = r.into_string().unwrap_or_default().to_ascii_lowercase();
+            if body.contains("api key") {
+                Err("the key was rejected (incorrect API key)".into())
+            } else {
+                Err("the server answered 400".into())
+            }
+        }
+        Err(ureq::Error::Status(c, _)) => Err(format!("the server answered {}", c)),
+        Err(ureq::Error::Transport(t)) => Err(format!("couldn't reach {} ({})", url, t.kind())),
+    }
+}
+
 #[cfg(windows)]
 mod vault {
     use windows_sys::Win32::Security::Credentials::{
@@ -270,7 +342,40 @@ mod tests {
         }
         assert_eq!(s.save(Secret::StreamKey, ""), Ok(Where::None));
         assert_eq!(s.location(Secret::StreamKey), Where::None);
+        // Separate slots.
+        s.save(Secret::XaiKey, "xai-test").unwrap();
+        assert_eq!(s.load(Secret::StreamKey), "");
+        assert_eq!(s.load(Secret::XaiKey), "xai-test");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn unit_tests_never_read_a_saved_xai_key() {
+        if !env_overrides_xai() {
+            assert!(xai_key().is_none());
+        }
+    }
+
+    #[test]
+    fn key_test_reports_unreachable_without_the_key() {
+        let k = "xai-NOT-A-REAL-KEY-0123456789";
+        let e = test_xai_key("http://127.0.0.1:9", k).unwrap_err();
+        assert!(e.contains("couldn't reach") && !e.contains(k), "{e}");
+    }
+
+    /// Live: the env key passes, a fake one is rejected. Never prints keys.
+    #[test]
+    #[ignore]
+    fn live_xai_key_test() {
+        let Some(k) = env_key() else {
+            eprintln!("SKIPPED live_xai_key_test: no XAI_API_KEY");
+            return;
+        };
+        let n = test_xai_key("https://api.x.ai/v1", &k).expect("env key should work");
+        assert!(n > 0);
+        let e = test_xai_key("https://api.x.ai/v1", "xai-FAKEdemoKEY0000000000000000").unwrap_err();
+        assert!(e.contains("rejected"), "{e}");
+        eprintln!("live_xai_key_test: real key ok ({n} models), fake key: {e}");
     }
 
     /// Real Credential Manager (Windows only; also runs under Wine).

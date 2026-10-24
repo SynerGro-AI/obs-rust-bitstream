@@ -79,10 +79,7 @@ pub fn b64_decode(s: &str) -> Option<Vec<u8>> {
 
 impl GrokImagine {
     pub fn from_env() -> Option<Self> {
-        let key = std::env::var("SERAPHINA_GROK_API_KEY")
-            .or_else(|_| std::env::var("XAI_API_KEY"))
-            .ok()
-            .filter(|k| !k.trim().is_empty())?;
+        let (key, _) = crate::secrets::xai_key()?;
         let base = std::env::var("SERAPHINA_VIDEO_BASE_URL")
             .unwrap_or_else(|_| "https://api.x.ai/v1".into());
         let model =
@@ -327,6 +324,15 @@ impl VideoGenPanel {
         }
     }
 
+    /// Pick up a key saved in Settings without losing clips.
+    pub fn reload_provider(&mut self) {
+        self.imager = GrokImagine::from_env().map(std::sync::Arc::new);
+        self.provider = self
+            .imager
+            .clone()
+            .map(|g| g as std::sync::Arc<dyn VideoGenProvider>);
+    }
+
     pub fn unconfigured() -> Self {
         Self {
             provider: None,
@@ -347,10 +353,9 @@ impl VideoGenPanel {
 
     /// Start a text-to-image job; the result arrives via `take_image`.
     pub fn generate_image(&mut self, prompt: &str) -> Result<String, String> {
-        let g = self
-            .imager
-            .clone()
-            .ok_or("Grok Imagine isn't configured: set XAI_API_KEY and restart")?;
+        let g = self.imager.clone().ok_or(
+            "Grok Imagine isn't configured: add an xAI API key in Settings (or set XAI_API_KEY)",
+        )?;
         if prompt.trim().is_empty() {
             return Err("empty prompt".into());
         }
@@ -385,10 +390,9 @@ impl VideoGenPanel {
         prompt: String,
         start: Box<dyn FnOnce(&dyn VideoGenProvider) -> Result<String, String> + Send>,
     ) -> Result<String, String> {
-        let p = self
-            .provider
-            .clone()
-            .ok_or("Grok Imagine isn't configured: set XAI_API_KEY and restart")?;
+        let p = self.provider.clone().ok_or(
+            "Grok Imagine isn't configured: add an xAI API key in Settings (or set XAI_API_KEY)",
+        )?;
         let (tx, rx) = channel();
         let idx = self.clips.len();
         std::thread::spawn(move || {
@@ -579,9 +583,8 @@ impl VideoGenPanel {
                         theme::pill(ui, p, p.success, "Configured").on_hover_text(pr.name());
                     }
                     None => {
-                        theme::pill(ui, p, p.warn, "Not configured").on_hover_text(
-                            "Set XAI_API_KEY (or SERAPHINA_GROK_API_KEY) and restart",
-                        );
+                        theme::pill(ui, p, p.warn, "Not configured")
+                            .on_hover_text("Add an xAI API key in Settings (or set XAI_API_KEY)");
                     }
                 },
             );

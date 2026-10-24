@@ -413,6 +413,11 @@ pub struct App {
     /// size, so a fit then would zoom the canvas to ~600%).
     ui_zoom_seen: f32,
     refit_in: u8,
+    /// Settings ▸ xAI API key (C7): the text box and a running key test.
+    xai_edit: String,
+    xai_test_rx: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
+    /// The key in use, looked up once (not every frame) and on change.
+    xai_cache: Option<Option<(String, secrets::KeySource)>>,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -518,6 +523,9 @@ impl App {
             ui_scale_capped: false,
             ui_zoom_seen: 1.0,
             refit_in: 0,
+            xai_edit: String::new(),
+            xai_test_rx: None,
+            xai_cache: None,
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
             app.toasts.push(ToastKind::Warn, &w);
@@ -2080,7 +2088,8 @@ impl App {
             theme::kv(ui, &p, "Language model", self.assistant.backend_label());
             theme::kv(ui, &p, "Seraphina.AGI CLI", self.assistant.cli.as_ref().map(|c| c.version.clone()).unwrap_or_else(|| "not found".into()));
             theme::kv(ui, &p, "Learning updates", format!("{}", self.assistant.prefs.bank.updates));
-            ui.add(egui::Label::new(theme::muted(&p, "Key: XAI_API_KEY (or SERAPHINA_GROK_API_KEY). Endpoint: SERAPHINA_BASE_URL / SERAPHINA_GROK_ENDPOINT. Model: SERAPHINA_MODEL / SERAPHINA_GROK_MODEL (default grok-4.7). Video: SERAPHINA_VIDEO_MODEL (grok-imagine-video-1.5) / SERAPHINA_VIDEO_RESOLUTION; image: SERAPHINA_IMAGE_MODEL. Restart after changing.")).wrap());
+            self.xai_key_ui(ui, &p);
+            ui.add(egui::Label::new(theme::muted(&p, "Env: XAI_API_KEY / SERAPHINA_GROK_API_KEY override the saved key. Endpoint: SERAPHINA_BASE_URL / SERAPHINA_GROK_ENDPOINT. Model: SERAPHINA_MODEL / SERAPHINA_GROK_MODEL (default grok-4.7). Video: SERAPHINA_VIDEO_MODEL (grok-imagine-video-1.5) / SERAPHINA_VIDEO_RESOLUTION; image: SERAPHINA_IMAGE_MODEL. Restart after changing.")).wrap());
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Grok Imagine"));
             theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
@@ -2895,6 +2904,113 @@ impl App {
             self.toasts
                 .push(ToastKind::Error, &format!("Couldn't save settings: {}", e));
         }
+    }
+
+    /// Settings ▸ Seraphina ▸ xAI API key (C7). The key is saved to
+    /// Credential Manager on Windows; env vars still take precedence.
+    /// Nothing here ever shows, logs or toasts the key itself.
+    fn xai_key_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        if let Some(rx) = &self.xai_test_rx {
+            if let Ok(r) = rx.try_recv() {
+                self.xai_test_rx = None;
+                match r {
+                    Ok(n) => self.toasts.push(
+                        ToastKind::Success,
+                        &format!("xAI key works ({} models available)", n),
+                    ),
+                    Err(e) => self
+                        .toasts
+                        .push(ToastKind::Error, &format!("xAI key test failed: {}", e)),
+                }
+            } else {
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(200));
+            }
+        }
+        let current = self.xai_cache.get_or_insert_with(secrets::xai_key).clone();
+        let env = matches!(current, Some((_, secrets::KeySource::Env)));
+        let status = match &current {
+            Some((k, secrets::KeySource::Env)) => format!("{} from environment", output::mask(k)),
+            Some((k, secrets::KeySource::Saved)) => format!("{} saved", output::mask(k)),
+            None => "not set".into(),
+        };
+        theme::kv(ui, p, "xAI API key", status);
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.xai_edit)
+                    .password(true)
+                    .hint_text("paste a new xAI API key")
+                    .desired_width(200.0),
+            );
+            let typed = !self.xai_edit.trim().is_empty();
+            if ui
+                .add_enabled(typed, theme::toggle_button(p, "Save", false))
+                .clicked()
+            {
+                let r = secrets::Store::user().save(secrets::Secret::XaiKey, &self.xai_edit);
+                self.xai_edit.clear();
+                match r {
+                    Ok(place) => {
+                        self.reload_llm_providers();
+                        let msg = if env {
+                            format!("xAI key saved in {}. XAI_API_KEY / SERAPHINA_GROK_API_KEY is set, so that one stays in use.", place.label())
+                        } else {
+                            format!("xAI key saved in {}. Seraphina and Grok Imagine use it now.", place.label())
+                        };
+                        self.toasts.push_for(ToastKind::Success, &msg, 6.0);
+                    }
+                    Err(e) => self
+                        .toasts
+                        .push(ToastKind::Error, &format!("Couldn't save the xAI key: {}", e)),
+                }
+            }
+            let testing = self.xai_test_rx.is_some();
+            let key = if typed {
+                Some(self.xai_edit.trim().to_string())
+            } else {
+                current.as_ref().map(|(k, _)| k.clone())
+            };
+            if ui
+                .add_enabled(
+                    key.is_some() && !testing,
+                    theme::toggle_button(p, if testing { "Testing…" } else { "Test key" }, false),
+                )
+                .on_hover_text("Lists models at the xAI API with the typed key, or the one in use")
+                .clicked()
+            {
+                if let Some(k) = key {
+                    crash::register_secret(&k);
+                    let base = std::env::var("SERAPHINA_BASE_URL")
+                        .ok()
+                        .filter(|b| !b.trim().is_empty())
+                        .unwrap_or_else(|| llm::OpenAiCompat::DEFAULT_BASE.into());
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    std::thread::spawn(move || {
+                        let _ = tx.send(secrets::test_xai_key(&base, &k));
+                    });
+                    self.xai_test_rx = Some(rx);
+                }
+            }
+            if matches!(current, Some((_, secrets::KeySource::Saved)))
+                && ui.add(theme::toggle_button(p, "Forget", false)).clicked()
+            {
+                secrets::Store::user().clear(secrets::Secret::XaiKey);
+                self.reload_llm_providers();
+                self.toasts.push(ToastKind::Info, "Saved xAI key removed");
+            }
+        });
+    }
+
+    /// Rebuild the language-model and Grok Imagine clients after the saved
+    /// key changes (env vars still win).
+    fn reload_llm_providers(&mut self) {
+        self.xai_cache = None;
+        if cfg!(test) {
+            return;
+        }
+        self.assistant.provider = llm::OpenAiCompat::from_env()
+            .map(|p| std::sync::Arc::new(p) as std::sync::Arc<dyn llm::LlmProvider>);
+        self.video.reload_provider();
     }
 
     /// Settings ▸ Graphics: renderer choice (D2), applied on the next launch.

@@ -217,13 +217,11 @@ impl OpenAiCompat {
     /// Verified on the account (Oct 2026); Seraphina.AGI itself defaults to grok-4-latest.
     pub const DEFAULT_MODEL: &'static str = "grok-4.7";
 
-    /// Configure from the environment. None when neither an API key nor a
-    /// custom base URL is set.
+    /// Configure from the environment (or the key saved in Settings). None
+    /// when neither an API key nor a custom base URL is set.
     pub fn from_env() -> Option<Self> {
-        let key = env("SERAPHINA_GROK_API_KEY").or_else(|| env("XAI_API_KEY"));
-        if let Some(k) = &key {
-            crate::crash::register_secret(k);
-        }
+        // Env vars win; otherwise the key saved in Settings (C7).
+        let key = crate::secrets::xai_key().map(|(k, _)| k);
         let base = env("SERAPHINA_BASE_URL");
         let endpoint = env("SERAPHINA_GROK_ENDPOINT").or_else(|| {
             base.as_ref()

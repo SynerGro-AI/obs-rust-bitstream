@@ -469,6 +469,9 @@ impl App {
             last_time: None,
             project: workspace::ProjectState::new(project::Session::default()),
         };
+        if let Some(w) = app.assistant.prefs.load_warning.clone() {
+            app.toasts.push(ToastKind::Warn, &w);
+        }
         app.mark_saved();
         app
     }
@@ -2698,6 +2701,21 @@ mod tests {
         for i in 0..frames {
             let _ = ctx.run(input(t0 + i as f64 * 0.05), |ctx| app.frame(ctx));
         }
+    }
+
+    #[test]
+    fn a_damaged_learning_bank_is_announced_at_startup() {
+        let dir = project::test_dir("startup-corrupt");
+        let path = dir.join("mercy_bank.json");
+        std::fs::write(&path, b"\x00\x00garbage").unwrap();
+        let ctx = egui::Context::default();
+        let a = assistant_panel::AssistantPanel::with_provider(None, prefs::Prefs::load(path));
+        let app = App::with(&ctx, a, videogen::VideoGenPanel::unconfigured());
+        assert!(app
+            .toasts
+            .items
+            .iter()
+            .any(|t| matches!(t.kind, ToastKind::Warn) && t.text.contains("learning bank")));
     }
 
     fn app_with(ctx: &egui::Context, provider: Option<Arc<dyn llm::LlmProvider>>) -> App {

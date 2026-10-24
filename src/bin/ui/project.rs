@@ -228,6 +228,98 @@ fn temp_path(path: &Path) -> PathBuf {
     path.with_file_name(format!(".{}.tmp-{}", name, std::process::id()))
 }
 
+/// UTC timestamp for file names: `20261023T201500Z`.
+pub fn file_stamp(secs: u64) -> String {
+    let (days, rem) = ((secs / 86_400) as i64, secs % 86_400);
+    // civil-from-days (H. Hinnant)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
+        y,
+        m,
+        d,
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
+}
+
+/// Move a file that could not be parsed out of the way, to
+/// `<name>.corrupt-<UTC timestamp>`, so the next save cannot destroy it.
+pub fn quarantine(path: &Path) -> std::io::Result<PathBuf> {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".into());
+    let mut dest = path.with_file_name(format!("{}.corrupt-{}", name, file_stamp(secs)));
+    let mut n = 1;
+    while dest.exists() {
+        n += 1;
+        dest = path.with_file_name(format!("{}.corrupt-{}-{}", name, file_stamp(secs), n));
+    }
+    std::fs::rename(path, &dest)?;
+    Ok(dest)
+}
+
+/// Load a JSON settings file. A missing file gives the defaults quietly; a
+/// file that cannot be parsed is kept (see [`quarantine`]) and the returned
+/// message tells the user where it went.
+pub fn load_json<T: serde::de::DeserializeOwned + Default>(
+    path: &Path,
+    what: &str,
+) -> (T, Option<String>) {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (T::default(), None),
+        Err(e) => {
+            eprintln!("warning: cannot read {}: {}", path.display(), e);
+            return (
+                T::default(),
+                Some(format!(
+                    "Could not read the {} ({}): {}. Using defaults for now.",
+                    what,
+                    path.display(),
+                    e
+                )),
+            );
+        }
+    };
+    match serde_json::from_str(&text) {
+        Ok(v) => (v, None),
+        Err(e) => {
+            let msg = match quarantine(path) {
+                Ok(bak) => format!(
+                    "The {} was damaged ({}). It was kept as {} and a fresh one was started.",
+                    what,
+                    e,
+                    bak.display()
+                ),
+                Err(re) => format!(
+                    "The {} ({}) was damaged ({}) and could not be backed up ({}).",
+                    what,
+                    path.display(),
+                    e,
+                    re
+                ),
+            };
+            eprintln!("warning: {}", msg);
+            (T::default(), Some(msg))
+        }
+    }
+}
+
 /// Replace `path` with `bytes` so readers only ever see the old or the new
 /// file: write a sibling temp file, fsync it, then rename over the target.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

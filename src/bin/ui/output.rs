@@ -117,16 +117,17 @@ impl OutputConfig {
     pub fn path() -> PathBuf {
         studio_dir().join("output.json")
     }
-    pub fn load() -> Self {
-        std::fs::read_to_string(Self::path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+    /// Settings and, if output.json was damaged, a message saying where
+    /// the damaged copy was kept.
+    pub fn load_from(path: &std::path::Path) -> (Self, Option<String>) {
+        crate::project::load_json(path, "output settings file")
+    }
+    pub fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
+        let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        crate::project::write_atomic(path, s.as_bytes()).map_err(|e| e.to_string())
     }
     pub fn save(&self) -> Result<(), String> {
-        std::fs::create_dir_all(studio_dir()).map_err(|e| e.to_string())?;
-        let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(Self::path(), s).map_err(|e| e.to_string())
+        self.save_to(&Self::path())
     }
     /// Even dimensions (yuv420p), sane bounds.
     pub fn size(&self) -> (u32, u32) {
@@ -772,7 +773,12 @@ impl Output {
     }
 
     pub fn load() -> Self {
-        Self::new(OutputConfig::load(), load_key())
+        let (cfg, warning) = OutputConfig::load_from(&OutputConfig::path());
+        let mut o = Self::new(cfg, load_key());
+        if let Some(w) = warning {
+            o.events.push((ToastKind::Warn, w));
+        }
+        o
     }
 
     pub fn key_is_set(&self) -> bool {

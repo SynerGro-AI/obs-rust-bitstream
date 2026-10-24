@@ -482,6 +482,9 @@ impl AssistantPanel {
                 if let Some(path) = &self.prefs.path {
                     ui.add(egui::Label::new(theme::muted(p, &format!("Saved to {}", path.display()))).wrap());
                 }
+                if let Some(w) = &self.prefs.load_warning {
+                    ui.add(egui::Label::new(egui::RichText::new(w).color(p.warn).size(11.0)).wrap());
+                }
                 if let Some(e) = &self.prefs.last_error {
                     ui.label(egui::RichText::new(format!("Save failed: {}", e)).color(p.danger).size(11.0));
                 }

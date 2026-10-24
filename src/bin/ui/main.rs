@@ -27,6 +27,7 @@ mod project;
 mod scene;
 mod secrets;
 mod settings;
+mod single;
 mod stream;
 mod text_raster;
 mod theme;
@@ -2805,6 +2806,14 @@ impl eframe::App for App {
         if crash::CRASH_TEST.swap(false, std::sync::atomic::Ordering::SeqCst) {
             panic!("crash test requested with --crash-test");
         }
+        single::set_context(ctx);
+        if single::FOCUS_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            self.toasts
+                .push(ToastKind::Info, "Seraphina Studio is already open here");
+        }
         self.frame(ctx);
         crash::FIRST_FRAME.store(true, std::sync::atomic::Ordering::SeqCst);
     }
@@ -3142,6 +3151,10 @@ fn main() -> eframe::Result<()> {
         start_light: std::env::var("SERAPHINA_LIGHT").is_ok(),
         native: std::env::var("SERAPHINA_NATIVE_FRAME").is_ok(),
     };
+    // A second plain launch brings the running window forward instead.
+    if single::defer_to_running(cfg.open_arg.is_some() || cfg.run_script.is_some()) {
+        return Ok(());
+    }
     // D2: start with the preferred renderer; if it can't start before the
     // first frame, try the other one instead of dying
     let (mut prefs, _) = settings::AppSettings::load();

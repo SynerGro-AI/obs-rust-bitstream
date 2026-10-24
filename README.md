@@ -5,7 +5,7 @@
 Goal: beat the ~800 scripts already finished upstream by using ~10% of the API actions.  
 **Work smarter, not harder.**
 
-Reusable patterns + differential helper + AI scaffold for automated assistance.
+Reusable patterns + differential helper, and the Seraphina Studio desktop app.
 
 ## Desktop app: Seraphina Studio
 
@@ -150,7 +150,8 @@ approximate.
 
 * **One command bus.** Every button, shortcut, drag and AI action becomes an
   `AppCommand` (`src/bin/ui/commands.rs`) and goes through `App::dispatch`.
-  The AI can therefore do anything the UI can, and nothing else.
+  The AI can only do what a command allows; a few commands, such as
+  `set_stream_key`, are UI-only and not offered to it.
 * **Tool calling.** The 101 commands are exposed as JSON-schema tools to an
   OpenAI-compatible chat API (list: [docs/AI_TOOLS.md](docs/AI_TOOLS.md)). Calls run through a Triad gate:
   * the call must parse;
@@ -304,261 +305,280 @@ secret. Without it the review step fails. GitHub does not pass secrets to
 workflows triggered from forks, so pull requests from forks skip the
 authenticated review.
 
-## Foundation modules (live)
+## Library modules
 
-| Module | What it does | Notes |
-|--------|----------------|-------|
-| **bitstream** | Position trait (wrap vs no-wrap is type-level) | Differential on short reads |
-| **dstr** | Safe dynamic string | Fixes infinite loop + overflow |
-| **utf8** | Safe truncation | Never splits a multibyte character |
-| **diff** | Reusable differential test helper | Wired into modules |
-| **crc32** | Standard CRC32 | Classic test vector |
-| **ai** | AI/SI integration scaffold | Simple config for Grok, Claude, or Seraphina |
-| **array_serializer** | Vec-based output serializer + LE helpers | Differential on short writes |
-| **text_lookup** | HashMap store with escape expansion | Differential on insert/get |
-| **path_extension** | Safe extension extractor | None on null/empty |
-| **bmem** | Alloc size check + alignment contract | 32-byte alignment |
-| **util_uint64** | Exact mul-then-div | 128-bit intermediate, div-zero safe |
-| **util_uint128** | Add / mul64_64 | Native u128 |
-| **deque** | Double-ended queue | Safe circular buffer |
-| **darray** | Dynamic array | Safe Vec wrapper |
-| **config** | Config store | Pure HashMap + defaults |
-| **lexer** | Base-token lexer | Pure &str slices |
-| **serializer** | Serializer trait | Pure memory impl + LE helpers |
-| **profiler** | Local profiler | Pure Instant deltas |
-| **task** | Task queue | Pure Vec of closures |
-| **file_serializer** | File serializer | Pure load/save via std::fs |
-| **buffered_serializer** | Buffered serializer | Pure chunked flush |
-| **cf_lexer** | CF lexer | Pure &str tokens |
-| **config_parser** | Config string parser | Pure ini → Config |
-| **source_profiler** | Source profiler stub | Pure local deltas |
-| **pipe** | In-memory pipe | Pure write/read |
-| **frame_rate** | Frame-rate helpers | Pure rational FPS |
-| **audio_math** | Audio math | Pure mul ↔ dB |
-| **video_fourcc** | Fourcc mapping | Pure u32 → format |
-| **format_conversion** | Format helpers | Pure plane sizes + scalar |
-| **video_matrices** | Color matrices | Pure Kb/Kr + identity |
-| **video_frame** | Video frame | Pure owned planes |
-| **audio_format** | Audio format | Pure size / planar helpers |
-| **video_scaler** | Video scaler | Pure scale size + lerp |
-| **audio_buffer** | Audio buffer | Pure owned planes |
-| **media_timing** | Media timing | Pure ns durations |
-| **audio_mixer** | Audio mixer | Pure gain + sum |
-| **vec2** | 2D vector | Pure add/dot/length |
-| **vec3** | 3D vector | Pure add/dot/cross |
-| **vec4** | 4D vector | Pure add/dot |
-| **matrix3** | 3x4 matrix | Pure identity + mul |
-| **matrix4** | 4x4 matrix | Pure identity + mul |
-| **quat** | Quaternion | Pure mul + normalize |
-| **axisang** | Axis-angle | Pure axis + angle |
-| **plane** | Plane | Pure normal + dist |
-| **bounds** | AABB | Pure min/max + center |
-| **half** | Half-float | Pure f32 <-> f16 |
-| **signal** | Signal handler | Pure connect + emit |
-| **proc** | Procedure handler | Pure add + call |
-| **calldata** | Call data | Pure named params |
-| **decl** | Decl parser | Pure signal/proc strings |
-| **obs_data** | Settings bag | Pure key/value + defaults |
-| **obs_properties** | Properties | Pure bool/int/float/text |
-| **source_context** | Source context | Pure name + settings + handlers |
-| **source_registry** | Source registry | Pure name-to-source map |
-| **output_context** | Output context | Pure name + settings + active |
-| **encoder_context** | Encoder context | Pure name + codec + type |
-| **service_context** | Service context | Pure name + id + settings |
-| **output_registry** | Output registry | Pure name-to-output map |
-| **encoder_registry** | Encoder registry | Pure name-to-encoder map |
-| **service_registry** | Service registry | Pure name-to-service map |
-| **scene_context** | Scene context | Pure ordered item list |
-| **scene_registry** | Scene registry | Pure name-to-scene map |
-| **scene_item** | Scene item | Pure transform + visibility |
-| **filter_context** | Filter context | Pure name + id + settings |
-| **filter_chain** | Filter chain | Pure ordered filter list |
-| **filter_registry** | Filter registry | Pure name-to-filter map |
-| **core** | Core root | Pure owner of all registries |
-| **module** | Module | Pure type registration |
-| **module_registry** | Module registry | Pure name-to-module map |
-| **display_context** | Display | Pure preview / program window |
-| **display_registry** | Display registry | Pure name-to-display map |
-| **hotkey** | Hotkey | Pure name + pressed flag |
-| **hotkey_registry** | Hotkey registry | Pure name-to-hotkey map |
-| **scene_collection** | Scene collection | Pure named set of scenes |
-| **collection_registry** | Collection registry | Pure name-to-collection map |
-| **transition** | Transition | Pure scene switch |
-| **transition_registry** | Transition registry | Pure name-to-transition map |
-| **audio_monitor** | Audio monitor | Pure volume + mute |
-| **monitor_registry** | Monitor registry | Pure name-to-monitor map |
-| **recording** | Recording | Pure start/stop + path |
-| **recording_registry** | Recording registry | Pure name-to-recording map |
-| **streaming** | Streaming | Pure start/stop + service |
-| **streaming_registry** | Streaming registry | Pure name-to-stream map |
-| **replay_buffer** | Replay buffer | Pure duration + save |
-| **replay_registry** | Replay registry | Pure name-to-buffer map |
-| **virtual_cam** | Virtual camera | Pure start/stop |
-| **virtual_cam_registry** | Virtual camera registry | Pure name-to-cam map |
-| **profile** | Profile | Pure name + settings |
-| **profile_registry** | Profile registry | Pure name-to-profile map |
-| **canvas** | Canvas | Pure render surface |
-| **canvas_registry** | Canvas registry | Pure name-to-canvas map |
-| **render_item** | Render item | Pure model matrix from transform |
-| **render_list** | Render list | Pure draw list from a scene |
-| **camera** | Camera | Pure Maya-style view matrix |
-| **projector** | Projector | Pure 2D-to-3D lift |
-| **bone** | Bone | Pure skeleton hierarchy |
-| **animation_timeline** | Animation timeline | Pure keyframe playback |
-| **physics** | Physics settings | Pure gravity/friction/bounce/mass + AI assist |
-| **settings_assist** | Settings assist | Pure AI assist for any ObsData bag |
-| **performance_capture** | Performance capture | Pure actor recording into timeline |
-| **character_renderer** | Character renderer | Pure skeleton walk + AI look |
-| **skeleton_connector** | Skeleton connector | Pure AI bone wiring |
-| **ai_animator** | AI animator | Pure AI-driven keyframe generation |
-| **physics_sim** | Physics simulation | Pure AI-driven step under gravity |
-| **learning_pipeline** | Learning pipeline | Pure physics-governed experience and lessons |
-| **environment** | Environment | Pure world physics governor |
-| **pilot** | Pilot | Pure lesson-driven flight controller |
-| **flight_session** | Flight session | Pure closed-loop altitude trace |
-| **flight_replay** | Flight replay | Pure playback of a recorded trace |
-| **wind** | Wind | Pure environment wind force |
-| **plane_renderer** | Plane renderer | Pure flight-to-skeleton render |
-| **camera_follow** | Camera follow | Pure flight camera tracking |
-| **view_frame** | View frame | Pure camera + bone view matrix |
-| **light** | Light | Pure named light |
-| **light_rig** | Light rig | Pure multi-light collection |
-| **camera_rig** | Camera rig | Pure multi-camera collection |
-| **camera_cut** | Camera cut | Pure timed camera switch |
-| **material** | Material | Pure surface (color, roughness, metallic) |
-| **lighting** | Lighting | Pure material × light evaluation |
-| **material_assign** | Material assign | Pure material-to-bone binding |
-| **shaded_render** | Shaded render | Pure lit skeleton evaluation |
-| **material_registry** | Material registry | Pure named material store |
-| **material_factory** | Material factory | Pure preset material creator |
-| **materials_lab** | Materials lab | Pure atomic binding science lab |
-| **periodic_table** | Periodic table | Pure element lookup by Z or symbol |
-| **compound** | Compound | Pure molecule from atoms |
-| **reaction** | Reaction | Pure reactant-to-product reaction |
-| **audio_channel** | Audio channel | Pure named gain and mute |
-| **audio_bus** | Audio bus | Pure channel mixer |
-| **audio_effect** | Audio effect | Pure gain effect on a channel |
-| **effect_chain** | Effect chain | Pure ordered effect processing |
-| **master_output** | Master output | Pure final mix level |
-| **eq** | EQ | Pure parametric band |
-| **compressor** | Compressor | Pure dynamics reduction |
-| **limiter** | Limiter | Pure peak ceiling |
-| **gate** | Gate | Pure noise gate |
-| **delay** | Delay | Pure echo |
-| **reverb** | Reverb | Pure feedback space |
-| **meter** | Meter | Pure peak and RMS |
-| **audio_timeline** | Audio timeline | Pure multi-track timeline |
-| **video_timeline** | Video timeline | Pure AI video edit and render |
-| **layer_stack** | Layer stack | Pure Photoshop-like layers |
-| **onion_viewer** | Onion viewer | Pure onion-skin edit viewer |
-| **mask** | Mask | Pure layer mask |
-| **editor_ui** | Editor UI | Pure layer / mask / onion panel |
-| **adjustment** | Adjustment | Pure brightness / contrast / hue |
-| **layer_group** | Layer group | Pure layer grouping |
-| **selection** | Selection | Pure marquee |
-| **brush** | Brush | Pure paint brush |
-| **text_layer** | Text layer | Pure text |
-| **transform** | Transform | Pure position, scale, rotation |
-| **curves** | Curves | Pure tone curve |
-| **filter** | Filter | Pure blur, sharpen, grayscale |
-| **smart_object** | Smart object | Pure non-destructive layer |
-| **history** | History | Pure undo / redo |
-| **pixel_canvas** | Pixel canvas | Pure RGB paint buffer |
-| **object3d** | Object 3D | Pure editable 3D object |
-| **smart_skin** | Smart skin | Pure drag-and-drop seamless skin |
-| **ai_editor** | AI editor | Pure AI access across the edit suite |
-| **compositor** | Compositor | Pure video frame compositor |
-| **input_device** | Input device | Pure keyboard and mouse |
-| **output** | Output | Pure frame emit |
-| **audio_output** | Audio output | Pure mix emit |
-| **session** | Session | Pure combined video + audio |
-| **preview** | Preview | Pure session frame viewer |
-| **program** | Program | Pure live output |
-| **live_camera** | Live camera | Pure news camera |
-| **ai_operator** | AI operator | Pure camera, lights, and sound crew |
-| **topic_background** | Topic background | Pure live background from a topic |
-| **performance** | Performance | Pure singer + music video |
-| **show_state** | Show state | Pure off / preview / live |
-| **cue_sheet** | Cue sheet | Pure show rundown |
-| **lower_third** | Lower third | Pure on-screen topic |
-| **keyer** | Keyer | Pure background removal |
-| **ai_director** | AI director | Pure scene picker from speech |
-| **storyboard** | Storyboard | Pure planned story |
-| **speech** | Speech | Pure live speech line |
-| **action** | Action | Pure detected action |
-| **effect** | Effect | Pure scene effect |
-| **effect_list** | Effect list | Pure effect registry |
-| **live_feed** | Live feed | Pure camera jump |
-| **scene_switch** | Scene switch | Pure scene switching |
-| **multi_angle** | Multi angle | Pure angles per camera |
-| **multi_monitor** | Multi monitor | Pure screens with scenes |
-| **options_menu** | Options menu | Pure camera per monitor |
-| **studio** | Studio | Pure program and preview |
-| **studio_transition** | Studio transition | Pure program/preview fade |
-| **multiview** | Multiview | Pure all cameras at once |
-| **tally** | Tally | Pure live indicator |
-| **program_record** | Program record | Pure program capture |
-| **program_stream** | Program stream | Pure program stream |
-| **virtual_camera** | Virtual camera | Pure virtual cam output |
-| **output_bus** | Output bus | Pure fan-out to record, stream, vcam |
-| **frame_clock** | Frame clock | Pure frame timing |
-| **instant_replay** | Instant replay | Pure last-N frames |
-| **replay_save** | Replay save | Pure replay to clip |
-| **export** | Export | Pure clip to file |
-| **file_writer** | File writer | Pure export to bytes |
-| **share** | Share | Pure post to a target |
-| **notify** | Notify | Pure share confirmation |
-| **status** | Status | Pure output state |
-| **keybind** | Keybind | Pure key to action |
-| **help** | Help | Pure key list |
-| **bind_profile** | Bind profile | Pure keybind save and load |
-| **log** | Log | Pure action history |
-| **undo** | Undo | Pure reverse action |
-| **redo** | Redo | Pure re-apply action |
-| **macro_seq** | Macro | Pure key sequence |
-| **schedule** | Schedule | Pure timed macro |
-| **nal_parser** | NAL parser | Pure AVC/HEVC NAL split |
-| **output_delay** | Output delay | Pure frame delay buffer |
-| **deinterlace** | Deinterlace | Pure field weave |
-| **missing_files** | Missing files | Pure missing file list |
-| **fingerprint** | Fingerprint | Pure file identity for rebuild |
-| **file_cache** | File cache | Pure byte store for rebuild |
-| **color_filter** | Color filter | Pure brightness, contrast, saturation |
-| **crop_filter** | Crop filter | Pure region crop |
-| **scale_filter** | Scale filter | Pure nearest-neighbor scale |
-| **noise_filter** | Noise filter | Pure deterministic noise |
-| **gain_filter** | Gain filter | Pure audio gain |
-| **compressor_filter** | Compressor | Pure audio compressor |
-| **limiter_filter** | Limiter | Pure audio limiter |
-| **gate_filter** | Gate | Pure audio gate |
-| **eq_filter** | EQ | Pure three-band equalizer |
-| **reverb_filter** | Reverb | Pure delay reverb |
-| **fade_transition** | Fade transition | Pure crossfade |
-| **swipe_transition** | Swipe transition | Pure wipe |
-| **slide_transition** | Slide transition | Pure slide |
-| **cut_transition** | Cut transition | Pure hard cut |
-| **image_source** | Image source | Pure static image |
-| **text_source** | Text source | Pure text overlay |
-| **color_source** | Color source | Pure solid color |
-| **browser_source** | Browser source | Pure URL holder |
-| **media_source** | Media source | Pure file path holder |
-| **window_capture** | Window capture | Pure window title holder |
-| **display_capture** | Display capture | Pure monitor holder |
-| **game_capture** | Game capture | Pure game title holder |
-| **audio_input** | Audio input | Pure microphone holder |
-| **audio_output_source** | Audio output | Pure desktop audio holder |
-| **group_source** | Group source | Pure source group |
-| **organization** | Organization | Pure team with individual profiles |
-| **invite** | Invite | Pure team invite |
-| **role** | Role | Pure role list |
-| **permission** | Permission | Pure role action |
-| **session** | Session | Pure signed-in member |
-| **audit** | Audit | Pure who-did-what |
-| **presence** | Presence | Pure online members |
-| **assignment** | Assignment | Pure resource claim |
-| **replay_buffer** | Replay buffer | Pure last-N frames |
+Every module below is used by a binary (`src/bin/`) or an example and has
+unit tests. The list is checked against `src/lib.rs` by the
+`readme_lists_every_library_module` test.
 
-All have unit tests. C ABI shims keep original quirks where required.
+<!-- modules:begin -->
+- `arena`: Physics Arena: rigid bodies under real environmental conditions.
+- `audio_bus`: Safe pure AudioBus (audio mixer core).
+- `audio_channel`: Safe pure AudioChannel (audio graph core).
+- `audio_effect`: Safe pure AudioEffect (audio processing core).
+- `audio_format`: Safe pure audio format helpers (OBS audio-io.h core).
+- `audio_sync`: Safe pure AudioSync (audio locked to video core).
+- `audio_timeline`: Safe pure AudioTimeline (multi-track core).
+- `audio_writer`: Safe pure AudioWriter (raw samples core).
+- `av_bundle`: Safe pure AvBundle (video + audio pair core).
+- `bitrate_slider`: Safe pure BitrateSlider (UI control core).
+- `bitstream`: Perfect port of OBS bitstream_reader.
+- `cancel_button`: Safe pure CancelButton (UI control core).
+- `caption_status`: Safe pure CaptionStatus (line count report).
+- `caption_track`: Safe pure CaptionTrack (OBS caption_track_data).
+- `capture`: Safe pure Capture (frame source core).
+- `chem`: Chemistry: thermochemistry and kinetics of real reactions.
+- `circuit`: Circuits: modified nodal analysis (MNA) with device models and
+- `computer`: Build a computer: transistors → gates → adder → register → CPU.
+- `crossfade`: Safe pure Crossfade (blend two sequences core).
+- `diff`: Reusable differential test helpers.
+- `edit_round`: Safe pure EditRound (select → edit → result).
+- `edit_target`: Safe pure EditTarget (layer or group).
+- `effect_chain`: Safe pure EffectChain (ordered audio processing core).
+- `effected_write`: Safe pure EffectedWrite (effect, push, write core).
+- `element_data`: Physical data for all 118 elements, plus their place in the standard
+- `element_props`: Extended per-element properties (embedded; never fetched at runtime).
+- `encode_cancel`: Safe pure EncodeCancel (stop an encode core).
+- `encode_progress`: Safe pure EncodeProgress (frames done core).
+- `encode_status`: Safe pure EncodeStatus (progress + time core).
+- `encoder_caps`: Safe pure EncoderCaps (OBS encoder capability flags).
+- `encoder_context`: Safe pure EncoderContext (OBS encoder context core).
+- `encoder_controls`: Safe pure EncoderControls (bitrate + quality panel).
+- `encoder_select`: Safe pure EncoderSelect (hardware or software core).
+- `fps_control`: Safe pure FrameRate (fps control core).
+- `fps_trailer`: Safe pure FpsTrailer (fps after frame data core).
+- `frame_hold`: Safe pure FrameHold (repeat a frame core).
+- `gop_slider`: Safe pure GopSlider (keyframe interval core).
+- `gpu_detect`: Safe pure GpuDetect (GPU and driver info core).
+- `h264_codec`: Safe H.264 wrapper around pure-Rust rusty_h264.
+- `joint_hierarchy`: Safe pure JointHierarchy (named joint tree core).
+- `keyframe_group`: Safe pure KeyframeGroup (OBS keyframe_group_data).
+- `keyframe_status`: Safe pure KeyframeStatus (group completion report).
+- `layer_group`: Safe pure LayerGroup (Photoshop-style group core).
+- `layer_select`: Safe pure LayerSelect (choose the selected layer).
+- `layer_stack`: Safe pure LayerStack (Photoshop-like layering core).
+- `material`: Safe pure Material (surface core).
+- `material_assign`: Safe pure MaterialAssign (material-to-bone core).
+- `material_env`: "Env metadata": the physical behaviour a simulation needs for an element
+- `material_pbr`: Composition → render (PBR) and simulation properties.
+- `material_registry`: Safe pure MaterialRegistry (named material store).
+- `materials_lab`: Safe pure MaterialsLab (materials science core).
+- `obs_data`: Safe pure ObsData (OBS obs-data.h core).
+- `obs_encoder_defaults`: OBS x264 defaults (shippable metrics).
+- `periodic_table`: Safe pure PeriodicTable (element lookup core).
+- `ping_pong`: Safe pure PingPong (forward then reverse core).
+- `playback_clock`: Safe pure PlaybackClock (frame from elapsed time).
+- `preset_control`: Safe pure PresetControl (speed/quality preset core).
+- `quality_slider`: Safe pure QualitySlider (QP control core).
+- `rate_compare`: Safe pure RateCompare (encode rate at two sizes).
+- `raw_reader`: Safe pure RawReader (read .obsr core).
+- `razor`: Safe pure Razor (split tool for video and audio timelines).
+- `relativity`: Relativity: special-relativistic kinematics, Newtonian N-body gravity
+- `report`: Safe pure Report (status + rate core).
+- `resample`: Safe pure Resample (change fps core).
+- `scene_effect`: Safe pure SceneEffect (pipeline on a scene core).
+- `sequence_reverse`: Safe pure SequenceReverse (reverse frames core).
+- `serde_static`: Serde helpers for `&'static str` fields (material notes, element
+- `service_context`: Safe pure ServiceContext (OBS service context core).
+- `sound_cc0`: Safe pure SoundCc0 (CC0 sample catalog core).
+- `system_status`: Safe pure SystemStatus (GPU + encoder + bundle core).
+- `timed_sequence`: Safe pure TimedSequence (frames + fps core).
+- `timeline_action`: Safe pure TimelineAction (wired AE timeline tools).
+- `timeline_rest`: Safe pure TimelineRest (Marker, Work Area, Time Remap, Keyframe Nav).
+- `timeline_tools`: Safe pure TimelineTools (AE timeline tool set).
+- `timestamp_stamp`: Safe pure TimestampStamp (burn time into a frame).
+- `tool_pipeline`: Safe pure ToolPipeline (named effect chain core).
+- `vec3`: Safe pure Vec3 (OBS graphics/vec3.h core).
+- `video_fourcc`: Safe pure video fourcc mapping (OBS video-fourcc.c).
+- `video_frame`: Safe pure video frame (OBS video-frame.h core).
+- `video_output_info`: Safe pure VideoOutputInfo (OBS video_output_info).
+- `video_scale_info`: Safe pure VideoScaleInfo (OBS video_scale_info).
+- `video_timeline`: Safe pure VideoTimeline (multi-clip video edit core).
+- `wav_reader`: Safe pure WavReader (PCM WAV core).
+- `weight_interp`: Safe pure WeightInterp (weight over frames core).
+- `windows_capture`: Windows camera capture (Media Foundation).
+- `write_timing`: Safe pure WriteTiming (elapsed time core).
+- `apple_capture`: macOS / iOS camera capture (AVFoundation).
+- `linux_capture`: Linux camera capture (V4L2).
+- `linux_audio`: Linux microphone capture (ALSA).
+- `active_tool`: Safe pure ActiveTool (toolbar click → mode).
+- `add_noise`: Safe pure AddNoise (deterministic noise core).
+- `ae_tools`: Safe pure AeTools (After Effects tools panel).
+- `apple_audio`: macOS / iOS microphone capture (CoreAudio).
+- `audio_backend_status`: Safe pure AudioBackendStatus (backend + live).
+- `audio_capture`: Safe pure AudioCapture (audio frame source core).
+- `audio_convert_info`: Safe pure AudioConvertInfo (OBS audio_convert_info).
+- `audio_cpal`: Optional cpal backend for AudioCapture.
+- `audio_output_info`: Safe pure AudioOutputInfo (OBS audio_output_info).
+- `audio_packet`: Safe pure AudioPacket (samples → EncoderPacket).
+- `audio_platform`: Safe pure platform audio open (microphone surface).
+- `audio_source_list`: Safe pure AudioSourceList (ordered audio sources).
+- `av_match`: Safe pure AvMatch (pair → scale + convert).
+- `av_pair`: Safe pure AvPair (video + audio output info).
+- `av_status`: Safe pure AvStatus (pair + match report).
+- `av_tick`: Safe pure AvTick (one video + one audio → output).
+- `blend`: Safe pure BlendMode (layer blend core).
+- `blend_composite`: Safe pure BlendComposite (blend mode → result).
+- `box_blur`: Safe pure BoxBlur (simple blur core).
+- `bright_contrast`: Safe pure BrightContrast (brightness and contrast core).
+- `canvas_effect`: Safe pure CanvasEffect (optional LiveWeights brightness).
+- `capture_rate`: Safe pure CaptureRate (frames per second from a source).
+- `capture_select`: Safe pure CaptureSelect (pick a source).
+- `color_balance`: Safe pure ColorBalance (shadow/mid/highlight shift core).
+- `color_source`: Safe pure ColorSource (solid color core).
+- `compositor`: Safe pure Compositor (video frame core).
+- `definition`: Safe pure Definition (pixel count and quality).
+- `delay_status`: Safe pure DelayStatus (delay + pause + reconnect report).
+- `display_capture`: Safe pure DisplayCapture (monitor holder core).
+- `display_frame`: Safe pure DisplayFrame (display → encode).
+- `draw`: Safe pure Draw (rectangle into Y800 frame).
+- `drop_shadow`: Safe pure DropShadow (dark shadow core).
+- `drop_status`: Safe pure DropStatus (dropped versus kept).
+- `edit_composite`: Safe pure EditComposite (edit → composite change).
+- `encoder_packet`: Safe pure EncoderPacket (OBS encoder_packet core).
+- `encoder_roi`: Safe pure EncoderRoi (OBS obs_encoder_roi).
+- `exposure`: Safe pure Exposure (stops shift core).
+- `file_capture`: Safe pure FileCapture (read frames from a file).
+- `frame_filter`: Safe pure FrameFilter (Y800 brightness core).
+- `frame_pacer`: Safe pure FramePacer (pace a source to a target fps).
+- `frame_renderer`: Safe pure FrameRenderer (color source → video frame).
+- `frame_sequence`: Safe pure FrameSequence (timed frame list).
+- `full_status`: Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause + av + service).
+- `group_composite`: Safe pure GroupComposite (group edit → members).
+- `history`: Safe pure History (undo / redo core).
+- `hue_sat`: Safe pure HueSat (hue/saturation shift core).
+- `inner_glow`: Safe pure InnerGlow (edge brighten core).
+- `input_device`: Safe pure InputDevice (keyboard / mouse core).
+- `invert`: Safe pure Invert (pixel invert core).
+- `joint`: Safe pure Joint (skeleton joint tool).
+- `latency_status`: Safe pure LatencyStatus (encode and total latency).
+- `layer_composite`: Safe pure LayerComposite (visible layers → result).
+- `levels`: Safe pure Levels (input/output range core).
+- `live_weights`: Safe pure LiveWeights (runtime parameter store).
+- `maya_shelves`: Safe pure MayaShelves (Maya shelf layout).
+- `menu_apply`: Safe pure MenuApply (action → layer stack).
+- `menu_dispatch`: Safe pure MenuDispatch (menu click → action).
+- `menu_history`: Safe pure MenuHistory (menu actions record and undo).
+- `menu_path`: Safe pure MenuPath (click → dispatch → apply).
+- `output_delay_queue`: Safe pure OutputDelayQueue (OBS obs-output-delay.c).
+- `output_feed`: Safe pure OutputFeed (interleave → output).
+- `output_info`: Safe pure OutputInfo (OBS obs_output core).
+- `output_pause`: Safe pure OutputPause (OBS output pause).
+- `output_service`: Safe pure OutputService (OBS set service).
+- `packet_drop`: Safe pure PacketDrop (priority gate).
+- `packet_file`: Safe pure PacketFile (interleaved packets to bytes).
+- `packet_time`: Safe pure PacketTime (OBS encoder_packet_time).
+- `path_status`: Safe pure PathStatus (delay + drop + latency).
+- `pattern_source`: Safe pure PatternSource (test pattern core).
+- `payload_dump`: Safe pure PayloadDump (H.264 packets → length-prefixed file).
+- `photo_layers`: Safe pure LayerStack (layer list core).
+- `pipeline`: Safe pure Pipeline (end-to-end wire).
+- `pixel_canvas`: Safe pure PixelCanvas (paint buffer core).
+- `posterize`: Safe pure Posterize (level reduce core).
+- `program_stream`: Safe pure ProgramStream (program stream core).
+- `properties`: Safe pure Properties (selected layer panel).
+- `ps_layers`: Safe pure PsLayers (Photoshop layer panel).
+- `ps_menus`: Safe pure PsMenus (Photoshop menu bar).
+- `ps_toolbar`: Safe pure PsToolbar (Photoshop toolbar layout).
+- `psd`: Safe pure Psd (Photoshop Document).
+- `raw_writer`: Safe pure RawWriter (frame sequence → file).
+- `reconnect`: Safe pure Reconnect (OBS obs-output.c reconnect).
+- `roi_accept`: Safe pure RoiAccept (ROI only if caps allow).
+- `roi_list`: Safe pure RoiList (accepted regions only).
+- `roi_status`: Safe pure RoiStatus (region count report).
+- `rtmp_audio`: Safe pure RtmpAudio (OBS audio packet → chunk).
+- `rtmp_chunk`: Safe pure RtmpChunk (OBS librtmp packet → chunk bytes).
+- `rtmp_close`: Safe pure RtmpClose (OBS librtmp deleteStream).
+- `rtmp_connect`: Safe pure RtmpConnect (OBS librtmp connect command).
+- `rtmp_create_stream`: Safe pure RtmpCreateStream (OBS librtmp createStream).
+- `rtmp_feed`: Safe pure RtmpFeed (packets → RTMP stream).
+- `rtmp_handshake`: Safe pure RtmpHandshake (OBS librtmp C0/C1).
+- `rtmp_metadata`: Safe pure RtmpMetadata (OBS onMetaData / setDataFrame).
+- `rtmp_open_status`: Safe pure RtmpOpenStatus (handshake → publish).
+- `rtmp_output`: Safe pure RtmpOutput (file packets → RTMP stream).
+- `rtmp_publish`: Safe pure RtmpPublish (OBS librtmp publish).
+- `rtmp_reconnect_status`: Safe pure RtmpReconnectStatus (RTMP + attempts).
+- `rtmp_socket`: Real RTMP socket send (OBS rtmp_stream connect → write).
+- `rtmp_start`: Safe pure RtmpStart (service → RTMP stream).
+- `rtmp_status`: Safe pure RtmpStatus (RTMP stream report).
+- `rtmp_stream`: Safe pure RtmpStream (OBS rtmp_stream shape).
+- `runner`: Safe pure Runner (continuous pipeline loop).
+- `runner_audio`: Safe pure RunnerAudio (live or synthetic source list).
+- `runner_dump`: Safe pure RunnerDump (run → length-prefixed file).
+- `scene`: Safe pure Scene (named source list).
+- `scene_list`: Safe pure SceneList (ordered scenes).
+- `scene_renderer`: Safe pure SceneRenderer (timeline → frames).
+- `scene_transition`: Safe pure SceneTransition (from one scene to another).
+- `service_status`: Safe pure ServiceStatus (service name report).
+- `sharpen`: Safe pure Sharpen (simple sharpen core).
+- `shell_event`: Safe pure ShellEvent (input → dispatch → state).
+- `shell_filter`: Safe pure ShellFilter (filter → encode).
+- `shell_frame`: Safe pure ShellFrame (edit → frame → encode).
+- `shell_loop`: Safe pure ShellLoop (sequence of shell actions).
+- `shell_loop_frame`: Safe pure ShellLoopFrame (actions → encode).
+- `shell_loop_socket`: Safe pure ShellLoopSocket (actions → socket payload).
+- `shell_publish`: Safe pure ShellPublish (shell packet → RTMP send).
+- `shell_round`: Safe pure ShellRound (tool + option + layer + view).
+- `shell_rtmp`: Safe pure ShellRtmp (shell frame → RTMP packet).
+- `shell_runner`: Safe pure ShellRunner (shell composite → encode loop).
+- `shell_sent`: Safe pure ShellSent (edit → sent bytes).
+- `shell_session`: Safe pure ShellSession (save and load state).
+- `shell_socket`: Safe pure ShellSocket (shell packet → socket payload).
+- `shell_status`: Safe pure ShellStatus (one line for the shell path).
+- `shell_summary`: Safe pure ShellSummary (full path in one line).
+- `source_list`: Safe pure SourceList (ordered capture sources).
+- `status_bar`: Safe pure StatusBar (bottom bar for the shell).
+- `status_history`: Safe pure StatusHistory (last N status lines).
+- `status_report`: Safe pure StatusReport (all status facts in one place).
+- `stream_start`: Safe pure StreamStart (service + OBS defaults → stream).
+- `stream_status`: Safe pure StreamStatus (streaming + service).
+- `stream_target`: Safe pure StreamTarget (multi-platform RTMP).
+- `synthetic_camera`: Safe pure SyntheticCamera (animated source core).
+- `text_draw`: Safe pure TextDraw (simple glyph into Y800 frame).
+- `text_overlay`: Safe pure TextOverlay (text on top of a frame).
+- `threshold`: Safe pure Threshold (binary split core).
+- `tone_curves`: Safe pure Curves (tone curve core).
+- `tool_help`: Safe pure ToolHelp (💭 instructions for tools and options).
+- `tool_option_set`: Safe pure ToolOptionSet (adjustable options bar).
+- `tool_options`: Safe pure ToolOptions (options bar for the active tool).
+- `tool_router`: Safe pure ToolRouter (input → active tool).
+- `toolbar`: Safe pure Toolbar (Photoshop-style expandable toolbar).
+- `toon_tools`: Safe pure ToonTools (ToonBoom Harmony tools toolbar).
+- `tuxedo`: Safe pure Tuxedo (UI theme).
+- `ui_view`: Safe pure UiView (full shell in one text).
+- `windows_audio`: Windows microphone capture (WASAPI).
+- `workspace`: Safe pure Workspace (one canvas, all tools).
+- `youtube_target`: Safe pure YouTubeTarget (RTMP URL + stream key).
+- `assistant`: Safe pure Assistant (Seraphina side-panel plumbing).
+- `mesh3d`: Polygon meshes for the 3D workspace.
+- `paint_engine`: Paint engine behind Seraphina Studio's Paint mode.
+- `psd_pixels`: Layered PSD with real pixel data (8-bit RGB, version 1).
+- `sim_worker`: Run a simulation on its own thread and let the UI read snapshots (A8).
+- `stream_inspect`: Safe pure StreamInspect (step-through view of bitstream::Reader).
+- `tile_undo`: Tile-based undo: store only the 256×256 tiles that changed.
+- `ui_canvas`: Safe pure UiCanvas (pixel model behind the Tuxedo Edit window).
+<!-- modules:end -->
+
+### Planned (not built)
+
+These were placeholder modules (named after OBS parts, or "AI" helpers
+that echoed the prompt back). No binary used them and they are removed
+until there is a real implementation:
+
+* OBS sources: browser source, game capture, window capture, media,
+  image and text sources, group source.
+* OBS core: the source/scene/filter/output/encoder/service registries,
+  scene collections, transitions, hotkeys, profiles, replay buffer,
+  virtual camera, multiview and studio mode.
+* Pipelines: `pipe` (a frame pipe) and `source_profiler` (per-source
+  timing).
+* Library-level streaming objects (`streaming`, `rtmp_open_*`,
+  `rtmp_reconnect*`). Real recording and RTMP streaming live in the app
+  (`src/bin/ui/output.rs`, through ffmpeg).
+* AI helpers in the library (`ai`, `ai_tools`, `ai_editor`,
+  `ai_director`, `settings_assist`, …). The app's real model client is
+  `src/bin/ui/llm.rs`.
+* Team features (organization, invite, roles, presence).
 
 ## Parser
 
@@ -566,65 +586,22 @@ All have unit tests. C ABI shims keep original quirks where required.
 Rust skeletons that already document the learned fixes. Add new lessons
 as you discover more quirks — the next parse gets smarter automatically.
 
-## Status
-
-- [x] Two hundred forty-eight foundation modules with tests
-- [x] Util foundation complete (high-leverage pure surface covered)
-- [x] Media-io pure layer solid (frame-rate through audio-mixer)
-- [x] Graphics pure layer solid (vec2 through half)
-- [x] Callback pure layer solid (signal, proc, calldata, decl)
-- [ ] Data pure layer started (obs_data, obs_properties)
-- [x] Source pure layer: context + registry complete for source, output, encoder, service
-- [x] Scene pure layer: context, registry, items, collection + registry
-- [x] Filter pure layer: context + chain + registry complete
-- [x] Core root owns all registries including modules, displays, hotkeys, collections, transitions, monitors, recordings, streams, replays, virtual cams, profiles, and canvases
-- [x] Module registration + registry complete
-- [x] Display pure layer: context + registry complete
-- [x] Hotkey pure layer: hotkey + registry complete
-- [x] Transition pure layer: transition + registry complete
-- [x] Audio monitor pure layer: monitor + registry complete
-- [x] Recording pure layer: recording + registry complete
-- [x] Streaming pure layer: streaming + registry complete
-- [x] Replay buffer pure layer: buffer + registry complete
-- [x] Virtual camera pure layer: cam + registry complete
-- [x] Profile pure layer: profile + registry complete
-- [x] Canvas pure layer: canvas + registry complete
-- [ ] Render pure layer started (render_item, render_list, camera, projector, bone, animation_timeline, performance_capture, character_renderer, skeleton_connector, ai_animator, physics_sim, learning_pipeline, environment, pilot, flight_session, flight_replay, wind, plane_renderer, camera_follow, view_frame, light, light_rig, camera_rig, camera_cut, material, lighting, material_assign, shaded_render, material_registry, material_factory, materials_lab, periodic_table, compound, reaction)
-- [ ] Video pure layer started (video_timeline, layer_stack, onion_viewer, mask, editor_ui, adjustment, layer_group, selection, brush, text_layer, transform, curves, filter, smart_object, history, pixel_canvas, object3d, smart_skin, ai_editor, compositor)
-- [ ] Input pure layer started (input_device)
-- [ ] Output pure layer started (output, audio_output, session, preview, program)
-- [x] Differential helper wired into modules
-- [x] Parser tools wired
-- [x] CI (cargo test on push/PR)
-- [x] Public under SynerGro-AI
-- [ ] Batch application to remaining util files
-- [ ] Workspace layout
-
 ## Layout
 
 ```
-src/
-  lib.rs
-  bitstream.rs
-  dstr.rs
-  utf8.rs
-  diff.rs
-  crc32.rs
-  ai.rs
-  array_serializer.rs
-  text_lookup.rs
-  path_extension.rs
-  bmem.rs
-tools/
-  obs_cpp_to_rust_parser.py
-.github/workflows/ci.yml
-PLAN.md
+src/lib.rs        library modules (listed above)
+src/bin/ui/       Seraphina Studio (the desktop app)
+src/bin/run.rs    terminal demo of the encode/stream status pipeline
+src/bin/ai_write.rs, raw_read.rs, slice.rs   small dev tools
+examples/         numeric checks for the arena, chemistry, CPU, relativity
+tools/            the OBS C-to-Rust parser and the element-data generator
 ```
 
 ## Usage
 
 ```bash
-cargo test
+cargo test --lib
+cargo test --features ui --bin ui
 ```
 
 ## Foundational plan
@@ -632,8 +609,8 @@ cargo test
 1. Foundation patterns first — done
 2. Parser wired — done
 3. High-leverage modules + differential helper — done
-5. Batch-apply to the rest
-6. Keep pushing — public, free, open
+4. Batch-apply to the rest
+5. Keep pushing — public, free, open
 
 AI-assisted contributions and PRs welcome.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to start.

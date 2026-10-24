@@ -1,21 +1,4 @@
-//! - material: pure material
-//! - material_assign: pure material-to-bone binding
-//! - material_registry: pure named material store
-//! - materials_lab: pure materials science lab
-//! - periodic_table: pure periodic table
-//! - audio_channel: pure audio channel
-//! - audio_bus: pure audio bus
-//! - audio_effect: pure audio effect
-//! - effect_chain: pure effect chain
-//! - audio_timeline: pure multi-track timeline
-//! - video_timeline: pure multi-clip video timeline
-//! - layer_stack: pure layer stack
-//! - layer_group: pure layer group
-//! - history: pure undo / redo
-//! - pixel_canvas: pure pixel canvas
-//! - compositor: pure video compositor
-//! - input_device: pure input device
-//! - program_stream: pure program stream
+//! Library behind Seraphina Studio. README.md lists every module.
 pub mod arena;
 pub mod audio_bus;
 pub mod audio_channel;
@@ -77,6 +60,8 @@ pub mod quality_slider;
 pub mod rate_compare;
 pub mod raw_reader;
 pub mod razor;
+#[cfg(test)]
+mod readme_check;
 pub mod relativity;
 pub mod report;
 pub mod resample;

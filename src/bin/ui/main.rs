@@ -402,6 +402,7 @@ impl App {
             assistant_panel::AssistantPanel::new(prefs::Prefs::load(prefs::default_path())),
             videogen::VideoGenPanel::new(),
         );
+        app.project.native_dialogs = project::native_dialogs_available();
         app.start_session(project::autosave_dir());
         app
     }
@@ -411,6 +412,8 @@ impl App {
         let mut st = workspace::ProjectState::new(project::Session::start(dir));
         st.include_chat = self.project.include_chat;
         st.script_files = self.project.script_files;
+        st.docs_dir = std::mem::take(&mut self.project.docs_dir);
+        st.native_dialogs = self.project.native_dialogs;
         self.project = st;
         self.mark_saved();
     }
@@ -848,6 +851,8 @@ impl App {
             C::SaveProject { path, save_as } => self.cmd_save_project(path.as_deref(), *save_as),
             C::OpenProject { path } => self.cmd_open_project(path.as_deref()),
             C::NewProject => self.cmd_new_project(),
+            C::SavePsd { path } => self.cmd_export(workspace::SaveTarget::Psd, path.as_deref()),
+            C::ExportPng { path } => self.cmd_export(workspace::SaveTarget::Png, path.as_deref()),
             C::OpenFile { path } => {
                 self.mode = Mode::Paint;
                 self.paint.open(path)
@@ -1196,8 +1201,8 @@ impl App {
                     }
                     if matches!(
                         cmd,
-                        AppCommand::SavePsd
-                            | AppCommand::ExportPng
+                        AppCommand::SavePsd { .. }
+                            | AppCommand::ExportPng { .. }
                             | AppCommand::OpenFile { .. }
                             | AppCommand::VideoGenerate { .. }
                             | AppCommand::GenerateImage { .. }
@@ -1371,7 +1376,7 @@ impl App {
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
         // file shortcuts work even while a text field has focus
-        if self.project.prompt.is_none() {
+        if self.project.prompt.is_none() && self.project.dialog.is_none() {
             use egui::{KeyboardShortcut, Modifiers};
             let take = |m: Modifiers, k: Key| {
                 ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
@@ -2709,6 +2714,7 @@ mod tests {
             },
             String::new(),
         );
+        app.project.docs_dir = project::test_dir("docs");
         app
     }
 

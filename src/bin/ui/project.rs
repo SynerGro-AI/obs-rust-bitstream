@@ -302,6 +302,17 @@ pub fn documents_dir() -> PathBuf {
         .join("Seraphina")
 }
 
+/// Whether to use the OS file dialogs. `SERAPHINA_NO_NATIVE_DIALOG`
+/// forces the in-app prompt; Linux needs a session bus for the portal
+/// (rfd falls back to zenity, and to the in-app prompt if neither works).
+pub fn native_dialogs_available() -> bool {
+    if std::env::var_os("SERAPHINA_NO_NATIVE_DIALOG").is_some() {
+        return false;
+    }
+    cfg!(any(windows, target_os = "macos"))
+        || std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some()
+}
+
 /// `name.seraphina` (adds the extension when missing).
 pub fn with_ext(path: &str) -> PathBuf {
     let p = PathBuf::from(path.trim());

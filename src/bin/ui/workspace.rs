@@ -78,18 +78,76 @@ pub enum After {
     Quit,
 }
 
+/// What a Save dialog writes.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SaveTarget {
+    /// The `.seraphina` project, then continue with `After`.
+    Project(After),
+    /// Paint: layered PSD.
+    Psd,
+    /// Paint: flattened PNG.
+    Png,
+}
+
+impl SaveTarget {
+    fn title(&self) -> &'static str {
+        match self {
+            SaveTarget::Project(_) => "Save project",
+            SaveTarget::Psd => "Save PSD",
+            SaveTarget::Png => "Export PNG",
+        }
+    }
+
+    fn filter(&self) -> (&'static str, &'static str) {
+        match self {
+            SaveTarget::Project(_) => ("Seraphina project", project::EXT),
+            SaveTarget::Psd => ("Photoshop document", "psd"),
+            SaveTarget::Png => ("PNG image", "png"),
+        }
+    }
+
+    /// `path` with this target's extension (added when missing).
+    fn with_ext(&self, path: &str) -> PathBuf {
+        let ext = self.filter().1;
+        let p = PathBuf::from(path.trim());
+        match p.extension() {
+            Some(e) if e.eq_ignore_ascii_case(ext) => p,
+            _ => {
+                let mut s = p.into_os_string();
+                s.push(".");
+                s.push(ext);
+                PathBuf::from(s)
+            }
+        }
+    }
+}
+
+/// A native file dialog running on its own thread.
+pub struct DialogJob {
+    pub kind: DialogKind,
+    pub rx: Receiver<Option<PathBuf>>,
+    pub started: Instant,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DialogKind {
+    Save(SaveTarget),
+    Open,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Prompt {
     /// The last session crashed; its autosave can be recovered.
     Recover,
     /// "Save changes to X?" before `After`.
     Unsaved(After),
-    /// Type a path to save to (in-app dialog).
-    SavePath(After),
+    /// Type a path to save to (in-app dialog, used when no native
+    /// dialog is available).
+    SavePath(SaveTarget),
     /// Type a path to open (in-app dialog).
     OpenPath,
     /// The chosen save path exists.
-    Overwrite(PathBuf, After),
+    Overwrite(PathBuf, SaveTarget),
 }
 
 pub struct ProjectState {
@@ -114,6 +172,11 @@ pub struct ProjectState {
     pub script_files: bool,
     allow_close: bool,
     title: String,
+    /// Where Save / Open / Export dialogs start (Documents/Seraphina).
+    pub docs_dir: PathBuf,
+    /// Use the OS file dialogs (rfd); otherwise the in-app path prompt.
+    pub native_dialogs: bool,
+    pub dialog: Option<DialogJob>,
 }
 
 impl ProjectState {
@@ -140,6 +203,9 @@ impl ProjectState {
             path_text: String::new(),
             script_files: false,
             allow_close: false,
+            docs_dir: project::documents_dir(),
+            native_dialogs: false,
+            dialog: None,
             title: String::new(),
         }
     }
@@ -418,11 +484,61 @@ impl App {
         "New project".into()
     }
 
-    fn default_save_path(&self) -> PathBuf {
-        match &self.project.path {
-            Some(p) => p.clone(),
-            None => project::documents_dir().join("Untitled.seraphina"),
+    /// Where a Save dialog for `t` starts.
+    fn suggested_path(&self, t: &SaveTarget) -> PathBuf {
+        let docs = &self.project.docs_dir;
+        match t {
+            SaveTarget::Project(_) => match &self.project.path {
+                Some(p) => p.clone(),
+                None => docs.join("Untitled.seraphina"),
+            },
+            SaveTarget::Psd => docs.join(self.paint.psd_file_name()),
+            SaveTarget::Png => docs.join(self.paint.png_file_name()),
         }
+    }
+
+    /// Relative paths from commands go under Documents/Seraphina, never
+    /// the working directory.
+    fn resolve(&self, path: &str, t: &SaveTarget) -> PathBuf {
+        let p = t.with_ext(path);
+        if p.is_absolute() {
+            p
+        } else {
+            self.project.docs_dir.join(p)
+        }
+    }
+
+    /// `save_psd` / `export_png`: to the given path, or ask where.
+    pub fn cmd_export(&mut self, t: SaveTarget, path: Option<&str>) -> Result<String, String> {
+        match path {
+            Some(p) => {
+                let p = self.resolve(p, &t);
+                self.write_target(&p, &t)
+            }
+            None => {
+                self.ask_save_path(t);
+                Ok("choose where to save".into())
+            }
+        }
+    }
+
+    /// Write `t` to `path` (no overwrite check).
+    fn write_target(&mut self, path: &Path, t: &SaveTarget) -> Result<String, String> {
+        if let SaveTarget::Project(_) = t {
+            return self.save_project_to(path);
+        }
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {}", dir.display(), e))?;
+        }
+        let r = match t {
+            SaveTarget::Psd => self.paint.save_psd_to(path),
+            _ => self.paint.export_png_to(path),
+        };
+        match &r {
+            Ok(m) => self.toasts.push(ToastKind::Success, m),
+            Err(e) => self.toasts.push(ToastKind::Error, e),
+        }
+        r
     }
 
     /// `save_project`: to the current file, or ask where.
@@ -433,7 +549,7 @@ impl App {
     ) -> Result<String, String> {
         match (path, &self.project.path) {
             (Some(p), _) => {
-                let p = project::with_ext(p);
+                let p = self.resolve(p, &SaveTarget::Project(After::Nothing));
                 self.save_project_to(&p)
             }
             (None, Some(p)) if !save_as => {
@@ -441,7 +557,7 @@ impl App {
                 self.save_project_to(&p)
             }
             _ => {
-                self.ask_save_path(After::Nothing);
+                self.ask_save_path(SaveTarget::Project(After::Nothing));
                 Ok("choose where to save the project".into())
             }
         }
@@ -465,14 +581,102 @@ impl App {
         self.run_after(After::New)
     }
 
-    pub(crate) fn ask_save_path(&mut self, after: After) {
-        self.project.path_text = self.default_save_path().to_string_lossy().into_owned();
-        self.project.prompt = Some(Prompt::SavePath(after));
+    /// Ask where to save `t`: the native Save dialog when available,
+    /// otherwise the in-app prompt. Both start in Documents/Seraphina.
+    pub(crate) fn ask_save_path(&mut self, t: SaveTarget) {
+        let suggested = self.suggested_path(&t);
+        if self.project.native_dialogs {
+            self.spawn_dialog(DialogKind::Save(t), suggested);
+        } else {
+            self.project.path_text = suggested.to_string_lossy().into_owned();
+            self.project.prompt = Some(Prompt::SavePath(t));
+        }
     }
 
     fn ask_open_path(&mut self) {
-        self.project.path_text = project::documents_dir().to_string_lossy().into_owned();
-        self.project.prompt = Some(Prompt::OpenPath);
+        let dir = self.project.docs_dir.clone();
+        if self.project.native_dialogs {
+            self.spawn_dialog(DialogKind::Open, dir);
+        } else {
+            let mut t = dir.to_string_lossy().into_owned();
+            t.push(std::path::MAIN_SEPARATOR);
+            self.project.path_text = t;
+            self.project.prompt = Some(Prompt::OpenPath);
+        }
+    }
+
+    /// Run an OS file dialog on a worker thread; `poll_dialog` picks up
+    /// the answer. The OS dialog confirms overwrites itself.
+    fn spawn_dialog(&mut self, kind: DialogKind, start: PathBuf) {
+        let (dir, name) = match &kind {
+            DialogKind::Save(_) => (
+                start.parent().map(Path::to_path_buf).unwrap_or_default(),
+                start.file_name().map(|n| n.to_string_lossy().into_owned()),
+            ),
+            DialogKind::Open => (start, None),
+        };
+        let _ = std::fs::create_dir_all(&dir);
+        let (label, ext, title) = match &kind {
+            DialogKind::Save(t) => (t.filter().0, t.filter().1, t.title()),
+            DialogKind::Open => ("Seraphina project", project::EXT, "Open project"),
+        };
+        let save = matches!(kind, DialogKind::Save(_));
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let d = rfd::FileDialog::new()
+                .set_title(title)
+                .set_directory(&dir)
+                .add_filter(label, &[ext]);
+            let picked = if save {
+                d.set_file_name(name.unwrap_or_default()).save_file()
+            } else {
+                d.pick_file()
+            };
+            let _ = tx.send(picked);
+        });
+        self.project.dialog = Some(DialogJob {
+            kind,
+            rx,
+            started: Instant::now(),
+        });
+    }
+
+    /// Act on a finished native dialog.
+    pub(crate) fn poll_dialog(&mut self) {
+        let Some(job) = &self.project.dialog else {
+            return;
+        };
+        let picked = match job.rx.try_recv() {
+            Ok(p) => p,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        let Some(job) = self.project.dialog.take() else {
+            return;
+        };
+        match (job.kind, picked) {
+            (DialogKind::Save(t), Some(p)) => {
+                let p = t.with_ext(&p.to_string_lossy());
+                // the OS dialog already asked about replacing the file
+                self.save_then(p, t, true);
+            }
+            (DialogKind::Open, Some(p)) => {
+                if let Err(e) = self.open_project_from(&p) {
+                    self.toasts.push(ToastKind::Error, &e);
+                }
+            }
+            (kind, None) => {
+                // No dialog could be shown (no portal/zenity on Linux):
+                // an instant "cancel" falls back to the in-app prompt.
+                if cfg!(unix) && job.started.elapsed() < Duration::from_millis(300) {
+                    self.project.native_dialogs = false;
+                    match kind {
+                        DialogKind::Save(t) => self.ask_save_path(t),
+                        DialogKind::Open => self.ask_open_path(),
+                    }
+                }
+            }
+        }
     }
 
     fn run_after(&mut self, after: After) -> Result<String, String> {
@@ -492,22 +696,29 @@ impl App {
         }
     }
 
-    /// Save to `path` (asking about an existing file unless it is the
-    /// current project), then continue with `after`.
-    fn save_then(&mut self, path: PathBuf, after: After, confirmed: bool) {
-        if !confirmed && path.exists() && self.project.path.as_deref() != Some(path.as_path()) {
-            self.project.prompt = Some(Prompt::Overwrite(path, after));
+    /// Save `t` to `path` (asking about an existing file unless it is
+    /// the current project), then continue with the project's `After`.
+    fn save_then(&mut self, path: PathBuf, t: SaveTarget, confirmed: bool) {
+        let current = matches!(t, SaveTarget::Project(_))
+            && self.project.path.as_deref() == Some(path.as_path());
+        if !confirmed && path.exists() && !current {
+            self.project.prompt = Some(Prompt::Overwrite(path, t));
             return;
         }
-        match self.save_project_to(&path) {
+        match self.write_target(&path, &t) {
             Ok(_) => {
-                if let Err(e) = self.run_after(after) {
-                    self.toasts.push(ToastKind::Error, &e);
+                if let SaveTarget::Project(after) = t {
+                    if let Err(e) = self.run_after(after) {
+                        self.toasts.push(ToastKind::Error, &e);
+                    }
                 }
             }
-            Err(e) => self
-                .toasts
-                .push(ToastKind::Error, &format!("Save failed: {}", e)),
+            Err(e) => {
+                if let SaveTarget::Project(_) = t {
+                    self.toasts
+                        .push(ToastKind::Error, &format!("Save failed: {}", e))
+                }
+            }
         }
     }
 
@@ -587,6 +798,10 @@ impl App {
     // ---- per-frame --------------------------------------------------------
 
     pub(crate) fn project_frame(&mut self, ctx: &egui::Context) {
+        self.poll_dialog();
+        if self.project.dialog.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
         self.track_changes();
         self.autosave_tick();
         if ctx.input(|i| i.viewport().close_requested())
@@ -612,6 +827,13 @@ impl App {
     }
 
     pub(crate) fn project_modals(&mut self, ctx: &egui::Context) {
+        if self.project.dialog.is_some() && self.project.prompt.is_none() {
+            // keep edits out while the OS dialog is open
+            egui::Modal::new(egui::Id::new("file-dialog-wait")).show(ctx, |ui| {
+                ui.label("Waiting for the file dialog…");
+            });
+            return;
+        }
         let Some(prompt) = self.project.prompt.clone() else {
             return;
         };
@@ -685,8 +907,8 @@ impl App {
                             if ui.add(theme::primary_button(&p, "Save")).clicked() {
                                 let a2 = after.clone();
                                 then = Some(Box::new(move |a: &mut App| match a.project.path.clone() {
-                                    Some(path) => a.save_then(path, a2, true),
-                                    None => a.ask_save_path(a2),
+                                    Some(path) => a.save_then(path, SaveTarget::Project(a2), true),
+                                    None => a.ask_save_path(SaveTarget::Project(a2)),
                                 }));
                                 close = true;
                             }
@@ -704,8 +926,8 @@ impl App {
                             }
                         });
                     }
-                    Prompt::SavePath(after) => {
-                        heading(ui, "Save project");
+                    Prompt::SavePath(target) => {
+                        heading(ui, target.title());
                         ui.label(egui::RichText::new("File").color(p.muted));
                         let r = ui.add(
                             egui::TextEdit::singleline(&mut self.project.path_text)
@@ -715,9 +937,9 @@ impl App {
                         ui.add_space(theme::SP_MD);
                         ui.horizontal(|ui| {
                             if ui.add(theme::primary_button(&p, "Save")).clicked() || enter {
-                                let path = project::with_ext(self.project.path_text.trim());
-                                let a2 = after.clone();
-                                then = Some(Box::new(move |a: &mut App| a.save_then(path, a2, false)));
+                                let path = target.with_ext(&self.project.path_text);
+                                let t2 = target.clone();
+                                then = Some(Box::new(move |a: &mut App| a.save_then(path, t2, false)));
                                 close = true;
                             }
                             if ui.button("Cancel").clicked() {
@@ -749,7 +971,7 @@ impl App {
                             }
                         });
                     }
-                    Prompt::Overwrite(path, after) => {
+                    Prompt::Overwrite(path, target) => {
                         let fname = path
                             .file_name()
                             .map(|n| n.to_string_lossy().into_owned())
@@ -765,8 +987,8 @@ impl App {
                         ui.add_space(theme::SP_MD);
                         ui.horizontal(|ui| {
                             if ui.add(theme::primary_button(&p, "Replace")).clicked() {
-                                let (p2, a2) = (path.clone(), after.clone());
-                                then = Some(Box::new(move |a: &mut App| a.save_then(p2, a2, true)));
+                                let (p2, t2) = (path.clone(), target.clone());
+                                then = Some(Box::new(move |a: &mut App| a.save_then(p2, t2, true)));
                                 close = true;
                             }
                             if ui.button("Cancel").clicked() {
@@ -815,6 +1037,7 @@ mod tests {
             },
             String::new(),
         );
+        app.project.docs_dir = project::test_dir("docs");
         app.mark_saved();
         app
     }
@@ -1188,19 +1411,25 @@ mod tests {
         let mut a = test_app(&ctx);
         let path = project::test_dir("overwrite").join("taken.seraphina");
         std::fs::write(&path, b"someone else's file").unwrap();
-        a.save_then(path.clone(), After::Nothing, false);
+        a.save_then(path.clone(), SaveTarget::Project(After::Nothing), false);
         assert_eq!(
             a.project.prompt,
-            Some(Prompt::Overwrite(path.clone(), After::Nothing))
+            Some(Prompt::Overwrite(
+                path.clone(),
+                SaveTarget::Project(After::Nothing)
+            ))
         );
         assert_eq!(std::fs::read(&path).unwrap(), b"someone else's file");
         a.project.prompt = None;
-        a.save_then(path.clone(), After::Nothing, true);
+        a.save_then(path.clone(), SaveTarget::Project(After::Nothing), true);
         assert!(project::read(&path).is_ok());
         // no path yet: save asks where, defaulting to Documents/Seraphina
         let mut b = test_app(&ctx);
         b.cmd_save_project(None, false).unwrap();
-        assert_eq!(b.project.prompt, Some(Prompt::SavePath(After::Nothing)));
+        assert_eq!(
+            b.project.prompt,
+            Some(Prompt::SavePath(SaveTarget::Project(After::Nothing)))
+        );
         assert!(b.project.path_text.ends_with("Untitled.seraphina"));
     }
 
@@ -1245,5 +1474,124 @@ mod tests {
         a.project.script_files = true;
         assert_eq!(a.run_script(script.to_str().unwrap()), 2);
         assert!(out.exists());
+    }
+
+    // ---- A6: dialogs and exports ------------------------------------------
+
+    #[test]
+    fn exports_ask_where_starting_in_documents() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        let docs = a.project.docs_dir.clone();
+        run(&mut a, r#"{"cmd":"save_psd"}"#);
+        assert_eq!(a.project.prompt, Some(Prompt::SavePath(SaveTarget::Psd)));
+        let psd = docs.join(a.paint.psd_file_name());
+        assert_eq!(PathBuf::from(&a.project.path_text), psd);
+        assert!(a.paint.psd_file_name().ends_with("_edit.psd"));
+        assert!(!psd.exists(), "nothing written before the user picks");
+        a.project.prompt = None;
+        a.save_then(psd.clone(), SaveTarget::Psd, false);
+        let back = obs_rust_bitstream::psd_pixels::PsdPixels::load(&psd).unwrap();
+        assert_eq!(back.layers.len(), a.paint.to_psd().layers.len());
+
+        run(&mut a, r#"{"cmd":"export_png"}"#);
+        assert_eq!(a.project.prompt, Some(Prompt::SavePath(SaveTarget::Png)));
+        let png = PathBuf::from(&a.project.path_text);
+        assert_eq!(png.parent(), Some(docs.as_path()));
+        a.project.prompt = None;
+        a.save_then(png.clone(), SaveTarget::Png, false);
+        let img = image::open(&png).unwrap();
+        assert_eq!(
+            (img.width(), img.height()),
+            (a.paint.doc.width, a.paint.doc.height)
+        );
+        // nothing landed in the working directory
+        assert!(!Path::new(&a.paint.png_file_name()).exists());
+        assert!(!Path::new(&a.paint.psd_file_name()).exists());
+    }
+
+    #[test]
+    fn exports_confirm_before_overwriting() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        let png = a.project.docs_dir.join("taken.png");
+        std::fs::write(&png, b"keep me").unwrap();
+        a.save_then(png.clone(), SaveTarget::Png, false);
+        assert_eq!(
+            a.project.prompt,
+            Some(Prompt::Overwrite(png.clone(), SaveTarget::Png))
+        );
+        assert_eq!(std::fs::read(&png).unwrap(), b"keep me");
+        a.project.prompt = None;
+        a.save_then(png.clone(), SaveTarget::Png, true);
+        assert!(image::open(&png).is_ok());
+    }
+
+    #[test]
+    fn relative_command_paths_go_to_documents_not_cwd() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        let docs = a.project.docs_dir.clone();
+        run(&mut a, r#"{"cmd":"export_png","path":"renders/final"}"#);
+        assert!(docs.join("renders").join("final.png").exists());
+        assert!(!Path::new("renders").exists());
+        run(&mut a, r#"{"cmd":"save_psd","path":"layers.psd"}"#);
+        assert!(docs.join("layers.psd").exists());
+        run(&mut a, r#"{"cmd":"save_project","path":"proj"}"#);
+        assert!(docs.join("proj.seraphina").exists());
+        assert_eq!(
+            a.project.path.as_deref(),
+            Some(docs.join("proj.seraphina").as_path())
+        );
+    }
+
+    #[test]
+    fn native_dialog_answers_are_acted_on() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        let target = a.project.docs_dir.join("picked");
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.project.dialog = Some(DialogJob {
+            kind: DialogKind::Save(SaveTarget::Project(After::Nothing)),
+            rx,
+            started: Instant::now(),
+        });
+        a.poll_dialog();
+        assert!(a.project.dialog.is_some(), "still open");
+        tx.send(Some(target.clone())).unwrap();
+        a.poll_dialog();
+        assert!(a.project.dialog.is_none());
+        let saved = target.with_extension("seraphina");
+        assert!(saved.exists(), "extension added, project written");
+        assert_eq!(a.project.path.as_deref(), Some(saved.as_path()));
+
+        // the OS dialog's cancel does nothing
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.project.dialog = Some(DialogJob {
+            kind: DialogKind::Open,
+            rx,
+            started: Instant::now() - Duration::from_secs(5),
+        });
+        tx.send(None).unwrap();
+        a.poll_dialog();
+        assert!(a.project.prompt.is_none() && a.project.dialog.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn missing_native_dialog_falls_back_to_in_app_prompt() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        a.project.native_dialogs = true;
+        let (tx, rx) = std::sync::mpsc::channel();
+        a.project.dialog = Some(DialogJob {
+            kind: DialogKind::Save(SaveTarget::Png),
+            rx,
+            started: Instant::now(),
+        });
+        tx.send(None).unwrap();
+        a.poll_dialog();
+        assert!(!a.project.native_dialogs);
+        assert_eq!(a.project.prompt, Some(Prompt::SavePath(SaveTarget::Png)));
     }
 }

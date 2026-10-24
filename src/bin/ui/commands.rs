@@ -173,8 +173,17 @@ pub enum AppCommand {
     OpenFile {
         path: String,
     },
-    SavePsd,
-    ExportPng,
+    /// Layered PSD. No path: the user picks one in a Save dialog. A
+    /// relative path is resolved against Documents/Seraphina.
+    SavePsd {
+        #[serde(default)]
+        path: Option<String>,
+    },
+    /// Flattened PNG; `path` as for `SavePsd`.
+    ExportPng {
+        #[serde(default)]
+        path: Option<String>,
+    },
     /// Save the whole workspace as a `.seraphina` project. No path (or
     /// `save_as`) asks the user where.
     SaveProject {
@@ -422,8 +431,8 @@ impl AppCommand {
                 | AppCommand::NbodyMeasurePrecession
                 | AppCommand::SetTheme { .. }
                 | AppCommand::TogglePanel { .. }
-                | AppCommand::SavePsd
-                | AppCommand::ExportPng
+                | AppCommand::SavePsd { .. }
+                | AppCommand::ExportPng { .. }
                 | AppCommand::OpenFile { .. }
                 | AppCommand::SaveProject { .. }
                 | AppCommand::OpenProject { .. }
@@ -437,8 +446,8 @@ impl AppCommand {
         matches!(
             self,
             AppCommand::OpenFile { .. }
-                | AppCommand::SavePsd
-                | AppCommand::ExportPng
+                | AppCommand::SavePsd { .. }
+                | AppCommand::ExportPng { .. }
                 | AppCommand::SaveProject { .. }
                 | AppCommand::OpenProject { .. }
                 | AppCommand::NewProject
@@ -461,6 +470,8 @@ impl AppCommand {
             self,
             AppCommand::SaveProject { path: Some(_), .. }
                 | AppCommand::OpenProject { path: Some(_) }
+                | AppCommand::SavePsd { path: Some(_) }
+                | AppCommand::ExportPng { path: Some(_) }
         )
     }
 }
@@ -547,11 +558,11 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "zoom", description: "Set Paint zoom.", params: obj(json!({ "percent": n("5-1600"), "fit": b("fit to window") }), &[]) },
         ToolSpec { name: "pan", description: "Pan the Paint view in screen points.", params: obj(json!({ "dx": n("dx"), "dy": n("dy") }), &["dx", "dy"]) },
         ToolSpec { name: "open_file", description: "Open an image as a new layer, or read a PSD header (user approval required).", params: obj(json!({ "path": s("file path") }), &["path"]) },
-        ToolSpec { name: "save_psd", description: "Save the document as a layered PSD with pixels, <name>_edit.psd (user approval required).", params: obj(json!({}), &[]) },
+        ToolSpec { name: "save_psd", description: "Save the document as a layered PSD with pixels (user approval required). Without a path the user picks one in a Save dialog (suggesting <name>_edit.psd in Documents/Seraphina); relative paths go under Documents/Seraphina.", params: obj(json!({"path": {"type": "string", "description": "optional file path"}}), &[]) },
         ToolSpec { name: "save_project", description: "Save every mode (Paint, Animate, Composite, 3D, Materials, Stream settings, optionally this chat) as a .seraphina project (user approval required). Omit path to save to the current project or ask the user.", params: obj(json!({ "path": s("file path; .seraphina is added"), "save_as": b("always ask where to save") }), &[]) },
         ToolSpec { name: "open_project", description: "Open a .seraphina project, replacing the workspace; the user is asked about unsaved changes (user approval required).", params: obj(json!({ "path": s("file path; omit to ask the user") }), &[]) },
         ToolSpec { name: "new_project", description: "Start a new project; the user is asked about unsaved changes (user approval required).", params: obj(json!({}), &[]) },
-        ToolSpec { name: "export_png", description: "Export a flattened PNG (user approval required).", params: obj(json!({}), &[]) },
+        ToolSpec { name: "export_png", description: "Export a flattened PNG (user approval required). Without a path the user picks one in a Save dialog; relative paths go under Documents/Seraphina.", params: obj(json!({"path": {"type": "string", "description": "optional file path"}}), &[]) },
         ToolSpec { name: "scene_add", description: "Add a 3D object.", params: obj(json!({ "kind": { "type": "string", "enum": ["cube", "plane", "cylinder", "joint", "light", "camera"] } }), &["kind"]) },
         ToolSpec { name: "scene_select", description: "Select a 3D object by name.", params: obj(json!({ "object": s("object name") }), &["object"]) },
         ToolSpec { name: "scene_gizmo", description: "3D viewport drag mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["select", "move", "rotate", "scale", "edge_loop", "multi_cut", "quad_draw"] } }), &["mode"]) },
@@ -735,7 +746,7 @@ mod tests {
 
     #[test]
     fn policy_flags() {
-        assert!(AppCommand::ExportPng.needs_user());
+        assert!(AppCommand::ExportPng { path: None }.needs_user());
         assert!(AppCommand::VideoGenerate {
             prompt: "x".into(),
             duration: None

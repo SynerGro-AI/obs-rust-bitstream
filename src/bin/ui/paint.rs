@@ -1219,34 +1219,61 @@ impl PaintState {
         }
     }
 
-    pub fn save_psd(&mut self) -> Result<String, String> {
+    /// Suggested PSD file name: `<name>_edit.psd`, never the source file.
+    pub fn psd_file_name(&self) -> String {
+        let t = save_target(&format!("{}.psd", self.doc_name));
+        std::path::Path::new(&t)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or(t)
+    }
+
+    /// Suggested PNG export file name: `<name>_export.png`.
+    pub fn png_file_name(&self) -> String {
+        let stem = std::path::Path::new(&self.doc_name)
+            .file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "untitled".into());
+        format!("{}_export.png", stem)
+    }
+
+    /// Write the layered PSD to `path` (atomically).
+    pub fn save_psd_to(&mut self, path: &std::path::Path) -> Result<String, String> {
         let d = self.to_psd();
-        let target = save_target(&format!("{}.psd", self.doc_name));
-        d.save(std::path::Path::new(&target))
-            .map_err(|e| format!("save failed: {}", e))?;
+        let bytes = d.to_bytes()?;
+        crate::project::write_atomic(path, &bytes).map_err(|e| format!("save failed: {}", e))?;
         let n = d
             .layers
             .iter()
             .filter(|l| l.kind == LayerKind::Pixels)
             .count();
         self.psd = Some(format!("{} × {}, {} layers saved", d.width, d.height, n));
-        Ok(format!("saved {} ({} layers with pixels)", target, n))
+        Ok(format!(
+            "saved {} ({} layers with pixels)",
+            path.display(),
+            n
+        ))
     }
 
-    pub fn export_png(&mut self) -> Result<String, String> {
+    /// Write the flattened image as PNG to `path` (atomically).
+    pub fn export_png_to(&mut self, path: &std::path::Path) -> Result<String, String> {
+        use image::ImageEncoder;
         let flat = self.flattened();
-        let target = format!("{}_export.png", self.doc_name);
-        image::save_buffer(
-            &target,
-            &flat.data,
-            flat.width,
-            flat.height,
-            image::ExtendedColorType::Rgba8,
-        )
-        .map_err(|e| format!("export failed: {}", e))?;
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(
+                &flat.data,
+                flat.width,
+                flat.height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| format!("export failed: {}", e))?;
+        crate::project::write_atomic(path, &bytes).map_err(|e| format!("export failed: {}", e))?;
         Ok(format!(
             "exported {} ({} × {})",
-            target, flat.width, flat.height
+            path.display(),
+            flat.width,
+            flat.height
         ))
     }
 
@@ -1755,8 +1782,6 @@ impl PaintState {
                 self.pan += Vec2::new(*dx, *dy);
                 Ok(format!("panned {:.0}, {:.0}", dx, dy))
             }
-            C::SavePsd => self.save_psd(),
-            C::ExportPng => self.export_png(),
             _ => return None,
         };
         if r.is_ok()
@@ -2040,17 +2065,17 @@ impl PaintState {
                     }
                     if ui
                         .add_sized([w, 24.0], theme::toggle_button(p, "Save PSD", false))
-                        .on_hover_text("Writes <name>_edit.psd; never overwrites the source")
+                        .on_hover_text("Save a layered PSD (asks where; suggests <name>_edit.psd)")
                         .clicked()
                     {
-                        bus.push(AppCommand::SavePsd);
+                        bus.push(AppCommand::SavePsd { path: None });
                     }
                     if ui
                         .add_sized([w, 24.0], theme::primary_button(p, "Export"))
-                        .on_hover_text("Flattened PNG")
+                        .on_hover_text("Export a flattened PNG (asks where)")
                         .clicked()
                     {
-                        bus.push(AppCommand::ExportPng);
+                        bus.push(AppCommand::ExportPng { path: None });
                     }
                 });
             });

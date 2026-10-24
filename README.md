@@ -588,12 +588,10 @@ as you discover more quirks — the next parse gets smarter automatically.
 - [ ] Input pure layer started (input_device)
 - [ ] Output pure layer started (output, audio_output, session, preview, program)
 - [x] Differential helper wired into modules
-- [x] AI integration scaffold (swap backends with one variable)
 - [x] Parser tools wired
 - [x] CI (cargo test on push/PR)
 - [x] Public under SynerGro-AI
 - [ ] Batch application to remaining util files
-- [ ] Live HTTP client in AI scaffold
 - [ ] Workspace layout
 
 ## Layout
@@ -623,25 +621,11 @@ PLAN.md
 cargo test
 ```
 
-## AI integration
-
-Simple variable adjustment:
-
-```rust
-use obs_rust_bitstream::ai::{AiAssistant, AiConfig};
-
-let ai = AiAssistant::new(AiConfig::default());          // Grok
-// let ai = AiAssistant::new(AiConfig::claude());       // Claude
-// let ai = AiAssistant::new(AiConfig::seraphina());    // Seraphina
-let review = ai.review_skeleton("/* generated rust */");
-```
-
 ## Foundational plan
 
 1. Foundation patterns first — done
 2. Parser wired — done
 3. High-leverage modules + differential helper — done
-4. AI scaffold for automated help — done
 5. Batch-apply to the rest
 6. Keep pushing — public, free, open
 

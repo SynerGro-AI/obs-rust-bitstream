@@ -1,15 +1,13 @@
-//! Safe pure VideoTimeline (AI video edit core).
+//! Safe pure VideoTimeline (multi-clip video edit core).
 //!
 //! Holds named clips. Each clip has a start time, a duration,
-//! and a source name. AI can add a clip. build produces the
+//! and a source name. build produces the
 //! active clip list. render returns the active clip count.
 //! Empty and duplicate names rejected. No unwraps.
 //!
 //! Differential: two clips + active-at-time round-trips.
 
 use std::collections::HashMap;
-
-use crate::ai::AiAssistant;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VideoError {
@@ -99,24 +97,6 @@ impl VideoTimeline {
         clips
     }
 
-    /// Ask the assistant for a clip name and add it.
-    pub fn add_ai(
-        &mut self,
-        ai: &AiAssistant,
-        prompt: &str,
-        start_secs: f32,
-        duration_secs: f32,
-        source: &str,
-        fallback: &str,
-    ) -> Result<(), VideoError> {
-        let reply = ai.assist(prompt);
-        let name = first_token(&reply).unwrap_or(fallback);
-        if name.is_empty() {
-            return Err(VideoError::EmptyName);
-        }
-        self.add(name, start_secs, duration_secs, source)
-    }
-
     /// Build the list of active clip sources at a time.
     pub fn build(&self, time: f32) -> Vec<String> {
         self.active_at(time)
@@ -129,11 +109,6 @@ impl VideoTimeline {
     pub fn render(&self, time: f32) -> usize {
         self.active_at(time).len()
     }
-}
-
-fn first_token(s: &str) -> Option<&str> {
-    s.split_whitespace()
-        .find(|t| !t.starts_with('[') && !t.contains('=') && !t.contains('|'))
 }
 
 #[cfg(test)]
@@ -161,15 +136,5 @@ mod tests {
         t.add("main", 2.0, 5.0, "cam2").unwrap();
         assert_eq!(t.render(1.0), 1);
         assert_eq!(t.build(3.0), vec!["cam2".to_string()]);
-    }
-
-    #[test]
-    fn ai_edit() {
-        let mut t = VideoTimeline::new();
-        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
-        t.add_ai(&ai, "suggest a clip", 0.0, 3.0, "cam1", "opening")
-            .unwrap();
-        assert_eq!(t.len(), 1);
-        assert_eq!(t.render(1.0), 1);
     }
 }

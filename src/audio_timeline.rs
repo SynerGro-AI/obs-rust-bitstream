@@ -7,7 +7,6 @@
 
 use std::collections::HashMap;
 
-use crate::ai::AiAssistant;
 use crate::audio_bus::AudioBus;
 use crate::audio_channel::{AudioChannel, ChannelError};
 use crate::wav_reader::WavData;
@@ -100,23 +99,6 @@ impl AudioTimeline {
         names
     }
 
-    /// Ask the assistant for a track name and add it at a time.
-    /// Falls back to `fallback` if the reply has no usable token.
-    pub fn add_ai(
-        &mut self,
-        ai: &AiAssistant,
-        prompt: &str,
-        start_secs: f32,
-        fallback: &str,
-    ) -> Result<(), TimelineError> {
-        let reply = ai.assist(prompt);
-        let name = first_token(&reply).unwrap_or(fallback);
-        if name.is_empty() {
-            return Err(TimelineError::EmptyName);
-        }
-        self.add(name, start_secs)
-    }
-
     /// Build a bus from every track that is active at `time`.
     pub fn build_bus(&self, time: f32) -> AudioBus {
         let mut bus = AudioBus::new();
@@ -161,11 +143,6 @@ impl AudioTimeline {
     }
 }
 
-fn first_token(s: &str) -> Option<&str> {
-    s.split_whitespace()
-        .find(|t| !t.starts_with('[') && !t.contains('=') && !t.contains('|'))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,10 +173,9 @@ mod tests {
     }
 
     #[test]
-    fn ai_edit_build_render() {
+    fn build_bus_and_render() {
         let mut t = AudioTimeline::new();
-        let ai = AiAssistant::new(crate::ai::AiConfig::seraphina());
-        t.add_ai(&ai, "suggest a track", 0.0, "voice").unwrap();
+        t.add("voice", 0.0).unwrap();
         t.add("music", 1.0).unwrap();
         assert_eq!(t.len(), 2);
         let bus = t.build_bus(0.5);

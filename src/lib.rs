@@ -8,7 +8,7 @@
 //! - audio_effect: pure audio effect
 //! - effect_chain: pure effect chain
 //! - audio_timeline: pure multi-track timeline
-//! - video_timeline: pure AI video timeline
+//! - video_timeline: pure multi-clip video timeline
 //! - layer_stack: pure layer stack
 //! - layer_group: pure layer group
 //! - history: pure undo / redo
@@ -16,7 +16,6 @@
 //! - compositor: pure video compositor
 //! - input_device: pure input device
 //! - program_stream: pure program stream
-pub mod ai;
 pub mod arena;
 pub mod audio_bus;
 pub mod audio_channel;
@@ -72,7 +71,6 @@ pub mod obs_data;
 pub mod obs_encoder_defaults;
 pub mod periodic_table;
 pub mod ping_pong;
-pub mod pipe_suggest;
 pub mod playback_clock;
 pub mod preset_control;
 pub mod quality_slider;
@@ -119,7 +117,6 @@ pub mod linux_audio;
 pub mod active_tool;
 pub mod add_noise;
 pub mod ae_tools;
-pub mod ai_tools;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod apple_audio;
 pub mod audio_backend_status;
@@ -268,7 +265,6 @@ pub mod windows_audio;
 pub mod workspace;
 pub mod youtube_target;
 pub use active_tool::{ActiveTool, ToolSource};
-pub use ai::{AiAssistant, AiConfig, Backend};
 pub use audio_bus::{AudioBus, BusError};
 pub use audio_channel::{AudioChannel, ChannelError};
 pub use audio_effect::{AudioEffect, EffectError};
@@ -363,7 +359,6 @@ pub mod tile_undo;
 pub mod ui_canvas;
 pub use add_noise::{AddNoise, NoiseError};
 pub use ae_tools::{AeTool, AeTools};
-pub use ai_tools::{AiTools, BalanceSuggestion, CurveSuggestion, EffectSuggestion};
 pub use audio_sync::AudioSync;
 pub use audio_writer::{AudioWriteError, AudioWriter};
 pub use av_bundle::AvBundle;
@@ -436,7 +431,6 @@ pub use photo_layers::{
     Layer as PhotoLayer, LayerError as PhotoLayerError, LayerStack as PhotoLayers,
 };
 pub use ping_pong::PingPong;
-pub use pipe_suggest::PipeSuggest;
 pub use playback_clock::{ClockError, PlaybackClock};
 pub use posterize::{Posterize, PosterizeError};
 pub use preset_control::{PresetControl, PresetKind};

@@ -579,7 +579,15 @@ impl App {
 
     /// `open_project`: asks about unsaved changes first.
     pub fn cmd_open_project(&mut self, path: Option<&str>) -> Result<String, String> {
-        let after = After::Open(path.map(project::with_ext));
+        // like saves: a relative path means Documents/Seraphina, never the CWD
+        let after = After::Open(path.map(|p| {
+            let p = project::with_ext(p);
+            if p.is_absolute() {
+                p
+            } else {
+                self.project.docs_dir.join(p)
+            }
+        }));
         if self.check_dirty() {
             self.project.prompt = Some(Prompt::Unsaved(after));
             return Ok("unsaved changes: the user is asked to save them first".into());
@@ -1568,6 +1576,23 @@ pub(crate) mod tests {
         run(&mut a, r#"{"cmd":"switch_mode","mode":"paint"}"#);
         run(&mut a, r#"{"cmd":"brush_stroke","points":[[5,5],[50,50]]}"#);
         assert!(a.is_dirty());
+    }
+
+    #[test]
+    fn a_relative_name_saves_and_opens_in_documents() {
+        let ctx = egui::Context::default();
+        let mut a = test_app(&ctx);
+        a.project.docs_dir = project::test_dir("relative-docs");
+        edit_scene(&mut a);
+        let n = a.scene.objs.len();
+        a.cmd_save_project(Some("smoke"), false).unwrap();
+        let file = a.project.docs_dir.join("smoke.seraphina");
+        assert!(file.exists());
+        let mut b = test_app(&ctx);
+        b.project.docs_dir = a.project.docs_dir.clone();
+        b.cmd_open_project(Some("smoke")).unwrap();
+        assert_eq!(b.scene.objs.len(), n);
+        assert_eq!(b.project.path.as_deref(), Some(file.as_path()));
     }
 
     #[test]

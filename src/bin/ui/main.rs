@@ -2667,7 +2667,12 @@ fn main() -> eframe::Result<()> {
                     .extension()
                     .is_some_and(|e| e.eq_ignore_ascii_case(project::EXT));
                 app.bus.push(if is_project {
-                    AppCommand::OpenProject { path: Some(path) }
+                    // a path typed in a terminal is relative to the shell's
+                    // directory, not Documents/Seraphina
+                    let abs = std::path::absolute(&path)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or(path);
+                    AppCommand::OpenProject { path: Some(abs) }
                 } else {
                     AppCommand::OpenFile { path }
                 });

@@ -6,7 +6,7 @@
 //! command bus (`commands::AppCommand`, dispatched by `App::dispatch`).
 //! Seraphina (assistant_panel) drives the same bus through an LLM
 //! provider (xAI by default), the Seraphina.AGI CLI for memory, or a
-//! labelled offline stub.
+//! labelled offline help mode.
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
@@ -19,6 +19,7 @@ mod lab;
 mod llm;
 mod materials;
 mod maya;
+mod net;
 mod output;
 mod paint;
 mod paint_undo;
@@ -33,6 +34,7 @@ mod text_raster;
 mod theme;
 mod tiled_tex;
 mod timeline;
+mod usage;
 mod videogen;
 mod workspace;
 
@@ -67,6 +69,14 @@ pub fn resolve_asset(path: &str) -> std::path::PathBuf {
 }
 
 // ---- toasts -------------------------------------------------------------
+
+/// B3: answers to the first-send privacy prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Consent {
+    All,
+    MessagesOnly,
+    No,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToastKind {
@@ -405,6 +415,8 @@ pub struct App {
     pub project: workspace::ProjectState,
     /// Crash reports from an earlier run, shown once (D1).
     pub crash_notice: Option<crash::CrashNotice>,
+    /// B3: the first-send privacy prompt is showing.
+    pub consent_open: bool,
     /// Settings read before the window opens (renderer, UI scale).
     pub app_settings: settings::AppSettings,
     /// The window is too small for the chosen UI scale right now.
@@ -419,6 +431,8 @@ pub struct App {
     xai_test_rx: Option<std::sync::mpsc::Receiver<Result<usize, String>>>,
     /// The key in use, looked up once (not every frame) and on change.
     xai_cache: Option<Option<(String, secrets::KeySource)>>,
+    /// xAI tokens and cost, and the spend cap (C3).
+    pub meter: usage::Meter,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -442,6 +456,7 @@ impl App {
         app.start_session(project::autosave_dir());
         app.crash_notice = crash::CrashNotice::check();
         app.app_settings = settings::AppSettings::load().0;
+        app.meter = usage::Meter::load(app.app_settings.spend_cap_usd);
         if let Some(why) = crash::take_fallback_note() {
             app.toasts.push_for(
                 ToastKind::Warn,
@@ -520,12 +535,14 @@ impl App {
             last_time: None,
             project: workspace::ProjectState::new(project::Session::default()),
             crash_notice: None,
+            consent_open: false,
             app_settings: settings::AppSettings::default(),
             ui_scale_capped: false,
             ui_zoom_seen: 1.0,
             refit_in: 0,
             xai_edit: String::new(),
             xai_test_rx: None,
+            meter: usage::Meter::ephemeral(0.0),
             xai_cache: None,
         };
         if let Some(w) = app.assistant.prefs.load_warning.clone() {
@@ -610,7 +627,7 @@ impl App {
             None => "not configured (no key)".into(),
         };
         format!(
-            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream, Materials). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
+            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream, Materials). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\n{} {}\nGrok Imagine video: {}.",
             self.mode.label(),
             if self.dark { "dark" } else { "light" },
             self.show_tools,
@@ -624,7 +641,8 @@ impl App {
             self.comp.context(),
             self.stream.context(),
             self.output.context(),
-            format!("{} {}", self.materials.context(), self.lab.context()),
+            self.materials.context(),
+            self.lab.context(),
             vid
         )
     }
@@ -892,12 +910,16 @@ impl App {
             C::Undo | C::Redo => match self.mode {
                 Mode::Paint => self.paint.apply(cmd).unwrap_or(Err("unsupported".into())),
                 Mode::Animate => {
-                    if matches!(cmd, C::Undo) {
+                    let done = if matches!(cmd, C::Undo) {
                         self.anim.undo()
                     } else {
                         self.anim.redo()
+                    };
+                    if done {
+                        Ok(format!("Animate {}", cmd.name()))
+                    } else {
+                        Err(format!("nothing to {} in Animate", cmd.name()))
                     }
-                    Ok(cmd.name())
                 }
                 Mode::Scene => {
                     let cur = self.scene_snap();
@@ -958,16 +980,22 @@ impl App {
             C::VideoGenerate { prompt, duration } => {
                 self.show_assistant = true;
                 self.dock_tab = 1;
+                let cost = self.video.video_cost(*duration);
+                self.cap_allows(cost, self.video.provider.is_some())?;
                 self.video.generate(prompt, *duration)
             }
             C::VideoExtend { clip, prompt } => {
                 self.show_assistant = true;
                 self.dock_tab = 1;
+                let cost = self.video.extend_cost();
+                self.cap_allows(cost, self.video.provider.is_some())?;
                 self.video.extend(*clip, prompt)
             }
             C::GenerateImage { prompt } => {
                 self.show_assistant = true;
                 self.dock_tab = 1;
+                let cost = self.video.image_cost();
+                self.cap_allows(cost, self.video.imager.is_some())?;
                 self.video.generate_image(prompt)
             }
             C::VideoStitch { clips } => {
@@ -1485,16 +1513,164 @@ impl App {
     }
 
     pub fn pump_assistant(&mut self) {
+        self.assistant.blocked = self.meter.check(0.0).err();
+        self.assistant.share_app_state = self.app_settings.share_app_state;
+        self.assistant.share_memory = self.app_settings.share_memory;
+        if self.assistant.want_send
+            && !self.app_settings.ai_consent
+            && self.assistant.would_leave_device()
+        {
+            // B3: ask first; the message stays in the input box
+            self.assistant.want_send = false;
+            self.consent_open = true;
+        }
         if self.assistant.want_send {
             let ctx = self.app_context();
             let w = self.workspace_ctx();
             self.assistant.start(&ctx, &w);
         }
         self.assistant.poll();
+        self.pump_usage();
         if let Some(calls) = self.assistant.take_tool_calls() {
             self.run_tool_calls(calls);
         }
         self.handle_panel_requests();
+    }
+
+    /// B3: the answer to the first-send privacy prompt.
+    pub fn consent_choice(&mut self, c: Consent) {
+        self.consent_open = false;
+        match c {
+            Consent::All | Consent::MessagesOnly => {
+                let all = c == Consent::All;
+                self.app_settings.ai_consent = true;
+                self.app_settings.share_app_state = all;
+                self.app_settings.share_memory = all;
+                self.save_settings();
+                self.assistant.want_send = true;
+            }
+            Consent::No => self.assistant.note(
+                "Nothing was sent. Your message is still in the box; Seraphina will ask again when you send.",
+            ),
+        }
+    }
+
+    fn save_settings(&mut self) {
+        if cfg!(test) {
+            return; // never touch the real settings file from tests
+        }
+        if let Err(e) = self.app_settings.save() {
+            self.toasts
+                .push(ToastKind::Error, &format!("Couldn't save settings: {}", e));
+        }
+    }
+
+    fn consent_modal(&mut self, ctx: &egui::Context) {
+        if !self.consent_open {
+            return;
+        }
+        let p = self.pal;
+        let to = self.assistant.backend_label();
+        let mut choice = None;
+        let r = egui::Modal::new(egui::Id::new("ai-consent"))
+            .frame(
+                egui::Frame::NONE
+                    .fill(p.panel)
+                    .stroke(egui::Stroke::new(1.0_f32, p.line))
+                    .corner_radius(egui::CornerRadius::same(theme::R_LG as u8))
+                    .inner_margin(egui::Margin::same(SP_LG as i8)),
+            )
+            .show(ctx, |ui| {
+                ui.set_width(500.0);
+                ui.label(egui::RichText::new("Send your chat outside this PC?").size(16.0).strong().color(p.text));
+                ui.add_space(SP_SM);
+                ui.add(egui::Label::new(egui::RichText::new(format!("Seraphina's chat runs on {}, outside this PC. Each message you send goes there together with:", to)).color(p.text)).wrap());
+                ui.add_space(SP_SM);
+                for line in [
+                    "• this conversation (your messages, Seraphina's replies and the results of her actions)",
+                    "• app state: the current mode, layer and object names, and panel layout",
+                    "• your most recent Seraphina.AGI memory notes, if the CLI is installed",
+                ] {
+                    ui.add(egui::Label::new(egui::RichText::new(line).color(p.muted)).wrap());
+                }
+                ui.add_space(SP_SM);
+                ui.add(egui::Label::new(theme::muted(&p, "Pixels, files and your API key are not sent with chat. The service bills your key for every message; set a spend cap and change these choices any time in Settings ▸ Privacy.")).wrap());
+                ui.add_space(SP_MD);
+                ui.horizontal(|ui| {
+                    if ui.add(theme::primary_button(&p, "Allow and send")).clicked() {
+                        choice = Some(Consent::All);
+                    }
+                    if ui.button("Send only my messages").on_hover_text("Leave out app state and memory notes").clicked() {
+                        choice = Some(Consent::MessagesOnly);
+                    }
+                    if ui.button("Don't send").clicked() {
+                        choice = Some(Consent::No);
+                    }
+                });
+            });
+        if r.should_close() && choice.is_none() {
+            choice = Some(Consent::No);
+        }
+        if let Some(c) = choice {
+            self.consent_choice(c);
+        }
+    }
+
+    /// Settings ▸ Privacy (B3).
+    fn privacy_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        ui.label(theme::section(p, "Privacy"));
+        let s = &mut self.app_settings;
+        let before = (s.ai_consent, s.share_app_state, s.share_memory);
+        theme::kv(
+            ui,
+            p,
+            "Chat to xAI",
+            if s.ai_consent {
+                "allowed"
+            } else {
+                "asks before the first message"
+            },
+        );
+        ui.checkbox(
+            &mut s.share_app_state,
+            "Send app state (mode, layer and object names)",
+        )
+        .on_hover_text(
+            "Seraphina works better with it; without it she has to ask what is in your project.",
+        );
+        ui.checkbox(
+            &mut s.share_memory,
+            "Send recent Seraphina.AGI memory notes",
+        );
+        if s.ai_consent && ui.small_button("Ask me again before sending").clicked() {
+            s.ai_consent = false;
+        }
+        if before != (s.ai_consent, s.share_app_state, s.share_memory) {
+            self.save_settings();
+        }
+    }
+
+    /// Count what the workers spent and toast a round the cap held back.
+    fn pump_usage(&mut self) {
+        self.video.tick_spent();
+        for u in std::mem::take(&mut self.assistant.spent)
+            .into_iter()
+            .chain(std::mem::take(&mut self.video.spent))
+        {
+            self.meter.record(&u);
+        }
+        if let Some(why) = self.assistant.cap_hit.take() {
+            self.toasts.push(ToastKind::Warn, &why);
+        }
+    }
+
+    /// Spend-cap check before a billed Imagine job.
+    fn cap_allows(&self, usd: f64, configured: bool) -> Result<(), String> {
+        if configured {
+            self.meter.check(usd)
+        } else {
+            Ok(())
+        }
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -1893,6 +2069,28 @@ impl App {
                         }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if self.meter.session.calls > 0 || self.meter.cap_usd > 0.0 {
+                            let capped = self.meter.check(0.0).is_err();
+                            let col = if capped { p.warn } else { p.muted };
+                            let r = ui
+                                .add(
+                                    egui::Label::new(
+                                        egui::RichText::new(format!(
+                                            "{} {}",
+                                            ic::COINS,
+                                            self.meter.label()
+                                        ))
+                                        .size(11.5)
+                                        .color(col),
+                                    )
+                                    .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text(self.meter.tooltip());
+                            if r.clicked() {
+                                self.show_settings = true;
+                            }
+                            theme::vdivider(ui, &p, 14.0);
+                        }
                         let st = self.output.status();
                         let live = self.output.is_live();
                         let rec = self.output.is_recording();
@@ -2095,6 +2293,10 @@ impl App {
             ui.label(theme::section(&p, "Grok Imagine"));
             theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
             ui.add_space(SP_SM);
+            self.privacy_ui(ui, &p);
+            ui.add_space(SP_SM);
+            self.spending_ui(ui, &p);
+            ui.add_space(SP_SM);
             if self.output.settings_ui(ui, &p, &mut self.bus) {
                 if let Err(e) = self.output.save_config() {
                     self.toasts.push(ToastKind::Error, &format!("Couldn't save output settings: {}", e));
@@ -2220,7 +2422,7 @@ impl App {
                     .as_chunks_mut::<4>()
                     .0
                     .iter_mut()
-                    .zip(r.data.chunks_exact(4))
+                    .zip(r.data.as_chunks::<4>().0)
                 {
                     let a = s[3] as u32;
                     for c in 0..3 {
@@ -2329,10 +2531,12 @@ impl App {
                 menv,
                 half,
                 c,
-                vol,
                 pr.temp.unwrap_or(env.temperature),
                 env.pressure,
             );
+            if let Some(v) = vol {
+                b = b.with_volume(v);
+            }
             b.heater = pr.heater;
             // open meshes (planes) are static floors
             b.fixed = pr.fixed || !m.is_closed();
@@ -2787,6 +2991,7 @@ impl App {
         self.windows(ctx);
         self.project_modals(ctx);
         self.crash_modal(ctx);
+        self.consent_modal(ctx);
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
@@ -2918,6 +3123,47 @@ impl App {
     /// Settings ▸ Seraphina ▸ xAI API key (C7). The key is saved to
     /// Credential Manager on Windows; env vars still take precedence.
     /// Nothing here ever shows, logs or toasts the key itself.
+    /// Settings ▸ xAI spending: the meter and the 24 h spend cap (C3).
+    fn spending_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        ui.label(theme::section(p, "xAI spending"));
+        theme::kv(ui, p, "This session", self.meter.session.summary());
+        theme::kv(ui, p, "This project", self.meter.project.summary());
+        theme::kv(
+            ui,
+            p,
+            "Last 24 h",
+            format!("${:.4}", self.meter.last_24h_usd()),
+        );
+        let mut cap = self.meter.cap_usd;
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Spend cap").color(p.muted));
+            ui.add(
+                egui::DragValue::new(&mut cap)
+                    .range(0.0..=10_000.0)
+                    .speed(0.1)
+                    .prefix("$")
+                    .suffix(" / 24 h")
+                    .max_decimals(2),
+            )
+            .on_hover_text("Seraphina stops sending chat, image and video requests to xAI once this much has been spent in the last 24 hours. 0 = no cap.");
+            if cap > 0.0 && ui.small_button("Off").clicked() {
+                cap = 0.0;
+            }
+        });
+        if (cap - self.meter.cap_usd).abs() > f64::EPSILON {
+            self.meter.cap_usd = cap;
+            self.app_settings.spend_cap_usd = cap;
+            self.save_settings();
+        }
+        ui.add(
+            egui::Label::new(theme::muted(
+                p,
+                "Costs are xAI's own figures where it reports them, otherwise estimates from the public price list (video is estimated). A job xAI already accepted is billed even if you press Stop.",
+            ))
+            .wrap(),
+        );
+    }
+
     fn xai_key_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
         if let Some(rx) = &self.xai_test_rx {
             if let Ok(r) = rx.try_recv() {
@@ -3237,6 +3483,7 @@ fn main() -> eframe::Result<()> {
 mod tests {
     use super::*;
     use crate::llm::{LlmReply, MockProvider, ToolCall};
+    use egui::Pos2;
     use std::sync::Arc;
 
     fn input(t: f64) -> egui::RawInput {
@@ -3254,6 +3501,141 @@ mod tests {
         for i in 0..frames {
             let _ = ctx.run(input(t0 + i as f64 * 0.05), |ctx| app.frame(ctx));
         }
+    }
+
+    /// Press at `from`, drag through `steps` points to `to`, release.
+    fn drag(app: &mut App, ctx: &egui::Context, from: Pos2, to: Pos2, t0: f64) -> f64 {
+        use egui::{Event, Modifiers, PointerButton};
+        let mut t = t0;
+        let mut frame = |events: Vec<Event>, t: &mut f64| {
+            let mut i = input(*t);
+            i.events = events;
+            let _ = ctx.run(i, |ctx| app.frame(ctx));
+            *t += 0.05;
+        };
+        let press = |pos, pressed| Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        frame(vec![Event::PointerMoved(from)], &mut t);
+        frame(vec![press(from, true)], &mut t);
+        let steps = 8;
+        for k in 1..=steps {
+            let p = from + (to - from) * (k as f32 / steps as f32);
+            frame(vec![Event::PointerMoved(p)], &mut t);
+        }
+        frame(vec![press(to, false)], &mut t);
+        frame(vec![], &mut t);
+        t
+    }
+
+    #[test]
+    fn an_animate_stroke_inks_only_the_current_frame_and_undoes_in_one_step() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Animate;
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(
+            app.dispatch(&AppCommand::Undo, Origin::User).is_err(),
+            "undo with no history must say so"
+        );
+        app.dispatch(&AppCommand::TimelineScrub { time: 0.5 }, Origin::User)
+            .unwrap();
+        let cur = app.anim.current();
+        let before = app.anim.frames.clone();
+        drag(
+            &mut app,
+            &ctx,
+            Pos2::new(700.0, 450.0),
+            Pos2::new(900.0, 470.0),
+            1.0,
+        );
+        assert_eq!(app.anim.current(), cur);
+        for (i, (a, b)) in before.iter().zip(&app.anim.frames).enumerate() {
+            if i != cur {
+                assert!(a.data == b.data, "frame {} changed", i);
+            }
+        }
+        let ink = |f: &obs_rust_bitstream::ui_canvas::Raster| -> Vec<[u8; 4]> {
+            f.data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .filter(|p| p[3] > 0)
+                .copied()
+                .collect()
+        };
+        let inked = ink(&app.anim.frames[cur]);
+        assert!(inked.len() > 200, "stroke covers {} px", inked.len());
+        // the brush colour, at full strength in the stroke's core
+        assert!(inked.contains(&[28, 28, 30, 255]));
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(
+            app.anim.frames[cur].data == before[cur].data,
+            "one undo removes the stroke"
+        );
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        assert_eq!(ink(&app.anim.frames[cur]), inked, "redo is exact");
+        assert!(app.dispatch(&AppCommand::Redo, Origin::User).is_err());
+    }
+
+    #[test]
+    fn a_paint_brush_stroke_changes_only_the_selected_layer_and_undoes_exactly() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Paint;
+        run(&mut app, &ctx, 3, 0.0);
+        app.dispatch(
+            &AppCommand::SelectLayer {
+                layer: "Paint".into(),
+            },
+            Origin::User,
+        )
+        .unwrap();
+        app.paint.tool = paint::Tool::Brush;
+        let sel = app.paint.doc.selected;
+        // layers may be trimmed to their content; compare them in document space
+        let pixels = |app: &App| -> Vec<Vec<u8>> {
+            let (w, h) = (app.paint.doc.width, app.paint.doc.height);
+            app.paint
+                .doc
+                .layers
+                .iter()
+                .map(|l| {
+                    let mut l = l.clone();
+                    l.bake_to(w, h);
+                    l.raster.data.clone()
+                })
+                .collect()
+        };
+        let before = pixels(&app);
+        drag(
+            &mut app,
+            &ctx,
+            Pos2::new(700.0, 450.0),
+            Pos2::new(900.0, 470.0),
+            1.0,
+        );
+        let after = pixels(&app);
+        for (i, (a, b)) in before.iter().zip(&after).enumerate() {
+            if i != sel {
+                assert!(a == b, "layer {} changed", app.paint.doc.layers[i].name);
+            }
+        }
+        let changed = before[sel]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(after[sel].as_chunks::<4>().0)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert!(changed > 200, "stroke changed {} px", changed);
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(pixels(&app) == before, "undo is exact");
+        app.dispatch(&AppCommand::Redo, Origin::User).unwrap();
+        assert!(pixels(&app) == after, "redo is exact");
     }
 
     #[test]
@@ -3312,7 +3694,8 @@ mod tests {
     fn app_with(ctx: &egui::Context, provider: Option<Arc<dyn llm::LlmProvider>>) -> App {
         let a = assistant_panel::AssistantPanel::with_provider(provider, prefs::Prefs::ephemeral());
         let mut app = App::with(ctx, a, videogen::VideoGenPanel::unconfigured());
-        // never touch the user's saved output settings or stream key
+        app.app_settings.ai_consent = true; // tests that need the prompt clear it
+                                            // never touch the user's saved output settings or stream key
         let dir = std::env::temp_dir().join(format!("seraphina_app_rec_{}", std::process::id()));
         app.output = output::Output::new(
             output::OutputConfig {
@@ -3559,7 +3942,7 @@ mod tests {
     /// the worker). `cargo test --release --features ui --bin ui -- --ignored
     /// measure_ui_frame_time --nocapture` (SERAPHINA_BENCH_BODIES, default 1500).
     #[test]
-    #[ignore]
+    #[ignore = "benchmark: run with --release and --nocapture"]
     fn measure_ui_frame_time_with_a_heavy_arena() {
         use obs_rust_bitstream::arena::{stress_pile, Collide, Environment};
         let n: usize = std::env::var("SERAPHINA_BENCH_BODIES")
@@ -4252,13 +4635,18 @@ mod tests {
             )
             .is_err());
         assert!(!app.output.is_live());
-        if output::find_ffmpeg().is_err() {
+        // Windows runners and Wine have no ffmpeg.exe: there the bus must
+        // refuse clearly. Everywhere else ffmpeg is required and the real
+        // recording below must run; a missing ffmpeg fails the test.
+        if cfg!(windows) && output::find_ffmpeg().is_err() {
             assert!(app
                 .dispatch(&AppCommand::SetRecording { recording: true }, Origin::User)
                 .unwrap_err()
                 .contains("ffmpeg was not found"));
             return;
         }
+        output::find_ffmpeg()
+            .expect("stream_commands_and_status needs ffmpeg (on PATH or SERAPHINA_FFMPEG)");
         // real recording of the Stream-mode bit view through the bus
         app.mode = Mode::Stream;
         let msg = app
@@ -4310,7 +4698,7 @@ mod tests {
 
     /// Rewrites assets/mountain_spire.psd from the built-in sample document.
     #[test]
-    #[ignore]
+    #[ignore = "tool, not a test: rewrites assets/mountain_spire.psd"]
     fn regenerate_sample_psd() {
         let mut t = Toasts {
             now: 0.0,
@@ -4365,13 +4753,11 @@ mod tests {
         }
     }
 
-    /// The chat panel routes CLI intents to the real `seraphina` CLI (skipped if not installed).
+    /// The chat panel routes CLI intents to the real `seraphina` CLI.
     #[test]
+    #[ignore = "needs the seraphina CLI on PATH (pip install seraphina-agi)"]
     fn chat_routes_memory_intents_to_the_real_cli() {
-        let Some(mut cli) = llm::SeraphinaCli::detect() else {
-            eprintln!("skipped: seraphina not on PATH");
-            return;
-        };
+        let mut cli = llm::SeraphinaCli::detect().expect("seraphina CLI not found on PATH");
         let home = std::env::temp_dir().join(format!("seraphina_chat_cli_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         cli.home = Some(home.clone());
@@ -4829,7 +5215,7 @@ mod tests {
         assert!(last
             .text
             .contains("Offline: no language model is configured"));
-        assert_eq!(app.assistant.backend_label(), "Offline stub");
+        assert_eq!(app.assistant.backend_label(), "Offline help");
     }
 
     #[test]
@@ -4839,6 +5225,7 @@ mod tests {
             LlmReply {
                 content: "Done: the mist is softer and the sky is hidden.".into(),
                 tool_calls: vec![],
+                usage: None,
             },
             LlmReply {
                 content: String::new(),
@@ -4854,6 +5241,7 @@ mod tests {
                     call("export_png", "{}"),
                     call("no_such_tool", "{}"),
                 ],
+                usage: None,
             },
         ];
         let mock = Arc::new(MockProvider::new(replies));
@@ -4879,12 +5267,12 @@ mod tests {
         {
             let seen = mock.seen.lock().unwrap();
             assert_eq!(seen.len(), 2);
+            assert!(seen[1].iter().any(|m| m.role == "tool"
+                && m.content.starts_with("<<<DATA tool result ")
+                && m.content.contains("\nok: ")));
             assert!(seen[1]
                 .iter()
-                .any(|m| m.role == "tool" && m.content.starts_with("ok: ")));
-            assert!(seen[1]
-                .iter()
-                .any(|m| m.role == "tool" && m.content.starts_with("blocked: ")));
+                .any(|m| m.role == "tool" && m.content.contains("\nblocked: ")));
             assert!(seen[0][0].content.contains("Current app state"));
         }
         assert!(app
@@ -4908,10 +5296,12 @@ mod tests {
             LlmReply {
                 content: "Press Run to go live.".into(),
                 tool_calls: vec![],
+                usage: None,
             },
             LlmReply {
                 content: String::new(),
                 tool_calls: vec![call("set_streaming", r#"{"live":true}"#)],
+                usage: None,
             },
         ];
         let mut app = app_with(&ctx, Some(Arc::new(MockProvider::new(replies))));
@@ -4941,13 +5331,270 @@ mod tests {
         assert!(r.as_ref().unwrap_err().contains("RTMP URL"), "{:?}", r);
     }
 
-    /// Live: real xAI tool calling through the bus. Skips without a key.
     #[test]
-    fn live_xai_tool_calling_smoke() {
-        let Some(p) = llm::OpenAiCompat::from_env() else {
-            eprintln!("SKIPPED live_xai_tool_calling_smoke: no XAI_API_KEY");
-            return;
+    fn stop_cancels_a_slow_round_and_frees_the_input() {
+        let ctx = egui::Context::default();
+        let replies = vec![LlmReply {
+            content: String::new(),
+            tool_calls: vec![call(
+                "set_layer_opacity",
+                r#"{"layer":"Mist Overlay","opacity":10}"#,
+            )],
+            usage: None,
+        }];
+        let mock = Arc::new(MockProvider::new(replies));
+        *mock.delay.lock().unwrap() = Some(std::time::Duration::from_secs(30));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let mist = app.paint.find_layer(Some("Mist Overlay")).unwrap();
+        let before = app.paint.doc.layers[mist].opacity;
+        app.assistant.input = "fade the mist".into();
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 2, 0.0);
+        assert!(app.assistant.is_busy());
+        let t0 = std::time::Instant::now();
+        assert!(app.assistant.stop());
+        assert!(!app.assistant.is_busy());
+        assert!(!app.assistant.stop(), "nothing left to stop");
+        // the worker notices quickly and nothing it returns is applied
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(t0.elapsed() < std::time::Duration::from_secs(5));
+        assert!((app.paint.doc.layers[mist].opacity - before).abs() < 1e-4);
+        assert!(
+            mock.seen.lock().unwrap().is_empty(),
+            "the mock never answered"
+        );
+        assert!(app
+            .assistant
+            .items
+            .iter()
+            .any(|i| i.text.starts_with("Stopped. Nothing more will be sent")));
+        // the next message goes through normally
+        *mock.delay.lock().unwrap() = None;
+        mock.replies.lock().unwrap().push(LlmReply {
+            content: "Okay.".into(),
+            tool_calls: vec![],
+            usage: None,
+        });
+        app.assistant.input = "never mind".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(app.assistant.items.iter().any(|i| i.text.contains("Okay.")));
+    }
+
+    fn system_prompt(m: &MockProvider, round: usize) -> String {
+        m.seen.lock().unwrap()[round][0].content.clone()
+    }
+
+    #[test]
+    fn first_send_asks_for_consent_and_respects_the_choice() {
+        let ctx = egui::Context::default();
+        let reply = |t: &str| LlmReply {
+            content: t.into(),
+            ..Default::default()
         };
+        let mock = billed_mock(vec![reply("b"), reply("a")]);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.app_settings = settings::AppSettings::default();
+        app.assistant.input = "hello".into();
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(app.consent_open && mock.seen.lock().unwrap().is_empty());
+        assert_eq!(app.assistant.input, "hello", "the message is kept");
+        app.consent_choice(Consent::No);
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(!app.consent_open && mock.seen.lock().unwrap().is_empty());
+        assert!(app
+            .assistant
+            .items
+            .iter()
+            .any(|i| i.text.starts_with("Nothing was sent")));
+        // asked again; this time only the messages go
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 2, 0.0);
+        assert!(app.consent_open);
+        app.consent_choice(Consent::MessagesOnly);
+        wait_idle(&mut app, &ctx, 10);
+        let sys = system_prompt(&mock, 0);
+        assert!(
+            !sys.contains("Active mode") && sys.contains("not shared"),
+            "{sys}"
+        );
+        assert!(app.app_settings.ai_consent && !app.app_settings.share_app_state);
+        // turning app state back on (Settings ▸ Privacy) sends it, no prompt
+        app.app_settings.share_app_state = true;
+        app.assistant.input = "again".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(!app.consent_open);
+        assert!(system_prompt(&mock, 1).contains("Active mode"));
+    }
+
+    #[test]
+    fn local_models_need_no_consent() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(vec![LlmReply {
+            content: "hi".into(),
+            ..Default::default()
+        }]));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.app_settings = settings::AppSettings::default();
+        app.assistant.input = "hello".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(!app.consent_open && mock.seen.lock().unwrap().len() == 1);
+    }
+
+    fn billed_mock(replies: Vec<LlmReply>) -> Arc<MockProvider> {
+        let mut m = MockProvider::new(replies);
+        m.billed = Some("grok-4.7".into());
+        Arc::new(m)
+    }
+
+    fn dollars(usd: f64) -> usage::Usage {
+        usage::Usage {
+            ticks: (usd * usage::TICKS_PER_USD) as u64,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn rounds_are_metered_with_xai_costs_or_estimates() {
+        let ctx = egui::Context::default();
+        let replies = vec![
+            LlmReply {
+                content: "Second.".into(),
+                tool_calls: vec![],
+                usage: None,
+            },
+            LlmReply {
+                content: "First.".into(),
+                tool_calls: vec![],
+                usage: Some(usage::Usage {
+                    prompt_tokens: 900,
+                    completion_tokens: 10,
+                    ticks: 20_000_000,
+                    estimated: false,
+                }),
+            },
+        ];
+        let mut app = app_with(&ctx, Some(billed_mock(replies)));
+        for msg in ["one", "two"] {
+            app.assistant.input = msg.into();
+            app.assistant.want_send = true;
+            wait_idle(&mut app, &ctx, 10);
+        }
+        run(&mut app, &ctx, 2, 0.0);
+        let s = &app.meter.session;
+        assert_eq!((s.calls, s.estimated_calls), (2, 1), "{s:?}");
+        assert!(s.usd_ticks > 20_000_000 && s.prompt_tokens > 900);
+        assert_eq!(&app.meter.project, s);
+        // saved with the project, cleared by New
+        let c = app.to_container(false, None);
+        assert_eq!(c.manifest["usage"]["calls"], 2);
+        app.new_project();
+        assert_eq!(app.meter.project, usage::Totals::default());
+        assert_eq!(app.meter.session.calls, 2, "the session keeps counting");
+        // an unbilled provider is not metered
+        let mut app = app_with(&ctx, Some(Arc::new(MockProvider::new(vec![]))));
+        app.assistant.input = "free".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert_eq!(app.meter.session.calls, 0);
+    }
+
+    #[test]
+    fn spend_cap_blocks_chat_and_imagine_with_a_toast() {
+        let ctx = egui::Context::default();
+        let mock = billed_mock(vec![LlmReply {
+            content: "should not be sent".into(),
+            ..Default::default()
+        }]);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.meter.cap_usd = 0.50;
+        app.meter.record(&dollars(0.60));
+        app.assistant.input = "make it pop".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 5);
+        assert!(mock.seen.lock().unwrap().is_empty(), "nothing went to xAI");
+        assert!(app
+            .toasts
+            .items
+            .iter()
+            .any(|t| matches!(t.kind, ToastKind::Warn)
+                && t.text.starts_with("Spend cap reached ($0.60 of $0.50")));
+        assert!(app
+            .assistant
+            .items
+            .iter()
+            .any(|i| i.text.contains("Settings")));
+
+        struct Free;
+        impl videogen::VideoGenProvider for Free {
+            fn name(&self) -> String {
+                "free".into()
+            }
+            fn start_generate(
+                &self,
+                _: &str,
+                _: u32,
+                _: &std::sync::atomic::AtomicBool,
+            ) -> Result<String, String> {
+                Err("must not be called".into())
+            }
+            fn start_extend(
+                &self,
+                _: &str,
+                _: &str,
+                _: &std::sync::atomic::AtomicBool,
+            ) -> Result<String, String> {
+                Err("must not be called".into())
+            }
+            fn poll(
+                &self,
+                _: &str,
+                _: &std::sync::atomic::AtomicBool,
+            ) -> Result<videogen::JobStatus, String> {
+                Ok(videogen::JobStatus::Pending)
+            }
+        }
+        app.video.provider = Some(Arc::new(Free));
+        let e = app
+            .dispatch(
+                &AppCommand::VideoGenerate {
+                    prompt: "a cat".into(),
+                    duration: Some(1),
+                },
+                Origin::User,
+            )
+            .unwrap_err();
+        assert!(e.starts_with("Spend cap reached"), "{e}");
+        assert!(app.video.clips.is_empty());
+        // raising the cap lets work through again
+        app.meter.cap_usd = 5.0;
+        assert!(app
+            .dispatch(
+                &AppCommand::VideoGenerate {
+                    prompt: "a cat".into(),
+                    duration: Some(1),
+                },
+                Origin::User
+            )
+            .is_ok());
+    }
+
+    /// Live, billed: real xAI tool calling through the bus. Run with
+    /// `cargo test --features ui --bin ui -- --ignored live_xai_tool_calling_smoke`.
+    #[test]
+    #[ignore = "live, billed: needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"]
+    fn live_xai_tool_calling_smoke() {
+        assert!(
+            ["XAI_API_KEY", "SERAPHINA_GROK_API_KEY"]
+                .iter()
+                .any(|k| std::env::var_os(k).is_some()),
+            "live_xai_tool_calling_smoke needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"
+        );
+        let p = llm::OpenAiCompat::from_env().expect("provider from env");
         let ctx = egui::Context::default();
         let mut app = app_with(&ctx, Some(Arc::new(p)));
         app.assistant.input =

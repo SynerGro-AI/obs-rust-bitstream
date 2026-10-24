@@ -208,6 +208,7 @@ fn env_overrides_xai() -> bool {
 /// never includes the key.
 pub fn test_xai_key(base: &str, key: &str) -> Result<usize, String> {
     let url = format!("{}/models", base.trim_end_matches('/'));
+    crate::net::key_allowed(&url)?;
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(std::time::Duration::from_secs(10))
         .timeout_read(std::time::Duration::from_secs(20))
@@ -361,16 +362,16 @@ mod tests {
         let k = "xai-NOT-A-REAL-KEY-0123456789";
         let e = test_xai_key("http://127.0.0.1:9", k).unwrap_err();
         assert!(e.contains("couldn't reach") && !e.contains(k), "{e}");
+        // B7: never over plain http to another machine (refused before connecting)
+        let e = test_xai_key("http://192.0.2.1/v1", k).unwrap_err();
+        assert!(e.contains("unencrypted") && !e.contains(k), "{e}");
     }
 
     /// Live: the env key passes, a fake one is rejected. Never prints keys.
     #[test]
-    #[ignore]
+    #[ignore = "live: needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"]
     fn live_xai_key_test() {
-        let Some(k) = env_key() else {
-            eprintln!("SKIPPED live_xai_key_test: no XAI_API_KEY");
-            return;
-        };
+        let k = env_key().expect("live_xai_key_test needs XAI_API_KEY");
         let n = test_xai_key("https://api.x.ai/v1", &k).expect("env key should work");
         assert!(n > 0);
         let e = test_xai_key("https://api.x.ai/v1", "xai-FAKEdemoKEY0000000000000000").unwrap_err();
@@ -380,10 +381,11 @@ mod tests {
 
     /// Real Credential Manager (Windows only; also runs under Wine).
     #[test]
+    #[cfg_attr(
+        not(windows),
+        ignore = "Windows Credential Manager only (runs under Wine)"
+    )]
     fn vault_store_migrates_plaintext_file() {
-        if !cfg!(windows) {
-            return;
-        }
         let d = tmp("vault");
         let prefix = format!("SeraphinaStudioTest{}", std::process::id());
         let s = Store::at(&d, &prefix, true);

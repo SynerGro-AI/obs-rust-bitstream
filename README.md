@@ -151,8 +151,8 @@ approximate.
 * **One command bus.** Every button, shortcut, drag and AI action becomes an
   `AppCommand` (`src/bin/ui/commands.rs`) and goes through `App::dispatch`.
   The AI can therefore do anything the UI can, and nothing else.
-* **Tool calling.** The 88 commands are exposed as JSON-schema tools to an
-  OpenAI-compatible chat API. Calls run through a Triad gate:
+* **Tool calling.** The 101 commands are exposed as JSON-schema tools to an
+  OpenAI-compatible chat API (list: [docs/AI_TOOLS.md](docs/AI_TOOLS.md)). Calls run through a Triad gate:
   * the call must parse;
   * file I/O (open, save PSD, export PNG), billed generation (video, image,
     extend, stitch), going live and starting a recording need the user to

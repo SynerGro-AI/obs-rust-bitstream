@@ -264,12 +264,12 @@ fn checked_dates(s: &str) -> Vec<String> {
                 weekday(y, m + 1, d),
                 wd,
                 "wrong weekday: {}",
-                &s[i..].chars().take(16).collect::<String>()
+                s[i..].chars().take(16).collect::<String>()
             );
             assert!(
                 rest[4..].starts_with(" (target"),
                 "date not labelled as a target: {}",
-                &s[i..].chars().take(16).collect::<String>()
+                s[i..].chars().take(16).collect::<String>()
             );
             out.push(format!("{day} {} {d}, {y}", MONTHS[m]));
         }

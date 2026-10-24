@@ -9,6 +9,14 @@ Visual C++ Redistributable is needed). Its tests pass on a GitHub Windows
 Server 2025 runner before the release zip is made; the code is also tested
 under Wine 10 on Linux (a proxy, not real Windows).
 
+FILES IN THIS FOLDER
+--------------------
+  SeraphinaStudio.exe   the app
+  README.txt            this file
+  assets\               sample images Paint and Composite open
+  out.obsr              the recording Stream mode opens at startup
+  out.h264              the default file in Stream mode's Open box
+
 RECORDING AND STREAMING NEED FFMPEG (not bundled)
 -------------------------------------------------
 Record (MP4: H.264 + AAC) and Go live (RTMP) run ffmpeg as a subprocess.

@@ -3539,8 +3539,8 @@ mod tests {
                 "{name} is used or named by Stream mode but not in ci.yml's windows-ui artifact"
             );
             assert!(
-                readme.contains(name),
-                "{name} is used or named by Stream mode but packaging/windows/README.txt does not list it"
+                lists_file(readme, name),
+                "{name} is used or named by Stream mode but packaging/windows/README.txt's FILES IN THIS FOLDER does not list it"
             );
         }
         let root = crate::test_dir::TestDir::new("zip_layout");
@@ -3561,6 +3561,30 @@ mod tests {
             assert_eq!(found, app.join(&unique), "{name} not found next to the exe");
             assert!(std::fs::metadata(&found).unwrap().len() > 0);
         }
+    }
+
+    /// Whether README.txt's FILES IN THIS FOLDER section has an entry
+    /// for `name` (the first word of one of its indented lines). Prose
+    /// elsewhere that merely mentions the file doesn't count.
+    fn lists_file(readme: &str, name: &str) -> bool {
+        readme
+            .lines()
+            .skip_while(|l| l.trim() != "FILES IN THIS FOLDER")
+            .skip(2) // the title and its underline
+            .take_while(|l| !l.trim().is_empty())
+            .filter(|l| l.starts_with("  "))
+            .any(|l| l.split_whitespace().next() == Some(name))
+    }
+
+    #[test]
+    fn lists_file_takes_only_entries_of_the_files_section() {
+        let readme = "Keep out.obsr next to the exe.\n\nFILES IN THIS FOLDER\n--------------------\n  App.exe     the app\n  out.h264    a sample\n\nENV\n  out.avbn    elsewhere\n";
+        assert!(lists_file(readme, "out.h264"));
+        assert!(lists_file(readme, "App.exe"));
+        assert!(!lists_file(readme, "out.obsr"), "prose is not an entry");
+        assert!(!lists_file(readme, "out.avbn"), "another section");
+        assert!(!lists_file(readme, "out.h26"), "whole names only");
+        assert!(!lists_file("  out.h264  no section\n", "out.h264"));
     }
 
     #[test]

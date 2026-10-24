@@ -2825,6 +2825,38 @@ mod tests {
         assert!(!a.contains("x11grab") && a.contains("-shortest"), "{a}");
     }
 
+    /// Whether the socket table (`/proc/net/tcp`) shows `port` listening.
+    /// Without the table there is no way to tell, so it fails loudly
+    /// instead of guessing.
+    fn listening(port: u16, table: std::io::Result<String>) -> bool {
+        let t = table.unwrap_or_else(|e| {
+            panic!("can't read /proc/net/tcp to see the RTMP listener come up: {e}")
+        });
+        let hex = format!(":{port:04X} ");
+        t.lines().any(|l| l.contains(&hex) && l.contains(" 0A "))
+    }
+
+    #[test]
+    fn listening_reads_the_socket_table() {
+        let table = concat!(
+            "  sl  local_address rem_address   st tx_queue rx_queue\n",
+            "   0: 0100007F:7A69 00000000:0000 0A 00000000:00000000\n",
+            "   1: 0100007F:1F90 0100007F:9C40 01 00000000:00000000\n",
+        );
+        assert!(listening(31337, Ok(table.into())));
+        assert!(
+            !listening(8080, Ok(table.into())),
+            "connected, not listening"
+        );
+        assert!(!listening(1935, Ok(table.into())));
+    }
+
+    #[test]
+    #[should_panic(expected = "can't read /proc/net/tcp")]
+    fn listening_without_a_socket_table_fails_loudly() {
+        listening(1935, Err(std::io::ErrorKind::NotFound.into()));
+    }
+
     /// A one-shot `ffmpeg -listen 1` RTMP server on 127.0.0.1 that saves
     /// what it receives under `live/rx_test_key`; returns it, its port and
     /// the file.
@@ -2849,17 +2881,8 @@ mod tests {
             .expect("spawn the ffmpeg RTMP listener");
         // Wait until the one-shot listener is bound. Connecting to check
         // would use up its only accept, so read the socket table instead.
-        let hex = format!(":{port:04X} ");
         let t0 = Instant::now();
-        loop {
-            match std::fs::read_to_string("/proc/net/tcp") {
-                Ok(t) if t.lines().any(|l| l.contains(&hex) && l.contains(" 0A ")) => break,
-                Ok(_) => {}
-                Err(_) => {
-                    std::thread::sleep(Duration::from_secs(1));
-                    break;
-                }
-            }
+        while !listening(port, std::fs::read_to_string("/proc/net/tcp")) {
             assert!(
                 t0.elapsed() < Duration::from_secs(10),
                 "listener never came up"

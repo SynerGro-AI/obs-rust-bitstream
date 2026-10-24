@@ -20,12 +20,14 @@ mod materials;
 mod maya;
 mod output;
 mod paint;
+mod paint_undo;
 mod prefs;
 mod project;
 mod scene;
 mod stream;
 mod text_raster;
 mod theme;
+mod tiled_tex;
 mod timeline;
 mod videogen;
 mod workspace;
@@ -345,6 +347,12 @@ impl<T> History<T> {
 
 pub struct App {
     pub ctx: egui::Context,
+    /// The running physics arena while it plays or steps in the background;
+    /// `scene.arena` then holds its latest snapshot.
+    pub arena_run:
+        Option<obs_rust_bitstream::sim_worker::SimWorker<obs_rust_bitstream::arena::Arena>>,
+    /// Frame time not yet handed to a busy arena worker (s).
+    pub arena_carry: f32,
     pub dark: bool,
     pub pal: Palette,
     pub mode: Mode,
@@ -461,6 +469,8 @@ impl App {
             bus: Vec::new(),
             log: Vec::new(),
             snapshots: HashMap::new(),
+            arena_run: None,
+            arena_carry: 0.0,
             scene_hist: History::new(),
             comp_hist: History::new(),
             mat_hist: History::new(),
@@ -594,6 +604,7 @@ impl App {
         self.comp.layers = s.comp_layers;
         self.comp.selected = s.comp_sel;
         self.scene.assign = s.scene_assign;
+        self.arena_cancel();
         self.scene.arena = None;
         self.scene.arena_playing = false;
         self.scene.arena_start = None;
@@ -612,6 +623,29 @@ impl App {
 
     /// The single entry point for every action in the app.
     pub fn dispatch(&mut self, cmd: &AppCommand, origin: Origin) -> Result<String, String> {
+        if self.arena_run.is_some() {
+            let name = cmd.name();
+            match cmd {
+                // stopping or throwing away a run doesn't wait for it
+                AppCommand::ArenaReset
+                | AppCommand::ArenaPlay {
+                    playing: Some(false),
+                }
+                | AppCommand::NewProject
+                | AppCommand::OpenProject { .. } => self.arena_cancel(),
+                _ if name.starts_with("arena")
+                    || name.starts_with("scene")
+                    || name.starts_with("material")
+                    || matches!(
+                        cmd,
+                        AppCommand::Undo | AppCommand::Redo | AppCommand::SaveProject { .. }
+                    ) =>
+                {
+                    self.arena_sync()
+                }
+                _ => {}
+            }
+        }
         let now = self.now();
         let recorded = self.record_history(cmd, now);
         let r = self.dispatch_inner(cmd);
@@ -715,6 +749,7 @@ impl App {
         self.scene.objs = s.objs;
         self.scene.assign = s.assign;
         // undo ends any running simulation (its start state is what's restored)
+        self.arena_cancel();
         self.scene.arena = None;
         self.scene.arena_playing = false;
         self.scene.arena_start = None;
@@ -986,6 +1021,31 @@ impl App {
                     self.arena_build()?;
                 }
                 self.scene.arena_playing = false;
+                if n as usize > obs_rust_bitstream::arena::MAX_CATCH_UP {
+                    // more than 1 s of simulation: run it off the UI thread
+                    // in 1 s slices, publishing each one
+                    let a = self.scene.arena.clone().ok_or("no arena")?;
+                    let t0 = a.time;
+                    let mut w = obs_rust_bitstream::sim_worker::SimWorker::spawn("arena", a);
+                    w.submit(move |a: &mut obs_rust_bitstream::arena::Arena, c| {
+                        let slice = obs_rust_bitstream::arena::MAX_CATCH_UP as u32;
+                        let mut done = 0;
+                        while done < n && !c.cancelled() {
+                            for _ in 0..slice.min(n - done) {
+                                a.step();
+                            }
+                            done += slice.min(n - done);
+                            c.publish(a, done as u64, n as u64);
+                        }
+                    });
+                    self.arena_run = Some(w);
+                    return Ok(format!(
+                        "stepping {} × 1/240 s in the background (t = {:.3} → {:.3} s); the arena panel shows progress",
+                        n,
+                        t0,
+                        t0 + n as f64 / 240.0
+                    ));
+                }
                 if let Some(a) = &mut self.scene.arena {
                     for _ in 0..n {
                         a.step();
@@ -2285,14 +2345,65 @@ impl App {
         }
     }
 
+    /// Bring the worker's state home to `scene.arena`, waiting for queued work.
+    pub fn arena_sync(&mut self) {
+        if let Some(mut w) = self.arena_run.take() {
+            // banked frame time still belongs to the run
+            let secs = std::mem::take(&mut self.arena_carry);
+            if secs > 0.0 {
+                w.submit(move |a: &mut obs_rust_bitstream::arena::Arena, _| {
+                    a.advance(secs);
+                });
+            }
+            self.scene.arena = Some(w.finish());
+            self.scene.arena_progress = None;
+            self.arena_carry = 0.0;
+            self.arena_write_back();
+        }
+    }
+
+    /// Stop the worker early, keeping the state it reached.
+    fn arena_cancel(&mut self) {
+        if let Some(w) = &self.arena_run {
+            w.cancel();
+        }
+        self.arena_sync();
+    }
+
+    /// Physics runs on a worker thread (A8): each frame hands it the frame
+    /// time if it is idle (or banks it, up to 1 s, while it is busy) and
+    /// shows the newest snapshot, so a heavy arena slows the simulation
+    /// instead of the UI.
     fn tick_arena(&mut self, dt: f32) {
-        if !self.scene.arena_playing {
+        let busy = self.arena_run.as_ref().is_some_and(|w| w.pending() > 0);
+        if !self.scene.arena_playing && !busy {
+            // a background run finished, or play stopped: take the state home
+            self.arena_sync();
             return;
         }
-        if let Some(a) = &mut self.scene.arena {
-            a.advance(dt);
+        if self.scene.arena_playing {
+            if self.arena_run.is_none() {
+                if let Some(a) = self.scene.arena.clone() {
+                    self.arena_run =
+                        Some(obs_rust_bitstream::sim_worker::SimWorker::spawn("arena", a));
+                }
+            }
+            self.arena_carry = (self.arena_carry + dt.max(0.0)).min(1.0);
+            if let Some(w) = self.arena_run.as_mut().filter(|w| w.pending() == 0) {
+                let secs = std::mem::take(&mut self.arena_carry);
+                w.submit(move |a: &mut obs_rust_bitstream::arena::Arena, _| {
+                    a.advance(secs);
+                });
+            }
         }
-        self.arena_write_back();
+        if let Some(w) = &self.arena_run {
+            let pr = w.progress();
+            self.scene.arena_progress = (pr.1 > 0).then_some(pr);
+            if let Some(a) = w.latest() {
+                self.scene.arena = Some(a);
+                self.arena_write_back();
+            }
+        }
         self.ctx.request_repaint();
     }
 
@@ -3006,6 +3117,260 @@ mod tests {
         run(&mut app, &ctx, 3, 10.0);
     }
 
+    /// UI frame time with a heavy arena playing, before (M1: all-pairs
+    /// contacts stepped inside the frame) and after (A8: sweep-and-prune on
+    /// the worker). `cargo test --release --features ui --bin ui -- --ignored
+    /// measure_ui_frame_time --nocapture` (SERAPHINA_BENCH_BODIES, default 1500).
+    #[test]
+    #[ignore]
+    fn measure_ui_frame_time_with_a_heavy_arena() {
+        use obs_rust_bitstream::arena::{stress_pile, Collide, Environment};
+        let n: usize = std::env::var("SERAPHINA_BENCH_BODIES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1500);
+        let frames = 120;
+        let stats = |mut v: Vec<f64>| {
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            (
+                v.iter().sum::<f64>() / v.len() as f64,
+                v[v.len() / 2],
+                v[v.len() * 95 / 100],
+            )
+        };
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Scene;
+        let dt = 1.0 / 60.0;
+        let mut t = 0.0;
+        for _ in 0..5 {
+            let _ = ctx.run(input(t), |ctx| app.frame(ctx));
+            t += dt;
+        }
+        // before: the frame also steps the arena itself, all pairs
+        app.scene.arena = Some(stress_pile(Environment::earth(), n, 11));
+        app.scene.arena_playing = false;
+        let mut before = Vec::new();
+        for _ in 0..frames {
+            let s = std::time::Instant::now();
+            let a = app.scene.arena.as_mut().unwrap();
+            for _ in 0..4 {
+                a.step_with(Collide::Brute);
+            }
+            let _ = ctx.run(input(t), |ctx| app.frame(ctx));
+            before.push(s.elapsed().as_secs_f64() * 1e3);
+            t += dt;
+        }
+        // after: the worker steps it; the frame shows the newest snapshot
+        app.scene.arena = Some(stress_pile(Environment::earth(), n, 11));
+        let t_sim0 = app.scene.arena.as_ref().unwrap().time;
+        app.scene.arena_playing = true;
+        let wall = std::time::Instant::now();
+        let mut after = Vec::new();
+        for _ in 0..frames {
+            let s = std::time::Instant::now();
+            let _ = ctx.run(input(t), |ctx| app.frame(ctx));
+            after.push(s.elapsed().as_secs_f64() * 1e3);
+            // pace like a 60 Hz display
+            let used = s.elapsed().as_secs_f64();
+            if used < dt {
+                std::thread::sleep(std::time::Duration::from_secs_f64(dt - used));
+            }
+            t += dt;
+        }
+        let wall = wall.elapsed().as_secs_f64();
+        app.scene.arena_playing = false;
+        app.arena_sync();
+        let sim = app.scene.arena.as_ref().unwrap().time - t_sim0;
+        let (b, a) = (stats(before), stats(after));
+        println!(
+            "{n} bodies, {frames} frames: before mean {:.2} ms / median {:.2} / p95 {:.2}; after mean {:.2} ms / median {:.2} / p95 {:.2}; simulation ran {:.2} s in {:.2} s wall ({:.0}% of real time)",
+            b.0, b.1, b.2, a.0, a.1, a.2, sim, wall, 100.0 * sim / wall
+        );
+    }
+
+    #[test]
+    fn a_document_wider_than_the_gpu_texture_limit_draws_from_tiles() {
+        use obs_rust_bitstream::paint_engine::PaintLayer;
+        use obs_rust_bitstream::ui_canvas::Raster;
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Paint;
+        run(&mut app, &ctx, 2, 0.0);
+        assert_eq!(app.paint.gpu_tile_count(), 1);
+        // the test context reports egui's default 2048 px texture limit
+        let (w, h) = (9000u32, 700u32);
+        let mut r = Raster::new(w, h);
+        for (i, px) in r.data.chunks_mut(4).enumerate() {
+            px.copy_from_slice(&[(i % 251) as u8, 90, 160, 255]);
+        }
+        app.paint.set_doc(crate::paint::PaintDoc {
+            layers: vec![PaintLayer::new(1, "Wide", r)],
+            groups: Vec::new(),
+            width: w,
+            height: h,
+            selection: None,
+            selected: 0,
+            next_id: 2,
+        });
+        let out = ctx.run(input(1.0), |ctx| app.frame(ctx));
+        let tiles = crate::tiled_tex::plan(w, h, 2048);
+        assert_eq!(app.paint.gpu_tile_count(), tiles.len());
+        assert_eq!(tiles.len(), 5);
+        // nothing uploaded is over the limit
+        for (_, d) in &out.textures_delta.set {
+            assert!(d.image.width() <= 2048 && d.image.height() <= 2048);
+        }
+        // a stroke updates the tiles it crosses and the frame still draws
+        app.dispatch(
+            &AppCommand::BrushStroke {
+                points: vec![[3900.0, 300.0], [4300.0, 340.0]],
+            },
+            Origin::User,
+        )
+        .unwrap();
+        let out = ctx.run(input(1.1), |ctx| app.frame(ctx));
+        assert!(out
+            .textures_delta
+            .set
+            .iter()
+            .all(|(_, d)| d.image.width() <= 2048 && d.image.height() <= 2048));
+    }
+
+    #[test]
+    fn opening_an_image_over_the_megapixel_cap_is_refused_with_a_message() {
+        fn crc32(b: &[u8]) -> u32 {
+            let mut c = !0u32;
+            for &x in b {
+                c ^= x as u32;
+                for _ in 0..8 {
+                    c = if c & 1 != 0 {
+                        0xEDB8_8320 ^ (c >> 1)
+                    } else {
+                        c >> 1
+                    };
+                }
+            }
+            !c
+        }
+        let dir = std::env::temp_dir().join(format!("seraphina-mp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // a PNG header claiming 20000×20000 (400 MP) and no pixel data
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        let mut ihdr = b"IHDR".to_vec();
+        ihdr.extend(20000u32.to_be_bytes());
+        ihdr.extend(20000u32.to_be_bytes());
+        ihdr.extend([8, 6, 0, 0, 0]);
+        png.extend(13u32.to_be_bytes());
+        png.extend(&ihdr);
+        png.extend(crc32(&ihdr).to_be_bytes());
+        for c in [&b"IDAT"[..], &b"IEND"[..]] {
+            png.extend(0u32.to_be_bytes());
+            png.extend(c);
+            png.extend(crc32(c).to_be_bytes());
+        }
+        let big_png = dir.join("huge.png");
+        std::fs::write(&big_png, &png).unwrap();
+        // a PSD header claiming 30000×30000
+        let mut psd = b"8BPS".to_vec();
+        psd.extend([0, 1, 0, 0, 0, 0, 0, 0, 0, 3]);
+        psd.extend(30000u32.to_be_bytes());
+        psd.extend(30000u32.to_be_bytes());
+        psd.extend([0, 8, 0, 3]);
+        let big_psd = dir.join("huge.psd");
+        std::fs::write(&big_psd, &psd).unwrap();
+
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let doc = (
+            app.paint.doc.width,
+            app.paint.doc.height,
+            app.paint.doc.layers.len(),
+        );
+        for (f, mp) in [(&big_png, "400 megapixels"), (&big_psd, "900 megapixels")] {
+            let e = app
+                .dispatch(
+                    &AppCommand::OpenFile {
+                        path: f.display().to_string(),
+                    },
+                    Origin::User,
+                )
+                .unwrap_err();
+            assert!(e.contains(mp) && e.contains("MP limit"), "{}", e);
+            assert!(e.contains("SERAPHINA_MAX_MEGAPIXELS"), "{}", e);
+        }
+        assert_eq!(
+            doc,
+            (
+                app.paint.doc.width,
+                app.paint.doc.height,
+                app.paint.doc.layers.len()
+            ),
+            "nothing changed"
+        );
+        assert!(crate::paint::check_open_size(7680, 4320).is_ok());
+        assert!(
+            crate::paint::check_open_size(16384, 8192).is_err()
+                == (16384u64 * 8192 > crate::paint::max_megapixels() * 1_000_000)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn background_arena_steps_match_inline_steps_and_keep_the_ui_free() {
+        let ctx = egui::Context::default();
+        let setup = |ctx: &egui::Context| {
+            let mut app = app_with(ctx, None);
+            run(&mut app, ctx, 2, 0.0);
+            app.dispatch(
+                &AppCommand::SceneTransform {
+                    object: Some("cube1".into()),
+                    translate: Some([0.0, 2.5, 0.0]),
+                    rotate_y: None,
+                    scale: None,
+                },
+                Origin::User,
+            )
+            .unwrap();
+            app
+        };
+        // 1000 steps on the worker…
+        let mut bg = setup(&ctx);
+        let r = bg
+            .dispatch(&AppCommand::ArenaStep { steps: Some(1000) }, Origin::User)
+            .unwrap();
+        assert!(r.contains("background"), "{}", r);
+        assert!(bg.arena_run.is_some());
+        // the UI keeps drawing frames while it runs, and shows progress
+        run(&mut bg, &ctx, 3, 16.0);
+        bg.arena_sync();
+        assert!(bg.arena_run.is_none() && bg.scene.arena_progress.is_none());
+        // …equal 240+240+240+240+40 steps inline, bit for bit
+        let mut inl = setup(&ctx);
+        for n in [240, 240, 240, 240, 40] {
+            inl.dispatch(&AppCommand::ArenaStep { steps: Some(n) }, Origin::User)
+                .unwrap();
+        }
+        assert!(inl.arena_run.is_none());
+        assert_eq!(
+            format!("{:?}", bg.scene.arena.as_ref().unwrap().bodies),
+            format!("{:?}", inl.scene.arena.as_ref().unwrap().bodies)
+        );
+        assert_eq!(bg.scene.objs[0].pos, inl.scene.objs[0].pos);
+        // reset during a background run cancels it
+        bg.dispatch(
+            &AppCommand::ArenaStep {
+                steps: Some(240 * 600),
+            },
+            Origin::User,
+        )
+        .unwrap();
+        let t = std::time::Instant::now();
+        bg.dispatch(&AppCommand::ArenaReset, Origin::User).unwrap();
+        assert!(t.elapsed().as_secs_f32() < 5.0);
+        assert!(bg.arena_run.is_none() && bg.scene.arena.is_none());
+    }
+
     #[test]
     fn arena_drops_the_copper_cube_on_the_moon_and_melts_ice() {
         let ctx = egui::Context::default();
@@ -3040,6 +3405,7 @@ mod tests {
         let steps = (t_land / obs_rust_bitstream::arena::DT) as u32 - 4;
         app.dispatch(&AppCommand::ArenaStep { steps: Some(steps) }, Origin::User)
             .unwrap();
+        app.arena_sync();
         assert!(
             app.scene.objs[0].pos[1] > 0.5,
             "still falling just before t_land"
@@ -3058,6 +3424,7 @@ mod tests {
             Origin::User,
         )
         .unwrap();
+        app.arena_sync();
         let y = app.scene.objs[0].pos[1];
         assert!((y - 0.5).abs() < 0.02, "landed on the ground: {}", y);
         // play advances with real frame time
@@ -3070,6 +3437,7 @@ mod tests {
         .unwrap();
         let t0 = app.scene.arena.as_ref().unwrap().time;
         run(&mut app, &ctx, 10, 20.0);
+        app.arena_sync();
         assert!(app.scene.arena.as_ref().unwrap().time > t0 + 0.2);
         // reset puts it back where it was before the simulation
         app.dispatch(&AppCommand::ArenaReset, Origin::User).unwrap();
@@ -3143,6 +3511,7 @@ mod tests {
             Origin::User,
         )
         .unwrap();
+        app.arena_sync();
         let b = app
             .scene
             .arena

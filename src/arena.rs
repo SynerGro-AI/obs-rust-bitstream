@@ -29,6 +29,70 @@ use crate::material_env::{EnvMeta, Phase};
 pub const G0: f32 = 9.80665;
 pub const SIGMA: f64 = 5.670_374_419e-8;
 pub const DT: f32 = 1.0 / 240.0;
+/// Most steps one [`Arena::advance`] call runs (1 s of simulated time).
+pub const MAX_CATCH_UP: usize = 240;
+/// Below this many bodies the all-pairs contact loop is already cheap.
+pub const SWEEP_MIN_BODIES: usize = 24;
+/// Slack added around each box for the sweep-and-prune candidate search.
+const SWEEP_MARGIN: f32 = 0.05;
+
+/// How contacts find their pairs. Both give bit-identical results; `Auto`
+/// sweeps once there are enough bodies for it to pay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Collide {
+    Auto,
+    Brute,
+    Sweep,
+}
+
+impl Collide {
+    fn sweep(self, n: usize) -> bool {
+        match self {
+            Collide::Auto => n >= SWEEP_MIN_BODIES,
+            Collide::Brute => false,
+            Collide::Sweep => true,
+        }
+    }
+}
+
+/// Sweep-and-prune on x: every pair whose boxes, grown by `margin`, overlap
+/// on all three axes, as (i, j) with i < j in ascending order — the order
+/// the all-pairs loop visits them.
+fn near(a: &Body, b: &Body, margin: f32) -> bool {
+    !a.vaporised
+        && !b.vaporised
+        && (0..3).all(|k| {
+            a.pos[k] - a.half[k] - margin <= b.pos[k] + b.half[k] + margin
+                && b.pos[k] - b.half[k] - margin <= a.pos[k] + a.half[k] + margin
+        })
+}
+
+pub fn sweep_pairs(bodies: &[Body], margin: f32) -> Vec<(usize, usize)> {
+    let mut idx: Vec<usize> = (0..bodies.len())
+        .filter(|&i| !bodies[i].vaporised)
+        .collect();
+    let lo = |i: usize, k: usize| bodies[i].pos[k] - bodies[i].half[k] - margin;
+    let hi = |i: usize, k: usize| bodies[i].pos[k] + bodies[i].half[k] + margin;
+    idx.sort_by(|&a, &b| lo(a, 0).total_cmp(&lo(b, 0)).then(a.cmp(&b)));
+    let mut active: Vec<usize> = Vec::new();
+    let mut out = Vec::new();
+    for &i in &idx {
+        let x0 = lo(i, 0);
+        active.retain(|&j| hi(j, 0) >= x0);
+        for &j in &active {
+            if lo(i, 1) <= hi(j, 1)
+                && lo(j, 1) <= hi(i, 1)
+                && lo(i, 2) <= hi(j, 2)
+                && lo(j, 2) <= hi(i, 2)
+            {
+                out.push((i.min(j), i.max(j)));
+            }
+        }
+        active.push(i);
+    }
+    out.sort_unstable();
+    out
+}
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
@@ -357,13 +421,20 @@ impl Arena {
     }
 
     /// Advance by real time `secs` using fixed steps; returns the steps taken.
+    /// Fixed-timestep catch-up for `secs` of wall time. At most
+    /// [`MAX_CATCH_UP`] steps (1 s of simulation) run per call; anything
+    /// left after a stall is dropped instead of being chased next frame,
+    /// so a slow frame cannot snowball into slower ones.
     pub fn advance(&mut self, secs: f32) -> usize {
         self.acc += secs.max(0.0);
         let mut n = 0;
-        while self.acc >= DT && n < 2400 {
+        while self.acc >= DT && n < MAX_CATCH_UP {
             self.step();
             self.acc -= DT;
             n += 1;
+        }
+        if self.acc >= DT {
+            self.acc = 0.0;
         }
         n
     }
@@ -407,6 +478,11 @@ impl Arena {
     }
 
     pub fn step(&mut self) {
+        self.step_with(Collide::Auto)
+    }
+
+    /// One step with a chosen pair search (for tests and benchmarks).
+    pub fn step_with(&mut self, mode: Collide) {
         if self.ledger.start.is_none() {
             self.ledger.start = Some(self.energy().total());
             self.ledger.start_mech = self.mechanical();
@@ -446,12 +522,58 @@ impl Arena {
             }
         }
         self.ledger.drag_work += drag_work;
-        let deposits = self.contacts();
+        let deposits = self.contacts(mode);
         for (i, e) in deposits {
             self.heat_body(i, e);
         }
-        self.thermal(dt);
+        self.thermal(dt, mode);
         self.time += dt as f64;
+    }
+
+    /// Box–box contacts over sweep-and-prune candidates, visited in the same
+    /// order as the all-pairs loop, with the same result. A pair left out
+    /// was more than 2·margin apart on some axis when it was last checked,
+    /// so it cannot touch until corrections move its bodies that far along
+    /// that axis. When one body has moved most of a margin, its pairs are
+    /// checked again from the current positions (any new ones that come
+    /// later in the order are queued) and its tally restarts. Returns how
+    /// many such re-checks were needed.
+    fn box_pairs_swept(&mut self, g: f32, touched: &mut [bool]) -> usize {
+        let n = self.bodies.len();
+        let mut queue: std::collections::BTreeSet<(usize, usize)> =
+            sweep_pairs(&self.bodies, SWEEP_MARGIN)
+                .into_iter()
+                .collect();
+        let mut moved = vec![[0.0f32; 3]; n];
+        let mut rechecks = 0;
+        while let Some((i, j)) = queue.pop_first() {
+            let (l, r) = self.bodies.split_at_mut(j);
+            let (a, b) = (&mut l[i], &mut r[0]);
+            let (pa, pb) = (a.pos, b.pos);
+            if !resolve_pair(a, b, g) {
+                continue;
+            }
+            touched[i] = true;
+            touched[j] = true;
+            for k in 0..3 {
+                moved[i][k] += (a.pos[k] - pa[k]).abs();
+                moved[j][k] += (b.pos[k] - pb[k]).abs();
+            }
+            for x in [i, j] {
+                if moved[x].iter().all(|&d| d <= SWEEP_MARGIN * 0.9) {
+                    continue;
+                }
+                rechecks += 1;
+                moved[x] = [0.0; 3];
+                for y in (0..n).filter(|&y| y != x) {
+                    let p = (x.min(y), x.max(y));
+                    if p > (i, j) && near(&self.bodies[x], &self.bodies[y], SWEEP_MARGIN) {
+                        queue.insert(p);
+                    }
+                }
+            }
+        }
+        rechecks
     }
 
     /// Put heat into body `i`, crediting the potential energy a melting body
@@ -473,7 +595,7 @@ impl Arena {
     /// Resolve contacts; returns heat deposits (body, J) for the kinetic
     /// energy the impulses removed, net of the potential energy the position
     /// corrections added.
-    fn contacts(&mut self) -> Vec<(usize, f64)> {
+    fn contacts(&mut self, mode: Collide) -> Vec<(usize, f64)> {
         let g = self.env.gravity;
         let e_before = self.mechanical();
         let mut touched = vec![false; self.bodies.len()];
@@ -523,95 +645,17 @@ impl Arena {
         }
         // box–box
         let n = self.bodies.len();
-        for i in 0..n {
-            for j in i + 1..n {
-                let (a, b) = {
+        if mode.sweep(n) {
+            self.box_pairs_swept(g, &mut touched);
+        } else {
+            for i in 0..n {
+                for j in i + 1..n {
                     let (l, r) = self.bodies.split_at_mut(j);
-                    (&mut l[i], &mut r[0])
-                };
-                if a.vaporised || b.vaporised || (a.fixed && b.fixed) {
-                    continue;
-                }
-                let d = [
-                    b.pos[0] - a.pos[0],
-                    b.pos[1] - a.pos[1],
-                    b.pos[2] - a.pos[2],
-                ];
-                let ov = [
-                    a.half[0] + b.half[0] - d[0].abs(),
-                    a.half[1] + b.half[1] - d[1].abs(),
-                    a.half[2] + b.half[2] - d[2].abs(),
-                ];
-                if ov[0] <= 0.0 || ov[1] <= 0.0 || ov[2] <= 0.0 {
-                    continue;
-                }
-                // axis of least penetration
-                let ax = if ov[0] < ov[1] && ov[0] < ov[2] {
-                    0
-                } else if ov[1] < ov[2] {
-                    1
-                } else {
-                    2
-                };
-                let mut nrm = [0.0; 3];
-                nrm[ax] = if d[ax] >= 0.0 { 1.0 } else { -1.0 };
-                let (ia, ib) = (
-                    if a.fixed { 0.0 } else { 1.0 / a.mass.max(1e-9) },
-                    if b.fixed { 0.0 } else { 1.0 / b.mass.max(1e-9) },
-                );
-                let it = ia + ib;
-                if it <= 0.0 {
-                    continue;
-                }
-                // positional correction split by inverse mass
-                let pen = ov[ax];
-                for k in 0..3 {
-                    a.pos[k] -= nrm[k] * pen * ia / it;
-                    b.pos[k] += nrm[k] * pen * ib / it;
-                }
-                let rv = [
-                    b.vel[0] - a.vel[0],
-                    b.vel[1] - a.vel[1],
-                    b.vel[2] - a.vel[2],
-                ];
-                let vn = dot(rv, nrm);
-                if vn < 0.0 {
-                    let solid = a.phase == Phase::Solid && b.phase == Phase::Solid;
-                    let e = if solid {
-                        (a.env.restitution * b.env.restitution).sqrt()
-                    } else {
-                        0.0
-                    };
-                    let e = if -vn < 2.0 * g * DT + 1e-3 { 0.0 } else { e };
-                    let jn = -(1.0 + e) * vn / it;
-                    for k in 0..3 {
-                        a.vel[k] -= jn * nrm[k] * ia;
-                        b.vel[k] += jn * nrm[k] * ib;
-                    }
-                    // friction on the tangential relative velocity
-                    let rv = [
-                        b.vel[0] - a.vel[0],
-                        b.vel[1] - a.vel[1],
-                        b.vel[2] - a.vel[2],
-                    ];
-                    let vn2 = dot(rv, nrm);
-                    let vt = [
-                        rv[0] - vn2 * nrm[0],
-                        rv[1] - vn2 * nrm[1],
-                        rv[2] - vn2 * nrm[2],
-                    ];
-                    let st = norm(vt);
-                    if st > 1e-9 {
-                        let mu = (a.env.friction_kinetic * b.env.friction_kinetic).sqrt();
-                        let jt = (st / it).min(mu * jn);
-                        for k in 0..3 {
-                            a.vel[k] += jt * vt[k] / st * ia;
-                            b.vel[k] -= jt * vt[k] / st * ib;
-                        }
+                    if resolve_pair(&mut l[i], &mut r[0], g) {
+                        touched[i] = true;
+                        touched[j] = true;
                     }
                 }
-                touched[i] = true;
-                touched[j] = true;
             }
         }
         // the mechanical energy the contacts removed becomes heat in the
@@ -637,7 +681,7 @@ impl Arena {
         deposits
     }
 
-    fn thermal(&mut self, dt: f32) {
+    fn thermal(&mut self, dt: f32, mode: Collide) {
         let env_t = self.env.temperature as f64;
         let h = self.env.convection_h() as f64;
         let dt = dt as f64;
@@ -647,8 +691,17 @@ impl Arena {
         if self.conduction {
             let n = self.bodies.len();
             let mut dq = vec![0.0f64; n];
-            for i in 0..n {
-                for j in i + 1..n {
+            // positions are fixed during this loop, so pairs within TOUCH
+            // are exactly the ones contact_patch accepts
+            let pairs: Vec<(usize, usize)> = if mode.sweep(n) {
+                sweep_pairs(&self.bodies, TOUCH * 2.0)
+            } else {
+                (0..n)
+                    .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+                    .collect()
+            };
+            {
+                for (i, j) in pairs {
                     let (a, b) = (&self.bodies[i], &self.bodies[j]);
                     if a.vaporised || b.vaporised {
                         continue;
@@ -735,6 +788,93 @@ fn contact_patch(a: &Body, b: &Body) -> Option<(f32, f32, f32)> {
     let (u, v) = ((ax + 1) % 3, (ax + 2) % 3);
     let area = lap[u].max(0.0) * lap[v].max(0.0);
     (area > 1e-8).then_some((area, a.half[ax], b.half[ax]))
+}
+
+/// Resolve one box–box contact (position correction, restitution and
+/// friction impulses); false when the pair does not touch.
+fn resolve_pair(a: &mut Body, b: &mut Body, g: f32) -> bool {
+    if a.vaporised || b.vaporised || (a.fixed && b.fixed) {
+        return false;
+    }
+    let d = [
+        b.pos[0] - a.pos[0],
+        b.pos[1] - a.pos[1],
+        b.pos[2] - a.pos[2],
+    ];
+    let ov = [
+        a.half[0] + b.half[0] - d[0].abs(),
+        a.half[1] + b.half[1] - d[1].abs(),
+        a.half[2] + b.half[2] - d[2].abs(),
+    ];
+    if ov[0] <= 0.0 || ov[1] <= 0.0 || ov[2] <= 0.0 {
+        return false;
+    }
+    // axis of least penetration
+    let ax = if ov[0] < ov[1] && ov[0] < ov[2] {
+        0
+    } else if ov[1] < ov[2] {
+        1
+    } else {
+        2
+    };
+    let mut nrm = [0.0; 3];
+    nrm[ax] = if d[ax] >= 0.0 { 1.0 } else { -1.0 };
+    let (ia, ib) = (
+        if a.fixed { 0.0 } else { 1.0 / a.mass.max(1e-9) },
+        if b.fixed { 0.0 } else { 1.0 / b.mass.max(1e-9) },
+    );
+    let it = ia + ib;
+    if it <= 0.0 {
+        return false;
+    }
+    // positional correction split by inverse mass
+    let pen = ov[ax];
+    for k in 0..3 {
+        a.pos[k] -= nrm[k] * pen * ia / it;
+        b.pos[k] += nrm[k] * pen * ib / it;
+    }
+    let rv = [
+        b.vel[0] - a.vel[0],
+        b.vel[1] - a.vel[1],
+        b.vel[2] - a.vel[2],
+    ];
+    let vn = dot(rv, nrm);
+    if vn < 0.0 {
+        let solid = a.phase == Phase::Solid && b.phase == Phase::Solid;
+        let e = if solid {
+            (a.env.restitution * b.env.restitution).sqrt()
+        } else {
+            0.0
+        };
+        let e = if -vn < 2.0 * g * DT + 1e-3 { 0.0 } else { e };
+        let jn = -(1.0 + e) * vn / it;
+        for k in 0..3 {
+            a.vel[k] -= jn * nrm[k] * ia;
+            b.vel[k] += jn * nrm[k] * ib;
+        }
+        // friction on the tangential relative velocity
+        let rv = [
+            b.vel[0] - a.vel[0],
+            b.vel[1] - a.vel[1],
+            b.vel[2] - a.vel[2],
+        ];
+        let vn2 = dot(rv, nrm);
+        let vt = [
+            rv[0] - vn2 * nrm[0],
+            rv[1] - vn2 * nrm[1],
+            rv[2] - vn2 * nrm[2],
+        ];
+        let st = norm(vt);
+        if st > 1e-9 {
+            let mu = (a.env.friction_kinetic * b.env.friction_kinetic).sqrt();
+            let jt = (st / it).min(mu * jn);
+            for k in 0..3 {
+                a.vel[k] += jt * vt[k] / st * ia;
+                b.vel[k] -= jt * vt[k] / st * ib;
+            }
+        }
+    }
+    true
 }
 
 fn friction(v: &mut [f32; 3], jn: f32, mu_k: f32, _mu_s: f32, _g: f32) {
@@ -841,8 +981,114 @@ fn on_phase(b: &mut Body, from: Phase, time: f64, ev: &mut Events) {
     }
 }
 
+/// A pile of `n` small boxes of mixed metals and glass dropped in loose
+/// layers over a 1 m-ish footprint per 25 bodies: the heavy-arena case for
+/// benchmarks and the broad-phase tests. Deterministic for a given seed.
+pub fn stress_pile(env: Environment, n: usize, seed: u64) -> Arena {
+    use crate::material_pbr::{preset, preset_profile};
+    const MATS: [&str; 5] = ["copper", "iron", "aluminum", "glass", "gold"];
+    let metas: Vec<EnvMeta> = MATS
+        .iter()
+        .map(|m| preset_profile(&preset(m).expect("preset")).env)
+        .collect();
+    let mut a = Arena::new(env);
+    let side = ((n as f32 / 4.0).sqrt().ceil() as usize).max(1);
+    let mut r = seed | 1;
+    let mut rnd = move || {
+        r ^= r << 13;
+        r ^= r >> 7;
+        r ^= r << 17;
+        (r % 10_000) as f32 / 10_000.0
+    };
+    for k in 0..n {
+        let (layer, cell) = (k / (side * side), k % (side * side));
+        let (cx, cz) = ((cell % side) as f32, (cell / side) as f32);
+        let h = 0.08 + 0.06 * rnd();
+        let half = [h, 0.05 + 0.05 * rnd(), h];
+        let pos = [
+            (cx - side as f32 / 2.0) * 0.3 + 0.05 * rnd(),
+            0.2 + layer as f32 * 0.35 + 0.1 * rnd(),
+            (cz - side as f32 / 2.0) * 0.3 + 0.05 * rnd(),
+        ];
+        let m = k % MATS.len();
+        let mut b = Body::new(
+            &format!("box{k}"),
+            MATS[m],
+            metas[m].clone(),
+            half,
+            pos,
+            None,
+            a.env.temperature + 40.0 * rnd(),
+            a.env.pressure,
+        );
+        b.vel = [0.5 * (rnd() - 0.5), 0.0, 0.5 * (rnd() - 0.5)];
+        a.add(b);
+    }
+    a
+}
+
 #[cfg(test)]
 mod tests {
+
+    fn state(a: &Arena) -> String {
+        format!("{:?}", a)
+    }
+
+    #[test]
+    fn sweep_and_prune_matches_all_pairs_bit_for_bit() {
+        for (n, seed) in [(60, 1), (150, 7), (300, 99)] {
+            let mut brute = stress_pile(Environment::earth(), n, seed);
+            let mut swept = brute.clone();
+            for s in 0..720 {
+                brute.step_with(Collide::Brute);
+                swept.step_with(Collide::Sweep);
+                if s % 60 == 59 {
+                    assert_eq!(state(&brute), state(&swept), "n {n} step {s}");
+                }
+            }
+            // the pile actually collided and settled
+            assert!(brute.ledger.dissipated > 0.0 && brute.ledger.conducted > 0.0);
+        }
+    }
+
+    #[test]
+    fn sweep_pairs_finds_exactly_the_touching_pairs() {
+        let a = stress_pile(Environment::earth(), 200, 3);
+        let n = a.bodies.len();
+        let near = |i: usize, j: usize, m: f32| {
+            (0..3).all(|k| {
+                let (p, q) = (&a.bodies[i], &a.bodies[j]);
+                (p.pos[k] - q.pos[k]).abs() <= p.half[k] + q.half[k] + 2.0 * m
+            })
+        };
+        for m in [0.0, 0.01, 0.1] {
+            let got = sweep_pairs(&a.bodies, m);
+            let want: Vec<(usize, usize)> = (0..n)
+                .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+                .filter(|&(i, j)| near(i, j, m))
+                .collect();
+            assert_eq!(got, want, "margin {m}");
+        }
+    }
+
+    #[test]
+    fn advance_caps_catch_up_and_drops_the_backlog() {
+        let mut a = stress_pile(Environment::moon(), 10, 5);
+        assert_eq!(a.advance(5.0), MAX_CATCH_UP);
+        // nothing left over to chase on the next frame
+        assert_eq!(a.advance(0.0), 0);
+        assert_eq!(a.advance(DT * 3.5), 3);
+        let mut b = stress_pile(Environment::moon(), 10, 5);
+        for _ in 0..MAX_CATCH_UP + 3 {
+            b.step();
+        }
+        assert_eq!(a.time, b.time);
+        assert_eq!(a.bodies.len(), b.bodies.len());
+        for (x, y) in a.bodies.iter().zip(&b.bodies) {
+            assert_eq!(x.pos, y.pos);
+        }
+    }
+
     use super::*;
     use crate::material_pbr::{preset, preset_profile};
 

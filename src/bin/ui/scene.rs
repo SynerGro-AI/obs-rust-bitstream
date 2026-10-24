@@ -256,6 +256,8 @@ pub struct SceneState {
     pub arena: Option<Arena>,
     pub arena_env: Environment,
     pub arena_playing: bool,
+    /// (steps done, steps asked) of a background arena run.
+    pub arena_progress: Option<(u64, u64)>,
     /// Per-object physics settings.
     pub phys: HashMap<String, PhysProps>,
     /// Scene state before the simulation started (Reset restores it).
@@ -310,6 +312,7 @@ impl SceneState {
             arena: None,
             arena_env: Environment::earth(),
             arena_playing: false,
+            arena_progress: None,
             phys: HashMap::new(),
             arena_start: None,
             ids: Vec::new(),
@@ -1569,6 +1572,12 @@ impl SceneState {
                     bus.push(AppCommand::ArenaReset);
                 }
             });
+            if let Some((done, total)) = self.arena_progress {
+                ui.add(
+                    egui::ProgressBar::new(done as f32 / total.max(1) as f32)
+                        .text(format!("stepping {} / {} in the background", done, total)),
+                );
+            }
             match &self.arena {
                 Some(a) => {
                     ui.label(theme::muted(

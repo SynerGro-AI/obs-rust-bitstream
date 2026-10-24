@@ -618,7 +618,9 @@ pub fn card<R>(
         .fill(p.surface)
         .stroke(Stroke::new(1.0_f32, p.border))
         .corner_radius(CornerRadius::same(R_MD as u8))
-        .inner_margin(egui::Margin::same((SP_SM + 2.0) as i8))
+        // egui >= 0.31 counts the 1 px stroke in the frame size; take it out of
+        // the margin so the card keeps its 0.29 dimensions.
+        .inner_margin(egui::Margin::same((SP_SM + 1.0) as i8))
         .outer_margin(egui::Margin {
             left: 0,
             right: 0,
@@ -679,7 +681,7 @@ pub fn pill(ui: &mut egui::Ui, p: &Palette, color: Color32, text: &str) -> egui:
         .fill(p.surface_hi)
         .stroke(Stroke::new(1.0_f32, p.border))
         .corner_radius(CornerRadius::same(99))
-        .inner_margin(egui::Margin::symmetric(SP_SM as i8, 1))
+        .inner_margin(egui::Margin::symmetric(SP_SM as i8 - 1, 0))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;

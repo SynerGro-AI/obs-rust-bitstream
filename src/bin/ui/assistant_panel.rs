@@ -547,7 +547,7 @@ impl AssistantPanel {
                         }
                     }
                     ItemKind::Actions { batch, lines, undone, .. } => {
-                        egui::Frame::NONE.fill(p.surface).stroke(egui::Stroke::new(1.0_f32, p.line)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(SP_SM as i8)).show(ui, |ui| {
+                        egui::Frame::NONE.fill(p.surface).stroke(egui::Stroke::new(1.0_f32, p.line)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(SP_SM as i8 - 1)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new(ic::LIGHTNING).color(p.accent));

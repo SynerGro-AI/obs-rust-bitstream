@@ -126,7 +126,7 @@ impl Toasts {
                             spread: 0,
                             color: Color32::from_black_alpha((60.0 * a) as u8),
                         })
-                        .inner_margin(egui::Margin::symmetric(SP_LG as i8, SP_SM as i8))
+                        .inner_margin(egui::Margin::symmetric(SP_LG as i8 - 1, SP_SM as i8 - 1))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 let (r, _) =
@@ -1523,8 +1523,7 @@ impl App {
             .frame(
                 egui::Frame::NONE
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 0))
-                    .stroke(Stroke::new(1.0_f32, p.line)),
+                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 0)),
             )
             .show(ctx, |ui| {
                 let full = ui.max_rect();
@@ -1700,8 +1699,7 @@ impl App {
             .frame(
                 egui::Frame::NONE
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 3))
-                    .stroke(Stroke::new(1.0_f32, p.line)),
+                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 3)),
             )
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
@@ -2315,9 +2313,11 @@ impl App {
         self.header(ctx);
         self.status_bar(ctx);
 
-        let side = egui::Frame::NONE
-            .fill(p.panel)
-            .stroke(Stroke::new(1.0_f32, p.line));
+        // No frame stroke on panels: egui >= 0.31 draws Frame strokes inside the
+        // rect and counts them in the layout size, which made every panel 2 px
+        // larger and exposed a gold outline. In 0.29 the stroke was hidden under
+        // the panel separator line, so dropping it keeps the 0.29 look.
+        let side = egui::Frame::NONE.fill(p.panel);
         let padded = side.inner_margin(egui::Margin::same(SP_MD as i8));
         let wctx = self.workspace_ctx();
 
@@ -2326,8 +2326,7 @@ impl App {
                 .frame(
                     egui::Frame::NONE
                         .fill(p.panel)
-                        .inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_XS as i8))
-                        .stroke(Stroke::new(1.0_f32, p.line)),
+                        .inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_XS as i8)),
                 )
                 .show_animated(ctx, self.show_shelf, |ui| {
                     let active = (self.mode == Mode::Scene).then_some(self.scene.gizmo);
@@ -2514,7 +2513,7 @@ impl App {
                                         sw: 0,
                                         se: 0,
                                     })
-                                    .inner_margin(egui::Margin::symmetric(SP_MD as i8, 4))
+                                    .inner_margin(egui::Margin::symmetric(SP_MD as i8 - 1, 3))
                                     .show(ui, |ui| {
                                         ui.label(
                                             egui::RichText::new(format!(

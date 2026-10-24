@@ -2962,6 +2962,9 @@ impl PaintState {
         egui::Frame::NONE
             .stroke(Stroke::new(1.0_f32, p.border))
             .fill(p.bg)
+            // egui >= 0.31 adds the stroke to the frame size; a -1 outer margin
+            // keeps the 0.29 list geometry (stroke straddles the edge again).
+            .outer_margin(egui::Margin::same(-1))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.spacing_mut().item_spacing.y = 0.0;

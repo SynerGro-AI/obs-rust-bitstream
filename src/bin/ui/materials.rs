@@ -632,7 +632,7 @@ impl MaterialsState {
             .fill(p.panel)
             .stroke(Stroke::new(1.0_f32, p.line))
             .corner_radius(CornerRadius::same(8))
-            .inner_margin(egui::Margin::same(12))
+            .inner_margin(egui::Margin::same(11))
             .outer_margin(egui::Margin::symmetric(SP_SM as i8, 0))
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {

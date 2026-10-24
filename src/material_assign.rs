@@ -76,7 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn differential() {
+    fn hand_checked_values() {
         let mut a = MaterialAssign::new();
         a.assign("wing", "paint").unwrap();
         a.assign("tail", "metal").unwrap();

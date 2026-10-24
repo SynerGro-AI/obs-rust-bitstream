@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn differential() {
+    fn hand_checked_values() {
         let mut h = JointHierarchy::new();
         h.add(Joint::new("body").unwrap());
         h.add(Joint::new("arm").unwrap());

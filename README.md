@@ -1,11 +1,9 @@
 # obs-rust-bitstream
 
-**Public foundation for the OBS Studio rewrite in Rust.**
-
-Goal: beat the ~800 scripts already finished upstream by using ~10% of the API actions.  
-**Work smarter, not harder.**
-
-Reusable patterns + differential helper, and the Seraphina Studio desktop app.
+**Seraphina Studio**, a desktop app for paint, composite, 3D, animation,
+streaming and a materials lab, and the tested Rust library behind it. It
+started as a Rust port of OBS's `bitstream_reader` (still here as
+`bitstream`, with its C ABI); recording and streaming go through ffmpeg.
 
 ## Desktop app: Seraphina Studio
 
@@ -22,7 +20,7 @@ Linux and macOS.
 | **Materials** | Periodic table of all 118 elements (search, category filter, detail card); composition builder (formula or protons/neutrons/electrons) with stability and charge analysis; derived PBR and simulation properties; measured presets; save to the library and assign to 3D meshes | Compound/alloy properties are estimates (see below) |
 | **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
 | **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas or screen source, status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Audio device capture (pulse/dshow) is wired but untested |
-| **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Offline without a key: it answers with built-in tips and says so |
+| **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Without a key it runs in offline help mode: a fixed table of tips, no model call and no actions, and it says so |
 | **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
 
 ### Materials Lab and Physics Arena
@@ -171,10 +169,13 @@ approximate.
   A summary is injected into the system prompt. The status bar shows
   "Online learning: N updates". It is stored in
   `~/.seraphina/studio/mercy_bank.json`.
-* **Seraphina.AGI CLI bridge.** If `seraphina` (`pip install seraphina-agi`)
-  is on PATH, or set via `SERAPHINA_CLI`, its native intents (`remember …`,
-  `recall`, `triad …`, `help`, `version`) are forwarded to it. Recent
-  `recall` notes are added to the prompt.
+* **Provider today: Grok (xAI).** Seraphina.AGI integration, with
+  Seraphina.AGI running as a separate local process, is planned (M4b,
+  proposed; see "Planned (not built)").
+* **Seraphina.AGI CLI bridge (optional, today).** If `seraphina`
+  (`pip install seraphina-agi`) is on PATH, or set via `SERAPHINA_CLI`, its
+  native intents (`remember …`, `recall`, `triad …`, `help`, `version`) are
+  forwarded to it. Recent `recall` notes are added to the prompt.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -230,9 +231,6 @@ For Record / Go live put `ffmpeg.exe` next to the exe or on PATH (see
 sample streams (`out.h264`, `out.obsr`) in the working directory, next to the
 exe, or up to four folders above it. Copy them alongside the exe to ship it.
 Release builds on Windows use the GUI subsystem, so no console window opens.
-
-Optional: `--features "ui windows"` also builds the Media Foundation camera
-capture code.
 
 ### Run on Linux / macOS
 
@@ -294,291 +292,94 @@ Paint: `V M L W C J S B E G O`/`Shift+O` `P T H Z I` tools, `Ctrl+Z` / `Ctrl+Shi
 
 ## CI: Grok PR review
 
-`.github/workflows/grok-review.yml` runs on every pull request. It installs
-the Grok CLI from `https://x.ai/cli/install.sh` and asks it to review the PR
-for bugs. The job has `contents: read` and `pull-requests: write`
-permissions so it can post the review.
+`.github/workflows/grok-review.yml` reviews same-repository pull requests
+from human authors (fork and bot PRs are skipped).
 
-**Required setup:** add the repository secret **`XAI_API_KEY`** under
-GitHub → Settings → Secrets and variables → Actions → New repository
-secret. Without it the review step fails. GitHub does not pass secrets to
-workflows triggered from forks, so pull requests from forks skip the
-authenticated review.
+* It downloads a pinned CLI, `https://x.ai/cli/grok-${GROK_CLI_VERSION}-linux-x86_64`,
+  and checks its SHA-256 before running it. There is no `curl | bash`.
+* The review job has `contents: read` only and gets the diff as a file; the
+  CLI runs without auto-approve and has no GitHub token.
+* A separate `comment` job, the only one with `pull-requests: write`, posts
+  the review. It never sees `XAI_API_KEY`.
+
+**Required setup:** the secret **`XAI_API_KEY`** and the repository variables
+**`GROK_CLI_VERSION`** and **`GROK_CLI_SHA256`** (Settings → Secrets and
+variables → Actions). The job fails closed if any of them is missing.
 
 ## Library modules
 
-Every module below is used by a binary (`src/bin/`) or an example and has
-unit tests. The list is checked against `src/lib.rs` by the
-`readme_lists_every_library_module` test.
+Every module below is reached from the app (`src/bin/ui/`) or an example
+and has unit tests. Two tests hold this list to the code:
+`readme_lists_every_library_module` (the list equals the `pub mod` set in
+`src/lib.rs`) and `every_library_module_is_reached_from_a_binary_or_example`
+(walks from the non-test code of `src/bin/` and `examples/`).
 
 <!-- modules:begin -->
 - `arena`: Physics Arena: rigid bodies under real environmental conditions.
-- `audio_bus`: Safe pure AudioBus (audio mixer core).
-- `audio_channel`: Safe pure AudioChannel (audio graph core).
-- `audio_effect`: Safe pure AudioEffect (audio processing core).
-- `audio_format`: Safe pure audio format helpers (OBS audio-io.h core).
-- `audio_sync`: Safe pure AudioSync (audio locked to video core).
-- `audio_timeline`: Safe pure AudioTimeline (multi-track core).
-- `audio_writer`: Safe pure AudioWriter (raw samples core).
-- `av_bundle`: Safe pure AvBundle (video + audio pair core).
-- `bitrate_slider`: Safe pure BitrateSlider (UI control core).
+- `assistant`: Chat types and the offline help table the Seraphina panel uses when no model is configured (it says so; no model call, no actions).
 - `bitstream`: Perfect port of OBS bitstream_reader.
-- `cancel_button`: Safe pure CancelButton (UI control core).
-- `caption_status`: Safe pure CaptionStatus (line count report).
-- `caption_track`: Safe pure CaptionTrack (OBS caption_track_data).
-- `capture`: Safe pure Capture (frame source core).
 - `chem`: Chemistry: thermochemistry and kinetics of real reactions.
-- `circuit`: Circuits: modified nodal analysis (MNA) with device models and
+- `circuit`: Circuits: modified nodal analysis (MNA) with device models and electro-thermal coupling.
 - `computer`: Build a computer: transistors → gates → adder → register → CPU.
-- `crossfade`: Safe pure Crossfade (blend two sequences core).
-- `diff`: Reusable differential test helpers.
-- `edit_round`: Safe pure EditRound (select → edit → result).
-- `edit_target`: Safe pure EditTarget (layer or group).
-- `effect_chain`: Safe pure EffectChain (ordered audio processing core).
-- `effected_write`: Safe pure EffectedWrite (effect, push, write core).
-- `element_data`: Physical data for all 118 elements, plus their place in the standard
+- `element_data`: Physical data for all 118 elements, plus their place in the standard 18-column periodic table.
 - `element_props`: Extended per-element properties (embedded; never fetched at runtime).
-- `encode_cancel`: Safe pure EncodeCancel (stop an encode core).
-- `encode_progress`: Safe pure EncodeProgress (frames done core).
-- `encode_status`: Safe pure EncodeStatus (progress + time core).
-- `encoder_caps`: Safe pure EncoderCaps (OBS encoder capability flags).
-- `encoder_context`: Safe pure EncoderContext (OBS encoder context core).
-- `encoder_controls`: Safe pure EncoderControls (bitrate + quality panel).
-- `encoder_select`: Safe pure EncoderSelect (hardware or software core).
-- `fps_control`: Safe pure FrameRate (fps control core).
-- `fps_trailer`: Safe pure FpsTrailer (fps after frame data core).
-- `frame_hold`: Safe pure FrameHold (repeat a frame core).
-- `gop_slider`: Safe pure GopSlider (keyframe interval core).
-- `gpu_detect`: Safe pure GpuDetect (GPU and driver info core).
-- `h264_codec`: Safe H.264 wrapper around pure-Rust rusty_h264.
+- `joint`: Safe pure Joint (skeleton joint tool).
 - `joint_hierarchy`: Safe pure JointHierarchy (named joint tree core).
-- `keyframe_group`: Safe pure KeyframeGroup (OBS keyframe_group_data).
-- `keyframe_status`: Safe pure KeyframeStatus (group completion report).
-- `layer_group`: Safe pure LayerGroup (Photoshop-style group core).
-- `layer_select`: Safe pure LayerSelect (choose the selected layer).
-- `layer_stack`: Safe pure LayerStack (Photoshop-like layering core).
+- `live_weights`: Safe pure LiveWeights (runtime parameter store).
 - `material`: Safe pure Material (surface core).
 - `material_assign`: Safe pure MaterialAssign (material-to-bone core).
 - `material_env`: "Env metadata": the physical behaviour a simulation needs for an element
 - `material_pbr`: Composition → render (PBR) and simulation properties.
 - `material_registry`: Safe pure MaterialRegistry (named material store).
 - `materials_lab`: Safe pure MaterialsLab (materials science core).
-- `obs_data`: Safe pure ObsData (OBS obs-data.h core).
-- `obs_encoder_defaults`: OBS x264 defaults (shippable metrics).
-- `periodic_table`: Safe pure PeriodicTable (element lookup core).
-- `ping_pong`: Safe pure PingPong (forward then reverse core).
-- `playback_clock`: Safe pure PlaybackClock (frame from elapsed time).
-- `preset_control`: Safe pure PresetControl (speed/quality preset core).
-- `quality_slider`: Safe pure QualitySlider (QP control core).
-- `rate_compare`: Safe pure RateCompare (encode rate at two sizes).
-- `raw_reader`: Safe pure RawReader (read .obsr core).
-- `razor`: Safe pure Razor (split tool for video and audio timelines).
-- `relativity`: Relativity: special-relativistic kinematics, Newtonian N-body gravity
-- `report`: Safe pure Report (status + rate core).
-- `resample`: Safe pure Resample (change fps core).
-- `scene_effect`: Safe pure SceneEffect (pipeline on a scene core).
-- `sequence_reverse`: Safe pure SequenceReverse (reverse frames core).
-- `serde_static`: Serde helpers for `&'static str` fields (material notes, element
-- `service_context`: Safe pure ServiceContext (OBS service context core).
-- `sound_cc0`: Safe pure SoundCc0 (CC0 sample catalog core).
-- `system_status`: Safe pure SystemStatus (GPU + encoder + bundle core).
-- `timed_sequence`: Safe pure TimedSequence (frames + fps core).
-- `timeline_action`: Safe pure TimelineAction (wired AE timeline tools).
-- `timeline_rest`: Safe pure TimelineRest (Marker, Work Area, Time Remap, Keyframe Nav).
-- `timeline_tools`: Safe pure TimelineTools (AE timeline tool set).
-- `timestamp_stamp`: Safe pure TimestampStamp (burn time into a frame).
-- `tool_pipeline`: Safe pure ToolPipeline (named effect chain core).
-- `vec3`: Vec3: three floats. The materials use it as a linear RGB colour.
-- `video_fourcc`: Safe pure video fourcc mapping (OBS video-fourcc.c).
-- `video_frame`: Safe pure video frame (OBS video-frame.h core).
-- `video_output_info`: Safe pure VideoOutputInfo (OBS video_output_info).
-- `video_scale_info`: Safe pure VideoScaleInfo (OBS video_scale_info).
-- `video_timeline`: Safe pure VideoTimeline (multi-clip video edit core).
-- `wav_reader`: Safe pure WavReader (PCM WAV core).
-- `weight_interp`: Safe pure WeightInterp (weight over frames core).
-- `windows_capture`: Windows camera capture (Media Foundation).
-- `write_timing`: Safe pure WriteTiming (elapsed time core).
-- `apple_capture`: macOS / iOS camera capture (AVFoundation).
-- `linux_capture`: Linux camera capture (V4L2).
-- `linux_audio`: Linux microphone capture (ALSA).
-- `active_tool`: Safe pure ActiveTool (toolbar click → mode).
-- `add_noise`: Safe pure AddNoise (deterministic noise core).
-- `ae_tools`: Safe pure AeTools (After Effects tools panel).
-- `apple_audio`: macOS / iOS microphone capture (CoreAudio).
-- `audio_backend_status`: Safe pure AudioBackendStatus (backend + live).
-- `audio_capture`: Safe pure AudioCapture (audio frame source core).
-- `audio_convert_info`: Safe pure AudioConvertInfo (OBS audio_convert_info).
-- `audio_cpal`: Optional cpal backend for AudioCapture.
-- `audio_output_info`: Safe pure AudioOutputInfo (OBS audio_output_info).
-- `audio_packet`: Safe pure AudioPacket (samples → EncoderPacket).
-- `audio_platform`: Safe pure platform audio open (microphone surface).
-- `audio_source_list`: Safe pure AudioSourceList (ordered audio sources).
-- `av_match`: Safe pure AvMatch (pair → scale + convert).
-- `av_pair`: Safe pure AvPair (video + audio output info).
-- `av_status`: Safe pure AvStatus (pair + match report).
-- `av_tick`: Safe pure AvTick (one video + one audio → output).
-- `blend`: Safe pure BlendMode (layer blend core).
-- `blend_composite`: Safe pure BlendComposite (blend mode → result).
-- `box_blur`: Safe pure BoxBlur (simple blur core).
-- `bright_contrast`: Safe pure BrightContrast (brightness and contrast core).
-- `canvas_effect`: Safe pure CanvasEffect (optional LiveWeights brightness).
-- `capture_rate`: Safe pure CaptureRate (frames per second from a source).
-- `capture_select`: Safe pure CaptureSelect (pick a source).
-- `color_balance`: Safe pure ColorBalance (shadow/mid/highlight shift core).
-- `color_source`: Safe pure ColorSource (solid color core).
-- `compositor`: Safe pure Compositor (video frame core).
-- `definition`: Safe pure Definition (pixel count and quality).
-- `delay_status`: Safe pure DelayStatus (delay + pause + reconnect report).
-- `display_capture`: Safe pure DisplayCapture (monitor holder core).
-- `display_frame`: Safe pure DisplayFrame (display → encode).
-- `draw`: Safe pure Draw (rectangle into Y800 frame).
-- `drop_shadow`: Safe pure DropShadow (dark shadow core).
-- `drop_status`: Safe pure DropStatus (dropped versus kept).
-- `edit_composite`: Safe pure EditComposite (edit → composite change).
-- `encoder_packet`: Safe pure EncoderPacket (OBS encoder_packet core).
-- `encoder_roi`: Safe pure EncoderRoi (OBS obs_encoder_roi).
-- `exposure`: Safe pure Exposure (stops shift core).
-- `file_capture`: Safe pure FileCapture (read frames from a file).
-- `frame_filter`: Safe pure FrameFilter (Y800 brightness core).
-- `frame_pacer`: Safe pure FramePacer (pace a source to a target fps).
-- `frame_renderer`: Safe pure FrameRenderer (color source → video frame).
-- `frame_sequence`: Safe pure FrameSequence (timed frame list).
-- `full_status`: Safe pure FullStatus (path + keyframe + caption + roi + reconnect + pause + av + service).
-- `group_composite`: Safe pure GroupComposite (group edit → members).
-- `history`: Safe pure History (undo / redo core).
-- `hue_sat`: Safe pure HueSat (hue/saturation shift core).
-- `inner_glow`: Safe pure InnerGlow (edge brighten core).
-- `input_device`: Safe pure InputDevice (keyboard / mouse core).
-- `invert`: Safe pure Invert (pixel invert core).
-- `joint`: Safe pure Joint (skeleton joint tool).
-- `latency_status`: Safe pure LatencyStatus (encode and total latency).
-- `layer_composite`: Safe pure LayerComposite (visible layers → result).
-- `levels`: Safe pure Levels (input/output range core).
-- `live_weights`: Safe pure LiveWeights (runtime parameter store).
-- `maya_shelves`: Safe pure MayaShelves (Maya shelf layout).
-- `menu_apply`: Safe pure MenuApply (action → layer stack).
-- `menu_dispatch`: Safe pure MenuDispatch (menu click → action).
-- `menu_history`: Safe pure MenuHistory (menu actions record and undo).
-- `menu_path`: Safe pure MenuPath (click → dispatch → apply).
-- `output_delay_queue`: Safe pure OutputDelayQueue (OBS obs-output-delay.c).
-- `output_feed`: Safe pure OutputFeed (interleave → output).
-- `output_info`: Safe pure OutputInfo (OBS obs_output core).
-- `output_pause`: Safe pure OutputPause (OBS output pause).
-- `output_service`: Safe pure OutputService (OBS set service).
-- `packet_drop`: Safe pure PacketDrop (priority gate).
-- `packet_file`: Safe pure PacketFile (interleaved packets to bytes).
-- `packet_time`: Safe pure PacketTime (OBS encoder_packet_time).
-- `path_status`: Safe pure PathStatus (delay + drop + latency).
-- `pattern_source`: Safe pure PatternSource (test pattern core).
-- `payload_dump`: Safe pure PayloadDump (H.264 packets → length-prefixed file).
-- `photo_layers`: Safe pure LayerStack (layer list core).
-- `pipeline`: Safe pure Pipeline (end-to-end wire).
-- `pixel_canvas`: Safe pure PixelCanvas (paint buffer core).
-- `posterize`: Safe pure Posterize (level reduce core).
-- `program_stream`: Safe pure ProgramStream (program stream core).
-- `properties`: Safe pure Properties (selected layer panel).
-- `ps_layers`: Safe pure PsLayers (Photoshop layer panel).
-- `ps_menus`: Safe pure PsMenus (Photoshop menu bar).
-- `ps_toolbar`: Safe pure PsToolbar (Photoshop toolbar layout).
-- `psd`: Safe pure Psd (Photoshop Document).
-- `raw_writer`: Safe pure RawWriter (frame sequence → file).
-- `reconnect`: Safe pure Reconnect (OBS obs-output.c reconnect).
-- `roi_accept`: Safe pure RoiAccept (ROI only if caps allow).
-- `roi_list`: Safe pure RoiList (accepted regions only).
-- `roi_status`: Safe pure RoiStatus (region count report).
-- `rtmp_audio`: Safe pure RtmpAudio (OBS audio packet → chunk).
-- `rtmp_chunk`: Safe pure RtmpChunk (OBS librtmp packet → chunk bytes).
-- `rtmp_close`: Safe pure RtmpClose (OBS librtmp deleteStream).
-- `rtmp_connect`: Safe pure RtmpConnect (OBS librtmp connect command).
-- `rtmp_create_stream`: Safe pure RtmpCreateStream (OBS librtmp createStream).
-- `rtmp_feed`: Safe pure RtmpFeed (packets → RTMP stream).
-- `rtmp_handshake`: Safe pure RtmpHandshake (OBS librtmp C0/C1).
-- `rtmp_metadata`: Safe pure RtmpMetadata (OBS onMetaData / setDataFrame).
-- `rtmp_open_status`: Safe pure RtmpOpenStatus (handshake → publish).
-- `rtmp_output`: Safe pure RtmpOutput (file packets → RTMP stream).
-- `rtmp_publish`: Safe pure RtmpPublish (OBS librtmp publish).
-- `rtmp_reconnect_status`: Safe pure RtmpReconnectStatus (RTMP + attempts).
-- `rtmp_socket`: Real RTMP socket send (OBS rtmp_stream connect → write).
-- `rtmp_start`: Safe pure RtmpStart (service → RTMP stream).
-- `rtmp_status`: Safe pure RtmpStatus (RTMP stream report).
-- `rtmp_stream`: Safe pure RtmpStream (OBS rtmp_stream shape).
-- `runner`: Safe pure Runner (continuous pipeline loop).
-- `runner_audio`: Safe pure RunnerAudio (live or synthetic source list).
-- `runner_dump`: Safe pure RunnerDump (run → length-prefixed file).
-- `scene`: Safe pure Scene (named source list).
-- `scene_list`: Safe pure SceneList (ordered scenes).
-- `scene_renderer`: Safe pure SceneRenderer (timeline → frames).
-- `scene_transition`: Safe pure SceneTransition (from one scene to another).
-- `service_status`: Safe pure ServiceStatus (service name report).
-- `sharpen`: Safe pure Sharpen (simple sharpen core).
-- `shell_event`: Safe pure ShellEvent (input → dispatch → state).
-- `shell_filter`: Safe pure ShellFilter (filter → encode).
-- `shell_frame`: Safe pure ShellFrame (edit → frame → encode).
-- `shell_loop`: Safe pure ShellLoop (sequence of shell actions).
-- `shell_loop_frame`: Safe pure ShellLoopFrame (actions → encode).
-- `shell_loop_socket`: Safe pure ShellLoopSocket (actions → socket payload).
-- `shell_publish`: Safe pure ShellPublish (shell packet → RTMP send).
-- `shell_round`: Safe pure ShellRound (tool + option + layer + view).
-- `shell_rtmp`: Safe pure ShellRtmp (shell frame → RTMP packet).
-- `shell_runner`: Safe pure ShellRunner (shell composite → encode loop).
-- `shell_sent`: Safe pure ShellSent (edit → sent bytes).
-- `shell_session`: Safe pure ShellSession (save and load state).
-- `shell_socket`: Safe pure ShellSocket (shell packet → socket payload).
-- `shell_status`: Safe pure ShellStatus (one line for the shell path).
-- `shell_summary`: Safe pure ShellSummary (full path in one line).
-- `source_list`: Safe pure SourceList (ordered capture sources).
-- `status_bar`: Safe pure StatusBar (bottom bar for the shell).
-- `status_history`: Safe pure StatusHistory (last N status lines).
-- `status_report`: Safe pure StatusReport (all status facts in one place).
-- `stream_start`: Safe pure StreamStart (service + OBS defaults → stream).
-- `stream_status`: Safe pure StreamStatus (streaming + service).
-- `stream_target`: Safe pure StreamTarget (multi-platform RTMP).
-- `synthetic_camera`: Safe pure SyntheticCamera (animated source core).
-- `text_draw`: Safe pure TextDraw (simple glyph into Y800 frame).
-- `text_overlay`: Safe pure TextOverlay (text on top of a frame).
-- `threshold`: Safe pure Threshold (binary split core).
-- `tone_curves`: Safe pure Curves (tone curve core).
-- `tool_help`: Safe pure ToolHelp (💭 instructions for tools and options).
-- `tool_option_set`: Safe pure ToolOptionSet (adjustable options bar).
-- `tool_options`: Safe pure ToolOptions (options bar for the active tool).
-- `tool_router`: Safe pure ToolRouter (input → active tool).
-- `toolbar`: Safe pure Toolbar (Photoshop-style expandable toolbar).
-- `toon_tools`: Safe pure ToonTools (ToonBoom Harmony tools toolbar).
-- `tuxedo`: Safe pure Tuxedo (UI theme).
-- `ui_view`: Safe pure UiView (full shell in one text).
-- `windows_audio`: Windows microphone capture (WASAPI).
-- `workspace`: Safe pure Workspace (one canvas, all tools).
-- `youtube_target`: Safe pure YouTubeTarget (RTMP URL + stream key).
-- `assistant`: Safe pure Assistant (Seraphina side-panel plumbing).
 - `mesh3d`: Polygon meshes for the 3D workspace.
 - `paint_engine`: Paint engine behind Seraphina Studio's Paint mode.
+- `periodic_table`: Safe pure PeriodicTable (element lookup core).
+- `psd`: Safe pure Psd (Photoshop Document).
 - `psd_pixels`: Layered PSD with real pixel data (8-bit RGB, version 1).
+- `reconnect`: Safe pure Reconnect (OBS obs-output.c reconnect).
+- `relativity`: Relativity: special-relativistic kinematics, Newtonian N-body gravity with a 1PN correction, GPS and light bending.
+- `serde_static`: Serde helpers for `&'static str` fields (material notes, element symbols, preset keys).
 - `sim_worker`: Run a simulation on its own thread and let the UI read snapshots (A8).
 - `stream_inspect`: Safe pure StreamInspect (step-through view of bitstream::Reader).
 - `tile_undo`: Tile-based undo: store only the 256×256 tiles that changed.
-- `ui_canvas`: Safe pure UiCanvas (pixel model behind the Tuxedo Edit window).
+- `ui_canvas`: RGBA raster, layers, brush and selection model behind Paint and Animate.
+- `vec3`: Vec3: three floats. The materials use it as a linear RGB colour.
 <!-- modules:end -->
 
 ### Planned (not built)
 
-These were placeholder modules (named after OBS parts, or "AI" helpers
-that echoed the prompt back). No binary used them and they are removed
-until there is a real implementation:
+Targets are milestones from the fix plan (M4b is the rest of M4 after
+M4a; M5 repo and release; M6 physics; M7+ one mode per milestone), not
+dates. Each item is removed from the code until a real implementation
+lands with tests.
 
-* OBS sources: browser source, game capture, window capture, media,
-  image and text sources, group source.
-* OBS core: the source/scene/filter/output/encoder/service registries,
-  scene collections, transitions, hotkeys, profiles, replay buffer,
-  virtual camera, multiview and studio mode.
-* Pipelines: `pipe` (a frame pipe) and `source_profiler` (per-source
-  timing).
-* Library-level streaming objects (`streaming`, `rtmp_open_*`,
-  `rtmp_reconnect*`). Real recording and RTMP streaming live in the app
-  (`src/bin/ui/output.rs`, through ffmpeg).
+| Item | Target |
+|------|--------|
+| Seraphina.AGI integration: the app talks to Seraphina.AGI as a separate local process. Today the provider is Grok (xAI) through `src/bin/ui/llm.rs`; the only link now is the optional CLI bridge for memory intents | M4b (proposed; not yet in the fix plan) |
+| Seraphina drives every mode, one learning system, chat saved with the project (C1, C4, C5/C6) | M4b |
+| Remove `dist/` binaries and root clutter (G5–G7) | M5 |
+| 64-bit physics, rotating bodies, contact graph (F1–F3) | M6 |
+| Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture (Media Foundation, AVFoundation, V4L2); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | M7+ (Stream) |
+| A Composite effects library: levels, tone curves, hue/saturation, colour balance, drop shadow, inner glow, blur, sharpen, posterize, threshold, crossfade (the old unused modules are deleted; the app's own filters live in `src/bin/ui/`) (E3) | M7+ (Composite) |
+| Microphone capture verified on real hardware on Windows (dshow) | M3 follow-up on your PC |
+| Team features (organisation, invite, roles, presence) | Not scheduled |
+
+Removed and not planned, because the app already does the real thing:
+
+* A library-level RTMP client (`rtmp_socket` and the `rtmp_*`/`shell_*`
+  modules). It never read the server's replies and reported success
+  while the server dropped the connection. The app streams through
+  ffmpeg (`src/bin/ui/output.rs`).
+* Synthetic capture, camera and audio sources and the demo binaries that
+  used them (`run`, `ai_write`, `slice`, `raw_read`). None shipped; the
+  synthetic audio was labelled "live".
 * AI helpers in the library (`ai`, `ai_tools`, `ai_editor`,
-  `ai_director`, `settings_assist`, …). The app's real model client is
-  `src/bin/ui/llm.rs`.
-* Team features (organization, invite, roles, presence).
+  `ai_director`, `settings_assist`, …) that echoed the prompt. The app's
+  model client is `src/bin/ui/llm.rs`.
+* Library copies of menus, toolbars, tool routers and status widgets
+  (`ps_*`, `maya_shelves`, `tool_*`, `*_status`, …). The app has its own
+  in `src/bin/ui/`.
 
 ## Parser
 
@@ -591,8 +392,6 @@ as you discover more quirks — the next parse gets smarter automatically.
 ```
 src/lib.rs        library modules (listed above)
 src/bin/ui/       Seraphina Studio (the desktop app)
-src/bin/run.rs    terminal demo of the encode/stream status pipeline
-src/bin/ai_write.rs, raw_read.rs, slice.rs   small dev tools
 examples/         numeric checks for the arena, chemistry, CPU, relativity
 tools/            the OBS C-to-Rust parser and the element-data generator
 ```
@@ -604,13 +403,10 @@ cargo test --lib
 cargo test --features ui --bin ui
 ```
 
-## Foundational plan
+## Roadmap
 
-1. Foundation patterns first — done
-2. Parser wired — done
-3. High-leverage modules + differential helper — done
-4. Batch-apply to the rest
-5. Keep pushing — public, free, open
+See "Planned (not built)" above. Targets are fix-plan milestones (M4b,
+M5, M6, M7+), not dates.
 
 AI-assisted contributions and PRs welcome.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to start.
@@ -621,43 +417,13 @@ See also the upstream [obs-rust/obs-studio](https://github.com/obs-rust/obs-stud
 
 GPL-2.0-or-later (matching OBS Studio).
 
-## Trial download
+## Prebuilt binaries in `dist/`
 
-A prebuilt Linux binary is in `dist/obs-rust`.
-
-```bash
-git clone https://github.com/SynerGro-AI/obs-rust-bitstream.git
-cd obs-rust-bitstream
-chmod +x dist/obs-rust
-./dist/obs-rust
-```
-
-It prints the shell status, platform targets, and a 💭 instruction for the active tool.
-
-To build from source (any OS):
-
-```bash
-cargo build --release --bin run
-./target/release/run
-```
-
-## Help
-
-When a tool is selected, a 💭 thought explains how to use it.
-When an option is selected, a 💭 thought explains that option.
-Press ? to see every bound key.
-
-Optional CC0 audio:
-
-```bash
-curl -L -o /tmp/bell1.wav \
-  https://raw.githubusercontent.com/code4fukui/sound-cc0/main/bell1.wav
-```
-
-Outputs: `out.avbn`, `status.txt`, `report.txt`, `stamped.avbn`.
+`dist/obs-rust` and `dist/obs-rust-ui` are stale builds of an earlier
+terminal demo and an older UI. They do not match this source; build from
+source instead (see above). They are removed in M5 (G5).
 
 ## Windows release
 
 See [Desktop app: Seraphina Studio](#desktop-app-seraphina-studio) above.
-Note: `dist/obs-rust-ui` is a stale Linux prebuilt of an older “Tuxedo Edit” UI revision. It does not match the current source; rebuild instead.
 

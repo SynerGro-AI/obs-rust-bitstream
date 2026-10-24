@@ -193,7 +193,6 @@ pub unsafe extern "C" fn bitstream_reader_r16(r: *mut bitstream_reader) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diff::assert_equal;
 
     #[test]
     fn basic_bits() {
@@ -254,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn differential_short_reads() {
+    fn safe_and_abi_readers_agree_on_short_reads() {
         // On short buffers the safe and ABI paths must agree.
         let data = [0xAB, 0xCD];
         let mut safe = BitstreamReader::new(&data);
@@ -268,6 +267,6 @@ mod tests {
         };
         let abi_r8 = unsafe { bitstream_reader_r8(&mut c_reader) };
 
-        assert_equal(safe_r8, abi_r8, "bitstream r8 short");
+        assert_eq!(safe_r8, abi_r8, "bitstream r8 short");
     }
 }

@@ -103,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn differential() {
+    fn hand_checked_values() {
         let mut a = Joint::new();
         a.add_root("r", 0.0, 0.0, 0.0);
         let mut b = Joint::new();

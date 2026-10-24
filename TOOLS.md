@@ -4,32 +4,33 @@ Goal: every capability of Photoshop, Adobe After Effects, and Maya that can be e
 
 `[x]` means the feature is in the library (see the module list in
 README.md) or in the app (`src/bin/ui`) and has a test. `[ ]` is
-planned and not built yet.
+planned and not built yet (targets: M7+, one mode per milestone; see
+README "Planned (not built)").
 
 ## Photoshop
 
 ### Adjustments
 - [x] Levels
-- [x] Curves (`tone_curves`)
-- [x] Color balance
-- [x] Hue/saturation
-- [x] Brightness/contrast
-- [x] Exposure
+- [x] Curves
+- [ ] Color balance
+- [ ] Hue/saturation
+- [ ] Brightness/contrast
+- [ ] Exposure
 - [x] Invert
-- [x] Posterize
-- [x] Threshold
+- [ ] Posterize
+- [ ] Threshold
 - [ ] Vibrance
-- [ ] Black & white
+- [x] Black & white (grayscale filter)
 - [ ] Photo filter
 - [ ] Channel mixer
 - [ ] Selective color
 - [ ] Gradient map
 
 ### Filters
-- [x] Box blur
+- [ ] Box blur
 - [x] Gaussian blur
-- [x] Sharpen
-- [x] Add noise
+- [ ] Sharpen
+- [ ] Add noise
 - [ ] Motion blur
 - [ ] Radial blur
 - [ ] Median
@@ -38,8 +39,8 @@ planned and not built yet.
 - [ ] High pass
 
 ### Layer styles
-- [x] Drop shadow
-- [x] Inner glow
+- [ ] Drop shadow
+- [ ] Inner glow
 - [ ] Outer glow
 - [ ] Bevel and emboss
 - [ ] Stroke
@@ -90,8 +91,8 @@ planned and not built yet.
 - [ ] Expressions
 
 ### Effects
-- [x] Color correction (shared with Photoshop adjustments)
-- [x] Blur & sharpen (shared)
+- [ ] Color correction (Paint has levels, curves, grayscale, invert; Composite has none yet)
+- [ ] Blur & sharpen
 - [ ] Distort (wave, bulge, twirl)
 - [ ] Generate (gradient, grid, lens flare)
 - [ ] Keying (chroma, luma)

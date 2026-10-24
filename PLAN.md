@@ -1,7 +1,8 @@
 # Public OBS Rust Rewrite — Plan
 
-Goal: a safe, tested Rust rewrite of the parts of OBS that a creator
-needs, plus the Seraphina Studio desktop app on top of it.
+Goal: Seraphina Studio, a desktop app for paint, composite, 3D,
+animation, streaming and a materials lab, and the tested library
+behind it.
 **Work smarter, not harder.**
 
 ## Where things stand
@@ -9,7 +10,6 @@ needs, plus the Seraphina Studio desktop app on top of it.
 * The library modules that exist are listed in README.md (the list is
   checked against `src/lib.rs` by a test). Each has unit tests.
 * `bitstream` is a port of OBS `bitstream_reader` and keeps a C ABI.
-* `diff` is the shared differential-test helper.
 * Recording and RTMP streaming run in the app through ffmpeg
   (`src/bin/ui/output.rs`), tested against a local ffmpeg RTMP listener
   and, on Linux CI, mediamtx.
@@ -18,17 +18,19 @@ needs, plus the Seraphina Studio desktop app on top of it.
 
 ## Planned (not built)
 
-The v1 cleanup removed placeholder modules that no binary used. They
-come back only as real implementations, each with a test:
+The v1 cleanup removed modules that the app and examples never used
+(the `every_library_module_is_reached_from_a_binary_or_example` test
+keeps it that way). They come back only as real implementations, each
+with a test. Targets are fix-plan milestones, not dates; the table in
+README.md ("Planned (not built)") is the list:
 
-1. OBS sources: browser source, game capture, window capture, media,
-   image and text sources.
-2. OBS core: source/scene/filter/output/encoder/service registries,
-   scene collections, transitions, hotkeys, profiles, replay buffer,
-   virtual camera.
-3. `pipe` (frame pipe) and `source_profiler` (per-source timing).
-4. The rest of the Photoshop / After Effects / Maya tools listed as
-   `[ ]` in TOOLS.md.
+1. Seraphina.AGI as a separate local process (Grok is today's
+   provider): M4b, proposed.
+2. Remove `dist/` and root clutter: M5.
+3. Physics foundation: M6.
+4. OBS sources, scenes and the rest of Stream (E6): M7+.
+5. The rest of the Photoshop / After Effects / Maya tools listed as
+   `[ ]` in TOOLS.md: M7+.
 
 ## Principles
 - Foundation first
@@ -39,5 +41,5 @@ come back only as real implementations, each with a test:
 - Every README claim is backed by a test or a measurement
 
 ## How to contribute
-Clone, run `cargo test --lib`, open a PR. Point the parser at the next
-`.c` file and reuse the patterns and the differential helper.
+Clone, run `cargo test --lib` and `cargo test --features ui --bin ui`,
+open a PR.

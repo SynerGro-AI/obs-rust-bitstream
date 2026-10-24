@@ -24,14 +24,20 @@ MAX_ENTRIES, MAX_KEY = 128, 64
 MAX_PACK_BYTES = 57 + MAX_ENTRIES * (1 + MAX_KEY + 2 + 2) + 64  # 8953
 OUT = Path(__file__).resolve().parent.parent / "tests/fixtures/lesson_pack"
 
+def fail(msg):
+    """Explicit failure that `python -O` cannot strip, unlike assert."""
+    print(f"FAIL: {msg}", file=sys.stderr); sys.exit(1)
+
 def key(seed): return Ed25519PrivateKey.from_private_bytes(seed)
 def pub(sk): return sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 
 def rfc8032_self_check():
     sk = key(bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"))
-    assert pub(sk).hex() == "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
-    assert sk.sign(b"").hex() == ("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555"
-                                  "fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+    if pub(sk).hex() != "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a":
+        fail("RFC 8032 7.1 TEST 1 public key mismatch")
+    if sk.sign(b"").hex() != ("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555"
+                              "fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"):
+        fail("RFC 8032 7.1 TEST 1 signature mismatch")
 
 def body(pk, seq, created, entries, version=1, flags=0, allow_rev=1):
     b = b"SSLP" + struct.pack("<BBH", version, flags, allow_rev) + pk
@@ -116,9 +122,12 @@ def main():
             "bad_flipped_byte.bin": "signature", "bad_wrong_domain.bin": "signature",
             "bad_unsorted.bin": "order", "bad_weight_10001.bin": "weight"}
     exp = expectations(files)
-    for n, w in want.items(): assert exp[n]["verify"] == w, (n, exp[n])
-    bc = files["beacon_a.bin"]; assert len(bc) == 107
-    Ed25519PublicKey.from_public_bytes(bc[5:37]).verify(bc[-64:], BEACON_DOMAIN + bc[:-64])
+    for n, w in want.items():
+        if exp[n]["verify"] != w: fail(f"{n}: verify gave {exp[n]['verify']}, expected {w}")
+    bc = files["beacon_a.bin"]
+    if len(bc) != 107: fail(f"beacon_a.bin: {len(bc)} bytes, expected 107")
+    try: Ed25519PublicKey.from_public_bytes(bc[5:37]).verify(bc[-64:], BEACON_DOMAIN + bc[:-64])
+    except InvalidSignature: fail("beacon_a.bin: signature does not verify")
     meta = {"generator": "tools/lesson_pack_vectors.py", "pack_domain": PACK_DOMAIN.decode().rstrip("\0") + "\\0",
             "beacon_domain": BEACON_DOMAIN.decode().rstrip("\0") + "\\0",
             "max_pack_bytes": MAX_PACK_BYTES,
@@ -128,9 +137,13 @@ def main():
                       "fingerprint": hashlib.sha256(pub(b)).hexdigest()[:32]},
             "files": exp}
     if "--check" in sys.argv:
-        old = json.loads((OUT / "vectors.json").read_text())
-        assert old == meta, "vectors.json differs from a fresh computation"
-        for n, d in files.items(): assert (OUT / n).read_bytes() == d, n
+        vj = OUT / "vectors.json"
+        if not vj.is_file(): fail(f"{vj}: missing")
+        if json.loads(vj.read_text()) != meta: fail(f"{vj}: differs from a fresh computation")
+        for n, d in files.items():
+            f = OUT / n
+            if not f.is_file(): fail(f"{f}: missing")
+            if f.read_bytes() != d: fail(f"{f}: differs from a fresh computation")
         print("all vectors match"); return
     OUT.mkdir(parents=True, exist_ok=True)
     for n, d in files.items(): (OUT / n).write_bytes(d)

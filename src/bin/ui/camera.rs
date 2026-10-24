@@ -1,0 +1,1110 @@
+//! Camera capture for the Camera output source: V4L2 on Linux, Media
+//! Foundation on Windows. Frames come back as RGBA `Raster`s, the same
+//! type the canvas hands to ffmpeg. Other systems get a clear refusal.
+
+use crate::output::FrameSlot;
+use obs_rust_bitstream::ui_canvas::Raster;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::Duration;
+
+/// A camera the system reports.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Device {
+    /// What the driver calls it (e.g. "HD Pro Webcam C920").
+    pub name: String,
+    /// `/dev/videoN` on Linux, the Media Foundation symbolic link on Windows.
+    pub path: String,
+}
+
+/// Pick the device named by `want` (its path, or its name ignoring case);
+/// empty means the first one.
+pub fn choose<'a>(devices: &'a [Device], want: &str) -> Result<&'a Device, String> {
+    let want = want.trim();
+    if want.is_empty() {
+        return devices.first().ok_or_else(|| {
+            "no camera found. Plug one in, then press Refresh in Settings ▸ Output.".into()
+        });
+    }
+    devices
+        .iter()
+        .find(|d| d.path == want || d.name.eq_ignore_ascii_case(want))
+        .ok_or_else(|| {
+            let names: Vec<&str> = devices.iter().map(|d| d.name.as_str()).collect();
+            format!(
+                "camera '{want}' not found (available: {})",
+                if names.is_empty() {
+                    "none".to_string()
+                } else {
+                    names.join(", ")
+                }
+            )
+        })
+}
+
+/// A camera being read on its own thread. The newest frame sits in
+/// `frames`, where recording, streaming and the Settings preview read it.
+pub struct Feed {
+    pub device: Device,
+    pub frames: FrameSlot,
+    /// (width, height) the camera actually delivers.
+    pub size: (u32, u32),
+    read: Arc<AtomicU64>,
+    error: Arc<Mutex<Option<String>>>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Feed {
+    /// Open the camera named by `want` (see [`choose`]) at about
+    /// `width`×`height` and start reading. Fails if it can't be opened.
+    pub fn start(want: &str, width: u32, height: u32) -> Result<Feed, String> {
+        let devices = list()?;
+        let device = choose(&devices, want)?.clone();
+        let dev = device.clone();
+        Self::spawn(device, move || Camera::open(&dev, width, height))
+    }
+
+    /// Run `open` on a new thread (Media Foundation objects stay on the
+    /// thread that made them) and keep reading frames until dropped.
+    fn spawn<C: Read>(
+        device: Device,
+        open: impl FnOnce() -> Result<C, String> + Send + 'static,
+    ) -> Result<Feed, String> {
+        let frames: FrameSlot = Arc::new(Mutex::new(None));
+        let read = Arc::new(AtomicU64::new(0));
+        let error = Arc::new(Mutex::new(None));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = mpsc::channel();
+        let (f, n, e, s) = (frames.clone(), read.clone(), error.clone(), stop.clone());
+        let thread = std::thread::spawn(move || {
+            let mut cam = match open() {
+                Ok(c) => c,
+                Err(err) => {
+                    let _ = tx.send(Err(err));
+                    return;
+                }
+            };
+            let first = cam.next_frame(Duration::from_secs(5));
+            let _ = tx.send(
+                first
+                    .as_ref()
+                    .map(|r| (r.width, r.height))
+                    .map_err(|e| e.clone()),
+            );
+            let Ok(first) = first else { return };
+            *f.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(first));
+            n.fetch_add(1, Ordering::Relaxed);
+            while !s.load(Ordering::Relaxed) {
+                match cam.next_frame(Duration::from_secs(2)) {
+                    Ok(r) => {
+                        *f.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::new(r));
+                        n.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Err(err) => {
+                        *e.lock().unwrap_or_else(|p| p.into_inner()) = Some(err);
+                        return;
+                    }
+                }
+            }
+        });
+        let size = match rx.recv_timeout(Duration::from_secs(15)) {
+            Ok(r) => r.map_err(|e| format!("camera '{}': {e}", device.name))?,
+            Err(_) => {
+                stop.store(true, Ordering::Relaxed);
+                return Err(format!("camera '{}' did not start in 15 s", device.name));
+            }
+        };
+        Ok(Feed {
+            device,
+            frames,
+            size,
+            read,
+            error,
+            stop,
+            thread: Some(thread),
+        })
+    }
+
+    /// Why reading stopped, once it has.
+    pub fn error(&self) -> Option<String> {
+        self.error.lock().ok().and_then(|e| e.clone())
+    }
+
+    /// Frames read so far.
+    pub fn frames_read(&self) -> u64 {
+        self.read.load(Ordering::Relaxed)
+    }
+
+    pub fn latest(&self) -> Option<Arc<Raster>> {
+        self.frames.lock().ok().and_then(|f| f.clone())
+    }
+}
+
+impl Drop for Feed {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        // A V4L2 read returns within 2 s; a stalled Media Foundation read
+        // can block longer, so after 3 s the thread is left to exit on its
+        // own at its next frame rather than freezing the UI.
+        if let Some(t) = self.thread.take() {
+            let until = std::time::Instant::now() + Duration::from_secs(3);
+            while !t.is_finished() && std::time::Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            if t.is_finished() {
+                let _ = t.join();
+            }
+        }
+    }
+}
+
+/// Something that produces camera frames: [`Camera`], or a test fake.
+pub trait Read {
+    fn next_frame(&mut self, timeout: Duration) -> Result<Raster, String>;
+}
+
+impl Read for Camera {
+    fn next_frame(&mut self, timeout: Duration) -> Result<Raster, String> {
+        self.read(timeout)
+    }
+}
+
+#[cfg(test)]
+impl Feed {
+    /// A feed whose frames come from `cam` instead of a device.
+    pub fn from_reader<C: Read + Send + 'static>(name: &str, cam: C) -> Result<Feed, String> {
+        let device = Device {
+            name: name.into(),
+            path: name.into(),
+        };
+        Self::spawn(device, move || Ok(cam))
+    }
+}
+
+/// BT.601 limited-range YUV to RGB.
+#[cfg(any(target_os = "linux", test))]
+fn yuv_px(y: u8, u: u8, v: u8, out: &mut [u8]) {
+    let c = 298 * (y as i32 - 16);
+    let d = u as i32 - 128;
+    let e = v as i32 - 128;
+    out[0] = ((c + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+    out[1] = ((c - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+    out[2] = ((c + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+    out[3] = 255;
+}
+
+#[cfg(any(target_os = "linux", test))]
+/// Packed YUYV 4:2:2 (Y0 U Y1 V), `stride` bytes per row, to RGBA.
+pub fn yuyv_to_rgba(src: &[u8], width: u32, height: u32, stride: usize) -> Result<Raster, String> {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || h == 0 || w % 2 != 0 || stride < w * 2 {
+        return Err(format!(
+            "bad YUYV geometry {width}x{height}, stride {stride}"
+        ));
+    }
+    if src.len() < stride * (h - 1) + w * 2 {
+        return Err(format!(
+            "YUYV frame too short: {} bytes for {width}x{height}",
+            src.len()
+        ));
+    }
+    let mut data = vec![0u8; w * h * 4];
+    for (y, row) in data.chunks_exact_mut(w * 4).enumerate() {
+        let s = &src[y * stride..y * stride + w * 2];
+        for (px, q) in row
+            .as_chunks_mut::<8>()
+            .0
+            .iter_mut()
+            .zip(s.as_chunks::<4>().0)
+        {
+            yuv_px(q[0], q[1], q[3], &mut px[..4]);
+            yuv_px(q[2], q[1], q[3], &mut px[4..]);
+        }
+    }
+    Ok(Raster {
+        width,
+        height,
+        data,
+    })
+}
+
+#[cfg(any(windows, test))]
+/// 32-bit BGRX rows to RGBA. `pitch` is the byte step from one image row
+/// to the next as Media Foundation reports it; it is negative for bottom-up
+/// images, whose bottom row comes first in `src`.
+pub fn bgrx_to_rgba(src: &[u8], width: u32, height: u32, pitch: isize) -> Result<Raster, String> {
+    let (w, h) = (width as usize, height as usize);
+    let step = pitch.unsigned_abs();
+    if w == 0 || h == 0 || step < w * 4 {
+        return Err(format!(
+            "bad RGB32 geometry {width}x{height}, pitch {pitch}"
+        ));
+    }
+    if src.len() < step * (h - 1) + w * 4 {
+        return Err(format!(
+            "RGB32 frame too short: {} bytes for {width}x{height}",
+            src.len()
+        ));
+    }
+    let mut data = vec![0u8; w * h * 4];
+    for (y, row) in data.chunks_exact_mut(w * 4).enumerate() {
+        let at = if pitch < 0 {
+            (h - 1 - y) * step
+        } else {
+            y * step
+        };
+        let px = src[at..at + w * 4].as_chunks::<4>().0;
+        for (d, s) in row.as_chunks_mut::<4>().0.iter_mut().zip(px) {
+            *d = [s[2], s[1], s[0], 255];
+        }
+    }
+    Ok(Raster {
+        width,
+        height,
+        data,
+    })
+}
+
+#[cfg(windows)]
+pub use mf::{list, Camera};
+#[cfg(target_os = "linux")]
+pub use v4l2::{list, Camera};
+
+#[cfg(not(any(target_os = "linux", windows)))]
+const UNSUPPORTED: &str =
+    "Camera capture isn't supported on this OS yet (Windows and Linux only). Pick Canvas or Screen in Settings ▸ Output.";
+
+#[cfg(not(any(target_os = "linux", windows)))]
+pub fn list() -> Result<Vec<Device>, String> {
+    Err(UNSUPPORTED.into())
+}
+
+/// No camera API on this OS: opening always fails with the reason.
+#[cfg(not(any(target_os = "linux", windows)))]
+pub enum Camera {}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+impl Camera {
+    pub fn open(_dev: &Device, _width: u32, _height: u32) -> Result<Camera, String> {
+        Err(UNSUPPORTED.into())
+    }
+    pub fn read(&mut self, _timeout: Duration) -> Result<Raster, String> {
+        match *self {}
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod v4l2 {
+    //! Video4Linux2 streaming capture through mmap'd buffers. Struct
+    //! layouts follow `<linux/videodev2.h>`; ioctl numbers are derived
+    //! from the struct sizes, like the C macros.
+
+    use super::{Device, Raster};
+    use std::ffi::CString;
+    use std::os::raw::{c_int, c_ulong, c_void};
+    use std::time::Duration;
+
+    pub(super) const CAP_VIDEO_CAPTURE: u32 = 0x0000_0001;
+    pub(super) const CAP_STREAMING: u32 = 0x0400_0000;
+    pub(super) const CAP_DEVICE_CAPS: u32 = 0x8000_0000;
+    const BUF_TYPE_VIDEO_CAPTURE: u32 = 1;
+    const MEMORY_MMAP: u32 = 1;
+    const FIELD_NONE: u32 = 1;
+    pub(super) const fn fourcc(s: &[u8; 4]) -> u32 {
+        s[0] as u32 | (s[1] as u32) << 8 | (s[2] as u32) << 16 | (s[3] as u32) << 24
+    }
+    pub(super) const PIX_YUYV: u32 = fourcc(b"YUYV");
+    pub(super) const PIX_MJPEG: u32 = fourcc(b"MJPG");
+
+    #[repr(C)]
+    pub(super) struct Capability {
+        pub driver: [u8; 16],
+        pub card: [u8; 32],
+        pub bus_info: [u8; 32],
+        pub version: u32,
+        pub capabilities: u32,
+        pub device_caps: u32,
+        pub reserved: [u32; 3],
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub(super) struct PixFormat {
+        pub width: u32,
+        pub height: u32,
+        pub pixelformat: u32,
+        pub field: u32,
+        pub bytesperline: u32,
+        pub sizeimage: u32,
+        pub colorspace: u32,
+        pub priv_: u32,
+        pub flags: u32,
+        pub ycbcr_enc: u32,
+        pub quantization: u32,
+        pub xfer_func: u32,
+    }
+
+    /// `v4l2_format.fmt`: 200 bytes, pointer-aligned (the kernel union
+    /// holds `v4l2_window`, which has pointers).
+    #[repr(C)]
+    pub(super) union FormatUnion {
+        pub pix: PixFormat,
+        pub raw: [u8; 200],
+        _align: *mut c_void,
+    }
+
+    #[repr(C)]
+    pub(super) struct Format {
+        pub type_: u32,
+        pub fmt: FormatUnion,
+    }
+
+    #[repr(C)]
+    pub(super) struct RequestBuffers {
+        pub count: u32,
+        pub type_: u32,
+        pub memory: u32,
+        pub capabilities: u32,
+        pub flags: u8,
+        pub reserved: [u8; 3],
+    }
+
+    #[repr(C)]
+    pub(super) struct Timecode {
+        pub type_: u32,
+        pub flags: u32,
+        pub frames: u8,
+        pub seconds: u8,
+        pub minutes: u8,
+        pub hours: u8,
+        pub userbits: [u8; 4],
+    }
+
+    /// `v4l2_buffer.m`: offset / userptr / planes / fd.
+    #[repr(C)]
+    pub(super) union BufferM {
+        pub offset: u32,
+        pub userptr: c_ulong,
+        _planes: *mut c_void,
+        pub fd: i32,
+    }
+
+    #[repr(C)]
+    pub(super) struct Buffer {
+        pub index: u32,
+        pub type_: u32,
+        pub bytesused: u32,
+        pub flags: u32,
+        pub field: u32,
+        pub timestamp: libc::timeval,
+        pub timecode: Timecode,
+        pub sequence: u32,
+        pub memory: u32,
+        pub m: BufferM,
+        pub length: u32,
+        pub reserved2: u32,
+        pub request_fd: i32,
+    }
+
+    const fn ioc(dir: u32, nr: u32, size: usize) -> c_ulong {
+        ((dir << 30) | ((size as u32) << 16) | ((b'V' as u32) << 8) | nr) as c_ulong
+    }
+    const R: u32 = 2;
+    const W: u32 = 1;
+    const RW: u32 = 3;
+    pub(super) const QUERYCAP: c_ulong = ioc(R, 0, size_of::<Capability>());
+    pub(super) const S_FMT: c_ulong = ioc(RW, 5, size_of::<Format>());
+    pub(super) const REQBUFS: c_ulong = ioc(RW, 8, size_of::<RequestBuffers>());
+    pub(super) const QUERYBUF: c_ulong = ioc(RW, 9, size_of::<Buffer>());
+    pub(super) const QBUF: c_ulong = ioc(RW, 15, size_of::<Buffer>());
+    pub(super) const DQBUF: c_ulong = ioc(RW, 17, size_of::<Buffer>());
+    pub(super) const STREAMON: c_ulong = ioc(W, 18, size_of::<c_int>());
+    pub(super) const STREAMOFF: c_ulong = ioc(W, 19, size_of::<c_int>());
+
+    fn zeroed<T>() -> T {
+        // SAFETY: only used for the plain-old-data kernel structs above,
+        // for which all-zero bytes are a valid value.
+        unsafe { std::mem::zeroed() }
+    }
+
+    /// `ioctl`, retried on EINTR.
+    fn xioctl<T>(fd: c_int, req: c_ulong, arg: &mut T) -> std::io::Result<()> {
+        loop {
+            // SAFETY: `arg` is the struct this request number was built from.
+            let r = unsafe { libc::ioctl(fd, req as _, arg as *mut T as *mut c_void) };
+            if r != -1 {
+                return Ok(());
+            }
+            let e = std::io::Error::last_os_error();
+            if e.kind() != std::io::ErrorKind::Interrupted {
+                return Err(e);
+            }
+        }
+    }
+
+    struct Fd(c_int);
+    impl Drop for Fd {
+        fn drop(&mut self) {
+            // SAFETY: we own the descriptor.
+            unsafe { libc::close(self.0) };
+        }
+    }
+
+    fn open_fd(path: &str) -> Result<Fd, String> {
+        let c = CString::new(path).map_err(|_| format!("bad device path {path:?}"))?;
+        // SAFETY: valid NUL-terminated path.
+        let fd = unsafe {
+            libc::open(
+                c.as_ptr(),
+                libc::O_RDWR | libc::O_NONBLOCK | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(format!(
+                "can't open {path}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(Fd(fd))
+    }
+
+    fn c_str(b: &[u8]) -> String {
+        let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
+        String::from_utf8_lossy(&b[..end]).trim().to_string()
+    }
+
+    /// The card name if `fd` is a V4L2 device that can stream video capture.
+    fn query(fd: &Fd, path: &str) -> Result<String, String> {
+        let mut cap: Capability = zeroed();
+        xioctl(fd.0, QUERYCAP, &mut cap)
+            .map_err(|e| format!("{path} is not a V4L2 device ({e})"))?;
+        let caps = if cap.capabilities & CAP_DEVICE_CAPS != 0 {
+            cap.device_caps
+        } else {
+            cap.capabilities
+        };
+        if caps & CAP_VIDEO_CAPTURE == 0 || caps & CAP_STREAMING == 0 {
+            return Err(format!("{path} can't stream video capture"));
+        }
+        Ok(c_str(&cap.card))
+    }
+
+    /// Every `/dev/videoN` that can stream video capture (metadata and
+    /// output nodes are skipped).
+    pub fn list() -> Result<Vec<Device>, String> {
+        let mut nodes: Vec<(u32, String)> = std::fs::read_dir("/dev")
+            .map_err(|e| format!("can't read /dev: {e}"))?
+            .filter_map(|e| {
+                let name = e.ok()?.file_name().into_string().ok()?;
+                let n = name.strip_prefix("video")?.parse().ok()?;
+                Some((n, format!("/dev/{name}")))
+            })
+            .collect();
+        nodes.sort();
+        Ok(nodes
+            .into_iter()
+            .filter_map(|(_, path)| {
+                let fd = open_fd(&path).ok()?;
+                let name = query(&fd, &path).ok()?;
+                Some(Device { name, path })
+            })
+            .collect())
+    }
+
+    struct Map {
+        ptr: *mut c_void,
+        len: usize,
+    }
+
+    /// An open, streaming camera.
+    pub struct Camera {
+        fd: Fd,
+        maps: Vec<Map>,
+        width: u32,
+        height: u32,
+        stride: usize,
+        pixfmt: u32,
+        path: String,
+    }
+
+    impl Camera {
+        /// Open `dev` asking for `width`×`height` YUYV (MJPEG if the camera
+        /// has no YUYV); the driver picks the nearest size it supports.
+        pub fn open(dev: &Device, width: u32, height: u32) -> Result<Camera, String> {
+            Self::open_path(&dev.path, width, height)
+        }
+
+        pub(super) fn open_path(path: &str, width: u32, height: u32) -> Result<Camera, String> {
+            let fd = open_fd(path)?;
+            query(&fd, path)?;
+            let mut f: Format = zeroed();
+            for want in [PIX_YUYV, PIX_MJPEG] {
+                f = zeroed();
+                f.type_ = BUF_TYPE_VIDEO_CAPTURE;
+                f.fmt.pix = PixFormat {
+                    width,
+                    height,
+                    pixelformat: want,
+                    field: FIELD_NONE,
+                    ..zeroed()
+                };
+                xioctl(fd.0, S_FMT, &mut f).map_err(|e| format!("{path}: VIDIOC_S_FMT: {e}"))?;
+                // SAFETY: S_FMT on a capture buffer type fills `pix`.
+                if unsafe { f.fmt.pix.pixelformat } == want {
+                    break;
+                }
+            }
+            // SAFETY: as above.
+            let pix = unsafe { f.fmt.pix };
+            if pix.pixelformat != PIX_YUYV && pix.pixelformat != PIX_MJPEG {
+                let cc = pix.pixelformat.to_le_bytes();
+                return Err(format!(
+                    "{path} offers neither YUYV nor MJPEG (it chose {})",
+                    String::from_utf8_lossy(&cc)
+                ));
+            }
+            let mut req = RequestBuffers {
+                count: 4,
+                type_: BUF_TYPE_VIDEO_CAPTURE,
+                memory: MEMORY_MMAP,
+                ..zeroed()
+            };
+            xioctl(fd.0, REQBUFS, &mut req).map_err(|e| format!("{path}: VIDIOC_REQBUFS: {e}"))?;
+            if req.count == 0 {
+                return Err(format!("{path}: the driver gave no capture buffers"));
+            }
+            let mut cam = Camera {
+                fd,
+                maps: Vec::new(),
+                width: pix.width,
+                height: pix.height,
+                stride: (pix.bytesperline as usize).max(pix.width as usize * 2),
+                pixfmt: pix.pixelformat,
+                path: path.to_string(),
+            };
+            for i in 0..req.count {
+                let mut b = cam.buffer(i);
+                xioctl(cam.fd.0, QUERYBUF, &mut b)
+                    .map_err(|e| format!("{path}: VIDIOC_QUERYBUF: {e}"))?;
+                // SAFETY: the offset and length come from QUERYBUF.
+                let ptr = unsafe {
+                    libc::mmap(
+                        std::ptr::null_mut(),
+                        b.length as usize,
+                        libc::PROT_READ | libc::PROT_WRITE,
+                        libc::MAP_SHARED,
+                        cam.fd.0,
+                        b.m.offset as libc::off_t,
+                    )
+                };
+                if ptr == libc::MAP_FAILED {
+                    return Err(format!("{path}: mmap: {}", std::io::Error::last_os_error()));
+                }
+                cam.maps.push(Map {
+                    ptr,
+                    len: b.length as usize,
+                });
+                xioctl(cam.fd.0, QBUF, &mut b).map_err(|e| format!("{path}: VIDIOC_QBUF: {e}"))?;
+            }
+            let mut t = BUF_TYPE_VIDEO_CAPTURE as c_int;
+            xioctl(cam.fd.0, STREAMON, &mut t)
+                .map_err(|e| format!("{path}: VIDIOC_STREAMON: {e}"))?;
+            Ok(cam)
+        }
+
+        fn buffer(&self, index: u32) -> Buffer {
+            let mut b: Buffer = zeroed();
+            b.index = index;
+            b.type_ = BUF_TYPE_VIDEO_CAPTURE;
+            b.memory = MEMORY_MMAP;
+            b
+        }
+
+        /// The next frame, waiting at most `timeout` for it.
+        pub fn read(&mut self, timeout: Duration) -> Result<Raster, String> {
+            let path = self.path.clone();
+            let mut p = libc::pollfd {
+                fd: self.fd.0,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let ms = timeout.as_millis().min(i32::MAX as u128) as c_int;
+            // SAFETY: one valid pollfd.
+            let n = unsafe { libc::poll(&mut p, 1, ms) };
+            if n < 0 {
+                return Err(format!("{path}: poll: {}", std::io::Error::last_os_error()));
+            }
+            if n == 0 {
+                return Err(format!("{path}: no frame within {} ms", ms));
+            }
+            if p.revents & (libc::POLLERR | libc::POLLHUP) != 0 {
+                return Err(format!("{path}: the camera went away"));
+            }
+            let mut b = self.buffer(0);
+            xioctl(self.fd.0, DQBUF, &mut b).map_err(|e| format!("{path}: VIDIOC_DQBUF: {e}"))?;
+            let m = self
+                .maps
+                .get(b.index as usize)
+                .ok_or_else(|| format!("{path}: driver returned buffer {}", b.index))?;
+            let used = (b.bytesused as usize).min(m.len);
+            // SAFETY: the buffer is dequeued, so the driver isn't writing it.
+            let bytes = unsafe { std::slice::from_raw_parts(m.ptr as *const u8, used) };
+            let frame = if self.pixfmt == PIX_YUYV {
+                super::yuyv_to_rgba(bytes, self.width, self.height, self.stride)
+            } else {
+                image::load_from_memory_with_format(bytes, image::ImageFormat::Jpeg)
+                    .map(|i| {
+                        let i = i.to_rgba8();
+                        Raster {
+                            width: i.width(),
+                            height: i.height(),
+                            data: i.into_raw(),
+                        }
+                    })
+                    .map_err(|e| format!("{path}: bad MJPEG frame: {e}"))
+            };
+            xioctl(self.fd.0, QBUF, &mut b).map_err(|e| format!("{path}: VIDIOC_QBUF: {e}"))?;
+            frame
+        }
+    }
+
+    impl Drop for Camera {
+        fn drop(&mut self) {
+            let mut t = BUF_TYPE_VIDEO_CAPTURE as c_int;
+            let _ = xioctl(self.fd.0, STREAMOFF, &mut t);
+            for m in &self.maps {
+                // SAFETY: mapped in `open_path`.
+                unsafe { libc::munmap(m.ptr, m.len) };
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+mod mf {
+    //! Media Foundation source reader with the built-in video processor
+    //! turned on, so every camera (YUY2, NV12, MJPEG) arrives as RGB32.
+    //! COM is initialised (multithreaded) on the thread that uses it.
+
+    use super::{Device, Raster};
+    use std::time::Duration;
+    use windows::core::{Interface, GUID, PWSTR};
+    use windows::Win32::Media::MediaFoundation::*;
+    use windows::Win32::System::Com::{
+        CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_MULTITHREADED,
+    };
+
+    /// COM + Media Foundation for the current thread, undone on drop.
+    struct Mf;
+    impl Mf {
+        fn start() -> Result<Mf, String> {
+            // SAFETY: paired with CoUninitialize in Drop.
+            unsafe {
+                CoInitializeEx(None, COINIT_MULTITHREADED)
+                    .ok()
+                    .map_err(|e| format!("COM init: {e}"))?;
+                if let Err(e) = MFStartup(MF_VERSION, MFSTARTUP_FULL) {
+                    CoUninitialize();
+                    return Err(format!("Media Foundation start: {e}"));
+                }
+            }
+            Ok(Mf)
+        }
+    }
+    impl Drop for Mf {
+        fn drop(&mut self) {
+            // SAFETY: started in `Mf::start` on this thread.
+            unsafe {
+                let _ = MFShutdown();
+                CoUninitialize();
+            }
+        }
+    }
+
+    fn string(a: &IMFActivate, key: &GUID) -> Result<String, String> {
+        let mut p = PWSTR::null();
+        let mut n = 0u32;
+        // SAFETY: MF allocates the string; we free it with CoTaskMemFree.
+        unsafe {
+            a.GetAllocatedString(key, &mut p, &mut n)
+                .map_err(|e| e.to_string())?;
+            let s = p.to_string().map_err(|e| e.to_string());
+            CoTaskMemFree(Some(p.0 as *const _));
+            s
+        }
+    }
+
+    fn devices() -> Result<Vec<(Device, IMFActivate)>, String> {
+        // SAFETY: standard MF enumeration; the array is freed below.
+        unsafe {
+            let mut attr = None;
+            MFCreateAttributes(&mut attr, 1).map_err(|e| format!("MFCreateAttributes: {e}"))?;
+            let attr = attr.ok_or("MFCreateAttributes returned nothing")?;
+            attr.SetGUID(
+                &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+                &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
+            )
+            .map_err(|e| format!("SetGUID: {e}"))?;
+            let mut arr: *mut Option<IMFActivate> = std::ptr::null_mut();
+            let mut count = 0u32;
+            MFEnumDeviceSources(&attr, &mut arr, &mut count)
+                .map_err(|e| format!("MFEnumDeviceSources: {e}"))?;
+            let mut out = Vec::new();
+            for i in 0..count as usize {
+                if let Some(a) = std::ptr::read(arr.add(i)) {
+                    let name = string(&a, &MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME)?;
+                    let path =
+                        string(&a, &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK)?;
+                    out.push((Device { name, path }, a));
+                }
+            }
+            if !arr.is_null() {
+                CoTaskMemFree(Some(arr as *const _));
+            }
+            Ok(out)
+        }
+    }
+
+    /// Video capture devices. Runs on its own thread so the caller's COM
+    /// apartment (the UI thread is single-threaded) doesn't matter.
+    pub fn list() -> Result<Vec<Device>, String> {
+        std::thread::spawn(|| {
+            let _mf = Mf::start()?;
+            Ok(devices()?.into_iter().map(|(d, _)| d).collect())
+        })
+        .join()
+        .map_err(|_| "camera enumeration panicked".to_string())?
+    }
+
+    /// An open camera. Use it on the thread that opened it.
+    pub struct Camera {
+        reader: IMFSourceReader,
+        width: u32,
+        height: u32,
+        /// Bytes from one image row to the next in a plain (non-2D)
+        /// buffer; negative for bottom-up RGB, MF's default.
+        stride: isize,
+        // dropped last: shuts Media Foundation down after the reader
+        _mf: Mf,
+    }
+
+    const STREAM: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
+
+    impl Camera {
+        /// Open `dev` (matched by symbolic link) asking for RGB32 at
+        /// `width`×`height`; the video processor scales if needed.
+        pub fn open(dev: &Device, width: u32, height: u32) -> Result<Camera, String> {
+            let mf = Mf::start()?;
+            let (_, act) = devices()?
+                .into_iter()
+                .find(|(d, _)| d.path == dev.path)
+                .ok_or_else(|| format!("camera '{}' is no longer connected", dev.name))?;
+            // SAFETY: standard MF source-reader setup.
+            unsafe {
+                let source: IMFMediaSource = act
+                    .ActivateObject()
+                    .map_err(|e| format!("{}: activate: {e}", dev.name))?;
+                let mut attr = None;
+                MFCreateAttributes(&mut attr, 1).map_err(|e| format!("MFCreateAttributes: {e}"))?;
+                let attr = attr.ok_or("MFCreateAttributes returned nothing")?;
+                attr.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)
+                    .map_err(|e| format!("SetUINT32: {e}"))?;
+                let reader = MFCreateSourceReaderFromMediaSource(&source, &attr)
+                    .map_err(|e| format!("{}: source reader: {e}", dev.name))?;
+                let mt = MFCreateMediaType().map_err(|e| format!("MFCreateMediaType: {e}"))?;
+                mt.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)
+                    .map_err(|e| e.to_string())?;
+                mt.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)
+                    .map_err(|e| e.to_string())?;
+                mt.SetUINT64(&MF_MT_FRAME_SIZE, (width as u64) << 32 | height as u64)
+                    .map_err(|e| e.to_string())?;
+                reader.SetCurrentMediaType(STREAM, None, &mt).map_err(|e| {
+                    format!("{}: can't deliver RGB32 {width}x{height}: {e}", dev.name)
+                })?;
+                let cur = reader
+                    .GetCurrentMediaType(STREAM)
+                    .map_err(|e| e.to_string())?;
+                let size = cur
+                    .GetUINT64(&MF_MT_FRAME_SIZE)
+                    .map_err(|e| e.to_string())?;
+                let (width, height) = ((size >> 32) as u32, size as u32);
+                let stride = match cur.GetUINT32(&MF_MT_DEFAULT_STRIDE) {
+                    Ok(s) => s as i32 as isize,
+                    Err(_) => -(width as isize * 4),
+                };
+                Ok(Camera {
+                    reader,
+                    width,
+                    height,
+                    stride,
+                    _mf: mf,
+                })
+            }
+        }
+
+        /// The next frame. The source reader blocks until one arrives;
+        /// `_timeout` is honoured by V4L2 only.
+        pub fn read(&mut self, _timeout: Duration) -> Result<Raster, String> {
+            // SAFETY: synchronous ReadSample; the buffer is unlocked below.
+            unsafe {
+                loop {
+                    let mut flags = 0u32;
+                    let mut sample = None;
+                    self.reader
+                        .ReadSample(STREAM, 0, None, Some(&mut flags), None, Some(&mut sample))
+                        .map_err(|e| format!("camera read: {e}"))?;
+                    if flags & (MF_SOURCE_READERF_ERROR.0 | MF_SOURCE_READERF_ENDOFSTREAM.0) as u32
+                        != 0
+                    {
+                        return Err("the camera stopped sending frames".into());
+                    }
+                    let Some(sample) = sample else { continue };
+                    let buf = sample
+                        .ConvertToContiguousBuffer()
+                        .map_err(|e| e.to_string())?;
+                    if let Ok(b2) = buf.cast::<IMF2DBuffer>() {
+                        let mut p = std::ptr::null_mut();
+                        let mut pitch = 0i32;
+                        b2.Lock2D(&mut p, &mut pitch).map_err(|e| e.to_string())?;
+                        let step = pitch.unsigned_abs() as usize;
+                        let h = self.height as usize;
+                        let (start, len) = if pitch < 0 {
+                            (p.offset(pitch as isize * (h as isize - 1)), step * h)
+                        } else {
+                            (p, step * h)
+                        };
+                        let bytes = std::slice::from_raw_parts(start as *const u8, len);
+                        let r = super::bgrx_to_rgba(bytes, self.width, self.height, pitch as isize);
+                        let _ = b2.Unlock2D();
+                        return r;
+                    }
+                    let mut p = std::ptr::null_mut();
+                    let mut len = 0u32;
+                    buf.Lock(&mut p, None, Some(&mut len))
+                        .map_err(|e| e.to_string())?;
+                    let bytes = std::slice::from_raw_parts(p as *const u8, len as usize);
+                    let r = super::bgrx_to_rgba(bytes, self.width, self.height, self.stride);
+                    let _ = buf.Unlock();
+                    return r;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    fn dev(name: &str, path: &str) -> Device {
+        Device {
+            name: name.into(),
+            path: path.into(),
+        }
+    }
+
+    #[test]
+    fn choose_picks_first_or_by_path_or_name() {
+        let d = [dev("Front Cam", "/dev/video0"), dev("C920", "/dev/video2")];
+        assert_eq!(choose(&d, "").unwrap().path, "/dev/video0");
+        assert_eq!(choose(&d, "  ").unwrap().path, "/dev/video0");
+        assert_eq!(choose(&d, "/dev/video2").unwrap().name, "C920");
+        assert_eq!(choose(&d, "c920").unwrap().path, "/dev/video2");
+        let e = choose(&d, "Logi").unwrap_err();
+        assert!(
+            e.contains("'Logi' not found") && e.contains("Front Cam, C920"),
+            "{e}"
+        );
+        assert!(choose(&[], "").unwrap_err().contains("no camera found"));
+        assert!(choose(&[], "x").unwrap_err().contains("available: none"));
+    }
+
+    #[test]
+    fn yuyv_converts_bt601_limited_range_and_honours_stride() {
+        // 2x2: row 0 is white (Y=235) then black (Y=16), grey chroma;
+        // row 1 is pure red-ish (Y=81 U=90 V=240). Rows padded to 6 bytes.
+        let src = [
+            235, 128, 16, 128, 0xAA, 0xAA, //
+            81, 90, 81, 240, 0xAA, 0xAA,
+        ];
+        let r = yuyv_to_rgba(&src, 2, 2, 6).unwrap();
+        assert_eq!((r.width, r.height), (2, 2));
+        assert_eq!(&r.data[0..4], &[255, 255, 255, 255]);
+        assert_eq!(&r.data[4..8], &[0, 0, 0, 255]);
+        let red = &r.data[8..12];
+        assert!(red[0] >= 250 && red[1] <= 5 && red[2] <= 5, "{red:?}");
+        assert_eq!(&r.data[8..12], &r.data[12..16]);
+        assert!(yuyv_to_rgba(&src, 3, 2, 6).is_err(), "odd width");
+        assert!(yuyv_to_rgba(&src, 2, 2, 3).is_err(), "stride < width*2");
+        assert!(yuyv_to_rgba(&src[..9], 2, 2, 6).is_err(), "short frame");
+    }
+
+    #[test]
+    fn bgrx_swaps_channels_and_flips_bottom_up_rows() {
+        // two rows, one pixel each, 8-byte pitch: blue then green
+        let src = [255, 0, 0, 7, 0xEE, 0xEE, 0xEE, 0xEE, 0, 255, 0, 7];
+        let top = bgrx_to_rgba(&src, 1, 2, 8).unwrap();
+        assert_eq!(top.data, [0, 0, 255, 255, 0, 255, 0, 255]);
+        // negative pitch: the bottom row comes first, so the image flips
+        let up = bgrx_to_rgba(&src, 1, 2, -8).unwrap();
+        assert_eq!(up.data, [0, 255, 0, 255, 0, 0, 255, 255]);
+        assert!(bgrx_to_rgba(&src, 3, 2, 8).is_err(), "pitch < width*4");
+        assert!(bgrx_to_rgba(&src[..10], 1, 2, 8).is_err(), "short frame");
+    }
+
+    /// Solid frames, failing after `ok` of them (never, if `None`).
+    pub(crate) struct Fake {
+        pub rgba: [u8; 4],
+        pub size: (u32, u32),
+        pub ok: Option<u32>,
+    }
+    impl Read for Fake {
+        fn next_frame(&mut self, _: Duration) -> Result<Raster, String> {
+            std::thread::sleep(Duration::from_millis(10));
+            match &mut self.ok {
+                Some(0) => return Err("unplugged".into()),
+                Some(n) => *n -= 1,
+                None => {}
+            }
+            Ok(Raster::filled(self.size.0, self.size.1, self.rgba))
+        }
+    }
+
+    #[test]
+    fn feed_reports_size_keeps_newest_frame_and_records_errors() {
+        let f = Feed::from_reader(
+            "fake",
+            Fake {
+                rgba: [9, 8, 7, 255],
+                size: (64, 48),
+                ok: Some(20),
+            },
+        )
+        .unwrap();
+        assert_eq!(f.size, (64, 48));
+        assert_eq!(f.latest().unwrap().data[..4], [9, 8, 7, 255]);
+        let t0 = std::time::Instant::now();
+        while f.error().is_none() && t0.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(f.error().as_deref(), Some("unplugged"));
+        assert_eq!(f.frames_read(), 20);
+    }
+
+    #[test]
+    fn feed_start_fails_loudly_when_the_camera_cannot_open_or_send() {
+        let e = Feed::spawn::<Fake>(dev("Gone", "x"), || Err("busy".into()))
+            .err()
+            .unwrap();
+        assert_eq!(e, "camera 'Gone': busy");
+        let silent = Fake {
+            rgba: [0; 4],
+            size: (2, 2),
+            ok: Some(0),
+        };
+        let e = Feed::from_reader("Mute", silent).err().unwrap();
+        assert_eq!(e, "camera 'Mute': unplugged");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn v4l2_ioctl_numbers_and_struct_sizes_match_videodev2_h() {
+        use std::os::raw::c_ulong;
+        use v4l2::*;
+        assert_eq!(fourcc(b"YUYV"), 0x5659_5559);
+        assert_eq!(PIX_MJPEG, 0x4750_4a4d);
+        if cfg!(target_pointer_width = "64") {
+            assert_eq!(size_of::<Capability>(), 104);
+            assert_eq!(size_of::<Format>(), 208);
+            assert_eq!(size_of::<RequestBuffers>(), 20);
+            assert_eq!(size_of::<Buffer>(), 88);
+            let want: [(c_ulong, c_ulong); 8] = [
+                (QUERYCAP, 0x8068_5600),
+                (S_FMT, 0xc0d0_5605),
+                (REQBUFS, 0xc014_5608),
+                (QUERYBUF, 0xc058_5609),
+                (QBUF, 0xc058_560f),
+                (DQBUF, 0xc058_5611),
+                (STREAMON, 0x4004_5612),
+                (STREAMOFF, 0x4004_5613),
+            ];
+            for (got, exp) in want {
+                assert_eq!(got, exp, "{got:#x} != {exp:#x}");
+            }
+        }
+        assert_eq!(
+            CAP_VIDEO_CAPTURE | CAP_STREAMING | CAP_DEVICE_CAPS,
+            0x8400_0001
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn v4l2_refuses_a_node_that_is_not_a_camera() {
+        let e = v4l2::Camera::open_path("/dev/null", 640, 480)
+            .err()
+            .unwrap();
+        assert!(e.starts_with("/dev/null is not a V4L2 device ("), "{e}");
+        let e = v4l2::Camera::open_path("/nonexistent/video9", 640, 480)
+            .err()
+            .unwrap();
+        assert!(e.starts_with("can't open /nonexistent/video9"), "{e}");
+        // enumeration works (and is empty without a camera)
+        assert!(list().is_ok());
+    }
+
+    /// Needs a real V4L2 node: `sudo modprobe v4l2loopback devices=1` and a
+    /// producer such as `ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=30
+    /// -pix_fmt yuyv422 -f v4l2 /dev/video0`, then
+    /// `SERAPHINA_TEST_CAMERA=/dev/video0 cargo test --features ui -- --ignored v4l2_reads`.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "needs a V4L2 device (v4l2loopback); the dev box's Firecracker kernel has no media support"]
+    fn v4l2_reads_frames_from_a_real_device() {
+        let path = std::env::var("SERAPHINA_TEST_CAMERA").unwrap_or("/dev/video0".into());
+        let devices = list().unwrap();
+        let d = choose(&devices, &path).unwrap().clone();
+        let f = Feed::start(&d.path, 640, 480).unwrap();
+        assert!(f.size.0 > 0 && f.size.1 > 0);
+        std::thread::sleep(Duration::from_secs(1));
+        assert!(f.frames_read() >= 10, "{} frames in 1 s", f.frames_read());
+        assert!(f.error().is_none(), "{:?}", f.error());
+        let r = f.latest().unwrap();
+        assert_eq!(r.data.len(), (r.width * r.height * 4) as usize);
+        assert!(r
+            .data
+            .chunks(4)
+            .any(|p| p[0] > 32 || p[1] > 32 || p[2] > 32));
+    }
+
+    /// Media Foundation enumeration runs on Windows (and under Wine, which
+    /// has no capture devices, so the list is empty but must not fail).
+    #[cfg(windows)]
+    #[test]
+    fn media_foundation_lists_cameras() {
+        let l = list().expect("MFEnumDeviceSources");
+        for d in &l {
+            assert!(!d.name.is_empty() && !d.path.is_empty(), "{d:?}");
+        }
+    }
+
+    /// Opens the first real camera through Media Foundation.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "needs a real webcam; Wine has none. Run on the Windows PC with --ignored"]
+    fn media_foundation_reads_frames_from_a_real_camera() {
+        let f = Feed::start("", 640, 480).unwrap();
+        std::thread::sleep(Duration::from_secs(1));
+        assert!(f.frames_read() >= 5, "{} frames in 1 s", f.frames_read());
+        let r = f.latest().unwrap();
+        assert_eq!(r.data.len(), (r.width * r.height * 4) as usize);
+    }
+
+    #[cfg(not(any(target_os = "linux", windows)))]
+    #[test]
+    fn other_systems_refuse_cameras() {
+        assert!(list().unwrap_err().contains("isn't supported"));
+    }
+}

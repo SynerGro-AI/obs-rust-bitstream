@@ -12,6 +12,7 @@
 
 mod animate;
 mod assistant_panel;
+mod camera;
 mod commands;
 mod composite;
 mod crash;
@@ -1021,21 +1022,40 @@ impl App {
                 }
             }
             C::RetryStream => self.output.retry(),
-            C::SetOutputSource { source } => match output::Source::parse(source) {
-                Some(s)
-                    if s != self.output.cfg.source
-                        && (self.output.is_live() || self.output.is_recording()) =>
-                {
-                    Err("stop recording and streaming before switching the source".into())
+            C::SetOutputSource { source, device } => {
+                let busy = self.output.is_live() || self.output.is_recording();
+                let dev = device.as_deref().map(str::trim);
+                match output::Source::parse(source) {
+                    Some(s)
+                        if busy
+                            && (s != self.output.cfg.source
+                                || dev.is_some_and(|d| d != self.output.cfg.camera_device)) =>
+                    {
+                        Err("stop recording and streaming before switching the source".into())
+                    }
+                    Some(s) if dev.is_some() && s != output::Source::Camera => {
+                        Err("only the camera source takes a device".into())
+                    }
+                    Some(s) => {
+                        self.output.cfg.source = s;
+                        if let Some(d) = dev {
+                            self.output.cfg.camera_device = d.to_string();
+                        }
+                        let what = match (s, self.output.cfg.camera_device.as_str()) {
+                            (output::Source::Camera, "") => "Camera (first camera found)".into(),
+                            (output::Source::Camera, d) => format!("Camera ({d})"),
+                            _ => s.label().to_string(),
+                        };
+                        self.output
+                            .save_config()
+                            .map(|_| format!("output source: {what}"))
+                    }
+                    None => Err(format!(
+                        "unknown source '{}' (canvas, screen, camera)",
+                        source
+                    )),
                 }
-                Some(s) => {
-                    self.output.cfg.source = s;
-                    self.output
-                        .save_config()
-                        .map(|_| format!("output source: {}", s.label()))
-                }
-                None => Err(format!("unknown source '{}' (canvas, screen)", source)),
-            },
+            }
             C::SetStreamTarget { url } => {
                 let u = url.trim();
                 if !u.is_empty() && !(u.starts_with("rtmp://") || u.starts_with("rtmps://")) {
@@ -4663,7 +4683,8 @@ mod tests {
         assert!(
             app.dispatch(
                 &AppCommand::SetOutputSource {
-                    source: "screen".into()
+                    source: "screen".into(),
+                    device: None,
                 },
                 Origin::User
             )
@@ -4677,6 +4698,42 @@ mod tests {
         let path = app.output.last_record.clone().unwrap();
         assert!(std::fs::metadata(&path).unwrap().len() > 1000);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn set_output_source_selects_a_camera_by_name() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let src = |source: &str, device: Option<&str>| AppCommand::SetOutputSource {
+            source: source.into(),
+            device: device.map(Into::into),
+        };
+        let msg = app.dispatch(&src("camera", None), Origin::User).unwrap();
+        assert_eq!(msg, "output source: Camera (first camera found)");
+        let msg = app
+            .dispatch(&src("webcam", Some(" C920 ")), Origin::User)
+            .unwrap();
+        assert_eq!(msg, "output source: Camera (C920)");
+        assert_eq!(app.output.cfg.source, output::Source::Camera);
+        assert_eq!(app.output.cfg.camera_device, "C920");
+        // switching away keeps the chosen camera for next time
+        app.dispatch(&src("canvas", None), Origin::User).unwrap();
+        assert_eq!(app.output.cfg.camera_device, "C920");
+        assert!(app
+            .dispatch(&src("screen", Some("C920")), Origin::User)
+            .unwrap_err()
+            .contains("only the camera source takes a device"));
+        assert!(app
+            .dispatch(&src("radio", None), Origin::User)
+            .unwrap_err()
+            .contains("(canvas, screen, camera)"));
+        // the AI tool spec offers the camera and its device
+        let spec = commands::tool_specs()
+            .into_iter()
+            .find(|t| t.name == "set_output_source")
+            .unwrap();
+        let p = spec.params.to_string();
+        assert!(p.contains("\"camera\"") && p.contains("\"device\""), "{p}");
     }
 
     #[test]

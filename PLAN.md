@@ -12,7 +12,9 @@ behind it.
 * `bitstream` is a port of OBS `bitstream_reader` and keeps a C ABI.
 * Recording and RTMP streaming run in the app through ffmpeg
   (`src/bin/ui/output.rs`), tested against a local ffmpeg RTMP listener
-  and, on Linux CI, mediamtx.
+  and, on Linux CI, mediamtx. Their source is the canvas, the screen, or a
+  webcam (`src/bin/ui/camera.rs`: V4L2 on Linux, Media Foundation on
+  Windows; macOS AVFoundation is planned).
 * `tools/obs_cpp_to_rust_parser.py` turns an OBS `.c` file into a Rust
   skeleton that documents the lessons in `tools/lessons.json`.
 

@@ -6,6 +6,9 @@
 //! * Screen source: ffmpeg grabs the desktop itself (x11grab; on Windows
 //!   ddagrab, the DPI-correct Desktop Duplication grabber, with gdigrab as
 //!   the fallback).
+//! * Camera source: a webcam read by `crate::camera` (V4L2 on Linux, Media
+//!   Foundation on Windows) is piped the same way as the canvas. A camera
+//!   that stops sending ends the recording / stream with the reason.
 //! * Encode: libx264 (veryfast, zerolatency, yuv420p) + AAC (silent track or a
 //!   capture device). Record writes MP4, live pushes FLV to RTMP.
 //! * `-progress pipe:1` is parsed for fps / bitrate / encoded time / drops.
@@ -34,6 +37,8 @@ use std::time::{Duration, Instant};
 pub enum Source {
     Canvas,
     Screen,
+    /// A webcam (V4L2 on Linux, Media Foundation on Windows).
+    Camera,
 }
 
 impl Source {
@@ -41,6 +46,7 @@ impl Source {
         match s.trim().to_lowercase().as_str() {
             "canvas" | "composite" | "app" => Some(Source::Canvas),
             "screen" | "desktop" | "display" => Some(Source::Screen),
+            "camera" | "webcam" => Some(Source::Camera),
             _ => None,
         }
     }
@@ -48,6 +54,7 @@ impl Source {
         match self {
             Source::Canvas => "Canvas",
             Source::Screen => "Screen",
+            Source::Camera => "Camera",
         }
     }
 }
@@ -84,6 +91,9 @@ pub struct OutputConfig {
     /// PulseAudio source (Linux) or DirectShow device name (Windows).
     pub audio_device: String,
     pub source: Source,
+    /// Camera for the Camera source: its name or device path; empty means
+    /// the first camera found.
+    pub camera_device: String,
     pub record_dir: String,
     pub retry_sec: u32,
     pub retry_max: u32,
@@ -101,6 +111,7 @@ impl Default for OutputConfig {
             audio: Audio::Silent,
             audio_device: String::new(),
             source: Source::Canvas,
+            camera_device: String::new(),
             record_dir: studio_dir()
                 .join("recordings")
                 .to_string_lossy()
@@ -387,7 +398,8 @@ pub fn build_args(
     .collect();
     let mut push = |xs: &[&str]| a.extend(xs.iter().map(|s| s.to_string()));
     match cfg.source {
-        Source::Canvas => {
+        // camera frames are piped like the canvas, at the output fps
+        Source::Canvas | Source::Camera => {
             if cfg.audio == Audio::Device {
                 // A capture device stamps audio with wall-clock time; stamp the
                 // piped frames the same way, or ffmpeg can't line the two up
@@ -510,7 +522,7 @@ pub fn build_args(
             "-ar",
             "48000",
         ]);
-        if cfg.source == Source::Canvas {
+        if cfg.source != Source::Screen {
             push(&["-shortest"]);
         }
     }
@@ -894,6 +906,15 @@ pub struct Output {
     key_place: Option<crate::secrets::Where>,
     /// Capture API for "Capture device" audio; `AudioBackend::host()`.
     pub audio_backend: AudioBackend,
+    /// The open camera while the Camera source is recording, streaming
+    /// or previewed; shared by all three.
+    pub camera: Option<crate::camera::Feed>,
+    /// Settings ▸ Output preview is showing the camera.
+    pub camera_preview: bool,
+    /// Last camera enumeration (Settings ▸ Output ▸ Refresh).
+    pub cameras: Option<Result<Vec<crate::camera::Device>, String>>,
+    preview_tex: Option<(usize, egui::TextureHandle)>,
+    preview_error: Option<String>,
 }
 
 impl Output {
@@ -921,6 +942,11 @@ impl Output {
             key_edit: String::new(),
             key_place: None,
             audio_backend: AudioBackend::host(),
+            camera: None,
+            camera_preview: false,
+            cameras: None,
+            preview_tex: None,
+            preview_error: None,
         }
     }
 
@@ -1035,6 +1061,60 @@ impl Output {
         }
     }
 
+    /// Frames for a new session: the canvas slot, or the camera's, opening
+    /// the camera if it isn't open yet.
+    fn session_frames(&mut self) -> Result<FrameSlot, String> {
+        if self.cfg.source == Source::Camera {
+            self.camera_frames()
+        } else {
+            Ok(self.frames.clone())
+        }
+    }
+
+    /// The configured camera's frame slot. An open, healthy feed of the
+    /// same camera is reused; anything else is closed and reopened.
+    pub fn camera_frames(&mut self) -> Result<FrameSlot, String> {
+        let want = self.cfg.camera_device.trim();
+        if let Some(f) = &self.camera {
+            let same = want.is_empty()
+                || f.device.path == want
+                || f.device.name.eq_ignore_ascii_case(want);
+            if same && f.error().is_none() {
+                return Ok(f.frames.clone());
+            }
+        }
+        // close first: a camera can only be opened once
+        self.camera = None;
+        let (w, h) = self.cfg.size();
+        let feed = crate::camera::Feed::start(want, w, h)?;
+        Ok(self.camera.insert(feed).frames.clone())
+    }
+
+    /// Show or hide the camera preview in Settings ▸ Output.
+    pub fn set_camera_preview(&mut self, on: bool) -> Result<(), String> {
+        if on {
+            self.camera_frames()?;
+        }
+        self.camera_preview = on;
+        self.release_camera();
+        Ok(())
+    }
+
+    /// Close the camera once nothing uses it.
+    fn release_camera(&mut self) {
+        let used = self.camera_preview
+            || self.rec.is_some()
+            || self.live.is_some()
+            || self.reconnect_at.is_some();
+        if !used {
+            self.camera = None;
+        }
+    }
+
+    pub fn refresh_cameras(&mut self) {
+        self.cameras = Some(crate::camera::list());
+    }
+
     fn default_record_path(&self) -> PathBuf {
         let secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1053,15 +1133,20 @@ impl Output {
             std::fs::create_dir_all(d)
                 .map_err(|e| format!("can't create {}: {}", d.display(), e))?;
         }
+        let frames = self.session_frames()?;
         let s = Session::spawn(
             &ff,
             &self.cfg,
             Kind::Record,
             &path.to_string_lossy(),
             "",
-            self.frames.clone(),
+            frames,
             self.audio_backend,
-        )?;
+        );
+        if s.is_err() {
+            self.release_camera();
+        }
+        let s = s?;
         self.rec = Some(s);
         self.rec_error = None;
         let (w, h) = self.cfg.size();
@@ -1084,6 +1169,7 @@ impl Output {
         let path = s.path.clone().unwrap_or_default();
         let secs = s.elapsed();
         drop(s);
+        self.release_camera();
         self.last_record = Some(path.clone());
         let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         match r {
@@ -1101,15 +1187,20 @@ impl Output {
     fn spawn_live(&mut self) -> Result<(), String> {
         let ff = self.ffmpeg()?;
         let target = rtmp_target(&self.cfg.rtmp_url, &self.key);
+        let frames = self.session_frames()?;
         let s = Session::spawn(
             &ff,
             &self.cfg,
             Kind::Live,
             &target,
             &self.key,
-            self.frames.clone(),
+            frames,
             self.audio_backend,
-        )?;
+        );
+        if s.is_err() {
+            self.release_camera();
+        }
+        let s = s?;
         self.live = Some(s);
         Ok(())
     }
@@ -1145,9 +1236,13 @@ impl Output {
         match self.live.take() {
             Some(mut s) => {
                 let _ = s.stop(Duration::from_secs(5));
+                self.release_camera();
                 Ok("stream ended".into())
             }
-            None => Ok("already offline".into()),
+            None => {
+                self.release_camera();
+                Ok("already offline".into())
+            }
         }
     }
 
@@ -1219,6 +1314,26 @@ impl Output {
 
     /// Poll the processes; drive reconnects. Returns toasts to show.
     pub fn tick(&mut self) -> Vec<(ToastKind, String)> {
+        if let Some(e) = self.camera.as_ref().and_then(|f| f.error()) {
+            // a frozen picture is worse than a stop: end what uses the camera
+            self.camera = None;
+            self.camera_preview = false;
+            let why = format!("camera stopped: {e}");
+            if let Some(mut s) = self.rec.take() {
+                let _ = s.stop(Duration::from_secs(15));
+                self.last_record = s.path.clone();
+                self.rec_error = Some(why.clone());
+            }
+            if self.live.take().is_some() || self.reconnect_at.is_some() {
+                self.reconnect_at = None;
+                self.live_since = None;
+                self.live_error = Some(why.clone());
+            }
+            self.events.push((ToastKind::Error, why));
+        }
+        if self.cfg.source != Source::Camera {
+            self.camera_preview = false;
+        }
         if let Some(s) = self.rec.as_mut() {
             if let Some(ok) = s.exited() {
                 let err = s.stats().last_error.unwrap_or_else(|| {
@@ -1274,6 +1389,7 @@ impl Output {
                 }
             }
         }
+        self.release_camera();
         std::mem::take(&mut self.events)
     }
 
@@ -1305,9 +1421,14 @@ impl Output {
     pub fn context(&self) -> String {
         let st = self.status();
         format!(
-            "Output: ffmpeg {}, source {}, {}x{} @ {} fps, audio {}; recording {}; live {}; RTMP URL {}, stream key {}",
+            "Output: ffmpeg {}, source {}{}, {}x{} @ {} fps, audio {}; recording {}; live {}; RTMP URL {}, stream key {}",
             if self.ffmpeg.is_some() { "found" } else if self.ffmpeg_error.is_some() { "missing" } else { "not checked" },
             self.cfg.source.label(),
+            match (&self.cfg.source, self.cfg.camera_device.trim()) {
+                (Source::Camera, "") => " (first camera)".to_string(),
+                (Source::Camera, d) => format!(" ({d})"),
+                _ => String::new(),
+            },
             self.cfg.size().0,
             self.cfg.size().1,
             self.cfg.fps,
@@ -1385,16 +1506,17 @@ impl Output {
                 ui,
                 p,
                 "out-src",
-                &["Canvas", "Screen"],
-                if self.cfg.source == Source::Canvas {
-                    0
-                } else {
-                    1
+                &["Canvas", "Screen", "Camera"],
+                match self.cfg.source {
+                    Source::Canvas => 0,
+                    Source::Screen => 1,
+                    Source::Camera => 2,
                 },
-                90.0,
+                70.0,
             ) {
                 bus.push(AppCommand::SetOutputSource {
-                    source: if i == 0 { "canvas" } else { "screen" }.into(),
+                    source: ["canvas", "screen", "camera"][i].into(),
+                    device: None,
                 });
             }
             let (w, h) = self.cfg.size();
@@ -1522,6 +1644,110 @@ impl Output {
                 *open_settings = true;
             }
         });
+    }
+
+    /// Camera picker and live preview (Settings ▸ Output, Camera source).
+    fn camera_ui(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
+        const FIRST: &str = "First camera found";
+        ui.label(theme::section(p, "Camera"));
+        if self.cameras.is_none() {
+            self.refresh_cameras();
+        }
+        let mut pick = None;
+        ui.horizontal(|ui| {
+            let cur = self.cfg.camera_device.trim();
+            egui::ComboBox::from_id_salt("out-camera")
+                .selected_text(if cur.is_empty() { FIRST } else { cur })
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    if ui.selectable_label(cur.is_empty(), FIRST).clicked() {
+                        pick = Some(String::new());
+                    }
+                    if let Some(Ok(list)) = &self.cameras {
+                        for d in list {
+                            if ui
+                                .selectable_label(cur == d.name, &d.name)
+                                .on_hover_text(&d.path)
+                                .clicked()
+                            {
+                                pick = Some(d.name.clone());
+                            }
+                        }
+                    }
+                });
+            if ui.add(theme::toggle_button(p, "Refresh", false)).clicked() {
+                self.refresh_cameras();
+            }
+        });
+        if let Some(d) = pick {
+            bus.push(AppCommand::SetOutputSource {
+                source: "camera".into(),
+                device: Some(d),
+            });
+        }
+        match &self.cameras {
+            Some(Err(e)) => {
+                ui.add(egui::Label::new(egui::RichText::new(e).size(11.0).color(p.danger)).wrap());
+            }
+            Some(Ok(l)) if l.is_empty() => {
+                ui.label(theme::muted(
+                    p,
+                    "No camera found. Plug one in and press Refresh.",
+                ));
+            }
+            _ => {}
+        }
+        let mut on = self.camera_preview;
+        if ui.checkbox(&mut on, "Preview").changed() {
+            self.preview_error = self.set_camera_preview(on).err();
+        }
+        if let Some(e) = &self.preview_error {
+            ui.add(egui::Label::new(egui::RichText::new(e).size(11.0).color(p.danger)).wrap());
+        }
+        if !self.camera_preview {
+            self.preview_tex = None;
+            return;
+        }
+        let Some(feed) = &self.camera else { return };
+        if let Some(f) = feed.latest() {
+            let id = Arc::as_ptr(&f) as usize;
+            if self.preview_tex.as_ref().map(|t| t.0) != Some(id) {
+                let img = egui::ColorImage::from_rgba_unmultiplied(
+                    [f.width as usize, f.height as usize],
+                    &f.data,
+                );
+                match &mut self.preview_tex {
+                    Some((old, t)) => {
+                        t.set(img, egui::TextureOptions::LINEAR);
+                        *old = id;
+                    }
+                    None => {
+                        let t = ui.ctx().load_texture(
+                            "camera-preview",
+                            img,
+                            egui::TextureOptions::LINEAR,
+                        );
+                        self.preview_tex = Some((id, t));
+                    }
+                }
+            }
+        }
+        if let Some((_, t)) = &self.preview_tex {
+            let [w, h] = t.size();
+            let s = (320.0 / w as f32).min(240.0 / h as f32);
+            ui.image((t.id(), egui::vec2(w as f32 * s, h as f32 * s)));
+        }
+        ui.label(theme::muted(
+            p,
+            &format!(
+                "{} · {}×{} · {} frames",
+                feed.device.name,
+                feed.size.0,
+                feed.size.1,
+                feed.frames_read()
+            ),
+        ));
+        ui.ctx().request_repaint_after(Duration::from_millis(33));
     }
 
     /// Settings window section. Returns true when the config changed.
@@ -1668,6 +1894,9 @@ impl Output {
                 });
                 ui.end_row();
             });
+        if self.cfg.source == Source::Camera {
+            self.camera_ui(ui, p, bus);
+        }
         let place = *self.key_place.get_or_insert_with(|| {
             if cfg!(test) {
                 crate::secrets::Where::None
@@ -1956,6 +2185,125 @@ mod tests {
             std::fs::copy(&path, out).unwrap();
         }
         let _ = std::fs::remove_file(&path);
+    }
+
+    fn camera_test_output(path: &Path) -> Output {
+        let cfg = OutputConfig {
+            width: 320,
+            height: 180,
+            fps: 30,
+            source: Source::Camera,
+            camera_device: "Fake Cam".into(),
+            ..Default::default()
+        };
+        let _ = std::fs::remove_file(path);
+        Output::new(cfg, String::new())
+    }
+
+    fn fake_camera(ok: Option<u32>) -> crate::camera::Feed {
+        crate::camera::Feed::from_reader(
+            "Fake Cam",
+            crate::camera::tests::Fake {
+                rgba: [200, 40, 40, 255],
+                size: (320, 180),
+                ok,
+            },
+        )
+        .unwrap()
+    }
+
+    /// The middle pixel of the file's frame at `t` seconds, as RGB.
+    fn pixel_at(ff: &Path, file: &Path, t: &str) -> [u8; 3] {
+        let o = Command::new(ff)
+            .args(["-v", "error", "-ss", t, "-i"])
+            .arg(file)
+            .args(["-frames:v", "1", "-vf", "crop=2:2:159:89,scale=1:1"])
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .output()
+            .unwrap();
+        assert_eq!(o.stdout.len(), 3, "{}", String::from_utf8_lossy(&o.stderr));
+        [o.stdout[0], o.stdout[1], o.stdout[2]]
+    }
+
+    /// The Camera source records what the camera sends, not the canvas:
+    /// the canvas slot gets a blue frame, the (fake) camera a red one, and
+    /// the file must be red.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn camera_source_records_the_camera_picture() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let path = std::env::temp_dir().join(format!("seraphina_cam_{}.mp4", std::process::id()));
+        let mut o = camera_test_output(&path);
+        o.camera = Some(fake_camera(None));
+        o.push_frame(Arc::new(Raster::filled(320, 180, [20, 40, 220, 255])));
+        o.start_record(Some(path.clone())).unwrap();
+        let t0 = Instant::now();
+        while t0.elapsed() < Duration::from_millis(1500) {
+            assert!(o.tick().is_empty());
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        assert!(o.context().contains("(Fake Cam)"), "{}", o.context());
+        o.stop_record().unwrap();
+        assert!(o.camera.is_none(), "camera closed once nothing uses it");
+        let [r, g, b] = pixel_at(&ff, &path, "0.7");
+        assert!(
+            r > 170 && g < 80 && b < 80,
+            "expected camera red, got {r},{g},{b}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A camera that stops sending ends the recording with the reason,
+    /// rather than freezing on the last frame.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn camera_failure_stops_the_recording_with_a_reason() {
+        find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let path =
+            std::env::temp_dir().join(format!("seraphina_cam_fail_{}.mp4", std::process::id()));
+        let mut o = camera_test_output(&path);
+        o.camera = Some(fake_camera(Some(40)));
+        o.start_record(Some(path.clone())).unwrap();
+        let t0 = Instant::now();
+        let mut toasts = Vec::new();
+        while o.is_recording() && t0.elapsed() < Duration::from_secs(10) {
+            toasts.extend(o.tick());
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        assert!(!o.is_recording(), "recording kept going on a dead camera");
+        assert_eq!(o.rec_error.as_deref(), Some("camera stopped: unplugged"));
+        assert!(
+            toasts
+                .iter()
+                .any(|(k, m)| *k == ToastKind::Error && m.contains("camera stopped: unplugged")),
+            "{toasts:?}"
+        );
+        assert!(o.camera.is_none());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn camera_source_pipes_raw_frames_and_parses() {
+        assert_eq!(Source::parse("Camera"), Some(Source::Camera));
+        assert_eq!(Source::parse("webcam"), Some(Source::Camera));
+        let c = OutputConfig {
+            source: Source::Camera,
+            ..Default::default()
+        };
+        let a = build_args(
+            &c,
+            Kind::Record,
+            "/tmp/x.mp4",
+            Grab::X11,
+            AudioBackend::Pulse,
+        )
+        .unwrap()
+        .join(" ");
+        assert!(
+            a.contains("-f rawvideo -pix_fmt rgba") && a.contains("-i pipe:0"),
+            "{a}"
+        );
+        assert!(!a.contains("x11grab") && a.contains("-shortest"), "{a}");
     }
 
     /// Goes live against `ffmpeg -listen 1` acting as the RTMP server: the

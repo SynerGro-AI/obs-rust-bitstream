@@ -19,7 +19,7 @@ Linux (the CI tests run there). macOS is untested.
 | **3D** | Software rasterizer: z-buffered flat/Lambert shading, Shaded / Wireframe / Shaded+wire (keys 5/4/6), selection highlight; orbit/dolly; cube, plane, cylinder, joint, light, camera; extrude, bevel, **Edge Loop, Multi-Cut, Bridge, Boolean union/difference/intersection (BSP, watertight after T-junction repair), Quad Draw**; Select/Move/Rotate/Scale (Q/W/E/R); outliner; keyframed Y; general undo/redo (drags coalesce) | Per-object **materials** (Blinn-Phong, metal vs dielectric, transparency) and the **Physics Arena** (see Materials Lab below). No textures, no smooth shading, no IK/skinning/FX/render-to-file (still "Coming soon") |
 | **Materials** | Periodic table of all 118 elements (search, category filter, detail card); composition builder (formula or protons/neutrons/electrons) with stability and charge analysis; derived PBR and simulation properties; measured presets; save to the library and assign to 3D meshes | Compound/alloy properties are estimates (see below) |
 | **Animate** | Frame-by-frame drawing, onion skin, new/duplicate/clear/delete frames, fps, playback, undo | No export, no layers per frame |
-| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas or screen source, status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Capture-device audio is tested on Linux (PulseAudio, `records_audio_from_a_real_pulse_source`); Windows DirectShow is not yet verified on hardware. On macOS, Capture device is refused as unsupported (`record_refuses_capture_audio_without_a_usable_device`). A device that can't be opened stops the recording with an error; the app never substitutes a tone or silence |
+| **Stream** | Bitstream inspector driving the real `bitstream::Reader`; **real Record (MP4 H.264+AAC) and Go live (RTMP) through an ffmpeg subprocess**, canvas, screen or camera source (V4L2 on Linux, Media Foundation on Windows), status bar with elapsed time, fps, bitrate, dropped frames and errors, reconnect with exponential backoff | Needs ffmpeg installed (not bundled). Capture-device audio is tested on Linux (PulseAudio, `records_audio_from_a_real_pulse_source`); Windows DirectShow is not yet verified on hardware. On macOS, Capture device is refused as unsupported (`record_refuses_capture_audio_without_a_usable_device`). A device that can't be opened stops the recording with an error; the app never substitutes a tone or silence |
 | **Seraphina panel** | Real LLM agent (xAI by default) that operates the app through tool calls (see below), with streaming replies, an action log, one-click Undo and live preference learning | Without a key it runs in offline help mode: a fixed table of tips, no model call and no actions, and it says so |
 | **Grok Imagine panel** | Real text-to-video (`grok-imagine-video-1.5`) and text-to-image (`grok-imagine-image-2.0`). Images can be added as a Paint layer ("Image → layer") | Billed per second / per image on your xAI account |
 
@@ -195,7 +195,12 @@ approximate.
 Record and Go live run `ffmpeg` as a subprocess. The active mode's canvas is
 letterboxed to the output size (default 1280×720, 30 fps) and piped as raw RGBA
 to ffmpeg's stdin; a tick that can't be written in time counts as a dropped
-frame. Alternatively ffmpeg grabs the screen (x11grab / gdigrab). Encoding is
+frame. Alternatively ffmpeg grabs the screen (x11grab / ddagrab / gdigrab), or
+the Camera source pipes a webcam the same way (`src/bin/ui/camera.rs`: V4L2
+mmap streaming on Linux, YUYV or MJPEG; Media Foundation's source reader on
+Windows). A camera that stops sending ends the recording or stream with the
+reason; it never freezes on the last frame. macOS cameras (AVFoundation) are
+refused as unsupported for now. Encoding is
 libx264 (veryfast, zerolatency) + AAC (silent track by default); recordings are
 MP4, live output is FLV over RTMP. `-progress` output drives the status bar.
 A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
@@ -204,12 +209,14 @@ A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
 * ffmpeg lookup: `SERAPHINA_FFMPEG`, next to the exe (or `./ffmpeg/bin/`), then
   `PATH`. Missing ffmpeg gives a clear error with download links.
 * Settings ▸ Output: RTMP URL, stream key, size, fps, bitrate, audio, record
-  folder, reconnect. Saved in `~/.seraphina/studio/output.json`; the key lives
+  folder, reconnect; with the Camera source, a camera picker (Refresh
+  re-scans) and a live preview. Saved in `~/.seraphina/studio/output.json`; the key lives
   alone in `~/.seraphina/studio/stream_key` (0600 on Unix), is shown masked,
   is scrubbed from ffmpeg error text and never reaches the AI context or logs.
   `set_stream_key` is UI-only (no AI tool).
 * All of it goes through the AppCommand bus (`set_recording`, `set_streaming`,
-  `retry_stream`, `set_output_source`, `set_stream_target`); starting output
+  `retry_stream`, `set_output_source` (canvas, screen, or camera with an
+  optional `device`), `set_stream_target`); starting output
   from Seraphina needs the user's approval.
 
 ### Run on Windows (recommended)
@@ -382,9 +389,10 @@ stay out of the code until a real implementation lands with tests.
 | Seraphina drives every mode, one learning system, chat saved with the project (C1, C4, C5/C6) | M4b: Wed Oct 28, 2026 (target) |
 | Remove `dist/` binaries and root clutter (G5–G7) | after v0.2.0 (M5) |
 | 64-bit physics, rotating bodies, contact graph (F1–F3) | after v0.2.0 (M6) |
-| Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture (Media Foundation, AVFoundation, V4L2); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | after v0.2.0 (M7+, Stream) |
+| Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture on macOS (AVFoundation; Linux V4L2 and Windows Media Foundation are built, as the Camera output source); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | after v0.2.0 (M7+, Stream) |
 | A Composite effects library: levels, tone curves, hue/saturation, colour balance, drop shadow, inner glow, blur, sharpen, posterize, threshold, crossfade (the old unused modules are deleted; the app's own filters live in `src/bin/ui/`) (E3) | after v0.2.0 (M7+, Composite) |
 | Microphone capture verified on real hardware on Windows (dshow) | after v0.2.0 (needs a run on a Windows PC with a microphone) |
+| Camera source verified on real hardware: a Windows webcam through Media Foundation (`media_foundation_reads_frames_from_a_real_camera`) and a Linux V4L2 device or v4l2loopback (`v4l2_reads_frames_from_a_real_device`); both tests are `#[ignore]` because the dev box has neither | after v0.2.0 (needs a run with a camera) |
 | Team features (organisation, invite, roles, presence) | after v0.2.0 |
 
 Removed and not planned, because the app already does the real thing:
@@ -394,7 +402,7 @@ Removed and not planned, because the app already does the real thing:
   while the server dropped the connection. The app streams through
   ffmpeg (`src/bin/ui/output.rs`).
 * Synthetic capture, camera and audio sources and the demo binaries that
-  used them (`run`, `ai_write`, `slice`, `raw_read`). None shipped; the
+  used them (real cameras are now the Camera output source) (`run`, `ai_write`, `slice`, `raw_read`). None shipped; the
   synthetic audio was labelled "live".
 * AI helpers in the library (`ai`, `ai_tools`, `ai_editor`,
   `ai_director`, `settings_assist`, …) that echoed the prompt. The app's

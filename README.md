@@ -221,25 +221,69 @@ A dropped live connection is retried with backoff (`Reconnect`, default 2 s,
   optional `device`), `set_stream_target`); starting output
   from Seraphina needs the user's approval.
 
-### Run on Windows (recommended)
+### Build and run on Windows (recommended)
 
-1. Install Rust with [rustup](https://rustup.rs) (`rustup-init.exe`). Keep the default
-   **MSVC** toolchain (`stable-x86_64-pc-windows-msvc`). If prompted, install the
-   Visual Studio Build Tools workload “Desktop development with C++”.
-2. In PowerShell:
+One-time setup:
 
-   ```powershell
-   git clone https://github.com/SynerGro-AI/seraphina-studio
-   cd seraphina-studio
-   $env:XAI_API_KEY = "<your key>"   # optional, enables Seraphina + Grok Imagine
-   cargo run --release --features ui --bin ui
-   ```
+1. Install the **Visual Studio Build Tools** (free:
+   <https://visualstudio.microsoft.com/visual-cpp-build-tools/>) with the
+   workload **"Desktop development with C++"** (it brings the MSVC compiler,
+   linker and Windows SDK). Rust's MSVC toolchain links with it, and the
+   `ring` crate (TLS for the xAI client) compiles a little C with it.
+2. Install Rust with `rustup-init.exe` from <https://rustup.rs> and accept the
+   default toolchain, `stable-x86_64-pc-windows-msvc`. The minimum Rust
+   version is 1.88.
+3. Install Git for Windows (<https://git-scm.com/download/win>).
+4. Open a **new** Command Prompt so `cargo` and `git` are on PATH.
 
-For Record / Go live put `ffmpeg.exe` next to the exe or on PATH (see
-`packaging/windows/README.txt`). The release build is `target\release\ui.exe`. It looks for `assets\` and the
-sample streams (`out.h264`, `out.obsr`) in the working directory, next to the
-exe, or up to four folders above it. Copy them alongside the exe to ship it.
-Release builds on Windows use the GUI subsystem, so no console window opens.
+Build, in a plain `cmd` window:
+
+```bat
+git clone https://github.com/SynerGro-AI/seraphina-studio
+cd seraphina-studio
+cargo build --release --features ui --bin ui
+```
+
+The app is behind the `ui` feature, so a bare `cargo build --release` only
+builds the library and produces no exe. The exe is
+**`target\release\ui.exe`**. Run it from the repo folder so it finds
+`assets\` and the sample streams (`out.h264`, `out.obsr`):
+
+```bat
+set XAI_API_KEY=<your key>
+target\release\ui.exe
+```
+
+The `set` line is optional and only lasts for that cmd window. It turns on
+the Seraphina assistant and Grok Imagine; you can also add the key in
+Settings. Without a key the assistant runs offline and says so.
+`cargo run --release --features ui --bin ui` builds and starts in one step.
+
+The build needs no bash, pkg-config, CMake or NASM: there is no build
+script, the Linux-only crate (`libc`, for V4L2) is only pulled in on Linux,
+and the Windows crates (`windows`, `windows-sys`) only on Windows.
+
+**ffmpeg** is not bundled. Record and Go live run it as a separate program
+and look for it in this order: `SERAPHINA_FFMPEG` (full path to
+`ffmpeg.exe`), next to `ui.exe` (`target\release\ffmpeg.exe` or
+`target\release\ffmpeg\bin\ffmpeg.exe`), then PATH. For example, download
+`ffmpeg-release-essentials.zip` from <https://www.gyan.dev/ffmpeg/builds/>,
+unzip it and run `set SERAPHINA_FFMPEG=C:\ffmpeg\bin\ffmpeg.exe` before
+starting the app. Stream mode ▸ Output shows "ffmpeg found" when it works;
+without it Record and Go live say "ffmpeg was not found" (see
+`packaging/windows/README.txt`).
+
+To ship the app, copy `ui.exe`, `assets\` and the `out.*` files into one
+folder; it also searches next to the exe and up to four folders above it.
+Release builds use the GUI subsystem, so no console window opens.
+
+**Unverified on Windows from the dev box:** these steps have not been run
+with the MSVC toolchain on real Windows. What is checked there is the
+`x86_64-pc-windows-gnu` cross-build (clippy, release build, and the UI tests
+under Wine). CI has a `windows-latest` MSVC job, but this branch has not
+been pushed, so it has not run on these changes yet. The first real-Windows
+run should confirm the Build Tools install, the
+`cargo build` above, and the camera and ffmpeg paths.
 
 ### Run on Linux / macOS
 

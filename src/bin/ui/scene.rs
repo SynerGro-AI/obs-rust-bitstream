@@ -17,7 +17,7 @@ use obs_rust_bitstream::{Joint, JointHierarchy};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Kind {
     Cube,
     Mesh,
@@ -38,7 +38,7 @@ impl Kind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Gizmo {
     Select,
     Move,
@@ -88,7 +88,7 @@ impl Gizmo {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shading {
     Shaded,
     Wireframe,
@@ -127,7 +127,7 @@ impl Shading {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Obj {
     pub name: String,
     pub kind: Kind,
@@ -198,7 +198,7 @@ impl Obj {
 }
 
 /// Physics settings an object keeps between simulation runs.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PhysProps {
     /// Starting temperature (K); `None` = ambient.
     pub temp: Option<f32>,
@@ -289,7 +289,7 @@ impl SceneState {
             }
         }
         let _ = joints.set_parent("knee", "hip");
-        Self {
+        let mut s = Self {
             objs,
             selected: Some(0),
             prev_selected: None,
@@ -319,7 +319,9 @@ impl SceneState {
             tex: None,
             counter: 1,
             drag_rot: None,
-        }
+        };
+        s.sync_joints();
+        s
     }
 
     pub fn camera(&self) -> Camera {
@@ -341,6 +343,12 @@ impl SceneState {
                 o.pos[1] = y;
             }
         }
+        self.sync_joints();
+    }
+
+    /// Joint positions follow their scene objects. Done on creation and
+    /// load too, so the first frame does not look like an edit.
+    fn sync_joints(&mut self) {
         for o in self.objs.iter().filter(|o| o.kind == Kind::Joint) {
             if let Ok(j) = self.joints.get_mut(&o.name) {
                 j.set_position(o.pos[0], o.pos[1], o.pos[2]);
@@ -2025,6 +2033,98 @@ fn energy_ledger(ui: &mut egui::Ui, p: &Palette, a: &obs_rust_bitstream::arena::
                 ),
         );
     });
+}
+
+// ---- project files ------------------------------------------------------------
+
+/// 3D scene in a `.seraphina` project.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SceneFile {
+    pub objs: Vec<Obj>,
+    pub selected: Option<usize>,
+    pub prev_selected: Option<usize>,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub dist: f32,
+    pub grid: bool,
+    pub clock: Clock,
+    pub joints: JointHierarchy,
+    pub gizmo: Gizmo,
+    pub shading: Shading,
+    pub shelf_tab: usize,
+    pub assign: MaterialAssign,
+    /// Next auto-name number ("cube3").
+    pub counter: usize,
+    /// Physics: the running (or paused) arena with its bodies, materials,
+    /// environment and energy ledger.
+    #[serde(default)]
+    pub arena: Option<Arena>,
+    #[serde(default = "Environment::earth")]
+    pub arena_env: Environment,
+    #[serde(default)]
+    pub arena_playing: bool,
+    #[serde(default)]
+    pub phys: HashMap<String, PhysProps>,
+    /// The scene before the simulation started (Reset restores it).
+    #[serde(default)]
+    pub arena_start: Option<Vec<Obj>>,
+}
+
+impl SceneState {
+    pub fn to_file(&self) -> SceneFile {
+        SceneFile {
+            objs: self.objs.clone(),
+            selected: self.selected,
+            prev_selected: self.prev_selected,
+            yaw: self.yaw,
+            pitch: self.pitch,
+            dist: self.dist,
+            grid: self.grid,
+            clock: self.clock.clone(),
+            joints: self.joints.clone(),
+            gizmo: self.gizmo,
+            shading: self.shading,
+            shelf_tab: self.shelf_tab,
+            assign: self.assign.clone(),
+            counter: self.counter,
+            arena: self.arena.clone(),
+            arena_env: self.arena_env.clone(),
+            arena_playing: self.arena_playing,
+            phys: self.phys.clone(),
+            arena_start: self.arena_start.clone(),
+        }
+    }
+
+    pub fn load_file(&mut self, f: SceneFile) -> Result<(), String> {
+        let n = f.objs.len();
+        if let Some(bad) = f.objs.iter().find(|o| o.parent.is_some_and(|p| p >= n)) {
+            return Err(format!("3D object '{}' has a missing parent", bad.name));
+        }
+        *self = Self {
+            objs: f.objs,
+            selected: f.selected.filter(|i| *i < n),
+            prev_selected: f.prev_selected.filter(|i| *i < n),
+            yaw: f.yaw,
+            pitch: f.pitch,
+            dist: f.dist,
+            grid: f.grid,
+            clock: f.clock,
+            joints: f.joints,
+            gizmo: f.gizmo,
+            shading: f.shading,
+            shelf_tab: f.shelf_tab,
+            assign: f.assign,
+            counter: f.counter,
+            arena: f.arena,
+            arena_env: f.arena_env,
+            arena_playing: f.arena_playing,
+            phys: f.phys,
+            arena_start: f.arena_start,
+            ..Self::new()
+        };
+        self.sync_joints();
+        Ok(())
+    }
 }
 
 #[cfg(test)]

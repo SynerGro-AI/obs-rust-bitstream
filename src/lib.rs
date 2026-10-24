@@ -306,6 +306,8 @@ pub mod scene_registry;
 pub mod selection;
 pub mod sequence_reverse;
 pub mod sequence_timing;
+#[cfg(feature = "ui")]
+pub mod serde_static;
 pub mod serializer;
 pub mod service_context;
 pub mod service_registry;

@@ -21,6 +21,7 @@ pub const R_GAS: f64 = 8.314_462_618;
 pub const P_ATM: f64 = 101_325.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum Phase {
     Solid,
     Liquid,
@@ -38,6 +39,7 @@ impl Phase {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum Flammability {
     NonFlammable,
     /// Burns when strongly heated / finely divided (e.g. Mg, Al, Fe powders).
@@ -48,6 +50,7 @@ pub enum Flammability {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum Reactivity {
     Inert,
     Low,
@@ -57,6 +60,7 @@ pub enum Reactivity {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct EnvMeta {
     /// g/mol of the formula unit that evaporates (H₂, N₂, O₂, halogens are
     /// diatomic, so twice the atomic mass).
@@ -91,6 +95,7 @@ pub struct EnvMeta {
     pub radioactive: bool,
     pub half_life_s: Option<f64>,
     /// Which values are estimates rather than measurements.
+    #[cfg_attr(feature = "ui", serde(deserialize_with = "crate::serde_static::vec"))]
     pub notes: Vec<&'static str>,
 }
 

@@ -124,7 +124,7 @@ pub const CIRCUITS: &[(&str, &str)] = &[
     ("silicon", "Doped silicon resistivity"),
 ];
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CircParams {
     pub voltage: f64,
     pub temp_c: f64,
@@ -1171,6 +1171,193 @@ impl LabState {
             }
         }
         true
+    }
+}
+
+// ---------------------------------------------------------------- project files
+
+/// Reactions inputs in a `.seraphina` project (results are re-simulated).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChemFile {
+    pub equation: String,
+    pub temp_c: f64,
+    pub pressure_kpa: f64,
+    pub seconds: f64,
+    pub air: bool,
+    pub ran: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CircFile {
+    pub preset: String,
+    pub params: CircParams,
+    pub ran: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CpuFile {
+    pub program: String,
+    pub source: String,
+    pub expected: Vec<u8>,
+    pub temp_c: f64,
+    pub clock_mhz: f64,
+    pub ran: bool,
+    pub sweep: Vec<(f64, f64, f64, bool)>,
+    pub sweep_fail: Option<String>,
+    pub f_max: Option<f64>,
+    pub follow: Option<String>,
+}
+
+/// The relativity scene, including the integrator state, so a saved
+/// orbit continues exactly where it stopped.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RelFile {
+    pub beta: f64,
+    pub preset: String,
+    pub nb: NBody,
+    pub gr: bool,
+    pub exaggerate: f64,
+    pub playing: bool,
+    pub days_per_s: f64,
+    pub extent: f64,
+    pub peri0: Option<f64>,
+    pub peri_moved: f64,
+    pub peri_last: f64,
+    pub pending: f64,
+    pub e0: f64,
+    pub period: Option<f64>,
+    pub precession: Option<(f64, f64)>,
+}
+
+/// Materials Lab (reactions, circuits, computer, relativity).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LabFile {
+    pub tab: usize,
+    pub chem: ChemFile,
+    pub circ: CircFile,
+    pub cpu: CpuFile,
+    pub rel: RelFile,
+}
+
+impl LabState {
+    pub fn to_file(&self) -> LabFile {
+        let (c, k, u, r) = (&self.chem, &self.circ, &self.cpu, &self.rel);
+        LabFile {
+            tab: self.tab,
+            chem: ChemFile {
+                equation: c.equation.clone(),
+                temp_c: c.temp_c,
+                pressure_kpa: c.pressure_kpa,
+                seconds: c.seconds,
+                air: c.air,
+                ran: c.run.is_some(),
+            },
+            circ: CircFile {
+                preset: k.preset.clone(),
+                params: k.params.clone(),
+                ran: k.run.is_some(),
+            },
+            cpu: CpuFile {
+                program: u.program.clone(),
+                source: u.source.clone(),
+                expected: u.expected.clone(),
+                temp_c: u.temp_c,
+                clock_mhz: u.clock_mhz,
+                ran: u.report.is_some(),
+                sweep: u.sweep.clone(),
+                sweep_fail: u.sweep_fail.clone(),
+                f_max: u.f_max,
+                follow: u.follow.clone(),
+            },
+            rel: RelFile {
+                beta: r.beta,
+                preset: r.preset.clone(),
+                nb: r.nb.clone(),
+                gr: r.gr,
+                exaggerate: r.exaggerate,
+                playing: r.playing,
+                days_per_s: r.days_per_s,
+                extent: r.extent,
+                peri0: r.peri0,
+                peri_moved: r.peri_moved,
+                peri_last: r.peri_last,
+                pending: r.pending,
+                e0: r.e0,
+                period: r.period,
+                precession: r.precession,
+            },
+        }
+    }
+
+    /// Restore a saved lab; simulations that had results are re-run
+    /// (they are deterministic), so their plots come back too.
+    pub fn load_file(&mut self, f: LabFile) -> Result<(), String> {
+        if f.tab >= TABS.len() {
+            return Err(format!("unknown lab tab {}", f.tab));
+        }
+        let mut s = Self::new();
+        s.tab = f.tab;
+        s.chem.equation = f.chem.equation;
+        s.chem.temp_c = f.chem.temp_c;
+        s.chem.pressure_kpa = f.chem.pressure_kpa;
+        s.chem.seconds = f.chem.seconds;
+        s.chem.air = f.chem.air;
+        if f.chem.ran {
+            match run_reaction(
+                &s.chem.equation,
+                s.chem.temp_c + 273.15,
+                s.chem.pressure_kpa * 1e3,
+                s.chem.seconds.min(1e7),
+                s.chem.air,
+            ) {
+                Ok(r) => s.chem.run = Some(r),
+                Err(e) => s.chem.error = Some(e),
+            }
+        }
+        s.circ.preset = f.circ.preset;
+        s.circ.params = f.circ.params;
+        if f.circ.ran {
+            match run_circuit(&s.circ.preset, &s.circ.params) {
+                Ok(r) => s.circ.run = Some(r),
+                Err(e) => s.circ.error = Some(e),
+            }
+        }
+        s.cpu.program = f.cpu.program;
+        s.cpu.source = f.cpu.source;
+        s.cpu.expected = f.cpu.expected;
+        s.cpu.temp_c = f.cpu.temp_c;
+        s.cpu.clock_mhz = f.cpu.clock_mhz;
+        s.cpu.report = None;
+        s.cpu.cpu = None;
+        s.cpu.lib = None;
+        if f.cpu.ran {
+            let _ = s.rerun_cpu();
+        }
+        s.cpu.sweep = f.cpu.sweep;
+        s.cpu.sweep_fail = f.cpu.sweep_fail;
+        s.cpu.f_max = f.cpu.f_max;
+        s.cpu.follow = f.cpu.follow;
+        let r = f.rel;
+        s.rel = RelState {
+            beta: r.beta,
+            preset: r.preset,
+            nb: r.nb,
+            gr: r.gr,
+            exaggerate: r.exaggerate,
+            playing: r.playing,
+            days_per_s: r.days_per_s,
+            extent: r.extent,
+            peri0: r.peri0,
+            peri_moved: r.peri_moved,
+            peri_last: r.peri_last,
+            pending: r.pending,
+            e0: r.e0,
+            period: r.period,
+            precession: r.precession,
+            clock: 0.0,
+        };
+        *self = s;
+        Ok(())
     }
 }
 

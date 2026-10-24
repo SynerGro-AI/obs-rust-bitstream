@@ -117,16 +117,17 @@ impl OutputConfig {
     pub fn path() -> PathBuf {
         studio_dir().join("output.json")
     }
-    pub fn load() -> Self {
-        std::fs::read_to_string(Self::path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+    /// Settings and, if output.json was damaged, a message saying where
+    /// the damaged copy was kept.
+    pub fn load_from(path: &std::path::Path) -> (Self, Option<String>) {
+        crate::project::load_json(path, "output settings file")
+    }
+    pub fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
+        let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        crate::project::write_atomic(path, s.as_bytes()).map_err(|e| e.to_string())
     }
     pub fn save(&self) -> Result<(), String> {
-        std::fs::create_dir_all(studio_dir()).map_err(|e| e.to_string())?;
-        let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(Self::path(), s).map_err(|e| e.to_string())
+        self.save_to(&Self::path())
     }
     /// Even dimensions (yuv420p), sane bounds.
     pub fn size(&self) -> (u32, u32) {
@@ -487,6 +488,29 @@ pub struct Session {
     finished: bool,
 }
 
+/// `rtmp://user:pass@host/app/KEY?token=x` → `rtmp://host/app`.
+pub fn strip_url_secrets(url: &str, key: &str) -> String {
+    let mut u = url.trim().to_string();
+    if let Some(q) = u.find(['?', '#']) {
+        u.truncate(q);
+    }
+    if let Some(s) = u.find("://") {
+        let rest = &u[s + 3..];
+        let host_end = rest.find('/').unwrap_or(rest.len());
+        if let Some(at) = rest[..host_end].rfind('@') {
+            u = format!("{}{}", &u[..s + 3], &rest[at + 1..]);
+        }
+    }
+    let k = key.trim();
+    if !k.is_empty() {
+        u = u.replace(k, "");
+    }
+    while u.ends_with('/') && !u.ends_with("://") {
+        u.pop();
+    }
+    u
+}
+
 fn scrub(line: &str, secret: &str) -> String {
     if secret.len() >= 2 {
         line.replace(secret, "****")
@@ -749,7 +773,12 @@ impl Output {
     }
 
     pub fn load() -> Self {
-        Self::new(OutputConfig::load(), load_key())
+        let (cfg, warning) = OutputConfig::load_from(&OutputConfig::path());
+        let mut o = Self::new(cfg, load_key());
+        if let Some(w) = warning {
+            o.events.push((ToastKind::Warn, w));
+        }
+        o
     }
 
     pub fn key_is_set(&self) -> bool {
@@ -778,6 +807,22 @@ impl Output {
                 self.key.chars().count()
             )
         })
+    }
+
+    /// Output settings for a project file: never the stream key (it stays in
+    /// its own file), URL credentials or query tokens.
+    pub fn project_cfg(&self) -> OutputConfig {
+        let mut c = self.cfg.clone();
+        c.rtmp_url = strip_url_secrets(&c.rtmp_url, &self.key);
+        c
+    }
+
+    /// Settings from an opened project (the local key is kept; nothing is
+    /// written to output.json until the user changes a setting).
+    pub fn load_project_cfg(&mut self, c: OutputConfig) {
+        self.cfg = c;
+        self.reconnect
+            .set_settings(self.cfg.retry_max, self.cfg.retry_sec);
     }
 
     pub fn save_config(&mut self) -> Result<(), String> {

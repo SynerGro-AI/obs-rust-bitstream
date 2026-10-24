@@ -1460,6 +1460,62 @@ pub fn cat_colour(c: Category) -> Color32 {
     }
 }
 
+// ---- project files ------------------------------------------------------------
+
+/// Materials Lab in a `.seraphina` project.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct MaterialsFile {
+    /// Saved library materials by name.
+    pub library: BTreeMap<String, Profile>,
+    pub selected: Option<u32>,
+    pub search: String,
+    pub comp: Composition,
+    pub formula: String,
+    pub builder_tab: usize,
+    pub atom: [u32; 3],
+    pub save_name: String,
+    pub built: Option<Profile>,
+    pub atom_note: Option<Result<String, String>>,
+}
+
+impl MaterialsState {
+    pub fn to_file(&self) -> MaterialsFile {
+        MaterialsFile {
+            library: self.lib.profiles.clone(),
+            selected: self.selected,
+            search: self.search.clone(),
+            comp: self.comp.clone(),
+            formula: self.formula.clone(),
+            builder_tab: self.builder_tab,
+            atom: self.atom,
+            save_name: self.save_name.clone(),
+            built: self.built.clone(),
+            atom_note: self.atom_note.clone(),
+        }
+    }
+
+    pub fn load_file(&mut self, f: MaterialsFile) -> Result<(), String> {
+        let mut lib = MatLib::default();
+        for (name, p) in f.library {
+            lib.save(p, Some(&name))?;
+        }
+        *self = Self {
+            lib,
+            selected: f.selected,
+            search: f.search,
+            comp: f.comp,
+            formula: f.formula,
+            builder_tab: f.builder_tab,
+            atom: f.atom,
+            save_name: f.save_name,
+            built: f.built,
+            atom_note: f.atom_note,
+            ..Self::new()
+        };
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

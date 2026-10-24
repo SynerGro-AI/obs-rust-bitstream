@@ -288,6 +288,8 @@ pub struct PaintState {
     pub doc: PaintDoc,
     history: History<PaintDoc>,
     coalesce: Option<String>,
+    /// Bumped by every document edit, undo and redo (dirty tracking).
+    pub edits: u64,
     pub tool: Tool,
     pub brush: Brush,
     /// Dodge/burn exposure 0..=1.
@@ -552,6 +554,7 @@ impl PaintState {
             doc,
             history: History::new(40),
             coalesce: None,
+            edits: 0,
             tool: Tool::Brush,
             brush: Brush::default(),
             exposure: 0.5,
@@ -616,12 +619,14 @@ impl PaintState {
     }
 
     fn checkpoint(&mut self) {
+        self.edits += 1;
         self.history.push(self.doc.clone());
         self.coalesce = None;
     }
 
     /// One undo step for a burst of the same edit (slider drags).
     fn checkpoint_coalesced(&mut self, key: String) {
+        self.edits += 1;
         if self.coalesce.as_deref() != Some(key.as_str()) {
             self.history.push(self.doc.clone());
             self.coalesce = Some(key);
@@ -642,6 +647,7 @@ impl PaintState {
 
     fn restore(&mut self, d: PaintDoc) {
         let resized = (d.width, d.height) != (self.doc.width, self.doc.height);
+        self.edits += 1;
         self.doc = d;
         self.doc.selected = self
             .doc
@@ -1213,34 +1219,61 @@ impl PaintState {
         }
     }
 
-    pub fn save_psd(&mut self) -> Result<String, String> {
+    /// Suggested PSD file name: `<name>_edit.psd`, never the source file.
+    pub fn psd_file_name(&self) -> String {
+        let t = save_target(&format!("{}.psd", self.doc_name));
+        std::path::Path::new(&t)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or(t)
+    }
+
+    /// Suggested PNG export file name: `<name>_export.png`.
+    pub fn png_file_name(&self) -> String {
+        let stem = std::path::Path::new(&self.doc_name)
+            .file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "untitled".into());
+        format!("{}_export.png", stem)
+    }
+
+    /// Write the layered PSD to `path` (atomically).
+    pub fn save_psd_to(&mut self, path: &std::path::Path) -> Result<String, String> {
         let d = self.to_psd();
-        let target = save_target(&format!("{}.psd", self.doc_name));
-        d.save(std::path::Path::new(&target))
-            .map_err(|e| format!("save failed: {}", e))?;
+        let bytes = d.to_bytes()?;
+        crate::project::write_atomic(path, &bytes).map_err(|e| format!("save failed: {}", e))?;
         let n = d
             .layers
             .iter()
             .filter(|l| l.kind == LayerKind::Pixels)
             .count();
         self.psd = Some(format!("{} × {}, {} layers saved", d.width, d.height, n));
-        Ok(format!("saved {} ({} layers with pixels)", target, n))
+        Ok(format!(
+            "saved {} ({} layers with pixels)",
+            path.display(),
+            n
+        ))
     }
 
-    pub fn export_png(&mut self) -> Result<String, String> {
+    /// Write the flattened image as PNG to `path` (atomically).
+    pub fn export_png_to(&mut self, path: &std::path::Path) -> Result<String, String> {
+        use image::ImageEncoder;
         let flat = self.flattened();
-        let target = format!("{}_export.png", self.doc_name);
-        image::save_buffer(
-            &target,
-            &flat.data,
-            flat.width,
-            flat.height,
-            image::ExtendedColorType::Rgba8,
-        )
-        .map_err(|e| format!("export failed: {}", e))?;
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(
+                &flat.data,
+                flat.width,
+                flat.height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| format!("export failed: {}", e))?;
+        crate::project::write_atomic(path, &bytes).map_err(|e| format!("export failed: {}", e))?;
         Ok(format!(
             "exported {} ({} × {})",
-            target, flat.width, flat.height
+            path.display(),
+            flat.width,
+            flat.height
         ))
     }
 
@@ -1749,8 +1782,6 @@ impl PaintState {
                 self.pan += Vec2::new(*dx, *dy);
                 Ok(format!("panned {:.0}, {:.0}", dx, dy))
             }
-            C::SavePsd => self.save_psd(),
-            C::ExportPng => self.export_png(),
             _ => return None,
         };
         if r.is_ok()
@@ -2034,17 +2065,17 @@ impl PaintState {
                     }
                     if ui
                         .add_sized([w, 24.0], theme::toggle_button(p, "Save PSD", false))
-                        .on_hover_text("Writes <name>_edit.psd; never overwrites the source")
+                        .on_hover_text("Save a layered PSD (asks where; suggests <name>_edit.psd)")
                         .clicked()
                     {
-                        bus.push(AppCommand::SavePsd);
+                        bus.push(AppCommand::SavePsd { path: None });
                     }
                     if ui
                         .add_sized([w, 24.0], theme::primary_button(p, "Export"))
-                        .on_hover_text("Flattened PNG")
+                        .on_hover_text("Export a flattened PNG (asks where)")
                         .clicked()
                     {
-                        bus.push(AppCommand::ExportPng);
+                        bus.push(AppCommand::ExportPng { path: None });
                     }
                 });
             });
@@ -3591,5 +3622,195 @@ impl PaintState {
         if let Some(d) = &self.psd {
             theme::prop(ui, p, "PSD:", d.clone());
         }
+    }
+}
+
+// ---- project files ------------------------------------------------------------
+
+use crate::project::{Assets, RasterRef};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MaskFile {
+    pub width: u32,
+    pub height: u32,
+    pub data: String,
+    pub density: f32,
+    pub feather: f32,
+    pub invert: bool,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LayerFile {
+    pub id: u32,
+    pub name: String,
+    pub visible: bool,
+    pub opacity: f32,
+    pub fill: f32,
+    pub blend: BlendMode,
+    pub raster: RasterRef,
+    pub offset: (i32, i32),
+    pub mask: Option<MaskFile>,
+    pub group: Option<u32>,
+    pub locked: bool,
+    pub text: Option<TextSpec>,
+}
+
+/// Paint mode in a `.seraphina` project.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PaintFile {
+    pub width: u32,
+    pub height: u32,
+    pub layers: Vec<LayerFile>,
+    pub groups: Vec<LayerGroup>,
+    /// Selection plane (`width * height` bytes).
+    pub selection: Option<String>,
+    pub selected: usize,
+    pub next_id: u32,
+    pub doc_name: String,
+    pub path: String,
+    pub psd: Option<String>,
+    pub source_ppi: Option<f32>,
+    pub tool: String,
+    pub brush: Brush,
+    pub exposure: f32,
+    pub tolerance: u8,
+    pub text_size: f32,
+    pub pen: Vec<(f32, f32)>,
+    pub clone_offset: Option<(f32, f32)>,
+}
+
+impl PaintState {
+    pub fn to_file(&self, a: &mut Assets) -> PaintFile {
+        let d = &self.doc;
+        let layers = d
+            .layers
+            .iter()
+            .map(|l| LayerFile {
+                id: l.id,
+                name: l.name.clone(),
+                visible: l.visible,
+                opacity: l.opacity,
+                fill: l.fill,
+                blend: l.blend,
+                raster: a.put_raster(&format!("paint {}", l.name), &l.raster),
+                offset: l.offset,
+                mask: l.mask.as_ref().map(|m| MaskFile {
+                    width: m.width,
+                    height: m.height,
+                    data: a.put(&format!("mask {}", l.name), (*m.data).clone()),
+                    density: m.density,
+                    feather: m.feather,
+                    invert: m.invert,
+                    enabled: m.enabled,
+                }),
+                group: l.group,
+                locked: l.locked,
+                text: l.text.clone(),
+            })
+            .collect();
+        PaintFile {
+            width: d.width,
+            height: d.height,
+            layers,
+            groups: d.groups.clone(),
+            selection: d
+                .selection
+                .as_ref()
+                .map(|s| a.put("selection", s.mask.clone())),
+            selected: d.selected,
+            next_id: d.next_id,
+            doc_name: self.doc_name.clone(),
+            path: self.path.clone(),
+            psd: self.psd.clone(),
+            source_ppi: self.source_ppi,
+            tool: self.tool.id().to_string(),
+            brush: self.brush,
+            exposure: self.exposure,
+            tolerance: self.tolerance,
+            text_size: self.text_size,
+            pen: self.pen.clone(),
+            clone_offset: self.clone_offset,
+        }
+    }
+
+    /// Replace the document with a project's (undo history starts fresh).
+    pub fn load_file(&mut self, f: PaintFile, a: &Assets) -> Result<(), String> {
+        let (w, h) = (f.width, f.height);
+        if w == 0 || h == 0 {
+            return Err("paint document has no size".into());
+        }
+        let mut layers = Vec::with_capacity(f.layers.len());
+        for l in f.layers {
+            let mut p = PaintLayer::new(l.id, &l.name, a.raster(&l.raster)?);
+            p.visible = l.visible;
+            p.opacity = l.opacity;
+            p.fill = l.fill;
+            p.blend = l.blend;
+            p.offset = l.offset;
+            p.group = l.group;
+            p.locked = l.locked;
+            p.text = l.text;
+            if let Some(m) = l.mask {
+                let sel = Selection {
+                    width: m.width,
+                    height: m.height,
+                    mask: a.plane(&m.data, m.width, m.height)?,
+                };
+                let mut mk = LayerMask::from_selection(&sel);
+                mk.density = m.density;
+                mk.feather = m.feather;
+                mk.invert = m.invert;
+                mk.enabled = m.enabled;
+                mk.prepare();
+                p.mask = Some(mk);
+            }
+            layers.push(p);
+        }
+        let selection = match f.selection {
+            Some(s) => Some(Selection {
+                width: w,
+                height: h,
+                mask: a.plane(&s, w, h)?,
+            }),
+            None => None,
+        };
+        let doc = PaintDoc {
+            layers,
+            groups: f.groups,
+            width: w,
+            height: h,
+            selection,
+            selected: f.selected,
+            next_id: f.next_id,
+        };
+        self.history = History::new(40);
+        self.restore(doc);
+        self.flat = Raster::new(w, h);
+        self.tex = None;
+        self.thumbs.clear();
+        self.fit_pending = true;
+        self.crop = None;
+        self.text_draft = None;
+        self.rename = None;
+        self.stroking = false;
+        self.stroke_src = None;
+        self.drag_from = None;
+        self.drag_to = None;
+        self.lasso.clear();
+        self.doc_name = f.doc_name;
+        self.path = f.path;
+        self.psd = f.psd;
+        self.source_ppi = f.source_ppi;
+        self.tool = Tool::from_id(&f.tool).unwrap_or(Tool::Brush);
+        self.brush = f.brush;
+        self.exposure = f.exposure;
+        self.tolerance = f.tolerance;
+        self.text_size = f.text_size;
+        self.pen = f.pen;
+        self.clone_offset = f.clone_offset;
+        self.mark_all();
+        Ok(())
     }
 }

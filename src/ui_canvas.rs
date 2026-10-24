@@ -147,6 +147,7 @@ impl PixelRect {
 
 /// Layer blend modes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum BlendMode {
     Normal,
     Multiply,
@@ -342,6 +343,7 @@ pub fn blend_into(base: &mut Raster, top: &Raster, mode: BlendMode, opacity: f32
 
 /// Brush settings.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Brush {
     /// Diameter in image pixels.
     pub size: f32,
@@ -596,6 +598,7 @@ pub fn save_target(path: &str) -> String {
 /// Animated scalar: keys sorted by time, linear interpolation,
 /// held at both ends. Setting a key near an existing one replaces it.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyTrack {
     keys: Vec<(f32, f32)>,
 }

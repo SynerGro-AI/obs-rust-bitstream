@@ -31,6 +31,7 @@ pub const SIGMA: f64 = 5.670_374_419e-8;
 pub const DT: f32 = 1.0 / 240.0;
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Environment {
     pub name: String,
     /// m/s² (downward).
@@ -124,6 +125,7 @@ impl Environment {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Body {
     pub name: String,
     pub material: String,
@@ -250,6 +252,7 @@ impl Body {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Events {
     pub log: Vec<(f64, String)>,
 }
@@ -258,6 +261,7 @@ pub struct Events {
 /// a flow; everything inside is a stock (kinetic, potential, internal).
 /// `residual = (stocks now − stocks at start) − (flows in)` must stay ≈ 0.
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ledger {
     /// J delivered by heaters.
     pub heater_in: f64,
@@ -298,6 +302,7 @@ impl EnergyTotals {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Arena {
     pub env: Environment,
     pub bodies: Vec<Body>,

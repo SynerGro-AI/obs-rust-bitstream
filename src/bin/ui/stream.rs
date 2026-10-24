@@ -559,3 +559,45 @@ impl StreamState {
         });
     }
 }
+
+// ---- project files ------------------------------------------------------------
+
+/// Stream inspector in a `.seraphina` project: the bytes, counter type and
+/// the reads made so far (replayed on load).
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct StreamFile {
+    pub data: String,
+    pub mode: CounterMode,
+    pub reads: Vec<u32>,
+    pub width: u32,
+    pub source: String,
+    pub path: String,
+}
+
+impl StreamState {
+    pub fn to_file(&self, a: &mut crate::project::Assets) -> StreamFile {
+        StreamFile {
+            data: a.put("bitstream", self.insp.data().to_vec()),
+            mode: self.insp.mode(),
+            reads: self.insp.records().iter().map(|r| r.width).collect(),
+            width: self.width,
+            source: self.source.clone(),
+            path: self.path.clone(),
+        }
+    }
+
+    pub fn load_file(&mut self, f: StreamFile, a: &crate::project::Assets) -> Result<(), String> {
+        let mut insp = StreamInspector::new(a.get(&f.data)?.to_vec(), f.mode);
+        for w in f.reads {
+            if !(1..=16).contains(&w) {
+                return Err(format!("stream read width {} is outside 1-16", w));
+            }
+            insp.read(w);
+        }
+        self.insp = insp;
+        self.width = f.width.clamp(1, 16);
+        self.source = f.source;
+        self.path = f.path;
+        Ok(())
+    }
+}

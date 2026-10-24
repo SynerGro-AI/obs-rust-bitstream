@@ -21,12 +21,14 @@ mod maya;
 mod output;
 mod paint;
 mod prefs;
+mod project;
 mod scene;
 mod stream;
 mod text_raster;
 mod theme;
 mod timeline;
 mod videogen;
+mod workspace;
 
 use assistant_panel::{ActionLine, LineStatus, PanelRequest};
 use commands::{parse_tool_call, AppCommand, Origin};
@@ -379,6 +381,8 @@ pub struct App {
     mat_hist: History<materials::MatSnap>,
     sel_ov: paint::SelOverlay,
     last_time: Option<f64>,
+    /// `.seraphina` file, dirty state, autosave and recovery.
+    pub project: workspace::ProjectState,
 }
 
 pub fn install_fonts(ctx: &egui::Context) {
@@ -393,11 +397,25 @@ pub fn install_fonts(ctx: &egui::Context) {
 
 impl App {
     pub fn new(ctx: &egui::Context) -> Self {
-        Self::with(
+        let mut app = Self::with(
             ctx,
             assistant_panel::AssistantPanel::new(prefs::Prefs::load(prefs::default_path())),
             videogen::VideoGenPanel::new(),
-        )
+        );
+        app.project.native_dialogs = project::native_dialogs_available();
+        app.start_session(project::autosave_dir());
+        app
+    }
+
+    /// Enable autosave in `dir` and look for a crashed session there.
+    pub fn start_session(&mut self, dir: std::path::PathBuf) {
+        let mut st = workspace::ProjectState::new(project::Session::start(dir));
+        st.include_chat = self.project.include_chat;
+        st.script_files = self.project.script_files;
+        st.docs_dir = std::mem::take(&mut self.project.docs_dir);
+        st.native_dialogs = self.project.native_dialogs;
+        self.project = st;
+        self.mark_saved();
     }
 
     pub fn with(
@@ -413,7 +431,7 @@ impl App {
         theme::apply(ctx, &pal);
         let mut toasts = Toasts::default();
         let paint = paint::PaintState::new(&mut toasts);
-        Self {
+        let mut app = Self {
             ctx: ctx.clone(),
             dark: true,
             pal,
@@ -449,7 +467,13 @@ impl App {
             sel_ov: paint::SelOverlay::default(),
             toasts,
             last_time: None,
+            project: workspace::ProjectState::new(project::Session::default()),
+        };
+        if let Some(w) = app.assistant.prefs.load_warning.clone() {
+            app.toasts.push(ToastKind::Warn, &w);
         }
+        app.mark_saved();
+        app
     }
 
     pub fn set_dark(&mut self, dark: bool) {
@@ -827,6 +851,11 @@ impl App {
                 }
                 m => Err(format!("{} mode has no undo history", m.label())),
             },
+            C::SaveProject { path, save_as } => self.cmd_save_project(path.as_deref(), *save_as),
+            C::OpenProject { path } => self.cmd_open_project(path.as_deref()),
+            C::NewProject => self.cmd_new_project(),
+            C::SavePsd { path } => self.cmd_export(workspace::SaveTarget::Psd, path.as_deref()),
+            C::ExportPng { path } => self.cmd_export(workspace::SaveTarget::Png, path.as_deref()),
             C::OpenFile { path } => {
                 self.mode = Mode::Paint;
                 self.paint.open(path)
@@ -1175,8 +1204,8 @@ impl App {
                     }
                     if matches!(
                         cmd,
-                        AppCommand::SavePsd
-                            | AppCommand::ExportPng
+                        AppCommand::SavePsd { .. }
+                            | AppCommand::ExportPng { .. }
                             | AppCommand::OpenFile { .. }
                             | AppCommand::VideoGenerate { .. }
                             | AppCommand::GenerateImage { .. }
@@ -1349,6 +1378,26 @@ impl App {
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
+        // file shortcuts work even while a text field has focus
+        if self.project.prompt.is_none() && self.project.dialog.is_none() {
+            use egui::{KeyboardShortcut, Modifiers};
+            let take = |m: Modifiers, k: Key| {
+                ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
+            };
+            let save_as = take(Modifiers::COMMAND | Modifiers::SHIFT, Key::S);
+            if save_as || take(Modifiers::COMMAND, Key::S) {
+                self.bus.push(AppCommand::SaveProject {
+                    path: None,
+                    save_as,
+                });
+            }
+            if take(Modifiers::COMMAND, Key::O) {
+                self.bus.push(AppCommand::OpenProject { path: None });
+            }
+            if take(Modifiers::COMMAND, Key::N) {
+                self.bus.push(AppCommand::NewProject);
+            }
+        }
         if ctx.wants_keyboard_input() {
             return;
         }
@@ -1554,11 +1603,17 @@ impl App {
                                 .strong()
                                 .color(p.accent),
                         );
+                        let dirty = self.is_dirty();
                         ui.label(
-                            egui::RichText::new("Professional Creative Suite")
+                            egui::RichText::new(self.title_label())
                                 .size(10.5)
-                                .color(p.muted),
-                        );
+                                .color(if dirty { p.text } else { p.muted }),
+                        )
+                        .on_hover_text(if dirty {
+                            "Unsaved changes  (Ctrl+S to save)"
+                        } else {
+                            "All changes saved"
+                        });
                     });
                     ui.add_space(SP_LG);
                     let tab_w = ((full.width() - 660.0) / 5.0).clamp(96.0, 150.0);
@@ -2073,14 +2128,16 @@ impl App {
                 continue;
             }
             match serde_json::from_str::<AppCommand>(l) {
-                Ok(c) if c.needs_user() => self.toasts.push(
-                    ToastKind::Error,
-                    &format!(
-                        "script line {}: {} needs the user; skipped",
-                        i + 1,
-                        c.name()
-                    ),
-                ),
+                Ok(c) if c.needs_user() && !(self.project.script_files && c.is_project_file()) => {
+                    self.toasts.push(
+                        ToastKind::Error,
+                        &format!(
+                            "script line {}: {} needs the user; skipped",
+                            i + 1,
+                            c.name()
+                        ),
+                    )
+                }
                 Ok(c) => match self.dispatch(&c, Origin::User) {
                     Ok(msg) => {
                         eprintln!("script line {}: {}: {}", i + 1, c.name(), msg);
@@ -2304,6 +2361,7 @@ impl App {
         }
         self.pump_assistant();
         self.handle_keys(ctx);
+        self.project_frame(ctx);
         self.edge_resize(ctx);
 
         let p = self.pal;
@@ -2543,6 +2601,7 @@ impl App {
                 }
             });
         self.windows(ctx);
+        self.project_modals(ctx);
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
@@ -2560,6 +2619,10 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.frame(ctx);
     }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.end_session();
+    }
 }
 
 fn main() -> eframe::Result<()> {
@@ -2567,6 +2630,8 @@ fn main() -> eframe::Result<()> {
     // `SeraphinaStudio <file>` (also how "Open with" passes a file on Windows)
     let args: Vec<String> = std::env::args().collect();
     let open_arg = args.get(1).filter(|a| !a.starts_with('-')).cloned();
+    // `--allow-file-commands`: let a `--run` script save and open projects
+    let script_files = args.iter().any(|a| a == "--allow-file-commands");
     // `--run script.jsonl`: one AppCommand JSON per line, dispatched at startup (demos, screenshots)
     let run_script = args
         .iter()
@@ -2596,8 +2661,21 @@ fn main() -> eframe::Result<()> {
             if start_light {
                 app.set_dark(false);
             }
+            app.project.script_files = script_files;
             if let Some(path) = open_arg {
-                app.bus.push(AppCommand::OpenFile { path });
+                let is_project = std::path::Path::new(&path)
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case(project::EXT));
+                app.bus.push(if is_project {
+                    // a path typed in a terminal is relative to the shell's
+                    // directory, not Documents/Seraphina
+                    let abs = std::path::absolute(&path)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or(path);
+                    AppCommand::OpenProject { path: Some(abs) }
+                } else {
+                    AppCommand::OpenFile { path }
+                });
             }
             if let Some(path) = run_script {
                 app.run_script(&path);
@@ -2630,6 +2708,59 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_fresh_launch_is_not_marked_unsaved() {
+        let ctx = egui::Context::default();
+        let mut app = crate::workspace::tests::test_app(&ctx);
+        let s0 = (app.paint.edits, app.anim.edits, app.project.edits);
+        let mut t = 0.0;
+        for m in [
+            Mode::Paint,
+            Mode::Composite,
+            Mode::Scene,
+            Mode::Animate,
+            Mode::Stream,
+            Mode::Materials,
+            Mode::Paint,
+        ] {
+            app.mode = m;
+            run(&mut app, &ctx, 12, t);
+            t += 1.0;
+            assert!(
+                !app.check_dirty(),
+                "{:?}: {:?} -> {:?}",
+                m,
+                s0,
+                (app.paint.edits, app.anim.edits, app.project.edits)
+            );
+        }
+        // and the same after saving and reopening
+        let path = project::test_dir("fresh-clean").join("fresh.seraphina");
+        app.save_project_to(&path).unwrap();
+        app.open_project_from(&path).unwrap();
+        for m in [Mode::Scene, Mode::Materials, Mode::Paint] {
+            app.mode = m;
+            run(&mut app, &ctx, 12, t);
+            t += 1.0;
+            assert!(!app.check_dirty(), "{:?} after reopening", m);
+        }
+    }
+
+    #[test]
+    fn a_damaged_learning_bank_is_announced_at_startup() {
+        let dir = project::test_dir("startup-corrupt");
+        let path = dir.join("mercy_bank.json");
+        std::fs::write(&path, b"\x00\x00garbage").unwrap();
+        let ctx = egui::Context::default();
+        let a = assistant_panel::AssistantPanel::with_provider(None, prefs::Prefs::load(path));
+        let app = App::with(&ctx, a, videogen::VideoGenPanel::unconfigured());
+        assert!(app
+            .toasts
+            .items
+            .iter()
+            .any(|t| matches!(t.kind, ToastKind::Warn) && t.text.contains("learning bank")));
+    }
+
     fn app_with(ctx: &egui::Context, provider: Option<Arc<dyn llm::LlmProvider>>) -> App {
         let a = assistant_panel::AssistantPanel::with_provider(provider, prefs::Prefs::ephemeral());
         let mut app = App::with(ctx, a, videogen::VideoGenPanel::unconfigured());
@@ -2644,6 +2775,7 @@ mod tests {
             },
             String::new(),
         );
+        app.project.docs_dir = project::test_dir("docs");
         app
     }
 

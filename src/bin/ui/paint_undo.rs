@@ -391,8 +391,8 @@ mod tests {
 
     fn layer(id: u32, w: u32, h: u32, off: (i32, i32), seed: u8) -> PaintLayer {
         let mut r = Raster::new(w, h);
-        for (k, px) in r.data.chunks_exact_mut(4).enumerate() {
-            px.copy_from_slice(&[(k as u8).wrapping_mul(seed), seed, (k >> 8) as u8, 255]);
+        for (k, px) in r.data.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            *px = [(k as u8).wrapping_mul(seed), seed, (k >> 8) as u8, 255];
         }
         let mut l = PaintLayer::new(id, &format!("Layer {id}"), r);
         l.offset = off;

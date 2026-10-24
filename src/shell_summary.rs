@@ -16,11 +16,16 @@ impl ShellSummary {
     pub fn line(actions: &[ShellAction]) -> String {
         let status = ShellLoop::run(actions);
         let encoded = ShellLoopFrame::encode(actions);
-        let payload = ShellLoopSocket::payload(actions).map(|p| p.len()).unwrap_or(0);
+        let payload = ShellLoopSocket::payload(actions)
+            .map(|p| p.len())
+            .unwrap_or(0);
         let valid = ShellLoopSocket::payload(actions)
             .map(|p| ShellLoopSocket::valid(&p))
             .unwrap_or(false);
-        format!("{} encoded={} payload={} valid={}", status, encoded, payload, valid)
+        format!(
+            "{} encoded={} payload={} valid={}",
+            status, encoded, payload, valid
+        )
     }
 
     /// One line covering the full path including the sent count.
@@ -30,7 +35,10 @@ impl ShellSummary {
 
     /// True if the line contains every section.
     pub fn complete(line: &str) -> bool {
-        line.contains("tool=") && line.contains("encoded=") && line.contains("payload=") && line.contains("valid=")
+        line.contains("tool=")
+            && line.contains("encoded=")
+            && line.contains("payload=")
+            && line.contains("valid=")
     }
 
     /// True if the line includes the sent count.

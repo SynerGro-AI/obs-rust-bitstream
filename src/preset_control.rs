@@ -52,11 +52,14 @@ impl PresetControl {
     /// Set the preset and write the weight.
     pub fn set(&mut self, kind: PresetKind, weights: &mut LiveWeights) {
         self.kind = kind;
-        let _ = weights.set("h264.preset", match kind {
-            PresetKind::Fast => 0.0,
-            PresetKind::Balanced => 1.0,
-            PresetKind::Quality => 2.0,
-        });
+        let _ = weights.set(
+            "h264.preset",
+            match kind {
+                PresetKind::Fast => 0.0,
+                PresetKind::Balanced => 1.0,
+                PresetKind::Quality => 2.0,
+            },
+        );
     }
 
     /// Read the weight into the control.
@@ -68,6 +71,12 @@ impl PresetControl {
                 _ => PresetKind::Balanced,
             };
         }
+    }
+}
+
+impl Default for PresetControl {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -6,10 +6,10 @@
 //!
 //! Differential: elapsed is non-negative.
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 #[cfg(test)]
 use crate::diff::assert_equal;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Default)]
 pub struct SourceProfiler {
@@ -29,7 +29,10 @@ impl SourceProfiler {
     pub fn end(&mut self, name: &str) -> Option<Duration> {
         let start = self.starts.remove(name)?;
         let delta = start.elapsed();
-        *self.totals.entry(name.to_string()).or_insert(Duration::ZERO) += delta;
+        *self
+            .totals
+            .entry(name.to_string())
+            .or_insert(Duration::ZERO) += delta;
         Some(delta)
     }
 
@@ -63,6 +66,10 @@ mod tests {
         p.start("x");
         let d = p.end("x");
         assert_equal(d.is_some(), true, "source profiler delta");
-        assert_equal(d.unwrap_or(Duration::MAX) < Duration::from_secs(60), true, "source profiler delta bounded");
+        assert_equal(
+            d.unwrap_or(Duration::MAX) < Duration::from_secs(60),
+            true,
+            "source profiler delta bounded",
+        );
     }
 }

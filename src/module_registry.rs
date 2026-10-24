@@ -111,7 +111,10 @@ mod tests {
     fn differential() {
         let mut r = ModuleRegistry::new();
         r.add("obs-ffmpeg").unwrap();
-        r.get_mut("obs-ffmpeg").unwrap().register_source("ffmpeg_source").unwrap();
+        r.get_mut("obs-ffmpeg")
+            .unwrap()
+            .register_source("ffmpeg_source")
+            .unwrap();
         assert!(r.get("obs-ffmpeg").unwrap().has_source("ffmpeg_source"));
     }
 
@@ -119,8 +122,14 @@ mod tests {
     fn type_lookup() {
         let mut r = ModuleRegistry::new();
         r.add("obs-ffmpeg").unwrap();
-        r.get_mut("obs-ffmpeg").unwrap().register_source("ffmpeg_source").unwrap();
-        r.get_mut("obs-ffmpeg").unwrap().register_filter("gain_filter").unwrap();
+        r.get_mut("obs-ffmpeg")
+            .unwrap()
+            .register_source("ffmpeg_source")
+            .unwrap();
+        r.get_mut("obs-ffmpeg")
+            .unwrap()
+            .register_filter("gain_filter")
+            .unwrap();
         assert!(r.has_source_type("ffmpeg_source"));
         assert!(r.has_filter_type("gain_filter"));
         assert!(!r.has_source_type("missing"));

@@ -18,7 +18,11 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     #[inline]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
@@ -45,7 +49,11 @@ impl Vec3 {
         if other.x == 0.0 || other.y == 0.0 || other.z == 0.0 {
             None
         } else {
-            Some(Self::new(self.x / other.x, self.y / other.y, self.z / other.z))
+            Some(Self::new(
+                self.x / other.x,
+                self.y / other.y,
+                self.z / other.z,
+            ))
         }
     }
 

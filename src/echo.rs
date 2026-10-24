@@ -30,7 +30,7 @@ impl Echo {
         if current.width != previous.width || current.height != previous.height {
             return Err(EchoError::SizeMismatch);
         }
-        if let (Some(dst), Some(prev)) = (current.planes.get_mut(0), previous.planes.get(0)) {
+        if let (Some(dst), Some(prev)) = (current.planes.get_mut(0), previous.planes.first()) {
             for (d, p) in dst.iter_mut().zip(prev.iter()) {
                 let v = (*d as u16 * (255 - amount as u16) + *p as u16 * amount as u16) / 255;
                 *d = v as u8;

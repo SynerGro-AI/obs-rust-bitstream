@@ -19,22 +19,18 @@ pub struct Wipe;
 
 impl Wipe {
     /// progress is 0.0..=1.0.
-    pub fn apply(
-        a: &VideoFrame,
-        b: &VideoFrame,
-        progress: f32,
-    ) -> Result<VideoFrame, WipeError> {
+    pub fn apply(a: &VideoFrame, b: &VideoFrame, progress: f32) -> Result<VideoFrame, WipeError> {
         if a.format != VideoFormat::Y800 || b.format != VideoFormat::Y800 {
             return Err(WipeError::WrongFormat);
         }
         if a.width != b.width || a.height != b.height {
             return Err(WipeError::SizeMismatch);
         }
-        let mut out = VideoFrame::new(VideoFormat::Y800, a.width, a.height)
-            .ok_or(WipeError::SizeMismatch)?;
+        let mut out =
+            VideoFrame::new(VideoFormat::Y800, a.width, a.height).ok_or(WipeError::SizeMismatch)?;
         let cut = (progress.clamp(0.0, 1.0) * a.width as f32) as u32;
         if let (Some(pa), Some(pb), Some(dst)) =
-            (a.planes.get(0), b.planes.get(0), out.planes.get_mut(0))
+            (a.planes.first(), b.planes.first(), out.planes.get_mut(0))
         {
             for y in 0..a.height {
                 for x in 0..a.width {

@@ -14,7 +14,10 @@ pub struct MaterialFactory;
 impl MaterialFactory {
     /// Create a preset material and add it to the registry.
     /// Known presets: chrome, paint, glass, rubber, gold.
-    pub fn create(registry: &mut MaterialRegistry, name: &str) -> Result<(), MaterialRegistryError> {
+    pub fn create(
+        registry: &mut MaterialRegistry,
+        name: &str,
+    ) -> Result<(), MaterialRegistryError> {
         registry.add(name)?;
         let m = registry.get_mut(name)?;
         match name {

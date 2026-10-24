@@ -20,11 +20,7 @@ impl Subdiv {
         for i in 0..verts.len() - 1 {
             let a = verts[i];
             let b = verts[i + 1];
-            mesh.add_vert(
-                (a.x + b.x) * 0.5,
-                (a.y + b.y) * 0.5,
-                (a.z + b.z) * 0.5,
-            );
+            mesh.add_vert((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5);
         }
     }
 

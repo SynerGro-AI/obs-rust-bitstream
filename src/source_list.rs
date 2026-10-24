@@ -40,7 +40,10 @@ impl SourceList {
 
     /// Count names that start with a prefix.
     pub fn count_prefix(&self, prefix: &str) -> usize {
-        self.items.iter().filter(|(n, _)| n.starts_with(prefix)).count()
+        self.items
+            .iter()
+            .filter(|(n, _)| n.starts_with(prefix))
+            .count()
     }
 
     /// Names that start with a prefix.
@@ -122,7 +125,10 @@ impl SourceList {
 
     /// Find by name.
     pub fn find(&mut self, name: &str) -> Option<&mut CaptureSource> {
-        self.items.iter_mut().find(|(n, _)| n == name).map(|(_, s)| s)
+        self.items
+            .iter_mut()
+            .find(|(n, _)| n == name)
+            .map(|(_, s)| s)
     }
 }
 

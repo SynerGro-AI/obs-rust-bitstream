@@ -40,10 +40,9 @@ impl StreamPayload {
         id: &str,
         frames: usize,
     ) -> Result<(Vec<u8>, Vec<u8>), StreamPayloadError> {
-        let (_, status_buf) = StreamDump::run_and_write(
-            runner, stream, service, output, weights, name, id, frames,
-        )
-        .map_err(StreamPayloadError::Run)?;
+        let (_, status_buf) =
+            StreamDump::run_and_write(runner, stream, service, output, weights, name, id, frames)
+                .map_err(StreamPayloadError::Run)?;
         let packet_buf =
             PayloadDump::write(codec, capture, frames).map_err(StreamPayloadError::Payload)?;
         Ok((status_buf, packet_buf))
@@ -82,8 +81,16 @@ mod tests {
         let mut codec = H264Codec::new(16, 16, &w).unwrap();
         let mut cap = SyntheticCapture::new(16, 16);
         let (st, pk) = StreamPayload::run(
-            &mut r, &mut stream, &mut svc, &out, &mut w, &mut codec, &mut cap,
-            "twitch", "rtmp", 2,
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            &mut codec,
+            &mut cap,
+            "twitch",
+            "rtmp",
+            2,
         )
         .unwrap();
         assert_eq!(StreamFile::streaming(&st), Some(true));
@@ -100,8 +107,16 @@ mod tests {
         let mut codec = H264Codec::new(16, 16, &w).unwrap();
         let mut cap = SyntheticCapture::new(16, 16);
         assert!(StreamPayload::run(
-            &mut r, &mut stream, &mut svc, &out, &mut w, &mut codec, &mut cap,
-            "", "rtmp", 1,
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            &mut codec,
+            &mut cap,
+            "",
+            "rtmp",
+            1,
         )
         .is_err());
     }
@@ -122,13 +137,11 @@ mod tests {
         let mut capa = SyntheticCapture::new(16, 16);
         let mut capb = SyntheticCapture::new(16, 16);
         let (_, pa) = StreamPayload::run(
-            &mut ra, &mut sa, &mut sva, &out, &mut wa, &mut ca, &mut capa,
-            "twitch", "rtmp", 1,
+            &mut ra, &mut sa, &mut sva, &out, &mut wa, &mut ca, &mut capa, "twitch", "rtmp", 1,
         )
         .unwrap();
         let (_, pb) = StreamPayload::run(
-            &mut rb, &mut sb, &mut svb, &out, &mut wb, &mut cb, &mut capb,
-            "youtube", "rtmp", 3,
+            &mut rb, &mut sb, &mut svb, &out, &mut wb, &mut cb, &mut capb, "youtube", "rtmp", 3,
         )
         .unwrap();
         let ha = PayloadDump::header(&pa).unwrap();

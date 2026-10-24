@@ -5,8 +5,8 @@
 //!
 //! Differential: +10 lifts a mid gray, -300 clamps to 0.
 
-use crate::video_frame::VideoFrame;
 use crate::video_fourcc::VideoFormat;
+use crate::video_frame::VideoFrame;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FilterError {

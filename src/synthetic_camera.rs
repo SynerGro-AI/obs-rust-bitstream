@@ -35,7 +35,7 @@ impl SyntheticCamera {
                 for x in 0..self.width {
                     let i = (y * self.width + x) as usize;
                     if i < plane.len() {
-                        let d = if x > pos { x - pos } else { pos - x };
+                        let d = x.abs_diff(pos);
                         plane[i] = if d < 4 { 255 } else { 32 };
                     }
                 }

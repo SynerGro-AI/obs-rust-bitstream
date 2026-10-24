@@ -45,12 +45,8 @@ impl ToolHelp {
             ("Crop", "ratio_w") | ("Crop", "ratio_h") => {
                 "💭 Ratio locks the crop to a width-to-height proportion. 0 is free."
             }
-            ("Zoom", "percent") => {
-                "💭 Percent sets the exact view scale. 100 is actual size."
-            }
-            ("Gradient", "opacity") => {
-                "💭 Opacity sets how strong the gradient fill is."
-            }
+            ("Zoom", "percent") => "💭 Percent sets the exact view scale. 100 is actual size.",
+            ("Gradient", "opacity") => "💭 Opacity sets how strong the gradient fill is.",
             _ => "💭 Adjust this option to change how the tool behaves.",
         }
     }

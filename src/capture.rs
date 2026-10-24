@@ -23,18 +23,15 @@ pub trait Capture {
 pub fn open_default() -> Result<Box<dyn Capture>, String> {
     #[cfg(target_os = "linux")]
     {
-        crate::linux_capture::LinuxCapture::open()
-            .map(|c| Box::new(c) as Box<dyn Capture>)
+        crate::linux_capture::LinuxCapture::open().map(|c| Box::new(c) as Box<dyn Capture>)
     }
     #[cfg(windows)]
     {
-        crate::windows_capture::WindowsCapture::open()
-            .map(|c| Box::new(c) as Box<dyn Capture>)
+        crate::windows_capture::WindowsCapture::open().map(|c| Box::new(c) as Box<dyn Capture>)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
-        crate::apple_capture::AppleCapture::open()
-            .map(|c| Box::new(c) as Box<dyn Capture>)
+        crate::apple_capture::AppleCapture::open().map(|c| Box::new(c) as Box<dyn Capture>)
     }
     #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
     {

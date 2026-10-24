@@ -29,7 +29,7 @@ impl Crossfade {
             .ok_or(CrossError::SizeMismatch)?;
         let t = progress.clamp(0.0, 1.0);
         if let (Some(pa), Some(pb), Some(dst)) =
-            (a.planes.get(0), b.planes.get(0), out.planes.get_mut(0))
+            (a.planes.first(), b.planes.first(), out.planes.get_mut(0))
         {
             for (d, (va, vb)) in dst.iter_mut().zip(pa.iter().zip(pb.iter())) {
                 let v = *va as f32 * (1.0 - t) + *vb as f32 * t;

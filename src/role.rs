@@ -15,7 +15,13 @@ impl Role {
     pub const GUEST: &'static str = "guest";
 
     pub fn known() -> &'static [&'static str] {
-        &[Self::HOST, Self::CAMERA, Self::AUDIO, Self::DIRECTOR, Self::GUEST]
+        &[
+            Self::HOST,
+            Self::CAMERA,
+            Self::AUDIO,
+            Self::DIRECTOR,
+            Self::GUEST,
+        ]
     }
 
     pub fn is_known(role: &str) -> bool {

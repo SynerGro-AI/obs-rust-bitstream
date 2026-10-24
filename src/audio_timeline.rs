@@ -8,9 +8,9 @@
 use std::collections::HashMap;
 
 use crate::ai::AiAssistant;
-use crate::wav_reader::WavData;
 use crate::audio_bus::AudioBus;
 use crate::audio_channel::{AudioChannel, ChannelError};
+use crate::wav_reader::WavData;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TimelineError {
@@ -154,7 +154,9 @@ impl AudioTimeline {
     /// Load WAV samples into a track.
     pub fn load_wav(&mut self, name: &str, wav: &WavData) -> Result<(), TimelineError> {
         let track = self.get_mut(name)?;
-        track.channel_mut().set_samples(wav.samples.clone(), wav.sample_rate);
+        track
+            .channel_mut()
+            .set_samples(wav.samples.clone(), wav.sample_rate);
         Ok(())
     }
 }

@@ -16,6 +16,7 @@ pub enum JointError {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Joint {
     name: String,
     x: f32,
@@ -59,6 +60,7 @@ impl Joint {
 }
 
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct JointHierarchy {
     joints: BTreeMap<String, Joint>,
     parents: BTreeMap<String, String>,
@@ -88,7 +90,10 @@ impl JointHierarchy {
     }
 
     pub fn parent_of(&self, child: &str) -> Result<&str, JointError> {
-        self.parents.get(child).map(|s| s.as_str()).ok_or(JointError::Missing)
+        self.parents
+            .get(child)
+            .map(|s| s.as_str())
+            .ok_or(JointError::Missing)
     }
 
     pub fn get(&self, name: &str) -> Result<&Joint, JointError> {

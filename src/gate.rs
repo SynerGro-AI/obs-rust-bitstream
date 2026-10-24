@@ -31,6 +31,12 @@ impl Gate {
     }
 }
 
+impl Default for Gate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

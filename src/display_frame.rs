@@ -18,7 +18,9 @@ impl DisplayFrame {
     /// Build a frame tagged with the monitor index.
     pub fn frame(display: &DisplayCapture) -> Option<VideoFrame> {
         let mut f = VideoFrame::new(VideoFormat::Y800, 16, 16)?;
-        let v = (display.monitor() as u8).saturating_mul(40).saturating_add(80);
+        let v = (display.monitor() as u8)
+            .saturating_mul(40)
+            .saturating_add(80);
         if let Some(p) = f.planes.get_mut(0) {
             for px in p.iter_mut() {
                 *px = v;

@@ -45,9 +45,12 @@ impl Bounds {
 
     #[inline]
     pub fn contains_point(self, p: Vec3) -> bool {
-        p.x >= self.min.x && p.x <= self.max.x &&
-        p.y >= self.min.y && p.y <= self.max.y &&
-        p.z >= self.min.z && p.z <= self.max.z
+        p.x >= self.min.x
+            && p.x <= self.max.x
+            && p.y >= self.min.y
+            && p.y <= self.max.y
+            && p.z >= self.min.z
+            && p.z <= self.max.z
     }
 
     #[inline]

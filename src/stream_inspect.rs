@@ -12,6 +12,7 @@ use crate::bitstream::{Position, Reader};
 
 /// Which counter type drives the reader.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum CounterMode {
     /// `usize` counter. Stops at the end of the buffer.
     Safe,
@@ -187,7 +188,10 @@ impl StreamInspector {
 /// `width`-digit binary string of `value`.
 pub fn to_binary(value: u16, width: u32) -> String {
     let w = width.clamp(1, 16);
-    (0..w).rev().map(|i| if value >> i & 1 == 1 { '1' } else { '0' }).collect()
+    (0..w)
+        .rev()
+        .map(|i| if value >> i & 1 == 1 { '1' } else { '0' })
+        .collect()
 }
 
 /// Deterministic sample longer than 256 bytes so wrap is visible.

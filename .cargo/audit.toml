@@ -1,0 +1,17 @@
+# cargo-audit configuration (read by `cargo audit` and the CI audit job).
+#
+# RUSTSEC-2026-0381 (webpki-roots: distrusted emSign roots), via ureq 2:
+#   ureq 2 depends on the webpki-roots 0.26.11 compatibility shim, which
+#   re-exports its 1.x dependency. Cargo.lock resolves that to
+#   webpki-roots 1.0.10, the patched release, and the advisory marks
+#   0.26.11 as unaffected, so cargo audit no longer reports it and NO ignore
+#   is needed. Deliberately not listed under `ignore`: if the lock ever
+#   resolves webpki-roots 1.x below 1.0.10 the job must fail again.
+#   Moving to ureq 3 (drops the shim) is tracked as a follow-up; it changes
+#   the error/response API used by src/bin/ui/llm.rs and videogen.rs.
+#
+# The remaining "unmaintained" warnings (paste, ttf-parser, zbus_names,
+# zvariant, zvariant_derive) are informational and do not fail the job.
+
+[advisories]
+ignore = []

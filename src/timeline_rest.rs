@@ -27,7 +27,9 @@ pub struct TimeRemap {
 
 impl TimeRemap {
     pub fn new() -> Self {
-        Self { keys: BTreeMap::new() }
+        Self {
+            keys: BTreeMap::new(),
+        }
     }
 
     /// Add a speed key at time. 1.0 is normal. 0.0 is frozen.
@@ -39,11 +41,21 @@ impl TimeRemap {
     /// Speed at time. Returns the nearest key at or before time, or 1.0.
     pub fn speed_at(&self, time: f32) -> f32 {
         let k = (time * 1000.0) as i32;
-        self.keys.range(..=k).next_back().map(|(_, s)| *s).unwrap_or(1.0)
+        self.keys
+            .range(..=k)
+            .next_back()
+            .map(|(_, s)| *s)
+            .unwrap_or(1.0)
     }
 
     pub fn key_count(&self) -> usize {
         self.keys.len()
+    }
+}
+
+impl Default for TimeRemap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

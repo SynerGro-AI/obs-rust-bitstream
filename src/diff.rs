@@ -34,11 +34,6 @@ mod tests {
     #[test]
     fn basic_differential() {
         let inputs = [1, 2, 3];
-        differential(
-            &inputs,
-            |x| x * 2,
-            |x| x + x,
-            "double",
-        );
+        differential(&inputs, |x| x * 2, |x| x + x, "double");
     }
 }

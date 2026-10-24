@@ -25,8 +25,9 @@ impl FrameTransform {
         if nw == 0 || nh == 0 {
             return Err(FrameTransformError::BadSize);
         }
-        let mut out = VideoFrame::new(VideoFormat::Y800, nw, nh).ok_or(FrameTransformError::BadSize)?;
-        if let (Some(src), Some(dst)) = (frame.planes.get(0), out.planes.get_mut(0)) {
+        let mut out =
+            VideoFrame::new(VideoFormat::Y800, nw, nh).ok_or(FrameTransformError::BadSize)?;
+        if let (Some(src), Some(dst)) = (frame.planes.first(), out.planes.get_mut(0)) {
             for y in 0..nh {
                 for x in 0..nw {
                     let sx = (x * frame.width) / nw;

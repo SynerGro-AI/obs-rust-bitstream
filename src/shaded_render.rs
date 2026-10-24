@@ -46,7 +46,6 @@ impl ShadedRender {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn shades_red() {
@@ -55,7 +54,10 @@ mod tests {
         assign.assign("plane", "paint").unwrap();
         let mut registry = MaterialRegistry::new();
         registry.add("paint").unwrap();
-        registry.get_mut("paint").unwrap().set_base_color(crate::vec3::Vec3::new(1.0, 0.0, 0.0));
+        registry
+            .get_mut("paint")
+            .unwrap()
+            .set_base_color(crate::vec3::Vec3::new(1.0, 0.0, 0.0));
         registry.get_mut("paint").unwrap().set_roughness(0.0);
         let mut rig = LightRig::new();
         rig.add("key").unwrap();

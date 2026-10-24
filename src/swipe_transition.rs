@@ -16,7 +16,11 @@ impl SwipeTransition {
         }
         let t = progress.clamp(0.0, 1.0);
         let edge = (t * width as f32) as usize;
-        if x < edge { b } else { a }
+        if x < edge {
+            b
+        } else {
+            a
+        }
     }
 }
 

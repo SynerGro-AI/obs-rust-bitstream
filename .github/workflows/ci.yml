@@ -2,12 +2,44 @@ name: CI
 
 on:
   push:
-    branches: [ main, ui-polish ]
-  pull_request:
     branches: [ main ]
+  # every PR, whatever its base (stacked PRs into feature branches included)
+  pull_request:
   workflow_dispatch:
 
 jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    # Advisory only for now (no -D warnings); see the warning count in the log.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo clippy --locked --all-targets --features ui
+
+  audit:
+    # RustSec advisories against Cargo.lock. Unmaintained/yanked crates are
+    # reported as warnings; vulnerabilities fail the job. Documented
+    # exceptions (if any) live in .cargo/audit.toml.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+
   test:
     runs-on: ubuntu-latest
     steps:

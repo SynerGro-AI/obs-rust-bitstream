@@ -11,11 +11,11 @@ use crate::box_blur::BoxBlur;
 use crate::bright_contrast::BrightContrast;
 use crate::color_balance::ColorBalance;
 use crate::exposure::Exposure;
+use crate::frame_sequence::FrameSequence;
 use crate::hue_sat::HueSat;
 use crate::inner_glow::InnerGlow;
 use crate::invert::Invert;
 use crate::levels::Levels;
-use crate::frame_sequence::FrameSequence;
 use crate::live_weights::LiveWeights;
 use crate::posterize::Posterize;
 use crate::sharpen::Sharpen;
@@ -50,8 +50,18 @@ impl ToolPipeline {
     /// The steps this pipeline knows how to run.
     pub fn available() -> &'static [&'static str] {
         &[
-            "bright", "exposure", "threshold", "invert", "posterize",
-            "noise", "blur", "sharpen", "glow", "levels", "hue", "balance",
+            "bright",
+            "exposure",
+            "threshold",
+            "invert",
+            "posterize",
+            "noise",
+            "blur",
+            "sharpen",
+            "glow",
+            "levels",
+            "hue",
+            "balance",
         ]
     }
 
@@ -105,9 +115,18 @@ impl ToolPipeline {
                     let _ = HueSat::apply(frame, shift);
                 }
                 "balance" => {
-                    let shadow = weights.get("pipe.balance.shadow").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
-                    let mid = weights.get("pipe.balance.mid").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
-                    let high = weights.get("pipe.balance.highlight").unwrap_or(0.0).clamp(-100.0, 100.0) as i8;
+                    let shadow = weights
+                        .get("pipe.balance.shadow")
+                        .unwrap_or(0.0)
+                        .clamp(-100.0, 100.0) as i8;
+                    let mid = weights
+                        .get("pipe.balance.mid")
+                        .unwrap_or(0.0)
+                        .clamp(-100.0, 100.0) as i8;
+                    let high = weights
+                        .get("pipe.balance.highlight")
+                        .unwrap_or(0.0)
+                        .clamp(-100.0, 100.0) as i8;
                     let _ = ColorBalance::apply(frame, shadow, mid, high);
                 }
                 _ => {}

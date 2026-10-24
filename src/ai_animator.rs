@@ -17,7 +17,10 @@ pub struct AiAnimator {
 }
 
 impl AiAnimator {
-    pub fn new(name: &str, duration_secs: f32) -> Result<Self, crate::animation_timeline::TimelineError> {
+    pub fn new(
+        name: &str,
+        duration_secs: f32,
+    ) -> Result<Self, crate::animation_timeline::TimelineError> {
         Ok(Self {
             timeline: AnimationTimeline::new(name, duration_secs)?,
         })
@@ -35,7 +38,8 @@ impl AiAnimator {
         let keys = parse_keys(&reply);
         if keys.is_empty() {
             self.timeline.add_key(0.0, bone_name, 0.0, 0.0, 0.0);
-            self.timeline.add_key(self.timeline.duration_secs(), bone_name, 0.0, 1.0, 0.0);
+            self.timeline
+                .add_key(self.timeline.duration_secs(), bone_name, 0.0, 1.0, 0.0);
         } else {
             for (t, x, y, z) in keys {
                 self.timeline.add_key(t, bone_name, x, y, z);
@@ -58,7 +62,7 @@ fn parse_keys(s: &str) -> Vec<(f32, f32, f32, f32)> {
     let mut out = Vec::new();
     for line in s.lines() {
         let parts: Vec<f32> = line
-            .split(|c: char| c == ',' || c == ' ')
+            .split([',', ' '])
             .filter_map(|p| p.trim().parse().ok())
             .collect();
         if parts.len() >= 4 {

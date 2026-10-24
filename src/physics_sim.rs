@@ -51,6 +51,12 @@ impl PhysicsSim {
     }
 }
 
+impl Default for PhysicsSim {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

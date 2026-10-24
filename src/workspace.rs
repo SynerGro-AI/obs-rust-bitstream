@@ -11,8 +11,8 @@ use crate::ae_tools::AeTools;
 use crate::maya_shelves::MayaShelves;
 use crate::pixel_canvas::PixelCanvas;
 use crate::ps_toolbar::PsToolbar;
-use crate::toon_tools::ToonTools;
 use crate::tool_option_set::ToolOptionSet;
+use crate::toon_tools::ToonTools;
 
 #[derive(Clone, Debug)]
 pub struct Workspace {
@@ -90,7 +90,13 @@ impl Workspace {
 
     /// One line: active tool and canvas size.
     pub fn line(&self) -> String {
-        format!("tool={} source={} canvas={}x{}", self.active.name(), self.active.source().label(), self.width, self.height)
+        format!(
+            "tool={} source={} canvas={}x{}",
+            self.active.name(),
+            self.active.source().label(),
+            self.width,
+            self.height
+        )
     }
 }
 

@@ -50,18 +50,66 @@ pub struct MayaShelves;
 impl MayaShelves {
     pub fn buttons() -> Vec<MayaButton> {
         vec![
-            MayaButton { name: "Polygon Cube", shelf: MayaShelf::Modeling, module: None },
-            MayaButton { name: "NURBS", shelf: MayaShelf::Modeling, module: Some("nurbs") },
-            MayaButton { name: "Subdivision", shelf: MayaShelf::Modeling, module: Some("subdiv") },
-            MayaButton { name: "Joint", shelf: MayaShelf::Rigging, module: Some("joint_hierarchy") },
-            MayaButton { name: "IK/FK", shelf: MayaShelf::Rigging, module: Some("ik_fk") },
-            MayaButton { name: "Key", shelf: MayaShelf::Animation, module: Some("keyframes") },
-            MayaButton { name: "Blend Shape", shelf: MayaShelf::Animation, module: Some("blend_shape") },
-            MayaButton { name: "Particles", shelf: MayaShelf::Fx, module: Some("particles") },
-            MayaButton { name: "Fluids", shelf: MayaShelf::Fx, module: Some("fluid") },
-            MayaButton { name: "Light", shelf: MayaShelf::Rendering, module: Some("light") },
-            MayaButton { name: "Camera", shelf: MayaShelf::Rendering, module: Some("camera") },
-            MayaButton { name: "Shader", shelf: MayaShelf::Rendering, module: Some("shader") },
+            MayaButton {
+                name: "Polygon Cube",
+                shelf: MayaShelf::Modeling,
+                module: None,
+            },
+            MayaButton {
+                name: "NURBS",
+                shelf: MayaShelf::Modeling,
+                module: Some("nurbs"),
+            },
+            MayaButton {
+                name: "Subdivision",
+                shelf: MayaShelf::Modeling,
+                module: Some("subdiv"),
+            },
+            MayaButton {
+                name: "Joint",
+                shelf: MayaShelf::Rigging,
+                module: Some("joint_hierarchy"),
+            },
+            MayaButton {
+                name: "IK/FK",
+                shelf: MayaShelf::Rigging,
+                module: Some("ik_fk"),
+            },
+            MayaButton {
+                name: "Key",
+                shelf: MayaShelf::Animation,
+                module: Some("keyframes"),
+            },
+            MayaButton {
+                name: "Blend Shape",
+                shelf: MayaShelf::Animation,
+                module: Some("blend_shape"),
+            },
+            MayaButton {
+                name: "Particles",
+                shelf: MayaShelf::Fx,
+                module: Some("particles"),
+            },
+            MayaButton {
+                name: "Fluids",
+                shelf: MayaShelf::Fx,
+                module: Some("fluid"),
+            },
+            MayaButton {
+                name: "Light",
+                shelf: MayaShelf::Rendering,
+                module: Some("light"),
+            },
+            MayaButton {
+                name: "Camera",
+                shelf: MayaShelf::Rendering,
+                module: Some("camera"),
+            },
+            MayaButton {
+                name: "Shader",
+                shelf: MayaShelf::Rendering,
+                module: Some("shader"),
+            },
         ]
     }
 
@@ -76,7 +124,10 @@ impl MayaShelves {
     }
 
     pub fn on_shelf(shelf: MayaShelf) -> Vec<MayaButton> {
-        Self::buttons().into_iter().filter(|b| b.shelf == shelf).collect()
+        Self::buttons()
+            .into_iter()
+            .filter(|b| b.shelf == shelf)
+            .collect()
     }
 
     pub fn line() -> String {
@@ -102,8 +153,12 @@ mod tests {
     #[test]
     fn maps_modules() {
         let buttons = MayaShelves::buttons();
-        assert!(buttons.iter().any(|b| b.name == "IK/FK" && b.module == Some("ik_fk")));
-        assert!(buttons.iter().any(|b| b.name == "Camera" && b.module == Some("camera")));
+        assert!(buttons
+            .iter()
+            .any(|b| b.name == "IK/FK" && b.module == Some("ik_fk")));
+        assert!(buttons
+            .iter()
+            .any(|b| b.name == "Camera" && b.module == Some("camera")));
     }
 
     #[test]

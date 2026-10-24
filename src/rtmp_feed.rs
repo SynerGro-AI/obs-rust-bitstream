@@ -6,8 +6,8 @@
 //! Differential: more packets produce more bytes.
 
 use crate::encoder_packet::EncoderPacket;
-use crate::rtmp_stream::{RtmpError, RtmpStream};
 use crate::rtmp_start::RtmpStart;
+use crate::rtmp_stream::{RtmpError, RtmpStream};
 
 pub struct RtmpFeed;
 

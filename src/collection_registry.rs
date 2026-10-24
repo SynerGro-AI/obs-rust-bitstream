@@ -49,11 +49,15 @@ impl CollectionRegistry {
     }
 
     pub fn get(&self, name: &str) -> Result<&SceneCollection, CollectionRegistryError> {
-        self.collections.get(name).ok_or(CollectionRegistryError::Missing)
+        self.collections
+            .get(name)
+            .ok_or(CollectionRegistryError::Missing)
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut SceneCollection, CollectionRegistryError> {
-        self.collections.get_mut(name).ok_or(CollectionRegistryError::Missing)
+        self.collections
+            .get_mut(name)
+            .ok_or(CollectionRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -84,14 +88,20 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = CollectionRegistry::new();
         r.add("a").unwrap();
-        assert!(matches!(r.add("a"), Err(CollectionRegistryError::Duplicate)));
+        assert!(matches!(
+            r.add("a"),
+            Err(CollectionRegistryError::Duplicate)
+        ));
         assert!(matches!(r.add(""), Err(CollectionRegistryError::EmptyName)));
     }
 
     #[test]
     fn missing_and_remove() {
         let mut r = CollectionRegistry::new();
-        assert!(matches!(r.get("nope"), Err(CollectionRegistryError::Missing)));
+        assert!(matches!(
+            r.get("nope"),
+            Err(CollectionRegistryError::Missing)
+        ));
         r.add("c").unwrap();
         assert!(r.remove("c"));
         assert!(!r.contains("c"));

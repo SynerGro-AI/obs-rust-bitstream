@@ -45,11 +45,15 @@ impl StreamingRegistry {
     }
 
     pub fn get(&self, name: &str) -> Result<&Streaming, StreamingRegistryError> {
-        self.streams.get(name).ok_or(StreamingRegistryError::Missing)
+        self.streams
+            .get(name)
+            .ok_or(StreamingRegistryError::Missing)
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Streaming, StreamingRegistryError> {
-        self.streams.get_mut(name).ok_or(StreamingRegistryError::Missing)
+        self.streams
+            .get_mut(name)
+            .ok_or(StreamingRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -87,7 +91,10 @@ mod tests {
     #[test]
     fn missing_and_remove() {
         let mut r = StreamingRegistry::new();
-        assert!(matches!(r.get("nope"), Err(StreamingRegistryError::Missing)));
+        assert!(matches!(
+            r.get("nope"),
+            Err(StreamingRegistryError::Missing)
+        ));
         r.add("s").unwrap();
         assert!(r.remove("s"));
         assert!(!r.contains("s"));

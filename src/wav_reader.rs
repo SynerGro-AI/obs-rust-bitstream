@@ -43,7 +43,8 @@ impl WavReader {
         let mut samples = Vec::new();
         while pos + 8 <= data.len() {
             let id = &data[pos..pos + 4];
-            let size = u32::from_le_bytes(data[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            let size =
+                u32::from_le_bytes(data[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
             pos += 8;
             if pos + size > data.len() {
                 break;
@@ -54,7 +55,8 @@ impl WavReader {
                     return Err(WavError::Unsupported);
                 }
                 channels = u16::from_le_bytes(data[pos + 2..pos + 4].try_into().unwrap_or([0; 2]));
-                sample_rate = u32::from_le_bytes(data[pos + 4..pos + 8].try_into().unwrap_or([0; 4]));
+                sample_rate =
+                    u32::from_le_bytes(data[pos + 4..pos + 8].try_into().unwrap_or([0; 4]));
                 bits = u16::from_le_bytes(data[pos + 14..pos + 16].try_into().unwrap_or([0; 2]));
             } else if id == b"data" {
                 samples = Self::decode(&data[pos..pos + size], channels, bits)?;

@@ -66,7 +66,11 @@ impl IkFk {
     /// Read mode and angle from live weights.
     pub fn from_weights(&mut self, weights: &LiveWeights) {
         if let Ok(m) = weights.get("ikfk.mode") {
-            self.mode = if m > 0.5 { SolveMode::Ik } else { SolveMode::Fk };
+            self.mode = if m > 0.5 {
+                SolveMode::Ik
+            } else {
+                SolveMode::Fk
+            };
         }
         if let Ok(a) = weights.get("ikfk.angle") {
             self.angle = a;

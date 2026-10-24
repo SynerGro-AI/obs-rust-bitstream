@@ -17,11 +17,7 @@ pub struct Status {
 }
 
 impl Status {
-    pub fn from(
-        record: &ProgramRecord,
-        stream: &ProgramStream,
-        vcam: &VirtualCamera,
-    ) -> Self {
+    pub fn from(record: &ProgramRecord, stream: &ProgramStream, vcam: &VirtualCamera) -> Self {
         Self {
             recording: record.is_recording(),
             streaming: stream.is_streaming(),

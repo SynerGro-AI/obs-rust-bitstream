@@ -32,7 +32,11 @@ pub struct TimelineAction;
 
 impl TimelineAction {
     /// Trim: set the in point of a clip. Duration shrinks from the start.
-    pub fn trim_in(timeline: &mut VideoTimeline, name: &str, new_start: f32) -> Result<f32, ActionError> {
+    pub fn trim_in(
+        timeline: &mut VideoTimeline,
+        name: &str,
+        new_start: f32,
+    ) -> Result<f32, ActionError> {
         let clip = timeline.get(name)?;
         let old_start = clip.start_secs();
         let old_end = old_start + clip.duration_secs();
@@ -47,7 +51,11 @@ impl TimelineAction {
     }
 
     /// Trim: set the out point of a clip. Duration shrinks from the end.
-    pub fn trim_out(timeline: &mut VideoTimeline, name: &str, new_end: f32) -> Result<f32, ActionError> {
+    pub fn trim_out(
+        timeline: &mut VideoTimeline,
+        name: &str,
+        new_end: f32,
+    ) -> Result<f32, ActionError> {
         let clip = timeline.get(name)?;
         let start = clip.start_secs();
         let old_end = start + clip.duration_secs();
@@ -75,7 +83,11 @@ impl TimelineAction {
 
     /// Slide: move a clip and trim the neighbor before it so the gap stays filled.
     /// Returns the new start of the moved clip.
-    pub fn slide(timeline: &mut VideoTimeline, name: &str, new_start: f32) -> Result<f32, ActionError> {
+    pub fn slide(
+        timeline: &mut VideoTimeline,
+        name: &str,
+        new_start: f32,
+    ) -> Result<f32, ActionError> {
         let clip = timeline.get(name)?;
         let old_start = clip.start_secs();
         let dur = clip.duration_secs();
@@ -87,7 +99,11 @@ impl TimelineAction {
 
     /// Ripple: trim a clip and shift every clip that starts after it.
     /// Returns the number of clips shifted.
-    pub fn ripple(timeline: &mut VideoTimeline, name: &str, new_dur: f32) -> Result<usize, ActionError> {
+    pub fn ripple(
+        timeline: &mut VideoTimeline,
+        name: &str,
+        new_dur: f32,
+    ) -> Result<usize, ActionError> {
         let clip = timeline.get(name)?;
         let start = clip.start_secs();
         let old_end = start + clip.duration_secs();
@@ -120,7 +136,12 @@ impl TimelineAction {
 
     /// Roll: move the cut between two adjacent clips. Left out and right in change together.
     /// Returns the new cut time.
-    pub fn roll(timeline: &mut VideoTimeline, left: &str, right: &str, new_cut: f32) -> Result<f32, ActionError> {
+    pub fn roll(
+        timeline: &mut VideoTimeline,
+        left: &str,
+        right: &str,
+        new_cut: f32,
+    ) -> Result<f32, ActionError> {
         let l = timeline.get(left)?;
         let r = timeline.get(right)?;
         let l_start = l.start_secs();

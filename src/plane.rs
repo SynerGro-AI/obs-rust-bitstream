@@ -65,8 +65,12 @@ mod tests {
 
     #[test]
     fn normalize_safe() {
-        assert!(Plane::from_components(0.0, 0.0, 0.0, 1.0).normalize().is_none());
-        let n = Plane::from_components(0.0, 2.0, 0.0, 1.0).normalize().unwrap();
+        assert!(Plane::from_components(0.0, 0.0, 0.0, 1.0)
+            .normalize()
+            .is_none());
+        let n = Plane::from_components(0.0, 2.0, 0.0, 1.0)
+            .normalize()
+            .unwrap();
         assert!((n.dir.y - 1.0).abs() < 1e-5);
     }
 

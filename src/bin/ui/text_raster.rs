@@ -8,7 +8,9 @@ use obs_rust_bitstream::ui_canvas::Raster;
 /// the first line. Supports multiple lines; no kerning.
 pub fn render(t: &TextSpec, w: u32, h: u32) -> Raster {
     let mut r = Raster::new(w, h);
-    let Ok(font) = FontRef::try_from_slice(epaint_default_fonts::UBUNTU_LIGHT) else { return r };
+    let Ok(font) = FontRef::try_from_slice(epaint_default_fonts::UBUNTU_LIGHT) else {
+        return r;
+    };
     let scale = PxScale::from(t.size.max(1.0));
     let sf = font.as_scaled(scale);
     let line_h = sf.height() + sf.line_gap();
@@ -53,10 +55,28 @@ mod tests {
 
     #[test]
     fn renders_visible_pixels() {
-        let t = TextSpec { text: "Hi\nyo".into(), x: 4.0, y: 2.0, size: 24.0, color: [255, 0, 0] };
+        let t = TextSpec {
+            text: "Hi\nyo".into(),
+            x: 4.0,
+            y: 2.0,
+            size: 24.0,
+            color: [255, 0, 0],
+        };
         let r = render(&t, 80, 80);
-        let n = r.data.chunks_exact(4).filter(|p| p[3] > 128).count();
+        let n = r
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 128)
+            .count();
         assert!(n > 40, "{}", n);
-        assert!(r.data.chunks_exact(4).filter(|p| p[3] > 0).all(|p| p[0] == 255));
+        assert!(r
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 0)
+            .all(|p| p[0] == 255));
     }
 }

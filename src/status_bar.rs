@@ -13,12 +13,18 @@ impl StatusBar {
     /// One line: tool, zoom, canvas, thought.
     pub fn line(tool: &str, zoom: f32, width: u32, height: u32) -> String {
         let thought = ToolHelp::tool(tool);
-        format!("tool={} zoom={:.0}% canvas={}x{} | {}", tool, zoom, width, height, thought)
+        format!(
+            "tool={} zoom={:.0}% canvas={}x{} | {}",
+            tool, zoom, width, height, thought
+        )
     }
 
     /// True if the line has every section.
     pub fn complete(line: &str) -> bool {
-        line.contains("tool=") && line.contains("zoom=") && line.contains("canvas=") && line.contains("💭")
+        line.contains("tool=")
+            && line.contains("zoom=")
+            && line.contains("canvas=")
+            && line.contains("💭")
     }
 }
 

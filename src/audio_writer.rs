@@ -18,7 +18,8 @@ impl AudioWriter {
     /// Write samples as f32 little-endian.
     pub fn write<W: Write>(samples: &[f32], mut out: W) -> Result<(), AudioWriteError> {
         for s in samples {
-            out.write_all(&s.to_le_bytes()).map_err(|_| AudioWriteError::Io)?;
+            out.write_all(&s.to_le_bytes())
+                .map_err(|_| AudioWriteError::Io)?;
         }
         Ok(())
     }
@@ -26,7 +27,9 @@ impl AudioWriter {
     /// Read samples back.
     pub fn read<R: Read>(mut input: R) -> Result<Vec<f32>, AudioWriteError> {
         let mut buf = Vec::new();
-        input.read_to_end(&mut buf).map_err(|_| AudioWriteError::Io)?;
+        input
+            .read_to_end(&mut buf)
+            .map_err(|_| AudioWriteError::Io)?;
         if buf.len() % 4 != 0 {
             return Err(AudioWriteError::Io);
         }

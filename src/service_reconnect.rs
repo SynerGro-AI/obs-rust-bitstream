@@ -45,7 +45,13 @@ mod tests {
         let mut r = Reconnect::new();
         r.start();
         assert_eq!(r.attempts(), 1);
-        assert!(ServiceReconnect::set(&mut os, &mut r, &out, "twitch", "rtmp_common"));
+        assert!(ServiceReconnect::set(
+            &mut os,
+            &mut r,
+            &out,
+            "twitch",
+            "rtmp_common"
+        ));
         assert_eq!(r.attempts(), 0);
     }
 
@@ -56,7 +62,13 @@ mod tests {
         os.set(&out, "twitch", "rtmp_common").unwrap();
         let mut r = Reconnect::new();
         r.start();
-        assert!(!ServiceReconnect::set(&mut os, &mut r, &out, "twitch", "rtmp_common"));
+        assert!(!ServiceReconnect::set(
+            &mut os,
+            &mut r,
+            &out,
+            "twitch",
+            "rtmp_common"
+        ));
         assert_eq!(r.attempts(), 1);
     }
 

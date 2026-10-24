@@ -125,6 +125,7 @@ pub fn gps_drift_per_day(r: f64) -> (f64, f64, f64) {
 // ---- N-body ------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mass {
     pub name: String,
     /// GM (m³/s²) — gravitational parameters are known far better than G or M
@@ -136,6 +137,7 @@ pub struct Mass {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct NBody {
     pub bodies: Vec<Mass>,
     pub time: f64,
@@ -157,7 +159,11 @@ fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 fn norm(a: [f64; 3]) -> f64 {
     dot(a, a).sqrt()
@@ -165,11 +171,28 @@ fn norm(a: [f64; 3]) -> f64 {
 
 impl NBody {
     pub fn new(name: &str, dt: f64) -> Self {
-        Self { bodies: Vec::new(), time: 0.0, dt, gr: false, central: 0, c: C, softening: 0.0, name: name.into(), trail_every: 20, steps: 0 }
+        Self {
+            bodies: Vec::new(),
+            time: 0.0,
+            dt,
+            gr: false,
+            central: 0,
+            c: C,
+            softening: 0.0,
+            name: name.into(),
+            trail_every: 20,
+            steps: 0,
+        }
     }
 
     pub fn add(&mut self, name: &str, gm: f64, pos: [f64; 3], vel: [f64; 3]) {
-        self.bodies.push(Mass { name: name.into(), gm, pos, vel, trail: Vec::new() });
+        self.bodies.push(Mass {
+            name: name.into(),
+            gm,
+            pos,
+            vel,
+            trail: Vec::new(),
+        });
     }
 
     /// Move to the centre-of-mass frame.
@@ -243,7 +266,12 @@ impl NBody {
                 b.pos = p1[i];
             }
         } else {
-            let add = |x: &Vec<[f64; 3]>, d: &Vec<[f64; 3]>, s: f64| -> Vec<[f64; 3]> { x.iter().zip(d).map(|(a, b)| [a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]]).collect() };
+            let add = |x: &Vec<[f64; 3]>, d: &Vec<[f64; 3]>, s: f64| -> Vec<[f64; 3]> {
+                x.iter()
+                    .zip(d)
+                    .map(|(a, b)| [a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]])
+                    .collect()
+            };
             let k1v = self.accel(&pos, &vel);
             let k1x = vel.clone();
             let k2v = self.accel(&add(&pos, &k1x, h / 2.0), &add(&vel, &k1v, h / 2.0));
@@ -254,14 +282,16 @@ impl NBody {
             let k4x = add(&vel, &k3v, h);
             for (i, b) in self.bodies.iter_mut().enumerate() {
                 for k in 0..3 {
-                    b.pos[k] += h / 6.0 * (k1x[i][k] + 2.0 * k2x[i][k] + 2.0 * k3x[i][k] + k4x[i][k]);
-                    b.vel[k] += h / 6.0 * (k1v[i][k] + 2.0 * k2v[i][k] + 2.0 * k3v[i][k] + k4v[i][k]);
+                    b.pos[k] +=
+                        h / 6.0 * (k1x[i][k] + 2.0 * k2x[i][k] + 2.0 * k3x[i][k] + k4x[i][k]);
+                    b.vel[k] +=
+                        h / 6.0 * (k1v[i][k] + 2.0 * k2v[i][k] + 2.0 * k3v[i][k] + k4v[i][k]);
                 }
             }
         }
         self.time += h;
         self.steps += 1;
-        if self.trail_every > 0 && self.steps % self.trail_every == 0 {
+        if self.trail_every > 0 && self.steps.is_multiple_of(self.trail_every) {
             for b in &mut self.bodies {
                 b.trail.push(b.pos);
                 if b.trail.len() > TRAIL_MAX {
@@ -312,7 +342,11 @@ impl NBody {
         let l = cross(r, v);
         let vl = cross(v, l);
         let rn = norm(r);
-        let a = [vl[0] - mu * r[0] / rn, vl[1] - mu * r[1] / rn, vl[2] - mu * r[2] / rn];
+        let a = [
+            vl[0] - mu * r[0] / rn,
+            vl[1] - mu * r[1] / rn,
+            vl[2] - mu * r[2] / rn,
+        ];
         a[1].atan2(a[0])
     }
 
@@ -331,7 +365,10 @@ impl NBody {
 fn at_perihelion(gm: f64, a: f64, e: f64, phi: f64) -> ([f64; 3], [f64; 3]) {
     let rp = a * (1.0 - e);
     let vp = (gm * (1.0 + e) / rp).sqrt();
-    ([rp * phi.cos(), rp * phi.sin(), 0.0], [-vp * phi.sin(), vp * phi.cos(), 0.0])
+    (
+        [rp * phi.cos(), rp * phi.sin(), 0.0],
+        [-vp * phi.sin(), vp * phi.cos(), 0.0],
+    )
 }
 
 /// Points kept per trail (the oldest quarter is dropped when full).
@@ -354,7 +391,12 @@ pub fn preset(name: &str) -> Option<NBody> {
         "inner" => {
             nb = NBody::new("Inner solar system", 0.05 * DAY);
             nb.add("Sun", GM_SUN, [0.0; 3], [0.0; 3]);
-            for (n, gm, a, e, phi) in [("Mercury", 2.2032e13, 0.387_098, 0.205_630, 0.5), ("Venus", 3.248_59e14, 0.723_332, 0.006_772, 2.0), ("Earth", 3.986_004e14 + 4.9028e12, 1.000_001, 0.016_709, 3.5), ("Mars", 4.282_837e13, 1.523_679, 0.093_4, 5.0)] {
+            for (n, gm, a, e, phi) in [
+                ("Mercury", 2.2032e13, 0.387_098, 0.205_630, 0.5),
+                ("Venus", 3.248_59e14, 0.723_332, 0.006_772, 2.0),
+                ("Earth", 3.986_004e14 + 4.9028e12, 1.000_001, 0.016_709, 3.5),
+                ("Mars", 4.282_837e13, 1.523_679, 0.093_4, 5.0),
+            ] {
                 let (p, v) = at_perihelion(GM_SUN, a * AU, e, phi);
                 nb.add(n, gm, p, v);
             }
@@ -431,7 +473,11 @@ mod tests {
         assert!((gamma(b) - 10.0125).abs() < 1e-3);
         let lab_life = tau * gamma(b);
         // τγβc ≈ 6.56 km of flight instead of 655 m without dilation
-        assert!((lab_life * b * C - 6.5617e3).abs() < 1.0, "{} m", lab_life * b * C);
+        assert!(
+            (lab_life * b * C - 6.5617e3).abs() < 1.0,
+            "{} m",
+            lab_life * b * C
+        );
         assert!((proper_time(lab_life, b) - tau).abs() < 1e-15);
         // velocities never add past c, and rapidities add linearly
         let w = add_velocities(0.9, 0.9);
@@ -461,14 +507,23 @@ mod tests {
         assert!((d - 1.751).abs() < 0.005, "{}", d);
         let per_orbit = perihelion_advance(GM_SUN, 0.387_098 * AU, 0.205_630);
         let orbits_per_century = 100.0 * JULIAN_YEAR / (87.969 * DAY);
-        assert!((per_orbit * orbits_per_century / ARCSEC - 42.98).abs() < 0.1, "{}", per_orbit * orbits_per_century / ARCSEC);
+        assert!(
+            (per_orbit * orbits_per_century / ARCSEC - 42.98).abs() < 0.1,
+            "{}",
+            per_orbit * orbits_per_century / ARCSEC
+        );
         assert!((schwarzschild_radius(GM_SUN) - 2953.25).abs() < 0.5);
     }
 
     #[test]
     fn simulated_mercury_orbit_precesses_by_the_gr_amount() {
         let (measured, predicted) = mercury_precession(5, 20_000);
-        assert!((measured / predicted - 1.0).abs() < 0.02, "{} vs {}", measured, predicted);
+        assert!(
+            (measured / predicted - 1.0).abs() < 0.02,
+            "{} vs {}",
+            measured,
+            predicted
+        );
     }
 
     #[test]
@@ -477,7 +532,11 @@ mod tests {
         let e0 = nb.energy_g();
         let l0 = nb.angular_momentum_g()[2];
         nb.advance(2.0 * JULIAN_YEAR);
-        assert!(((nb.energy_g() - e0) / e0).abs() < 1e-6, "{}", (nb.energy_g() - e0) / e0);
+        assert!(
+            ((nb.energy_g() - e0) / e0).abs() < 1e-6,
+            "{}",
+            (nb.energy_g() - e0) / e0
+        );
         assert!(((nb.angular_momentum_g()[2] - l0) / l0).abs() < 1e-10);
         // Earth goes round once a year
         let earth = nb.bodies.iter().position(|b| b.name == "Earth").unwrap();
@@ -500,7 +559,12 @@ mod tests {
         nb.dt = 1e-4;
         nb.advance(6.325_913_98);
         for (b, s) in nb.bodies.iter().zip(&start) {
-            assert!(norm(sub(b.pos, *s)) < 1e-3, "{} off by {}", b.name, norm(sub(b.pos, *s)));
+            assert!(
+                norm(sub(b.pos, *s)) < 1e-3,
+                "{} off by {}",
+                b.name,
+                norm(sub(b.pos, *s))
+            );
         }
         assert!(((nb.energy_g() - e0) / e0).abs() < 1e-8);
     }

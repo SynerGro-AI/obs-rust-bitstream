@@ -29,8 +29,20 @@ impl RadialBlur {
             for y in 0..h {
                 for x in 0..w {
                     let i = (y * w + x) as usize;
-                    let dx = if x > cx { -1 } else if x < cx { 1 } else { 0 };
-                    let dy = if y > cy { -1 } else if y < cy { 1 } else { 0 };
+                    let dx = if x > cx {
+                        -1
+                    } else if x < cx {
+                        1
+                    } else {
+                        0
+                    };
+                    let dy = if y > cy {
+                        -1
+                    } else if y < cy {
+                        1
+                    } else {
+                        0
+                    };
                     let nx = (x + dx).clamp(0, w - 1);
                     let ny = (y + dy).clamp(0, h - 1);
                     let ni = (ny * w + nx) as usize;

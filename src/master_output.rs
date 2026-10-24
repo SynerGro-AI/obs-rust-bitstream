@@ -32,6 +32,12 @@ impl MasterOutput {
     }
 }
 
+impl Default for MasterOutput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -6,12 +6,12 @@
 //! Differential: a session with a clip programs red.
 
 use crate::ai::AiAssistant;
+use crate::ai_director::{AiDirector, SceneKind};
 use crate::ai_operator::{AiOperator, CrewState};
 use crate::audio_timeline::AudioTimeline;
-use crate::ai_director::{AiDirector, SceneKind};
 use crate::keyer::Keyer;
-use crate::lower_third::LowerThird;
 use crate::live_camera::LiveCamera;
+use crate::lower_third::LowerThird;
 use crate::output::OutputFrame;
 use crate::performance::Performance;
 use crate::pixel_canvas::PixelCanvas;
@@ -73,11 +73,7 @@ impl Program {
     }
 
     /// Emit a news frame: topic background behind the keyed camera.
-    pub fn live_news(
-        camera: &LiveCamera,
-        topic: &str,
-        canvas: &mut PixelCanvas,
-    ) -> OutputFrame {
+    pub fn live_news(camera: &LiveCamera, topic: &str, canvas: &mut PixelCanvas) -> OutputFrame {
         let bg = TopicBackground::render(topic);
         let keyer = Keyer::new();
         let color = if camera.is_live() {
@@ -222,7 +218,8 @@ mod tests {
         let mut audio = AudioTimeline::new();
         audio.add("voice", 0.0).unwrap();
         let mut c = PixelCanvas::new(4, 4).unwrap();
-        let (_, _, title) = Program::live_show_titled(&ai, &p, &mut cam, &audio, "concert", 1.0, &mut c);
+        let (_, _, title) =
+            Program::live_show_titled(&ai, &p, &mut cam, &audio, "concert", 1.0, &mut c);
         assert_eq!(title, "concert");
     }
 

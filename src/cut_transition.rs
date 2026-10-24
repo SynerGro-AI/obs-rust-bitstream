@@ -11,7 +11,11 @@ pub struct CutTransition;
 impl CutTransition {
     /// Pick a pixel. progress is clamped 0..=1.
     pub fn pick(a: u8, b: u8, progress: f32) -> u8 {
-        if progress.clamp(0.0, 1.0) < 0.5 { a } else { b }
+        if progress.clamp(0.0, 1.0) < 0.5 {
+            a
+        } else {
+            b
+        }
     }
 }
 

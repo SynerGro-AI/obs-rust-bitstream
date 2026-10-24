@@ -17,7 +17,11 @@ impl SlideTransition {
         }
         let t = progress.clamp(0.0, 1.0);
         let offset = ((1.0 - t) * width as f32) as usize;
-        if x >= offset { b } else { a }
+        if x >= offset {
+            b
+        } else {
+            a
+        }
     }
 }
 

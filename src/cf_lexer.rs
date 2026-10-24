@@ -68,19 +68,34 @@ impl<'a> CfLexer<'a> {
 
         let (kind, end) = if Self::is_name_start(c) {
             let mut e = start;
-            while self.input[e..].chars().next().map(Self::is_name_cont).unwrap_or(false) {
+            while self.input[e..]
+                .chars()
+                .next()
+                .map(Self::is_name_cont)
+                .unwrap_or(false)
+            {
                 e += self.input[e..].chars().next().unwrap().len_utf8();
             }
             (CfTokenType::Name, e)
         } else if Self::is_digit(c) {
             let mut e = start;
-            while self.input[e..].chars().next().map(Self::is_digit).unwrap_or(false) {
+            while self.input[e..]
+                .chars()
+                .next()
+                .map(Self::is_digit)
+                .unwrap_or(false)
+            {
                 e += self.input[e..].chars().next().unwrap().len_utf8();
             }
             (CfTokenType::Num, e)
         } else if Self::is_space_tab(c) {
             let mut e = start;
-            while self.input[e..].chars().next().map(Self::is_space_tab).unwrap_or(false) {
+            while self.input[e..]
+                .chars()
+                .next()
+                .map(Self::is_space_tab)
+                .unwrap_or(false)
+            {
                 e += self.input[e..].chars().next().unwrap().len_utf8();
             }
             (CfTokenType::SpaceTab, e)

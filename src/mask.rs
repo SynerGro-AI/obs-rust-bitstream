@@ -102,9 +102,7 @@ impl MaskSet {
     }
 
     pub fn mask_of(&self, layer: &str) -> Option<&Mask> {
-        self.attached
-            .get(layer)
-            .and_then(|n| self.masks.get(n))
+        self.attached.get(layer).and_then(|n| self.masks.get(n))
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Mask, MaskError> {

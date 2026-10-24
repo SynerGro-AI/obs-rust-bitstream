@@ -33,7 +33,12 @@ impl Joint {
         }
         self.nodes.insert(
             name.to_string(),
-            JointNode { x, y, z, parent: None },
+            JointNode {
+                x,
+                y,
+                z,
+                parent: None,
+            },
         );
         true
     }

@@ -41,9 +41,9 @@ impl H264Codec {
         cfg.bitrate = defaults.bitrate_kbps * 1000;
         let fps = weights.get("fps").unwrap_or(30.0);
         if fps > 0.0 {
-            cfg.framerate = fps as f32;
+            cfg.framerate = fps;
         }
-        cfg.gop_size = defaults.gop(fps as f32).max(1);
+        cfg.gop_size = defaults.gop(fps).max(1);
         let preset = weights.get("h264.preset").unwrap_or(1.0);
         cfg.preset = match preset as u8 {
             0 => Preset::Fast,
@@ -90,7 +90,9 @@ impl H264Codec {
             return Ok(None);
         }
         let key = bytes.windows(4).any(|w| w == [0, 0, 0, 1])
-            && bytes.windows(5).any(|w| w[0..4] == [0, 0, 0, 1] && (w[4] & 0x1f) == 5);
+            && bytes
+                .windows(5)
+                .any(|w| w[0..4] == [0, 0, 0, 1] && (w[4] & 0x1f) == 5);
         let mut pkt = crate::encoder_packet::EncoderPacket::new(
             crate::encoder_context::EncoderType::Video,
             pts,
@@ -113,7 +115,7 @@ impl H264Codec {
 
 /// Convert Y800 luminance to I420 with neutral chroma.
 fn y800_to_i420(frame: &VideoFrame) -> Result<YuvFrame, H264Error> {
-    let plane = frame.planes.get(0).ok_or(H264Error::WrongFormat)?;
+    let plane = frame.planes.first().ok_or(H264Error::WrongFormat)?;
     let w = frame.width as usize;
     let h = frame.height as usize;
     if plane.len() < w * h {
@@ -121,10 +123,16 @@ fn y800_to_i420(frame: &VideoFrame) -> Result<YuvFrame, H264Error> {
     }
     let mut y = vec![0u8; w * h];
     y.copy_from_slice(&plane[..w * h]);
-    let uv_size = ((w + 1) / 2) * ((h + 1) / 2);
+    let uv_size = w.div_ceil(2) * h.div_ceil(2);
     let u = vec![128u8; uv_size];
     let v = vec![128u8; uv_size];
-    Ok(YuvFrame { y, u, v, width: w, height: h })
+    Ok(YuvFrame {
+        y,
+        u,
+        v,
+        width: w,
+        height: h,
+    })
 }
 
 #[cfg(test)]

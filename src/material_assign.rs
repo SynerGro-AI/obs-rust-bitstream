@@ -14,6 +14,7 @@ pub enum AssignError {
 }
 
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct MaterialAssign {
     map: HashMap<String, String>,
 }
@@ -32,7 +33,10 @@ impl MaterialAssign {
     }
 
     pub fn material_of(&self, bone: &str) -> Result<&str, AssignError> {
-        self.map.get(bone).map(|s| s.as_str()).ok_or(AssignError::Missing)
+        self.map
+            .get(bone)
+            .map(|s| s.as_str())
+            .ok_or(AssignError::Missing)
     }
 
     /// (bone/object, material) pairs.

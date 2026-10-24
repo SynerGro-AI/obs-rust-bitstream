@@ -49,7 +49,9 @@ impl ServiceRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut ServiceContext, ServiceRegistryError> {
-        self.services.get_mut(name).ok_or(ServiceRegistryError::Missing)
+        self.services
+            .get_mut(name)
+            .ok_or(ServiceRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,8 +82,14 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = ServiceRegistry::new();
         r.add("a", "id").unwrap();
-        assert!(matches!(r.add("a", "id"), Err(ServiceRegistryError::Duplicate)));
-        assert!(matches!(r.add("", "id"), Err(ServiceRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", "id"),
+            Err(ServiceRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", "id"),
+            Err(ServiceRegistryError::EmptyName)
+        ));
     }
 
     #[test]
@@ -97,7 +105,18 @@ mod tests {
     fn differential() {
         let mut r = ServiceRegistry::new();
         r.add("YouTube", "rtmp_common").unwrap();
-        r.get_mut("YouTube").unwrap().settings_mut().set_string("key", "abc").unwrap();
-        assert_eq!(r.get("YouTube").unwrap().settings().get_string("key").unwrap(), "abc");
+        r.get_mut("YouTube")
+            .unwrap()
+            .settings_mut()
+            .set_string("key", "abc")
+            .unwrap();
+        assert_eq!(
+            r.get("YouTube")
+                .unwrap()
+                .settings()
+                .get_string("key")
+                .unwrap(),
+            "abc"
+        );
     }
 }

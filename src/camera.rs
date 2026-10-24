@@ -24,8 +24,15 @@ impl Camera {
 
     /// Build a right-handed look-at view matrix.
     pub fn view(&self) -> Matrix4 {
-        let f = self.target.sub(self.eye).normalize().unwrap_or(Vec3::new(0.0, 0.0, -1.0));
-        let s = f.cross(self.up).normalize().unwrap_or(Vec3::new(1.0, 0.0, 0.0));
+        let f = self
+            .target
+            .sub(self.eye)
+            .normalize()
+            .unwrap_or(Vec3::new(0.0, 0.0, -1.0));
+        let s = f
+            .cross(self.up)
+            .normalize()
+            .unwrap_or(Vec3::new(1.0, 0.0, 0.0));
         let u = s.cross(f);
         Matrix4::from_columns(
             Vec4::new(s.x, u.x, -f.x, 0.0),

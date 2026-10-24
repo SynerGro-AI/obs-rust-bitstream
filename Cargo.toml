@@ -30,21 +30,25 @@ objc2-core-video = { version = "0.3", optional = true }
 objc2-core-media = { version = "0.3", optional = true }
 dispatch2 = { version = "0.2", optional = true }
 libc = "0.2.191"
-eframe = { version = "0.29", optional = true }
+eframe = { version = "0.32", optional = true }
 image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png"] }
-egui-phosphor = { version = "0.7", optional = true }
+egui-phosphor = { version = "0.10", optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
-serde_json = { version = "1", optional = true }
+# float_roundtrip: project files must reload f64 state bit-for-bit
+serde_json = { version = "1", optional = true, features = ["float_roundtrip"] }
 ureq = { version = "2", optional = true, default-features = false, features = ["tls", "json"] }
 ab_glyph = { version = "0.2", optional = true }
-epaint_default_fonts = { version = "0.29", optional = true }
+epaint_default_fonts = { version = "0.32", optional = true }
 cpal = { version = "0.15", optional = true }
 rusty_h264 = "0.14"
+zip = { version = "9", optional = true, default-features = false, features = ["deflate-flate2"] }
+dirs = { version = "6", optional = true }
+rfd = { version = "0.17", optional = true, default-features = false, features = ["xdg-portal"] }
 windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_Foundation"], optional = true }
 
 [features]
 default = []
-ui = ["eframe", "image", "dep:egui-phosphor", "dep:serde", "dep:serde_json", "dep:ureq", "dep:ab_glyph", "dep:epaint_default_fonts"]
+ui = ["eframe", "image", "dep:egui-phosphor", "dep:serde", "dep:serde_json", "dep:ureq", "dep:ab_glyph", "dep:epaint_default_fonts", "dep:zip", "dep:rfd", "dep:dirs"]
 avfoundation = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-av-foundation", "dep:objc2-core-video", "dep:objc2-core-media", "dep:dispatch2"]
 audio = ["dep:cpal"]
 windows = ["dep:windows"]

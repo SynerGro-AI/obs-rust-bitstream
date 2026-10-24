@@ -63,6 +63,6 @@ mod tests {
         f.planes[0][0] = 255;
         DropShadow::apply(&mut f, 1, 1, 200).unwrap();
         // Pixel at (1,1) should be darkened
-        assert!(f.planes[0][1 * 4 + 1] < 128);
+        assert!(f.planes[0][4 + 1] < 128);
     }
 }

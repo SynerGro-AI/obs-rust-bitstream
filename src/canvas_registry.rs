@@ -49,7 +49,9 @@ impl CanvasRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Canvas, CanvasRegistryError> {
-        self.canvases.get_mut(name).ok_or(CanvasRegistryError::Missing)
+        self.canvases
+            .get_mut(name)
+            .ok_or(CanvasRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,8 +82,14 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = CanvasRegistry::new();
         r.add("a", 1, 1).unwrap();
-        assert!(matches!(r.add("a", 1, 1), Err(CanvasRegistryError::Duplicate)));
-        assert!(matches!(r.add("", 1, 1), Err(CanvasRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", 1, 1),
+            Err(CanvasRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", 1, 1),
+            Err(CanvasRegistryError::EmptyName)
+        ));
     }
 
     #[test]

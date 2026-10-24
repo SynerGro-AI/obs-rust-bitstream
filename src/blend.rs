@@ -39,7 +39,7 @@ impl Blend {
         if base.width != over.width || base.height != over.height {
             return Err(BlendError::SizeMismatch);
         }
-        if let (Some(dst), Some(src)) = (base.planes.get_mut(0), over.planes.get(0)) {
+        if let (Some(dst), Some(src)) = (base.planes.get_mut(0), over.planes.first()) {
             for (d, s) in dst.iter_mut().zip(src.iter()) {
                 *d = Self::pixel(*d, *s, mode);
             }

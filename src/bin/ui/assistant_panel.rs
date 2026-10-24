@@ -10,9 +10,11 @@ use crate::commands::{tools_json, AppCommand};
 use crate::llm::{self, AgentEvent, ChatMsg, LlmProvider, SeraphinaCli, ToolCall};
 use crate::prefs::Prefs;
 use crate::theme::{self, Palette, R_LG, SP_MD, SP_SM, SP_XS};
-use eframe::egui::{self, Rounding};
+use eframe::egui::{self, CornerRadius};
 use egui_phosphor::regular as ic;
-use obs_rust_bitstream::assistant::{AssistantBackend, ChatMessage, OfflineBackend, Role, WorkspaceContext};
+use obs_rust_bitstream::assistant::{
+    AssistantBackend, ChatMessage, OfflineBackend, Role, WorkspaceContext,
+};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
@@ -36,8 +38,15 @@ pub struct ActionLine {
 #[derive(Clone, Debug)]
 pub enum ItemKind {
     User,
-    Assistant { source: String },
-    Actions { batch: u64, lines: Vec<ActionLine>, undone: bool, settled: bool },
+    Assistant {
+        source: String,
+    },
+    Actions {
+        batch: u64,
+        lines: Vec<ActionLine>,
+        undone: bool,
+        settled: bool,
+    },
     Note,
 }
 
@@ -50,7 +59,11 @@ pub struct ChatItem {
 
 pub enum PanelRequest {
     UndoBatch(u64),
-    Run { cmd: AppCommand, batch: u64, line: usize },
+    Run {
+        cmd: AppCommand,
+        batch: u64,
+        line: usize,
+    },
 }
 
 pub struct AssistantPanel {
@@ -102,7 +115,13 @@ impl AssistantPanel {
             cli: None,
             cli_rx: None,
             prefs,
-            items: vec![ChatItem { kind: ItemKind::Assistant { source: "Seraphina".into() }, text: hello, rated: Some(true) }],
+            items: vec![ChatItem {
+                kind: ItemKind::Assistant {
+                    source: "Seraphina".into(),
+                },
+                text: hello,
+                rated: Some(true),
+            }],
             convo: Vec::new(),
             rx: None,
             rx_source: String::new(),
@@ -135,16 +154,35 @@ impl AssistantPanel {
     }
 
     fn system(&self, app_ctx: &str) -> ChatMsg {
-        ChatMsg::new("system", &format!("{}\n\nCurrent app state:\n{}\n\nLearned user preferences (live, incremental):\n{}", persona(), app_ctx, self.prefs.summary()))
+        ChatMsg::new(
+            "system",
+            &format!(
+                "{}\n\nCurrent app state:\n{}\n\nLearned user preferences (live, incremental):\n{}",
+                persona(),
+                app_ctx,
+                self.prefs.summary()
+            ),
+        )
     }
 
     /// Mark earlier un-undone AI batches as accepted (one update each).
     pub fn settle(&mut self) {
         let mut names = Vec::new();
         for it in &mut self.items {
-            if let ItemKind::Actions { lines, undone, settled, .. } = &mut it.kind {
+            if let ItemKind::Actions {
+                lines,
+                undone,
+                settled,
+                ..
+            } = &mut it.kind
+            {
                 if !*settled && !*undone {
-                    names.extend(lines.iter().filter(|l| l.status == LineStatus::Done).filter_map(|l| l.cmd.as_ref().map(|c| c.name())));
+                    names.extend(
+                        lines
+                            .iter()
+                            .filter(|l| l.status == LineStatus::Done)
+                            .filter_map(|l| l.cmd.as_ref().map(|c| c.name())),
+                    );
                 }
                 *settled = true;
             }
@@ -157,11 +195,22 @@ impl AssistantPanel {
     pub fn mark_undone(&mut self, batch: u64) {
         let mut names = Vec::new();
         for it in &mut self.items {
-            if let ItemKind::Actions { batch: b, lines, undone, settled } = &mut it.kind {
+            if let ItemKind::Actions {
+                batch: b,
+                lines,
+                undone,
+                settled,
+            } = &mut it.kind
+            {
                 if *b == batch && !*undone {
                     *undone = true;
                     *settled = true;
-                    names.extend(lines.iter().filter(|l| l.status == LineStatus::Done).filter_map(|l| l.cmd.as_ref().map(|c| c.name())));
+                    names.extend(
+                        lines
+                            .iter()
+                            .filter(|l| l.status == LineStatus::Done)
+                            .filter_map(|l| l.cmd.as_ref().map(|c| c.name())),
+                    );
                 }
             }
         }
@@ -172,7 +221,10 @@ impl AssistantPanel {
 
     pub fn mark_ran(&mut self, batch: u64, line: usize, result: Result<String, String>) {
         for it in &mut self.items {
-            if let ItemKind::Actions { batch: b, lines, .. } = &mut it.kind {
+            if let ItemKind::Actions {
+                batch: b, lines, ..
+            } = &mut it.kind
+            {
                 if *b == batch {
                     if let Some(l) = lines.get_mut(line) {
                         l.ran = true;
@@ -202,7 +254,11 @@ impl AssistantPanel {
         }
         self.input.clear();
         self.settle();
-        self.items.push(ChatItem { kind: ItemKind::User, text: text.clone(), rated: None });
+        self.items.push(ChatItem {
+            kind: ItemKind::User,
+            text: text.clone(),
+            rated: None,
+        });
         if let (Some(cli), true) = (&self.cli, SeraphinaCli::is_native_intent(&text)) {
             self.rx_source = format!("{} (local CLI)", cli.version);
             self.rx = Some(llm::spawn_cli(cli.clone(), text));
@@ -216,8 +272,16 @@ impl AssistantPanel {
             }
             None => {
                 let hist = vec![ChatMessage::new(Role::User, &text)];
-                let reply = OfflineBackend.respond(&hist, wctx).unwrap_or_else(|e| format!("{:?}", e));
-                self.items.push(ChatItem { kind: ItemKind::Assistant { source: "Offline stub".into() }, text: reply, rated: None });
+                let reply = OfflineBackend
+                    .respond(&hist, wctx)
+                    .unwrap_or_else(|e| format!("{:?}", e));
+                self.items.push(ChatItem {
+                    kind: ItemKind::Assistant {
+                        source: "Offline stub".into(),
+                    },
+                    text: reply,
+                    rated: None,
+                });
             }
         }
     }
@@ -246,10 +310,15 @@ impl AssistantPanel {
         if let Some(rx) = &self.remember_rx {
             if let Ok(AgentEvent::Done(r)) = rx.try_recv() {
                 let t = match r {
-                    Ok(_) => "Saved to Seraphina.AGI memory (~/.seraphina/wizard/memory.jsonl).".to_string(),
+                    Ok(_) => "Saved to Seraphina.AGI memory (~/.seraphina/wizard/memory.jsonl)."
+                        .to_string(),
                     Err(e) => format!("Couldn't save to Seraphina.AGI memory: {}", e),
                 };
-                self.items.push(ChatItem { kind: ItemKind::Note, text: t, rated: None });
+                self.items.push(ChatItem {
+                    kind: ItemKind::Note,
+                    text: t,
+                    rated: None,
+                });
                 self.remember_rx = None;
             }
         }
@@ -270,10 +339,20 @@ impl AssistantPanel {
             let source = self.rx_source.clone();
             match r {
                 Ok(reply) => {
-                    let text = if reply.content.is_empty() { std::mem::take(&mut self.streaming) } else { reply.content.clone() };
+                    let text = if reply.content.is_empty() {
+                        std::mem::take(&mut self.streaming)
+                    } else {
+                        reply.content.clone()
+                    };
                     self.streaming.clear();
                     if !text.trim().is_empty() {
-                        self.items.push(ChatItem { kind: ItemKind::Assistant { source: source.clone() }, text: text.clone(), rated: None });
+                        self.items.push(ChatItem {
+                            kind: ItemKind::Assistant {
+                                source: source.clone(),
+                            },
+                            text: text.clone(),
+                            rated: None,
+                        });
                     }
                     if self.provider.is_some() && !source.contains("local CLI") {
                         let mut m = ChatMsg::new("assistant", &text);
@@ -284,16 +363,27 @@ impl AssistantPanel {
                                 self.pending_calls = Some(reply.tool_calls);
                             } else {
                                 for c in &reply.tool_calls {
-                                    self.convo.push(ChatMsg::tool_result(&c.id, "skipped: tool-round limit reached"));
+                                    self.convo.push(ChatMsg::tool_result(
+                                        &c.id,
+                                        "skipped: tool-round limit reached",
+                                    ));
                                 }
-                                self.items.push(ChatItem { kind: ItemKind::Note, text: format!("Stopped after {} tool rounds.", MAX_ROUNDS), rated: None });
+                                self.items.push(ChatItem {
+                                    kind: ItemKind::Note,
+                                    text: format!("Stopped after {} tool rounds.", MAX_ROUNDS),
+                                    rated: None,
+                                });
                             }
                         }
                     }
                 }
                 Err(e) => {
                     self.streaming.clear();
-                    self.items.push(ChatItem { kind: ItemKind::Note, text: format!("{} error: {}", source, e), rated: None });
+                    self.items.push(ChatItem {
+                        kind: ItemKind::Note,
+                        text: format!("{} error: {}", source, e),
+                        rated: None,
+                    });
                 }
             }
         }
@@ -311,9 +401,24 @@ impl AssistantPanel {
     }
 
     /// Record executed tool calls and continue the conversation.
-    pub fn submit_results(&mut self, batch: u64, lines: Vec<ActionLine>, results: Vec<(String, String)>, app_ctx: &str) {
+    pub fn submit_results(
+        &mut self,
+        batch: u64,
+        lines: Vec<ActionLine>,
+        results: Vec<(String, String)>,
+        app_ctx: &str,
+    ) {
         if !lines.is_empty() {
-            self.items.push(ChatItem { kind: ItemKind::Actions { batch, lines, undone: false, settled: false }, text: String::new(), rated: None });
+            self.items.push(ChatItem {
+                kind: ItemKind::Actions {
+                    batch,
+                    lines,
+                    undone: false,
+                    settled: false,
+                },
+                text: String::new(),
+                rated: None,
+            });
         }
         for (id, r) in results {
             self.convo.push(ChatMsg::tool_result(&id, &r));
@@ -327,22 +432,39 @@ impl AssistantPanel {
     pub fn ui(&mut self, ui: &mut egui::Ui, p: &Palette, wctx: &WorkspaceContext, now: f64) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(ic::SPARKLE).size(16.0).color(p.accent));
-            ui.label(egui::RichText::new("Seraphina").size(14.0).strong().color(p.text));
+            ui.label(
+                egui::RichText::new("Seraphina")
+                    .size(14.0)
+                    .strong()
+                    .color(p.text),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::icon_button(ui, p, ic::BROOM, "Clear chat", false).clicked() && !self.is_busy() {
+                if theme::icon_button(ui, p, ic::BROOM, "Clear chat", false).clicked()
+                    && !self.is_busy()
+                {
                     self.settle();
                     self.items.truncate(1);
                     self.convo.clear();
                 }
-                let (c, t) = if self.provider.is_some() { (p.success, "LLM") } else { (p.warn, "Offline stub") };
+                let (c, t) = if self.provider.is_some() {
+                    (p.success, "LLM")
+                } else {
+                    (p.warn, "Offline stub")
+                };
                 theme::pill(ui, p, c, t).on_hover_text(self.backend_label());
             });
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label(theme::muted(p, &format!("{} · {} · {}", self.backend_label(), wctx.mode, wctx.tool)));
+            ui.label(theme::muted(
+                p,
+                &format!("{} · {} · {}", self.backend_label(), wctx.mode, wctx.tool),
+            ));
         });
         let cli_txt = match (&self.cli, &self.cli_rx) {
-            (Some(c), _) => format!("{} linked: remember / recall / triad run locally", c.version),
+            (Some(c), _) => format!(
+                "{} linked: remember / recall / triad run locally",
+                c.version
+            ),
             (None, Some(_)) => "Looking for the Seraphina.AGI CLI…".into(),
             (None, None) => "Seraphina.AGI CLI not found (pip install seraphina-agi)".into(),
         };
@@ -350,7 +472,7 @@ impl AssistantPanel {
         ui.add_space(SP_XS);
 
         let mut send = false;
-        egui::TopBottomPanel::bottom("assistant-input").frame(egui::Frame::none().inner_margin(egui::Margin::symmetric(0.0, SP_SM))).show_inside(ui, |ui| {
+        egui::TopBottomPanel::bottom("assistant-input").frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(0, SP_SM as i8))).show_inside(ui, |ui| {
             egui::CollapsingHeader::new(theme::section(p, &format!("Online learning · {} updates", self.prefs.bank.updates))).id_salt("learning").show(ui, |ui| {
                 ui.add(egui::Label::new(theme::muted(p, "Each accept, undo, 👍/👎 and tool choice is one golden-ratio EMA step (α 0.382, as in Seraphina.AGI's MercyLearningHeart). Nothing is retrained in bulk; the summary below goes into Seraphina's prompt.")).wrap());
                 ui.add(egui::Label::new(egui::RichText::new(self.prefs.summary()).size(11.5).color(p.text)).wrap());
@@ -360,6 +482,9 @@ impl AssistantPanel {
                 if let Some(path) = &self.prefs.path {
                     ui.add(egui::Label::new(theme::muted(p, &format!("Saved to {}", path.display()))).wrap());
                 }
+                if let Some(w) = &self.prefs.load_warning {
+                    ui.add(egui::Label::new(egui::RichText::new(w).color(p.warn).size(11.0)).wrap());
+                }
                 if let Some(e) = &self.prefs.last_error {
                     ui.label(egui::RichText::new(format!("Save failed: {}", e)).color(p.danger).size(11.0));
                 }
@@ -367,7 +492,7 @@ impl AssistantPanel {
             ui.add_space(SP_XS);
             ui.horizontal(|ui| {
                 let w = ui.available_width() - 64.0;
-                let r = ui.add_sized([w.max(80.0), 28.0], egui::TextEdit::singleline(&mut self.input).hint_text("Ask Seraphina to edit, explain or automate…").margin(egui::Margin::symmetric(SP_SM, 5.0)));
+                let r = ui.add_sized([w.max(80.0), 28.0], egui::TextEdit::singleline(&mut self.input).hint_text("Ask Seraphina to edit, explain or automate…").margin(egui::Margin::symmetric(SP_SM as i8, 5)));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     send = true;
                     r.request_focus();
@@ -392,13 +517,13 @@ impl AssistantPanel {
                         let user = matches!(it.kind, ItemKind::User);
                         ui.with_layout(egui::Layout::top_down(if user { egui::Align::Max } else { egui::Align::Min }), |ui| {
                             let (fill, fg) = if user { (p.accent, p.accent_text) } else { (p.surface_hi, p.text) };
-                            let mut rounding = Rounding::same(R_LG);
+                            let mut rounding = CornerRadius::same(R_LG as u8);
                             if user {
-                                rounding.se = 3.0
+                                rounding.se = 3
                             } else {
-                                rounding.sw = 3.0
+                                rounding.sw = 3
                             }
-                            egui::Frame::none().fill(fill).rounding(rounding).inner_margin(egui::Margin::symmetric(SP_MD, SP_SM)).show(ui, |ui| {
+                            egui::Frame::NONE.fill(fill).corner_radius(rounding).inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8)).show(ui, |ui| {
                                 ui.set_max_width(max_w);
                                 ui.add(egui::Label::new(egui::RichText::new(&it.text).color(fg).size(12.5)).wrap());
                             });
@@ -425,7 +550,7 @@ impl AssistantPanel {
                         }
                     }
                     ItemKind::Actions { batch, lines, undone, .. } => {
-                        egui::Frame::none().fill(p.surface).stroke(egui::Stroke::new(1.0_f32, p.line)).rounding(Rounding::same(6.0)).inner_margin(egui::Margin::same(SP_SM)).show(ui, |ui| {
+                        egui::Frame::NONE.fill(p.surface).stroke(egui::Stroke::new(1.0_f32, p.line)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(SP_SM as i8 - 1)).show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new(ic::LIGHTNING).color(p.accent));
@@ -467,7 +592,7 @@ impl AssistantPanel {
                 ui.add_space(SP_XS);
             }
             if self.is_busy() {
-                egui::Frame::none().fill(p.surface_hi).rounding(Rounding::same(R_LG)).inner_margin(egui::Margin::symmetric(SP_MD, SP_SM)).show(ui, |ui| {
+                egui::Frame::NONE.fill(p.surface_hi).corner_radius(CornerRadius::same(R_LG as u8)).inner_margin(egui::Margin::symmetric(SP_MD as i8, SP_SM as i8)).show(ui, |ui| {
                     ui.set_max_width(max_w);
                     if self.streaming.is_empty() {
                         ui.horizontal(|ui| {
@@ -492,5 +617,99 @@ impl AssistantPanel {
             let note: String = t.chars().take(400).collect::<String>().replace('\n', " ");
             self.remember_rx = Some(llm::spawn_cli(cli.clone(), format!("remember {}", note)));
         }
+    }
+}
+
+// ---- project files ------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChatItemFile {
+    /// "user", "assistant" or "note".
+    pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub text: String,
+    #[serde(default)]
+    pub rated: Option<bool>,
+}
+
+/// The Seraphina conversation in a `.seraphina` project (optional).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChatFile {
+    pub items: Vec<ChatItemFile>,
+}
+
+impl AssistantPanel {
+    /// Action logs are kept as notes: their one-click undo belongs to the
+    /// session that ran them.
+    pub fn to_file(&self) -> ChatFile {
+        let items = self
+            .items
+            .iter()
+            .map(|it| {
+                let (role, source, text) = match &it.kind {
+                    ItemKind::User => ("user", None, it.text.clone()),
+                    ItemKind::Assistant { source } => {
+                        ("assistant", Some(source.clone()), it.text.clone())
+                    }
+                    ItemKind::Actions { lines, .. } => {
+                        let l: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+                        let head = if it.text.is_empty() {
+                            "Seraphina ran".to_string()
+                        } else {
+                            it.text.clone()
+                        };
+                        ("note", None, format!("{}: {}", head, l.join("; ")))
+                    }
+                    ItemKind::Note => ("note", None, it.text.clone()),
+                };
+                ChatItemFile {
+                    role: role.into(),
+                    source,
+                    text,
+                    rated: it.rated,
+                }
+            })
+            .collect();
+        ChatFile { items }
+    }
+
+    /// Replace the conversation; the model context is rebuilt from the
+    /// user and assistant turns (the greeting is not part of it).
+    pub fn load_file(&mut self, f: ChatFile) {
+        self.rx = None;
+        self.pending_calls = None;
+        self.streaming.clear();
+        self.rounds = 0;
+        self.requests.clear();
+        self.convo.clear();
+        self.items = f
+            .items
+            .into_iter()
+            .map(|i| ChatItem {
+                kind: match i.role.as_str() {
+                    "user" => ItemKind::User,
+                    "assistant" => ItemKind::Assistant {
+                        source: i.source.unwrap_or_else(|| "Seraphina".into()),
+                    },
+                    _ => ItemKind::Note,
+                },
+                text: i.text,
+                rated: i.rated,
+            })
+            .collect();
+        for (n, it) in self.items.iter().enumerate() {
+            match it.kind {
+                ItemKind::User => self.convo.push(ChatMsg::new("user", &it.text)),
+                ItemKind::Assistant { .. } if n > 0 => {
+                    self.convo.push(ChatMsg::new("assistant", &it.text))
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn convo_len(&self) -> usize {
+        self.convo.len()
     }
 }

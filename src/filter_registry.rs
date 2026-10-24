@@ -49,7 +49,9 @@ impl FilterRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut FilterContext, FilterRegistryError> {
-        self.filters.get_mut(name).ok_or(FilterRegistryError::Missing)
+        self.filters
+            .get_mut(name)
+            .ok_or(FilterRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,8 +82,14 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = FilterRegistry::new();
         r.add("a", "id").unwrap();
-        assert!(matches!(r.add("a", "id"), Err(FilterRegistryError::Duplicate)));
-        assert!(matches!(r.add("", "id"), Err(FilterRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", "id"),
+            Err(FilterRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", "id"),
+            Err(FilterRegistryError::EmptyName)
+        ));
     }
 
     #[test]
@@ -97,7 +105,14 @@ mod tests {
     fn differential() {
         let mut r = FilterRegistry::new();
         r.add("gain", "gain_filter").unwrap();
-        r.get_mut("gain").unwrap().settings_mut().set_double("db", -6.0).unwrap();
-        assert_eq!(r.get("gain").unwrap().settings().get_double("db").unwrap(), -6.0);
+        r.get_mut("gain")
+            .unwrap()
+            .settings_mut()
+            .set_double("db", -6.0)
+            .unwrap();
+        assert_eq!(
+            r.get("gain").unwrap().settings().get_double("db").unwrap(),
+            -6.0
+        );
     }
 }

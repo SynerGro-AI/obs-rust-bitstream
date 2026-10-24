@@ -46,11 +46,6 @@ mod tests {
     #[test]
     fn differential_against_itself() {
         let inputs: &[&[u8]] = &[b"", b"a", b"123456789", b"hello"];
-        differential(
-            inputs,
-            |s| crc32(s),
-            |s| crc32(s),
-            "crc32",
-        );
+        differential(inputs, |s| crc32(s), |s| crc32(s), "crc32");
     }
 }

@@ -63,7 +63,9 @@ impl ShellLoopSocket {
 
     /// Run two sequences. Returns (one_len, two_len).
     pub fn run() -> (usize, usize) {
-        let one = Self::payload(&[ShellAction::NewLayer]).map(|p| p.len()).unwrap_or(0);
+        let one = Self::payload(&[ShellAction::NewLayer])
+            .map(|p| p.len())
+            .unwrap_or(0);
         let two = Self::payload(&[ShellAction::NewLayer, ShellAction::NewLayer])
             .map(|p| p.len())
             .unwrap_or(0);

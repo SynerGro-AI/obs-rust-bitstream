@@ -27,7 +27,11 @@ pub fn dot(a: V3, b: V3) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 pub fn cross(a: V3, b: V3) -> V3 {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 pub fn length(a: V3) -> f32 {
     dot(a, a).sqrt()
@@ -41,7 +45,11 @@ pub fn normalize(a: V3) -> V3 {
     }
 }
 pub fn lerp(a: V3, b: V3, t: f32) -> V3 {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
 }
 
 fn ekey(a: usize, b: usize) -> (usize, usize) {
@@ -53,6 +61,7 @@ fn ekey(a: usize, b: usize) -> (usize, usize) {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct PolyMesh {
     pub verts: Vec<V3>,
     pub faces: Vec<Vec<usize>>,
@@ -61,15 +70,34 @@ pub struct PolyMesh {
 impl PolyMesh {
     pub fn cube() -> Self {
         let h = 0.5;
-        let verts = vec![[-h, -h, -h], [h, -h, -h], [h, -h, h], [-h, -h, h], [-h, h, -h], [h, h, -h], [h, h, h], [-h, h, h]];
-        let faces = vec![vec![0, 1, 2, 3], vec![4, 7, 6, 5], vec![3, 2, 6, 7], vec![1, 0, 4, 5], vec![2, 1, 5, 6], vec![0, 3, 7, 4]];
+        let verts = vec![
+            [-h, -h, -h],
+            [h, -h, -h],
+            [h, -h, h],
+            [-h, -h, h],
+            [-h, h, -h],
+            [h, h, -h],
+            [h, h, h],
+            [-h, h, h],
+        ];
+        let faces = vec![
+            vec![0, 1, 2, 3],
+            vec![4, 7, 6, 5],
+            vec![3, 2, 6, 7],
+            vec![1, 0, 4, 5],
+            vec![2, 1, 5, 6],
+            vec![0, 3, 7, 4],
+        ];
         Self { verts, faces }
     }
 
     /// Unit quad in the XZ plane facing +Y.
     pub fn plane() -> Self {
         let h = 0.5;
-        Self { verts: vec![[-h, 0.0, -h], [h, 0.0, -h], [h, 0.0, h], [-h, 0.0, h]], faces: vec![vec![0, 3, 2, 1]] }
+        Self {
+            verts: vec![[-h, 0.0, -h], [h, 0.0, -h], [h, 0.0, h], [-h, 0.0, h]],
+            faces: vec![vec![0, 3, 2, 1]],
+        }
     }
 
     /// Cylinder of radius 0.5 and height 1 with `n` sides (quads) and n-gon caps.
@@ -106,7 +134,9 @@ impl PolyMesh {
 
     pub fn centroid(&self) -> V3 {
         let n = self.verts.len().max(1) as f32;
-        self.verts.iter().fold([0.0; 3], |a, v| add(a, scale(*v, 1.0 / n)))
+        self.verts
+            .iter()
+            .fold([0.0; 3], |a, v| add(a, scale(*v, 1.0 / n)))
     }
 
     /// Newell normal (unit length; zero for degenerate faces).
@@ -126,7 +156,8 @@ impl PolyMesh {
     pub fn face_center(&self, f: usize) -> V3 {
         let face = &self.faces[f];
         let k = 1.0 / face.len().max(1) as f32;
-        face.iter().fold([0.0; 3], |a, &i| add(a, scale(self.verts[i], k)))
+        face.iter()
+            .fold([0.0; 3], |a, &i| add(a, scale(self.verts[i], k)))
     }
 
     /// Unique undirected edges.
@@ -144,7 +175,9 @@ impl PolyMesh {
         let mut m: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
         for (fi, f) in self.faces.iter().enumerate() {
             for i in 0..f.len() {
-                m.entry(ekey(f[i], f[(i + 1) % f.len()])).or_default().push(fi);
+                m.entry(ekey(f[i], f[(i + 1) % f.len()]))
+                    .or_default()
+                    .push(fi);
             }
         }
         m
@@ -159,7 +192,10 @@ impl PolyMesh {
                 *dir.entry((a, b)).or_insert(0) += 1;
             }
         }
-        !dir.is_empty() && dir.iter().all(|(&(a, b), &c)| c == 1 && dir.get(&(b, a)) == Some(&1))
+        !dir.is_empty()
+            && dir
+                .iter()
+                .all(|(&(a, b), &c)| c == 1 && dir.get(&(b, a)) == Some(&1))
     }
 
     /// Insert every vertex that lies on the interior of a face edge into that
@@ -206,7 +242,10 @@ impl PolyMesh {
         let mut v = 0.0;
         for f in &self.faces {
             for i in 1..f.len().saturating_sub(1) {
-                v += dot(self.verts[f[0]], cross(self.verts[f[i]], self.verts[f[i + 1]])) / 6.0;
+                v += dot(
+                    self.verts[f[0]],
+                    cross(self.verts[f[i]], self.verts[f[i + 1]]),
+                ) / 6.0;
             }
         }
         v
@@ -217,13 +256,21 @@ impl PolyMesh {
         (0..self.faces.len()).max_by(|&a, &b| {
             let ka = (self.face_normal(a)[1] * 1000.0).round() as i64;
             let kb = (self.face_normal(b)[1] * 1000.0).round() as i64;
-            ka.cmp(&kb).then(self.face_center(a)[1].partial_cmp(&self.face_center(b)[1]).unwrap_or(std::cmp::Ordering::Equal))
+            ka.cmp(&kb).then(
+                self.face_center(a)[1]
+                    .partial_cmp(&self.face_center(b)[1])
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
         })
     }
 
     fn check_face(&self, f: usize) -> Result<(), String> {
         if f >= self.faces.len() {
-            Err(format!("face {} doesn't exist (mesh has {})", f, self.faces.len()))
+            Err(format!(
+                "face {} doesn't exist (mesh has {})",
+                f,
+                self.faces.len()
+            ))
         } else {
             Ok(())
         }
@@ -250,7 +297,10 @@ impl PolyMesh {
     pub fn extrude(&mut self, f: usize, d: f32) -> Result<(), String> {
         self.check_face(f)?;
         let n = self.face_normal(f);
-        let ring = self.faces[f].iter().map(|&i| add(self.verts[i], scale(n, d))).collect();
+        let ring = self.faces[f]
+            .iter()
+            .map(|&i| add(self.verts[i], scale(n, d)))
+            .collect();
         self.ring_op(f, ring, d >= 0.0);
         Ok(())
     }
@@ -261,7 +311,10 @@ impl PolyMesh {
         let inset = inset.clamp(0.0, 0.45);
         let n = self.face_normal(f);
         let c = self.face_center(f);
-        let ring = self.faces[f].iter().map(|&i| add(lerp(self.verts[i], c, inset), scale(n, lift))).collect();
+        let ring = self.faces[f]
+            .iter()
+            .map(|&i| add(lerp(self.verts[i], c, inset), scale(n, lift)))
+            .collect();
         self.ring_op(f, ring, lift >= 0.0);
         Ok(())
     }
@@ -289,13 +342,24 @@ impl PolyMesh {
         let t = t.clamp(0.02, 0.98);
         let ef = self.edge_faces();
         let start = ekey(a, b);
-        let adj = ef.get(&start).cloned().ok_or_else(|| format!("{}–{} isn't an edge of this mesh", a, b))?;
+        let adj = ef
+            .get(&start)
+            .cloned()
+            .ok_or_else(|| format!("{}–{} isn't an edge of this mesh", a, b))?;
         // directed ring edges and the quads crossed (face, in-edge position)
         let mut ring: Vec<(usize, usize)> = vec![(a, b)];
         let mut crossed: Vec<usize> = Vec::new();
         let mut closed = false;
-        let walk = |first_face: usize, ring: &mut Vec<(usize, usize)>, crossed: &mut Vec<usize>, forward: bool| -> bool {
-            let mut cur = if forward { *ring.last().unwrap_or(&(a, b)) } else { ring[0] };
+        let walk = |first_face: usize,
+                    ring: &mut Vec<(usize, usize)>,
+                    crossed: &mut Vec<usize>,
+                    forward: bool|
+         -> bool {
+            let mut cur = if forward {
+                *ring.last().unwrap_or(&(a, b))
+            } else {
+                ring[0]
+            };
             let mut face = first_face;
             loop {
                 if crossed.contains(&face) {
@@ -305,9 +369,16 @@ impl PolyMesh {
                 if q.len() != 4 {
                     return false;
                 }
-                let Some(i) = (0..4).find(|&i| ekey(q[i], q[(i + 1) % 4]) == ekey(cur.0, cur.1)) else { return false };
+                let Some(i) = (0..4).find(|&i| ekey(q[i], q[(i + 1) % 4]) == ekey(cur.0, cur.1))
+                else {
+                    return false;
+                };
                 let same = q[i] == cur.0;
-                let next = if same { (q[(i + 3) % 4], q[(i + 2) % 4]) } else { (q[(i + 2) % 4], q[(i + 3) % 4]) };
+                let next = if same {
+                    (q[(i + 3) % 4], q[(i + 2) % 4])
+                } else {
+                    (q[(i + 2) % 4], q[(i + 3) % 4])
+                };
                 crossed.push(face);
                 if ekey(next.0, next.1) == start {
                     return true;
@@ -339,15 +410,17 @@ impl PolyMesh {
         let mut mid: HashMap<(usize, usize), usize> = HashMap::new();
         for &(u, v) in &ring {
             let k = ekey(u, v);
-            if !mid.contains_key(&k) {
+            if let std::collections::hash_map::Entry::Vacant(e) = mid.entry(k) {
                 self.verts.push(lerp(self.verts[u], self.verts[v], t));
-                mid.insert(k, self.verts.len() - 1);
+                e.insert(self.verts.len() - 1);
             }
         }
         let mut new_faces = Vec::new();
         for &fi in &crossed {
             let q = self.faces[fi].clone();
-            let ring_pos: Vec<usize> = (0..4).filter(|&i| mid.contains_key(&ekey(q[i], q[(i + 1) % 4]))).collect();
+            let ring_pos: Vec<usize> = (0..4)
+                .filter(|&i| mid.contains_key(&ekey(q[i], q[(i + 1) % 4])))
+                .collect();
             if ring_pos.len() != 2 {
                 continue;
             }
@@ -391,12 +464,22 @@ impl PolyMesh {
 
     /// Split face `f` with a cut from edge `ei` (at `ti`) to edge `ej` (at `tj`).
     /// Edge k runs from corner k to corner k+1 of the face.
-    pub fn multi_cut(&mut self, f: usize, ei: usize, ti: f32, ej: usize, tj: f32) -> Result<(), String> {
+    pub fn multi_cut(
+        &mut self,
+        f: usize,
+        ei: usize,
+        ti: f32,
+        ej: usize,
+        tj: f32,
+    ) -> Result<(), String> {
         self.check_face(f)?;
         let face = self.faces[f].clone();
         let n = face.len();
         if ei >= n || ej >= n || ei == ej {
-            return Err(format!("pick two different edges of face {} (it has {})", f, n));
+            return Err(format!(
+                "pick two different edges of face {} (it has {})",
+                f, n
+            ));
         }
         let (ti, tj) = (ti.clamp(0.02, 0.98), tj.clamp(0.02, 0.98));
         let mut mid = HashMap::new();
@@ -449,15 +532,25 @@ impl PolyMesh {
         let a = self.faces[fa].clone();
         let b = self.faces[fb].clone();
         if a.len() != b.len() {
-            return Err(format!("bridge needs faces with the same number of corners ({} vs {})", a.len(), b.len()));
+            return Err(format!(
+                "bridge needs faces with the same number of corners ({} vs {})",
+                a.len(),
+                b.len()
+            ));
         }
         let n = a.len();
         // b reversed, best rotation
         let br: Vec<usize> = b.iter().rev().copied().collect();
         let best = (0..n)
             .min_by(|&x, &y| {
-                let cost = |k: usize| (0..n).map(|i| length(sub(self.verts[a[i]], self.verts[br[(i + k) % n]]))).sum::<f32>();
-                cost(x).partial_cmp(&cost(y)).unwrap_or(std::cmp::Ordering::Equal)
+                let cost = |k: usize| {
+                    (0..n)
+                        .map(|i| length(sub(self.verts[a[i]], self.verts[br[(i + k) % n]])))
+                        .sum::<f32>()
+                };
+                cost(x)
+                    .partial_cmp(&cost(y))
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
             .unwrap_or(0);
         let m: Vec<usize> = (0..n).map(|i| br[(i + best) % n]).collect();
@@ -478,7 +571,12 @@ impl PolyMesh {
         let vo = self.verts.len();
         let fo = self.faces.len();
         self.verts.extend(other.verts.iter().copied());
-        self.faces.extend(other.faces.iter().map(|f| f.iter().map(|i| i + vo).collect()));
+        self.faces.extend(
+            other
+                .faces
+                .iter()
+                .map(|f| f.iter().map(|i| i + vo).collect()),
+        );
         fo
     }
 
@@ -541,7 +639,10 @@ impl PolyMesh {
     }
 
     pub fn transformed(&self, m: impl Fn(V3) -> V3) -> PolyMesh {
-        PolyMesh { verts: self.verts.iter().map(|v| m(*v)).collect(), faces: self.faces.clone() }
+        PolyMesh {
+            verts: self.verts.iter().map(|v| m(*v)).collect(),
+            faces: self.faces.clone(),
+        }
     }
 }
 
@@ -598,13 +699,19 @@ impl CPoly {
         if v.len() < 3 {
             return None;
         }
-        let m = PolyMesh { verts: v.clone(), faces: vec![(0..v.len()).collect()] };
+        let m = PolyMesh {
+            verts: v.clone(),
+            faces: vec![(0..v.len()).collect()],
+        };
         let n = m.face_normal(0);
         if length(n) < 0.5 {
             return None;
         }
         let w = dot(n, v[0]);
-        Some(Self { v, plane: CPlane { n, w } })
+        Some(Self {
+            v,
+            plane: CPlane { n, w },
+        })
     }
     fn flip(&mut self) {
         self.v.reverse();
@@ -612,7 +719,14 @@ impl CPoly {
     }
 }
 
-fn split_polygon(plane: &CPlane, poly: CPoly, cf: &mut Vec<CPoly>, cb: &mut Vec<CPoly>, front: &mut Vec<CPoly>, back: &mut Vec<CPoly>) {
+fn split_polygon(
+    plane: &CPlane,
+    poly: CPoly,
+    cf: &mut Vec<CPoly>,
+    cb: &mut Vec<CPoly>,
+    front: &mut Vec<CPoly>,
+    back: &mut Vec<CPoly>,
+) {
     const COPLANAR: u8 = 0;
     const FRONT: u8 = 1;
     const BACK: u8 = 2;
@@ -623,7 +737,13 @@ fn split_polygon(plane: &CPlane, poly: CPoly, cf: &mut Vec<CPoly>, cb: &mut Vec<
         .iter()
         .map(|v| {
             let t = dot(plane.n, *v) - plane.w;
-            let ty = if t < -CSG_EPS { BACK } else if t > CSG_EPS { FRONT } else { COPLANAR };
+            let ty = if t < -CSG_EPS {
+                BACK
+            } else if t > CSG_EPS {
+                FRONT
+            } else {
+                COPLANAR
+            };
             ptype |= ty;
             ty
         })
@@ -659,10 +779,16 @@ fn split_polygon(plane: &CPlane, poly: CPoly, cf: &mut Vec<CPoly>, cb: &mut Vec<
                 }
             }
             if f.len() >= 3 {
-                front.push(CPoly { v: f, plane: poly.plane.clone() });
+                front.push(CPoly {
+                    v: f,
+                    plane: poly.plane.clone(),
+                });
             }
             if b.len() >= 3 {
-                back.push(CPoly { v: b, plane: poly.plane });
+                back.push(CPoly {
+                    v: b,
+                    plane: poly.plane,
+                });
             }
         }
     }
@@ -700,7 +826,9 @@ impl BspNode {
     }
 
     fn clip_polygons(&self, polys: Vec<CPoly>) -> Vec<CPoly> {
-        let Some(plane) = &self.plane else { return polys };
+        let Some(plane) = &self.plane else {
+            return polys;
+        };
         let (mut f, mut b) = (Vec::new(), Vec::new());
         for p in polys {
             let (mut cf, mut cb) = (Vec::new(), Vec::new());
@@ -750,7 +878,10 @@ impl BspNode {
             self.polys.extend(polys);
             return;
         }
-        let plane = self.plane.get_or_insert_with(|| polys[0].plane.clone()).clone();
+        let plane = self
+            .plane
+            .get_or_insert_with(|| polys[0].plane.clone())
+            .clone();
         let (mut f, mut b, mut cf, mut cb) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for p in polys {
             split_polygon(&plane, p, &mut cf, &mut cb, &mut f, &mut b);
@@ -758,16 +889,23 @@ impl BspNode {
         self.polys.extend(cf);
         self.polys.extend(cb);
         if !f.is_empty() {
-            self.front.get_or_insert_with(Default::default).build(f, depth + 1);
+            self.front
+                .get_or_insert_with(Default::default)
+                .build(f, depth + 1);
         }
         if !b.is_empty() {
-            self.back.get_or_insert_with(Default::default).build(b, depth + 1);
+            self.back
+                .get_or_insert_with(Default::default)
+                .build(b, depth + 1);
         }
     }
 }
 
 fn to_polys(m: &PolyMesh) -> Vec<CPoly> {
-    m.faces.iter().filter_map(|f| CPoly::new(f.iter().map(|&i| m.verts[i]).collect())).collect()
+    m.faces
+        .iter()
+        .filter_map(|f| CPoly::new(f.iter().map(|&i| m.verts[i]).collect()))
+        .collect()
 }
 
 fn from_polys(polys: Vec<CPoly>) -> PolyMesh {
@@ -776,7 +914,11 @@ fn from_polys(polys: Vec<CPoly>) -> PolyMesh {
     for p in polys {
         let mut f = Vec::with_capacity(p.v.len());
         for v in p.v {
-            let k = ((v[0] * 1e4).round() as i64, (v[1] * 1e4).round() as i64, (v[2] * 1e4).round() as i64);
+            let k = (
+                (v[0] * 1e4).round() as i64,
+                (v[1] * 1e4).round() as i64,
+                (v[2] * 1e4).round() as i64,
+            );
             let i = *index.entry(k).or_insert_with(|| {
                 m.verts.push(v);
                 m.verts.len() - 1
@@ -892,9 +1034,15 @@ pub fn shade(normal: V3, to_light: V3, to_eye: V3, base: [u8; 3]) -> [u8; 3] {
     if dot(n, to_eye) < 0.0 {
         n = scale(n, -1.0); // two-sided for open meshes
     }
-    let k = 0.2 + 0.6 * dot(n, normalize(to_light)).max(0.0) + 0.25 * dot(n, normalize(to_eye)).max(0.0);
+    let k = 0.2
+        + 0.6 * dot(n, normalize(to_light)).max(0.0)
+        + 0.25 * dot(n, normalize(to_eye)).max(0.0);
     let k = k.min(1.15);
-    [(base[0] as f32 * k).min(255.0) as u8, (base[1] as f32 * k).min(255.0) as u8, (base[2] as f32 * k).min(255.0) as u8]
+    [
+        (base[0] as f32 * k).min(255.0) as u8,
+        (base[1] as f32 * k).min(255.0) as u8,
+        (base[2] as f32 * k).min(255.0) as u8,
+    ]
 }
 
 /// Surface parameters for [`shade_surface`] (linear-RGB base colour).
@@ -915,7 +1063,17 @@ impl Surface {
     }
 
     pub fn from_srgb8(c: [u8; 3], metalness: f32, roughness: f32, ior: f32) -> Self {
-        Self { base: [srgb_to_linear(c[0]), srgb_to_linear(c[1]), srgb_to_linear(c[2])], metalness, roughness, ior, transmission: 0.0 }
+        Self {
+            base: [
+                srgb_to_linear(c[0]),
+                srgb_to_linear(c[1]),
+                srgb_to_linear(c[2]),
+            ],
+            metalness,
+            roughness,
+            ior,
+            transmission: 0.0,
+        }
     }
 
     /// Normal-incidence reflectance per channel: the base colour for metals,
@@ -923,7 +1081,11 @@ impl Surface {
     pub fn f0(&self) -> [f32; 3] {
         let d = ((self.ior - 1.0) / (self.ior + 1.0)).powi(2);
         let m = self.metalness.clamp(0.0, 1.0);
-        [d + (self.base[0] - d) * m, d + (self.base[1] - d) * m, d + (self.base[2] - d) * m]
+        [
+            d + (self.base[0] - d) * m,
+            d + (self.base[1] - d) * m,
+            d + (self.base[2] - d) * m,
+        ]
     }
 
     /// Blinn-Phong exponent from roughness (Walter et al. 2007 mapping α → 2/α² − 2, α = r²).
@@ -944,7 +1106,11 @@ pub fn srgb_to_linear(c: u8) -> f32 {
 
 pub fn linear_to_srgb(c: f32) -> u8 {
     let c = c.clamp(0.0, 1.0);
-    let s = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 };
+    let s = if c <= 0.0031308 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    };
     (s * 255.0).round() as u8
 }
 
@@ -995,13 +1161,22 @@ pub fn shade_surface(normal: V3, to_light: V3, to_eye: V3, s: &Surface) -> [u8; 
         let f = f0[k] + (1.0 - f0[k]) * fres;
         let fv = f0[k] + (1.0 - f0[k]) * fres_v * (1.0 - rough);
         let diffuse = s.base[k] * (1.0 - metal) * (1.0 - f);
-        out[k] = ENV * (0.30 * diffuse * env_diff + fv * env_spec) + LIGHT * (diffuse * ndl * 0.6 + f * spec * 0.25);
+        out[k] = ENV * (0.30 * diffuse * env_diff + fv * env_spec)
+            + LIGHT * (diffuse * ndl * 0.6 + f * spec * 0.25);
     }
     // hue-preserving Reinhard shoulder on the max channel, so a bright
     // copper highlight stays copper instead of clipping to white
     let m = out[0].max(out[1]).max(out[2]);
-    let k = if m > 0.6 { (0.6 + (m - 0.6) / (1.0 + (m - 0.6) / 0.4)) / m } else { 1.0 };
-    [linear_to_srgb(out[0] * k), linear_to_srgb(out[1] * k), linear_to_srgb(out[2] * k)]
+    let k = if m > 0.6 {
+        (0.6 + (m - 0.6) / (1.0 + (m - 0.6) / 0.4)) / m
+    } else {
+        1.0
+    };
+    [
+        linear_to_srgb(out[0] * k),
+        linear_to_srgb(out[1] * k),
+        linear_to_srgb(out[2] * k),
+    ]
 }
 
 /// Colour + depth + id buffers.
@@ -1016,25 +1191,53 @@ pub struct Frame3d {
 impl Frame3d {
     pub fn new(w: usize, h: usize, bg: [u8; 3]) -> Self {
         let mut rgba = vec![255u8; w * h * 4];
-        for px in rgba.chunks_exact_mut(4) {
+        for px in rgba.as_chunks_mut::<4>().0 {
             px[0] = bg[0];
             px[1] = bg[1];
             px[2] = bg[2];
         }
-        Self { w, h, rgba, depth: vec![f32::INFINITY; w * h], ids: vec![0; w * h] }
+        Self {
+            w,
+            h,
+            rgba,
+            depth: vec![f32::INFINITY; w * h],
+            ids: vec![0; w * h],
+        }
     }
 
     /// Fill a screen-space triangle (x, y, view depth) with depth testing.
     pub fn tri(&mut self, p: [[f32; 3]; 3], color: [u8; 3], id: u32) {
-        let edge = |a: [f32; 3], b: [f32; 3], x: f32, y: f32| (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+        let edge = |a: [f32; 3], b: [f32; 3], x: f32, y: f32| {
+            (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
+        };
         let area = edge(p[0], p[1], p[2][0], p[2][1]);
         if area.abs() < 1e-8 {
             return;
         }
-        let minx = p.iter().map(|v| v[0]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-        let maxx = (p.iter().map(|v| v[0]).fold(f32::NEG_INFINITY, f32::max).ceil() as i64).min(self.w as i64 - 1);
-        let miny = p.iter().map(|v| v[1]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-        let maxy = (p.iter().map(|v| v[1]).fold(f32::NEG_INFINITY, f32::max).ceil() as i64).min(self.h as i64 - 1);
+        let minx = p
+            .iter()
+            .map(|v| v[0])
+            .fold(f32::INFINITY, f32::min)
+            .floor()
+            .max(0.0) as usize;
+        let maxx = (p
+            .iter()
+            .map(|v| v[0])
+            .fold(f32::NEG_INFINITY, f32::max)
+            .ceil() as i64)
+            .min(self.w as i64 - 1);
+        let miny = p
+            .iter()
+            .map(|v| v[1])
+            .fold(f32::INFINITY, f32::min)
+            .floor()
+            .max(0.0) as usize;
+        let maxy = (p
+            .iter()
+            .map(|v| v[1])
+            .fold(f32::NEG_INFINITY, f32::max)
+            .ceil() as i64)
+            .min(self.h as i64 - 1);
         if maxx < 0 || maxy < 0 {
             return;
         }
@@ -1065,15 +1268,37 @@ impl Frame3d {
     /// Like [`tri`] but blends `color` over the existing pixel by `alpha`
     /// (transparent surfaces drawn after opaque ones).
     pub fn tri_alpha(&mut self, p: [[f32; 3]; 3], color: [u8; 3], alpha: f32, id: u32) {
-        let edge = |a: [f32; 3], b: [f32; 3], x: f32, y: f32| (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+        let edge = |a: [f32; 3], b: [f32; 3], x: f32, y: f32| {
+            (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])
+        };
         let area = edge(p[0], p[1], p[2][0], p[2][1]);
         if area.abs() < 1e-8 {
             return;
         }
-        let minx = p.iter().map(|v| v[0]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-        let maxx = (p.iter().map(|v| v[0]).fold(f32::NEG_INFINITY, f32::max).ceil() as i64).min(self.w as i64 - 1);
-        let miny = p.iter().map(|v| v[1]).fold(f32::INFINITY, f32::min).floor().max(0.0) as usize;
-        let maxy = (p.iter().map(|v| v[1]).fold(f32::NEG_INFINITY, f32::max).ceil() as i64).min(self.h as i64 - 1);
+        let minx = p
+            .iter()
+            .map(|v| v[0])
+            .fold(f32::INFINITY, f32::min)
+            .floor()
+            .max(0.0) as usize;
+        let maxx = (p
+            .iter()
+            .map(|v| v[0])
+            .fold(f32::NEG_INFINITY, f32::max)
+            .ceil() as i64)
+            .min(self.w as i64 - 1);
+        let miny = p
+            .iter()
+            .map(|v| v[1])
+            .fold(f32::INFINITY, f32::min)
+            .floor()
+            .max(0.0) as usize;
+        let maxy = (p
+            .iter()
+            .map(|v| v[1])
+            .fold(f32::NEG_INFINITY, f32::max)
+            .ceil() as i64)
+            .min(self.h as i64 - 1);
         if maxx < 0 || maxy < 0 {
             return;
         }
@@ -1137,21 +1362,42 @@ impl Frame3d {
 
     /// Draw a mesh already placed in world space (flat Lambert).
     #[allow(clippy::too_many_arguments)]
-    pub fn mesh(&mut self, cam: &Camera, m: &PolyMesh, base: [u8; 3], light_pos: V3, id_base: u32, wire: Option<[u8; 4]>) {
-        self.mesh_with(cam, m, light_pos, id_base, wire, |n, l, v| shade(n, l, v, base));
+    pub fn mesh(
+        &mut self,
+        cam: &Camera,
+        m: &PolyMesh,
+        base: [u8; 3],
+        light_pos: V3,
+        id_base: u32,
+        wire: Option<[u8; 4]>,
+    ) {
+        self.mesh_with(cam, m, light_pos, id_base, wire, |n, l, v| {
+            shade(n, l, v, base)
+        });
     }
 
     /// Draw a mesh with a material surface (Blinn-Phong); `tint` mixes the
     /// shaded colour toward a highlight colour (selection) by `tint.3`.
     #[allow(clippy::too_many_arguments)]
-    pub fn mesh_surface(&mut self, cam: &Camera, m: &PolyMesh, s: &Surface, light_pos: V3, id_base: u32, wire: Option<[u8; 4]>, tint: Option<([u8; 3], f32)>) {
+    pub fn mesh_surface(
+        &mut self,
+        cam: &Camera,
+        m: &PolyMesh,
+        s: &Surface,
+        light_pos: V3,
+        id_base: u32,
+        wire: Option<[u8; 4]>,
+        tint: Option<([u8; 3], f32)>,
+    ) {
         if s.transmission > 0.0 {
             return self.mesh_clear(cam, m, s, light_pos, id_base, wire, tint);
         }
         self.mesh_with(cam, m, light_pos, id_base, wire, |n, l, v| {
             let c = shade_surface(n, l, v, s);
             match tint {
-                Some((t, k)) => [0, 1, 2].map(|i| (c[i] as f32 + (t[i] as f32 - c[i] as f32) * k).round() as u8),
+                Some((t, k)) => {
+                    [0, 1, 2].map(|i| (c[i] as f32 + (t[i] as f32 - c[i] as f32) * k).round() as u8)
+                }
                 None => c,
             }
         });
@@ -1162,19 +1408,31 @@ impl Frame3d {
     /// reflectance at the view angle (glass edges look more reflective).
     /// No refraction or depth sorting between transparent objects.
     #[allow(clippy::too_many_arguments)]
-    fn mesh_clear(&mut self, cam: &Camera, m: &PolyMesh, s: &Surface, light_pos: V3, id_base: u32, wire: Option<[u8; 4]>, tint: Option<([u8; 3], f32)>) {
+    fn mesh_clear(
+        &mut self,
+        cam: &Camera,
+        m: &PolyMesh,
+        s: &Surface,
+        light_pos: V3,
+        id_base: u32,
+        wire: Option<[u8; 4]>,
+        tint: Option<([u8; 3], f32)>,
+    ) {
         let (w, h) = (self.w as f32, self.h as f32);
         let eye = cam.eye();
         let proj: Vec<Option<[f32; 3]>> = m.verts.iter().map(|v| cam.project(*v, w, h)).collect();
         let f0 = s.f0()[1];
         for (fi, tri) in m.triangles() {
-            let (Some(a), Some(b), Some(c)) = (proj[tri[0]], proj[tri[1]], proj[tri[2]]) else { continue };
+            let (Some(a), Some(b), Some(c)) = (proj[tri[0]], proj[tri[1]], proj[tri[2]]) else {
+                continue;
+            };
             let n = m.face_normal(fi);
             let ctr = m.face_center(fi);
             let v = normalize(sub(eye, ctr));
             let mut col = shade_surface(n, sub(light_pos, ctr), sub(eye, ctr), s);
             if let Some((t, k)) = tint {
-                col = [0, 1, 2].map(|i| (col[i] as f32 + (t[i] as f32 - col[i] as f32) * k).round() as u8);
+                col = [0, 1, 2]
+                    .map(|i| (col[i] as f32 + (t[i] as f32 - col[i] as f32) * k).round() as u8);
             }
             let cos = dot(normalize(n), v).abs();
             let fres = f0 + (1.0 - f0) * (1.0 - cos).powi(5);
@@ -1192,12 +1450,22 @@ impl Frame3d {
         }
     }
 
-    fn mesh_with(&mut self, cam: &Camera, m: &PolyMesh, light_pos: V3, id_base: u32, wire: Option<[u8; 4]>, sh: impl Fn(V3, V3, V3) -> [u8; 3]) {
+    fn mesh_with(
+        &mut self,
+        cam: &Camera,
+        m: &PolyMesh,
+        light_pos: V3,
+        id_base: u32,
+        wire: Option<[u8; 4]>,
+        sh: impl Fn(V3, V3, V3) -> [u8; 3],
+    ) {
         let (w, h) = (self.w as f32, self.h as f32);
         let eye = cam.eye();
         let proj: Vec<Option<[f32; 3]>> = m.verts.iter().map(|v| cam.project(*v, w, h)).collect();
         for (fi, tri) in m.triangles() {
-            let (Some(a), Some(b), Some(c)) = (proj[tri[0]], proj[tri[1]], proj[tri[2]]) else { continue };
+            let (Some(a), Some(b), Some(c)) = (proj[tri[0]], proj[tri[1]], proj[tri[2]]) else {
+                continue;
+            };
             let n = m.face_normal(fi);
             let ctr = m.face_center(fi);
             let col = sh(n, sub(light_pos, ctr), sub(eye, ctr));
@@ -1287,7 +1555,10 @@ mod tests {
         assert_eq!(p.edge_loop(0, 3, 0.5).unwrap(), 1);
         assert_eq!(p.faces.len(), 2);
 
-        let mut tri = PolyMesh { verts: vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], faces: vec![vec![0, 2, 1]] };
+        let mut tri = PolyMesh {
+            verts: vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+            faces: vec![vec![0, 2, 1]],
+        };
         assert!(tri.edge_loop(0, 1, 0.5).is_err());
         assert!(PolyMesh::cube().edge_loop(0, 6, 0.5).is_err());
     }
@@ -1334,12 +1605,23 @@ mod tests {
         // a cylinder drilled through a cube
         let drill = PolyMesh::cylinder(12).transformed(|v| [v[0] * 0.6, v[1] * 2.0, v[2] * 0.6]);
         let holed = boolean(&a, &drill, BoolOp::Difference);
-        assert!(holed.is_closed(), "drilled cube is watertight after T-junction repair");
+        assert!(
+            holed.is_closed(),
+            "drilled cube is watertight after T-junction repair"
+        );
         // same-height cylinder: coplanar caps on both ends
-        let flush = boolean(&PolyMesh::cube(), &PolyMesh::cylinder(16).transformed(|v| [v[0] * 0.6, v[1], v[2] * 0.6]), BoolOp::Difference);
+        let flush = boolean(
+            &PolyMesh::cube(),
+            &PolyMesh::cylinder(16).transformed(|v| [v[0] * 0.6, v[1], v[2] * 0.6]),
+            BoolOp::Difference,
+        );
         assert!(flush.is_closed(), "flush difference is watertight");
         let hole = 0.5 * 16.0 * 0.09 * (std::f32::consts::TAU / 16.0).sin();
-        assert!((flush.volume() - (1.0 - hole)).abs() < 1e-3, "{}", flush.volume());
+        assert!(
+            (flush.volume() - (1.0 - hole)).abs() < 1e-3,
+            "{}",
+            flush.volume()
+        );
         let hole = 12.0 / 2.0 * 0.09 * (std::f32::consts::TAU / 12.0).sin();
         assert!(near(holed.volume(), 1.0 - hole, 2e-3), "{}", holed.volume());
         assert_eq!(BoolOp::parse("Subtract"), Some(BoolOp::Difference));
@@ -1348,8 +1630,26 @@ mod tests {
     #[test]
     fn quad_draw_welds_shared_edges() {
         let mut m = PolyMesh::default();
-        m.quad_draw(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]], 0.05, None);
-        m.quad_draw(&[[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [2.0, 0.0, 1.0], [1.01, 0.0, 1.0]], 0.05, None);
+        m.quad_draw(
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+            ],
+            0.05,
+            None,
+        );
+        m.quad_draw(
+            &[
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [2.0, 0.0, 1.0],
+                [1.01, 0.0, 1.0],
+            ],
+            0.05,
+            None,
+        );
         assert_eq!(m.verts.len(), 6);
         assert_eq!(m.faces.len(), 2);
         assert!((0..2).all(|f| m.face_normal(f)[1] > 0.99));
@@ -1376,26 +1676,73 @@ mod tests {
 
     #[test]
     fn blinn_phong_metal_vs_dielectric() {
-        let copper = Surface { base: [0.955, 0.638, 0.538], metalness: 1.0, roughness: 0.3, ior: 1.5, transmission: 0.0 };
-        let red_plastic = Surface { base: [0.8, 0.05, 0.05], metalness: 0.0, roughness: 0.3, ior: 1.5, transmission: 0.0 };
+        let copper = Surface {
+            base: [0.955, 0.638, 0.538],
+            metalness: 1.0,
+            roughness: 0.3,
+            ior: 1.5,
+            transmission: 0.0,
+        };
+        let red_plastic = Surface {
+            base: [0.8, 0.05, 0.05],
+            metalness: 0.0,
+            roughness: 0.3,
+            ior: 1.5,
+            transmission: 0.0,
+        };
         let n = [0.0, 1.0, 0.0];
         // mirror configuration: light and eye symmetric about the normal → peak highlight
         let (l, v) = ([1.0, 1.0, 0.0], [-1.0, 1.0, 0.0]);
         let cu = shade_surface(n, l, v, &copper);
-        assert!(cu[0] as i32 > cu[2] as i32 + 20, "metal highlight is tinted: {:?}", cu);
+        assert!(
+            cu[0] as i32 > cu[2] as i32 + 20,
+            "metal highlight is tinted: {:?}",
+            cu
+        );
         let pl = shade_surface(n, l, v, &red_plastic);
         // dielectric highlight is white: green/blue get a big specular lift
         let off = shade_surface(n, [1.0, 1.0, 0.0], [0.0, 1.0, 1.0], &red_plastic);
-        assert!(pl[1] as i32 > off[1] as i32 + 40, "white specular on plastic: {:?} vs {:?}", pl, off);
+        assert!(
+            pl[1] as i32 > off[1] as i32 + 40,
+            "white specular on plastic: {:?} vs {:?}",
+            pl,
+            off
+        );
         // a metal has no diffuse: off-specular it is much darker than at the peak
         let cu_off = shade_surface(n, [1.0, 1.0, 0.0], [0.0, 1.0, 1.0], &copper);
-        assert!(cu[0] as i32 > cu_off[0] as i32 + 30, "{:?} {:?}", cu, cu_off);
+        assert!(
+            cu[0] as i32 > cu_off[0] as i32 + 30,
+            "{:?} {:?}",
+            cu,
+            cu_off
+        );
         // smoother → tighter, brighter peak
-        let rough = Surface { roughness: 0.8, ..copper };
+        let rough = Surface {
+            roughness: 0.8,
+            ..copper
+        };
         assert!(shade_surface(n, l, v, &copper)[1] > shade_surface(n, l, v, &rough)[1]);
         // Fresnel: water IOR 1.333 has F0 ≈ 0.02, glass 1.5 ≈ 0.04
-        assert!((Surface { ior: 1.333, ..red_plastic }.f0()[0] - 0.0204).abs() < 0.001);
-        assert!((Surface { ior: 1.5, ..red_plastic }.f0()[0] - 0.04).abs() < 0.001);
+        assert!(
+            (Surface {
+                ior: 1.333,
+                ..red_plastic
+            }
+            .f0()[0]
+                - 0.0204)
+                .abs()
+                < 0.001
+        );
+        assert!(
+            (Surface {
+                ior: 1.5,
+                ..red_plastic
+            }
+            .f0()[0]
+                - 0.04)
+                .abs()
+                < 0.001
+        );
         // sRGB round trip
         for c in [0u8, 1, 50, 128, 200, 255] {
             assert_eq!(linear_to_srgb(srgb_to_linear(c)), c);
@@ -1404,12 +1751,24 @@ mod tests {
 
     #[test]
     fn shaded_cube_renders_lit_and_picks_faces() {
-        let cam = Camera { yaw: 0.6, pitch: 0.45, dist: 4.0 };
+        let cam = Camera {
+            yaw: 0.6,
+            pitch: 0.45,
+            dist: 4.0,
+        };
         let mut f = Frame3d::new(160, 120, [10, 10, 10]);
-        f.mesh(&cam, &PolyMesh::cube(), [200, 200, 200], [2.0, 4.0, 3.0], 100, Some([255, 200, 0, 255]));
+        f.mesh(
+            &cam,
+            &PolyMesh::cube(),
+            [200, 200, 200],
+            [2.0, 4.0, 3.0],
+            100,
+            Some([255, 200, 0, 255]),
+        );
         let covered = f.ids.iter().filter(|&&i| i >= 100).count();
         assert!(covered > 1500, "{}", covered);
-        let ids: std::collections::BTreeSet<u32> = f.ids.iter().copied().filter(|&i| i >= 100).collect();
+        let ids: std::collections::BTreeSet<u32> =
+            f.ids.iter().copied().filter(|&i| i >= 100).collect();
         assert_eq!(ids.len(), 3, "three faces visible from a corner view");
         // distinct shading per visible face
         let mut cols = std::collections::BTreeSet::new();
@@ -1419,6 +1778,18 @@ mod tests {
             }
         }
         assert!(cols.len() >= 3);
-        assert!(shade([0.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0], [100, 100, 100])[0] > shade([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [100, 100, 100])[0]);
+        assert!(
+            shade(
+                [0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [100, 100, 100]
+            )[0] > shade(
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [100, 100, 100]
+            )[0]
+        );
     }
 }

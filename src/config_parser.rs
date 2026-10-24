@@ -7,10 +7,10 @@
 //!
 //! Differential: parsed keys match a reference HashMap of the input.
 
+use crate::cf_lexer::{CfLexer, CfTokenType};
 use crate::config::Config;
 #[cfg(test)]
 use crate::diff::assert_equal;
-use crate::cf_lexer::{CfLexer, CfTokenType};
 
 /// Parse a simple ini-style string into a Config.
 /// Format: [section]\n key = value\n
@@ -25,12 +25,12 @@ pub fn parse_config_string(input: &str) -> Config {
         // Section: [ name ]
         if toks[i].text == "[" {
             if let Some(name_tok) = toks.get(i + 1) {
-                if name_tok.kind == CfTokenType::Name {
-                    if toks.get(i + 2).map(|t| t.text == "]").unwrap_or(false) {
-                        current_section = name_tok.text.to_string();
-                        i += 3;
-                        continue;
-                    }
+                if name_tok.kind == CfTokenType::Name
+                    && toks.get(i + 2).map(|t| t.text == "]").unwrap_or(false)
+                {
+                    current_section = name_tok.text.to_string();
+                    i += 3;
+                    continue;
                 }
             }
         }

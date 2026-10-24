@@ -64,7 +64,11 @@ impl GateKind {
         }
     }
     fn inputs(self) -> usize {
-        if self == GateKind::Inv { 1 } else { 2 }
+        if self == GateKind::Inv {
+            1
+        } else {
+            2
+        }
     }
 }
 
@@ -143,7 +147,15 @@ impl CellChar {
                 GateKind::Nor2 => !(a || b),
             }
         };
-        self.table.iter().all(|(inp, v)| if ideal(*inp) { *v > 0.8 * VDD } else { *v < 0.2 * VDD }) && self.nm_high() > 0.1 && self.nm_low() > 0.1 && self.t_pd().is_some()
+        self.table.iter().all(|(inp, v)| {
+            if ideal(*inp) {
+                *v > 0.8 * VDD
+            } else {
+                *v < 0.2 * VDD
+            }
+        }) && self.nm_high() > 0.1
+            && self.nm_low() > 0.1
+            && self.t_pd().is_some()
     }
 }
 
@@ -159,10 +171,15 @@ pub fn characterise(kind: GateKind, t: f64) -> CellChar {
     let other = if kind == GateKind::Nor2 { 0.0 } else { VDD };
     // VTC
     let n = 72;
-    let vtc: Vec<(f64, f64)> = (0..=n).map(|i| {
-        let vin = VDD * i as f64 / n as f64;
-        (vin, dc_out(kind, t, vin, other).map(|x| x.0).unwrap_or(f64::NAN))
-    }).collect();
+    let vtc: Vec<(f64, f64)> = (0..=n)
+        .map(|i| {
+            let vin = VDD * i as f64 / n as f64;
+            (
+                vin,
+                dc_out(kind, t, vin, other).map(|x| x.0).unwrap_or(f64::NAN),
+            )
+        })
+        .collect();
     let voh = vtc[0].1;
     let vol = vtc[n].1;
     // unity-gain points
@@ -179,20 +196,38 @@ pub fn characterise(kind: GateKind, t: f64) -> CellChar {
             vih = w[1].0;
         }
     }
-    let vm = vtc.windows(2).find(|w| w[0].1 >= w[0].0 && w[1].1 < w[1].0).map(|w| 0.5 * (w[0].0 + w[1].0)).unwrap_or(f64::NAN);
+    let vm = vtc
+        .windows(2)
+        .find(|w| w[0].1 >= w[0].0 && w[1].1 < w[1].0)
+        .map(|w| 0.5 * (w[0].0 + w[1].0))
+        .unwrap_or(f64::NAN);
     // truth table + leakage
     let mut table = Vec::new();
     let mut leak = 0.0;
-    let states: Vec<u8> = if kind.inputs() == 1 { vec![0, 1] } else { vec![0, 1, 2, 3] };
+    let states: Vec<u8> = if kind.inputs() == 1 {
+        vec![0, 1]
+    } else {
+        vec![0, 1, 2, 3]
+    };
     for s in &states {
-        let (a, b) = (if s & 1 == 1 { VDD } else { 0.0 }, if s & 2 == 2 { VDD } else { 0.0 });
+        let (a, b) = (
+            if s & 1 == 1 { VDD } else { 0.0 },
+            if s & 2 == 2 { VDD } else { 0.0 },
+        );
         let (v, i) = dc_out(kind, t, a, b).unwrap_or((f64::NAN, 0.0));
         table.push((*s, v));
         leak += i.abs();
     }
     let leakage = leak / states.len() as f64;
     // transient delays: input a steps 0→1 at 20 ps then back at 420 ps
-    let pulse = Wave::Pulse { v0: 0.0, v1: VDD, delay: 20e-12, rise: 5e-12, width: 400e-12, period: 0.0 };
+    let pulse = Wave::Pulse {
+        v0: 0.0,
+        v1: VDD,
+        delay: 20e-12,
+        rise: 5e-12,
+        width: 400e-12,
+        period: 0.0,
+    };
     let mut c = cell(kind, t, pulse, Wave::Dc(other), C_LOAD);
     let _ = c.dc();
     let h = 0.25e-12;
@@ -225,7 +260,20 @@ pub fn characterise(kind: GateKind, t: f64) -> CellChar {
     }
     let t_phl = t_out_fall.zip(t_in_rise).map(|(o, i)| o - i);
     let t_plh = t_out_rise.zip(t_in_fall).map(|(o, i)| o - i);
-    CellChar { kind, t, voh, vol, vil, vih, vm, t_phl, t_plh, leakage, table, vtc }
+    CellChar {
+        kind,
+        t,
+        voh,
+        vol,
+        vil,
+        vih,
+        vm,
+        t_phl,
+        t_plh,
+        leakage,
+        table,
+        vtc,
+    }
 }
 
 /// All three gates at one temperature.
@@ -237,7 +285,10 @@ pub struct Library {
 
 impl Library {
     pub fn at(t: f64) -> Self {
-        Self { t, cells: GateKind::ALL.map(|k| characterise(k, t)) }
+        Self {
+            t,
+            cells: GateKind::ALL.map(|k| characterise(k, t)),
+        }
     }
     pub fn get(&self, k: GateKind) -> &CellChar {
         &self.cells[k.idx()]
@@ -248,7 +299,11 @@ impl Library {
     /// Delays in femtoseconds for the event simulator (a gate that never
     /// switches gets an effectively infinite delay).
     pub fn delays_fs(&self) -> [u64; 3] {
-        self.cells.clone().map(|c| c.t_pd().map(|d| (d * 1e15).round().max(1.0) as u64).unwrap_or(u64::MAX / 4))
+        self.cells.clone().map(|c| {
+            c.t_pd()
+                .map(|d| (d * 1e15).round().max(1.0) as u64)
+                .unwrap_or(u64::MAX / 4)
+        })
     }
 }
 
@@ -262,7 +317,11 @@ pub enum L {
 
 impl L {
     pub fn from(b: bool) -> Self {
-        if b { L::One } else { L::Zero }
+        if b {
+            L::One
+        } else {
+            L::Zero
+        }
     }
     pub fn bit(self) -> Option<bool> {
         match self {
@@ -301,7 +360,20 @@ pub struct Netlist {
 
 impl Netlist {
     pub fn new() -> Self {
-        Self { gates: Vec::new(), names: Vec::new(), fanout: Vec::new(), values: Vec::new(), pending: Vec::new(), queue: BinaryHeap::new(), queued_value: Default::default(), seq: 0, now_fs: 0, delays: [30_000, 40_000, 50_000], toggles: 0, last_change_fs: 0 }
+        Self {
+            gates: Vec::new(),
+            names: Vec::new(),
+            fanout: Vec::new(),
+            values: Vec::new(),
+            pending: Vec::new(),
+            queue: BinaryHeap::new(),
+            queued_value: Default::default(),
+            seq: 0,
+            now_fs: 0,
+            delays: [30_000, 40_000, 50_000],
+            toggles: 0,
+            last_change_fs: 0,
+        }
     }
 
     pub fn net(&mut self, name: &str) -> usize {
@@ -317,9 +389,17 @@ impl Netlist {
     }
 
     fn gate(&mut self, kind: GateKind, a: usize, b: usize) -> usize {
-        let out = self.net(&format!("{}{}", kind.name().to_lowercase(), self.gates.len()));
+        let out = self.net(&format!(
+            "{}{}",
+            kind.name().to_lowercase(),
+            self.gates.len()
+        ));
         let gi = self.gates.len();
-        self.gates.push(Gate { kind, ins: [a, b], out });
+        self.gates.push(Gate {
+            kind,
+            ins: [a, b],
+            out,
+        });
         self.fanout[a].push(gi);
         if kind.inputs() == 2 && b != a {
             self.fanout[b].push(gi);
@@ -366,11 +446,19 @@ impl Netlist {
             let q = nl.net("q");
             let qb = nl.net("qb");
             let gq = nl.gates.len();
-            nl.gates.push(Gate { kind: GateKind::Nand2, ins: [s, qb], out: q });
+            nl.gates.push(Gate {
+                kind: GateKind::Nand2,
+                ins: [s, qb],
+                out: q,
+            });
             nl.fanout[s].push(gq);
             nl.fanout[qb].push(gq);
             let gqb = nl.gates.len();
-            nl.gates.push(Gate { kind: GateKind::Nand2, ins: [r, q], out: qb });
+            nl.gates.push(Gate {
+                kind: GateKind::Nand2,
+                ins: [r, q],
+                out: qb,
+            });
             nl.fanout[r].push(gqb);
             nl.fanout[q].push(gqb);
             q
@@ -389,10 +477,22 @@ impl Netlist {
                 L::X => L::X,
             },
             GateKind::Nand2 => {
-                if a == L::Zero || b == L::Zero { L::One } else if a == L::One && b == L::One { L::Zero } else { L::X }
+                if a == L::Zero || b == L::Zero {
+                    L::One
+                } else if a == L::One && b == L::One {
+                    L::Zero
+                } else {
+                    L::X
+                }
             }
             GateKind::Nor2 => {
-                if a == L::One || b == L::One { L::Zero } else if a == L::Zero && b == L::Zero { L::One } else { L::X }
+                if a == L::One || b == L::One {
+                    L::Zero
+                } else if a == L::Zero && b == L::Zero {
+                    L::One
+                } else {
+                    L::X
+                }
             }
         }
     }
@@ -503,7 +603,14 @@ impl Alu {
             sum[i] = s;
             carry = c;
         }
-        Self { nl, a, b, sub, sum, cout: carry }
+        Self {
+            nl,
+            a,
+            b,
+            sub,
+            sum,
+            cout: carry,
+        }
     }
     pub fn gate_count(&self) -> usize {
         self.nl.gates.len()
@@ -579,7 +686,23 @@ impl Op {
         }
     }
     fn parse(s: &str) -> Option<Self> {
-        [Op::Nop, Op::Ldi, Op::Lda, Op::Sta, Op::Add, Op::Addi, Op::Sub, Op::Subi, Op::Jmp, Op::Jz, Op::Jc, Op::Out, Op::Hlt].into_iter().find(|o| o.mnemonic().eq_ignore_ascii_case(s))
+        [
+            Op::Nop,
+            Op::Ldi,
+            Op::Lda,
+            Op::Sta,
+            Op::Add,
+            Op::Addi,
+            Op::Sub,
+            Op::Subi,
+            Op::Jmp,
+            Op::Jz,
+            Op::Jc,
+            Op::Out,
+            Op::Hlt,
+        ]
+        .into_iter()
+        .find(|o| o.mnemonic().eq_ignore_ascii_case(s))
     }
 }
 
@@ -605,23 +728,28 @@ pub fn assemble(src: &str) -> Result<Vec<u8>, String> {
     if lines.len() > 16 {
         return Err(format!("{} instructions; the ROM holds 16", lines.len()));
     }
-    lines.iter().map(|l| {
-        let mut it = l.split_whitespace();
-        let m = it.next().unwrap_or("");
-        let op = Op::parse(m).ok_or_else(|| format!("unknown instruction '{}'", m))?;
-        let arg = match it.next() {
-            None => 0,
-            Some(a) => {
-                let a = a.trim_start_matches('#');
-                match a.parse::<u8>() {
-                    Ok(v) if v < 16 => v,
-                    Ok(v) => return Err(format!("operand {} does not fit 4 bits", v)),
-                    Err(_) => *labels.get(&a.to_lowercase()).ok_or_else(|| format!("unknown label '{}'", a))?,
+    lines
+        .iter()
+        .map(|l| {
+            let mut it = l.split_whitespace();
+            let m = it.next().unwrap_or("");
+            let op = Op::parse(m).ok_or_else(|| format!("unknown instruction '{}'", m))?;
+            let arg = match it.next() {
+                None => 0,
+                Some(a) => {
+                    let a = a.trim_start_matches('#');
+                    match a.parse::<u8>() {
+                        Ok(v) if v < 16 => v,
+                        Ok(v) => return Err(format!("operand {} does not fit 4 bits", v)),
+                        Err(_) => *labels
+                            .get(&a.to_lowercase())
+                            .ok_or_else(|| format!("unknown label '{}'", a))?,
+                    }
                 }
-            }
-        };
-        Ok((op as u8) << 4 | arg)
-    }).collect()
+            };
+            Ok((op as u8) << 4 | arg)
+        })
+        .collect()
 }
 
 pub const PROGRAMS: &[(&str, &str, &[u8])] = &[
@@ -727,7 +855,11 @@ impl Cpu {
             Op::Lda => self.acc = self.ram[arg as usize],
             Op::Sta => self.ram[arg as usize] = self.acc,
             Op::Add | Op::Addi | Op::Sub | Op::Subi => {
-                let b = if matches!(op, Op::Add | Op::Sub) { self.ram[arg as usize] } else { arg };
+                let b = if matches!(op, Op::Add | Op::Sub) {
+                    self.ram[arg as usize]
+                } else {
+                    arg
+                };
                 let (s, c) = self.alu_cycle(b, matches!(op, Op::Sub | Op::Subi));
                 self.acc = s & 0xF;
                 self.c = c;
@@ -751,7 +883,10 @@ impl Cpu {
             let now = self.alu.nl.now_fs;
             self.alu.nl.run_until(now + self.period_fs);
         }
-        if matches!(op, Op::Ldi | Op::Lda | Op::Add | Op::Addi | Op::Sub | Op::Subi) {
+        if matches!(
+            op,
+            Op::Ldi | Op::Lda | Op::Add | Op::Addi | Op::Sub | Op::Subi
+        ) {
             self.z = self.acc == 0;
         }
         self.pc = next;
@@ -768,19 +903,28 @@ impl Cpu {
     pub fn power(&self) -> (f64, f64) {
         let secs = (self.cycles.max(1) * self.period_fs) as f64 * 1e-15;
         let dynamic = self.alu.nl.toggles as f64 * 0.5 * C_LOAD * VDD * VDD / secs;
-        let leak = self.lib.as_ref().map(|l| l.get(GateKind::Nand2).leakage).unwrap_or(0.0) * self.alu.gate_count() as f64 * VDD;
+        let leak = self
+            .lib
+            .as_ref()
+            .map(|l| l.get(GateKind::Nand2).leakage)
+            .unwrap_or(0.0)
+            * self.alu.gate_count() as f64
+            * VDD;
         (dynamic, leak)
     }
 
     /// Disassembly of the ROM.
     pub fn listing(&self) -> Vec<String> {
-        self.rom.iter().map(|b| {
-            let op = Op::from(b >> 4);
-            match op {
-                Op::Nop | Op::Out | Op::Hlt => op.mnemonic().to_string(),
-                _ => format!("{} {}", op.mnemonic(), b & 0xF),
-            }
-        }).collect()
+        self.rom
+            .iter()
+            .map(|b| {
+                let op = Op::from(b >> 4);
+                match op {
+                    Op::Nop | Op::Out | Op::Hlt => op.mnemonic().to_string(),
+                    _ => format!("{} {}", op.mnemonic(), b & 0xF),
+                }
+            })
+            .collect()
     }
 }
 
@@ -802,7 +946,12 @@ pub struct RunReport {
 }
 
 pub fn run_program(name: &str, t: f64, clock_hz: f64) -> Result<RunReport, String> {
-    let (src, expected) = program(name).ok_or_else(|| format!("unknown program '{}' (multiply, fibonacci, countdown)", name))?;
+    let (src, expected) = program(name).ok_or_else(|| {
+        format!(
+            "unknown program '{}' (multiply, fibonacci, countdown)",
+            name
+        )
+    })?;
     let lib = Library::at(t);
     run_with(&lib, src, expected, clock_hz)
 }
@@ -811,7 +960,12 @@ pub fn run_program(name: &str, t: f64, clock_hz: f64) -> Result<RunReport, Strin
 /// it, the p–n junctions that isolate transistors stop isolating.
 pub const WELL_DOPING: f64 = 1e17;
 
-pub fn run_with(lib: &Library, src: &str, expected: &[u8], clock_hz: f64) -> Result<RunReport, String> {
+pub fn run_with(
+    lib: &Library,
+    src: &str,
+    expected: &[u8],
+    clock_hz: f64,
+) -> Result<RunReport, String> {
     let rom = assemble(src)?;
     let ni = crate::circuit::si_intrinsic(lib.t);
     let intrinsic = ni > WELL_DOPING;
@@ -855,7 +1009,13 @@ pub fn run_with(lib: &Library, src: &str, expected: &[u8], clock_hz: f64) -> Res
 
 /// Heat the die from `t0` in `dt` steps until the program fails; returns
 /// every run (the last one is the first failure, if any within `t_max`).
-pub fn heat_to_failure(name: &str, clock_hz: f64, t0: f64, dt: f64, t_max: f64) -> Result<Vec<RunReport>, String> {
+pub fn heat_to_failure(
+    name: &str,
+    clock_hz: f64,
+    t0: f64,
+    dt: f64,
+    t_max: f64,
+) -> Result<Vec<RunReport>, String> {
     let mut out = Vec::new();
     let mut t = t0;
     while t <= t_max {
@@ -875,10 +1035,14 @@ pub fn heat_to_failure(name: &str, clock_hz: f64, t0: f64, dt: f64, t_max: f64) 
 pub fn max_clock(name: &str, t: f64) -> Result<f64, String> {
     let (src, expected) = program(name).ok_or("unknown program")?;
     let lib = Library::at(t);
-    let (mut lo, mut hi) = (1e7, 1e11);
+    let (mut lo, mut hi): (f64, f64) = (1e7, 1e11);
     for _ in 0..30 {
-        let mid = (lo * hi as f64).sqrt();
-        if run_with(&lib, src, expected, mid)?.correct { lo = mid } else { hi = mid }
+        let mid = (lo * hi).sqrt();
+        if run_with(&lib, src, expected, mid)?.correct {
+            lo = mid
+        } else {
+            hi = mid
+        }
     }
     Ok(lo)
 }
@@ -905,9 +1069,18 @@ mod tests {
     fn hot_gates_are_slower_and_leak_more() {
         let cold = Library::at(300.0);
         let hot = Library::at(400.0);
-        let (dc, dh) = (cold.get(GateKind::Nand2).t_pd().unwrap(), hot.get(GateKind::Nand2).t_pd().unwrap());
+        let (dc, dh) = (
+            cold.get(GateKind::Nand2).t_pd().unwrap(),
+            hot.get(GateKind::Nand2).t_pd().unwrap(),
+        );
         assert!(dh > 1.1 * dc, "{} vs {}", dh, dc);
-        eprintln!("NAND2 t_pd 300 K {:.1} ps, 400 K {:.1} ps; leakage {:.3e} → {:.3e} A", dc * 1e12, dh * 1e12, cold.get(GateKind::Nand2).leakage, hot.get(GateKind::Nand2).leakage);
+        eprintln!(
+            "NAND2 t_pd 300 K {:.1} ps, 400 K {:.1} ps; leakage {:.3e} → {:.3e} A",
+            dc * 1e12,
+            dh * 1e12,
+            cold.get(GateKind::Nand2).leakage,
+            hot.get(GateKind::Nand2).leakage
+        );
         assert!(hot.get(GateKind::Nand2).leakage > 50.0 * cold.get(GateKind::Nand2).leakage);
     }
 
@@ -963,7 +1136,11 @@ mod tests {
             let rom = assemble(src).unwrap();
             assert!(rom.len() <= 16, "{}", name);
             let r = run_program(name, 300.0, 500e6).unwrap();
-            assert!(r.correct, "{}: {:?} vs {:?} ({:?})", name, r.out, expected, r.failure);
+            assert!(
+                r.correct,
+                "{}: {:?} vs {:?} ({:?})",
+                name, r.out, expected, r.failure
+            );
             assert_eq!(r.timing_violations, 0);
         }
         assert!(assemble("FOO 1").is_err());
@@ -988,11 +1165,21 @@ mod tests {
         let last = runs.last().unwrap();
         assert!(runs[0].correct);
         assert!(!last.correct, "it should fail somewhere below 900 K");
-        assert!(last.t > 300.0 && last.t < 500.0, "fails at {} K: {:?}", last.t, last.failure);
+        assert!(
+            last.t > 300.0 && last.t < 500.0,
+            "fails at {} K: {:?}",
+            last.t,
+            last.failure
+        );
         // a slow clock survives much hotter, until the gates stop being logic
         let slow = heat_to_failure("multiply", 1e7, 300.0, 100.0, 1500.0).unwrap();
         let l = slow.last().unwrap();
         assert!(l.t > last.t + 100.0, "{} vs {}", l.t, last.t);
-        assert!(l.t > 700.0 && l.t < 950.0 && l.failure.as_deref().unwrap().contains("intrinsic"), "{} {:?}", l.t, l.failure);
+        assert!(
+            l.t > 700.0 && l.t < 950.0 && l.failure.as_deref().unwrap().contains("intrinsic"),
+            "{} {:?}",
+            l.t,
+            l.failure
+        );
     }
 }

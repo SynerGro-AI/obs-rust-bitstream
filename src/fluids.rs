@@ -33,7 +33,12 @@ impl Fluids {
         }
         self.emitters.insert(
             name.to_string(),
-            Emitter { x, y, z, rate: rate.max(0.0) },
+            Emitter {
+                x,
+                y,
+                z,
+                rate: rate.max(0.0),
+            },
         );
         true
     }

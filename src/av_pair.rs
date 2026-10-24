@@ -49,7 +49,8 @@ mod tests {
     #[test]
     fn valid() {
         let v = VideoOutputInfo::new("main", VideoFormat::Y800, 30, 1, 1920, 1080).unwrap();
-        let a = AudioOutputInfo::new("main", 48000, AudioFormat::F32, SpeakerLayout::Stereo).unwrap();
+        let a =
+            AudioOutputInfo::new("main", 48000, AudioFormat::F32, SpeakerLayout::Stereo).unwrap();
         let p = AvPair::from(&v, &a);
         assert!(p.is_valid());
         assert_eq!(p.video_pixels, 1920 * 1080);

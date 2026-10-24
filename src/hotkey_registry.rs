@@ -80,8 +80,14 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = HotkeyRegistry::new();
         r.add("a", "A").unwrap();
-        assert!(matches!(r.add("a", "A"), Err(HotkeyRegistryError::Duplicate)));
-        assert!(matches!(r.add("", "x"), Err(HotkeyRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", "A"),
+            Err(HotkeyRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", "x"),
+            Err(HotkeyRegistryError::EmptyName)
+        ));
     }
 
     #[test]

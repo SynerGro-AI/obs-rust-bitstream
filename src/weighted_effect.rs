@@ -12,14 +12,14 @@ use crate::drop_shadow::DropShadow;
 use crate::emboss::Emboss;
 use crate::exposure::Exposure;
 use crate::gauss_blur::GaussBlur;
+use crate::gradient::Gradient;
 use crate::hue_sat::HueSat;
 use crate::inner_glow::InnerGlow;
 use crate::live_weights::{LiveWeights, WeightError};
 use crate::motion_blur::MotionBlur;
 use crate::outer_glow::OuterGlow;
-use crate::sharpen::Sharpen;
-use crate::gradient::Gradient;
 use crate::pattern::Pattern;
+use crate::sharpen::Sharpen;
 use crate::stroke::Stroke;
 use crate::threshold::Threshold;
 use crate::video_frame::VideoFrame;
@@ -53,7 +53,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        InnerGlow::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        InnerGlow::apply(frame, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply outer glow using the weight named `name`.
@@ -62,7 +63,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        OuterGlow::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        OuterGlow::apply(frame, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply drop shadow using the weight named `name`.
@@ -71,7 +73,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        DropShadow::apply(frame, 2, 2, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        DropShadow::apply(frame, 2, 2, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply bright shadow using the weight named `name`.
@@ -80,7 +83,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        BrightShadow::apply(frame, -1, -1, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        BrightShadow::apply(frame, -1, -1, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply sharpen using the weight named `name`.
@@ -124,7 +128,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        Threshold::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        Threshold::apply(frame, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply gaussian-style blur. Weight is pass count.
@@ -133,7 +138,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        GaussBlur::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        GaussBlur::apply(frame, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply motion blur. Weight is distance.
@@ -142,7 +148,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        MotionBlur::apply(frame, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        MotionBlur::apply(frame, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply noise. Weight is amount.
@@ -187,7 +194,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        Gradient::apply(frame, 0, Self::strength(weights, name)?).map_err(|_| WeightedError::BadWeight)
+        Gradient::apply(frame, 0, Self::strength(weights, name)?)
+            .map_err(|_| WeightedError::BadWeight)
     }
 
     /// Apply checker pattern. Weight is the light value.
@@ -196,7 +204,8 @@ impl WeightedEffect {
         weights: &LiveWeights,
         name: &str,
     ) -> Result<(), WeightedError> {
-        Pattern::apply(frame, Self::strength(weights, name)?, 0, 2).map_err(|_| WeightedError::BadWeight)
+        Pattern::apply(frame, Self::strength(weights, name)?, 0, 2)
+            .map_err(|_| WeightedError::BadWeight)
     }
 }
 
@@ -216,11 +225,11 @@ mod tests {
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
         f.planes[0].fill(32);
-        f.planes[0][1 * 4 + 1] = 200;
+        f.planes[0][4 + 1] = 200;
         let mut w = LiveWeights::new();
         w.set("glow", 50.0).unwrap();
         WeightedEffect::glow(&mut f, &w, "glow").unwrap();
-        assert!(f.planes[0][1 * 4 + 1] > 200);
+        assert!(f.planes[0][4 + 1] > 200);
     }
 
     #[test]
@@ -230,14 +239,14 @@ mod tests {
         let mut w = LiveWeights::new();
         w.set("shadow", 100.0).unwrap();
         WeightedEffect::shadow(&mut f, &w, "shadow").unwrap();
-        assert!(f.planes[0][1 * 4 + 1] < 255);
+        assert!(f.planes[0][4 + 1] < 255);
 
         let mut f2 = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
         f2.planes[0].fill(32);
-        f2.planes[0][1 * 4 + 1] = 200;
+        f2.planes[0][4 + 1] = 200;
         w.set("sharp", 128.0).unwrap();
         WeightedEffect::sharpen(&mut f2, &w, "sharp").unwrap();
-        assert!(f2.planes[0][1 * 4 + 1] >= 200);
+        assert!(f2.planes[0][4 + 1] >= 200);
     }
 
     #[test]

@@ -27,7 +27,7 @@ impl Pattern {
             for (i, p) in plane.iter_mut().enumerate() {
                 let x = i % w;
                 let y = i / w;
-                let on = ((x / cell) + (y / cell)) % 2 == 0;
+                let on = ((x / cell) + (y / cell)).is_multiple_of(2);
                 *p = if on { a } else { b };
             }
         }

@@ -54,9 +54,9 @@ mod imp {
     };
     use objc2_core_media::CMSampleBuffer;
     use objc2_core_video::{
-        CVPixelBufferGetBaseAddress, CVPixelBufferGetBytesPerRow, CVPixelBufferGetHeight,
-        CVPixelBufferGetWidth, CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress,
-        kCVPixelBufferLock_ReadOnly, kCVPixelFormatType_32BGRA,
+        kCVPixelBufferLock_ReadOnly, kCVPixelFormatType_32BGRA, CVPixelBufferGetBaseAddress,
+        CVPixelBufferGetBytesPerRow, CVPixelBufferGetHeight, CVPixelBufferGetWidth,
+        CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress,
     };
     use objc2_foundation::{NSDictionary, NSNumber, NSObject, NSString};
 
@@ -228,11 +228,17 @@ pub struct AppleCapture;
 #[cfg(not(all(any(target_os = "macos", target_os = "ios"), feature = "avfoundation")))]
 impl AppleCapture {
     pub fn open() -> Result<Self, String> {
-        Err("Apple AVFoundation capture requires macOS/iOS and the avfoundation feature".to_string())
+        Err(
+            "Apple AVFoundation capture requires macOS/iOS and the avfoundation feature"
+                .to_string(),
+        )
     }
 
     pub fn open_index(_index: u32) -> Result<Self, String> {
-        Err("Apple AVFoundation capture requires macOS/iOS and the avfoundation feature".to_string())
+        Err(
+            "Apple AVFoundation capture requires macOS/iOS and the avfoundation feature"
+                .to_string(),
+        )
     }
 }
 

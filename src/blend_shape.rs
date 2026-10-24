@@ -30,7 +30,11 @@ impl BlendShape {
         self.base = verts;
     }
 
-    pub fn add_target(&mut self, name: &str, offsets: Vec<(f32, f32, f32)>) -> Result<(), BlendError> {
+    pub fn add_target(
+        &mut self,
+        name: &str,
+        offsets: Vec<(f32, f32, f32)>,
+    ) -> Result<(), BlendError> {
         if name.is_empty() {
             return Err(BlendError::EmptyName);
         }

@@ -95,7 +95,11 @@ impl FramePacer {
             target,
             measured,
             Self::delta(target, measured),
-            if Self::hit(target, measured, 0.1) { "hit" } else { "miss" }
+            if Self::hit(target, measured, 0.1) {
+                "hit"
+            } else {
+                "miss"
+            }
         )
     }
 

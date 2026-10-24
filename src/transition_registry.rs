@@ -45,11 +45,15 @@ impl TransitionRegistry {
     }
 
     pub fn get(&self, name: &str) -> Result<&Transition, TransitionRegistryError> {
-        self.transitions.get(name).ok_or(TransitionRegistryError::Missing)
+        self.transitions
+            .get(name)
+            .ok_or(TransitionRegistryError::Missing)
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Transition, TransitionRegistryError> {
-        self.transitions.get_mut(name).ok_or(TransitionRegistryError::Missing)
+        self.transitions
+            .get_mut(name)
+            .ok_or(TransitionRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,14 +84,23 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = TransitionRegistry::new();
         r.add("a", 0).unwrap();
-        assert!(matches!(r.add("a", 0), Err(TransitionRegistryError::Duplicate)));
-        assert!(matches!(r.add("", 0), Err(TransitionRegistryError::EmptyName)));
+        assert!(matches!(
+            r.add("a", 0),
+            Err(TransitionRegistryError::Duplicate)
+        ));
+        assert!(matches!(
+            r.add("", 0),
+            Err(TransitionRegistryError::EmptyName)
+        ));
     }
 
     #[test]
     fn missing_and_remove() {
         let mut r = TransitionRegistry::new();
-        assert!(matches!(r.get("nope"), Err(TransitionRegistryError::Missing)));
+        assert!(matches!(
+            r.get("nope"),
+            Err(TransitionRegistryError::Missing)
+        ));
         r.add("t", 0).unwrap();
         assert!(r.remove("t"));
         assert!(!r.contains("t"));

@@ -45,8 +45,7 @@ impl RateCompare {
     }
 
     fn one(size: u32) -> Result<f32, H264Error> {
-        let mut frame = VideoFrame::new(VideoFormat::Y800, size, size)
-            .ok_or(H264Error::Encode)?;
+        let mut frame = VideoFrame::new(VideoFormat::Y800, size, size).ok_or(H264Error::Encode)?;
         frame.planes[0].fill(40);
         let weights = LiveWeights::new();
         let mut enc = H264Codec::new(size, size, &weights)?;

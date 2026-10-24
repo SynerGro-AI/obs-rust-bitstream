@@ -23,10 +23,16 @@ impl EditRound {
         groups.add("Group 1").unwrap();
         groups.add_member("Group 1", "A").unwrap();
         groups.add_member("Group 1", "B").unwrap();
-        let layer = EditApply::set_opacity(&mut stack, &groups, &EditTarget::Layer("A".into()), 0.5);
+        let layer =
+            EditApply::set_opacity(&mut stack, &groups, &EditTarget::Layer("A".into()), 0.5);
         // Reset for the group pass.
         let _ = stack.set_opacity("A", 1.0);
-        let group = EditApply::set_opacity(&mut stack, &groups, &EditTarget::Group("Group 1".into()), 0.5);
+        let group = EditApply::set_opacity(
+            &mut stack,
+            &groups,
+            &EditTarget::Group("Group 1".into()),
+            0.5,
+        );
         (layer, group)
     }
 

@@ -4,12 +4,16 @@
 //! Prints the run header and a one-line FullStatus.
 
 use obs_rust_bitstream::{
-    AudioSource, AudioSourceList, AvStatus, CaptionStatus, FullStatus, H264Codec,
-    KeyframeStatus, LiveWeights, ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, Pipeline,
-    ProgramStream, Reconnect, RoiStatus, Runner, RunnerDump, ServiceStatus, StreamStart,
-    StreamStatus, SyntheticCapture, PayloadDump, RtmpOutput, CanvasEffect,
-    CaptureSource, RtmpReconnectStatus, RunnerAudio, AudioBackendStatus, RtmpSocket,
-    RtmpOpenStatus, ShellRound, LayerComposite, EditRound, EditComposite, GroupComposite, BlendComposite, ShellStatus, ShellFrame, ShellRunner, ShellRtmp, ShellPublish, ShellSocket, ShellSent, ShellLoop, ShellAction, ShellLoopFrame, ShellLoopSocket, ShellSummary, ShellEvent, ShellInput, ShellFilter, ShellSession, DisplayFrame, YouTubeTarget, StreamTarget, Platform, Razor, TimelineTools, TimelineAction, TimelineRest, Toolbar, StatusBar, Definition, Tuxedo, History, OUTPUT_AV,
+    AudioBackendStatus, AudioSource, AudioSourceList, AvStatus, BlendComposite, CanvasEffect,
+    CaptionStatus, CaptureSource, Definition, DisplayFrame, EditComposite, EditRound, FullStatus,
+    GroupComposite, H264Codec, History, KeyframeStatus, LayerComposite, LiveWeights,
+    ObsEncoderDefaults, OutputInfo, OutputPause, OutputService, PayloadDump, Pipeline, Platform,
+    ProgramStream, Razor, Reconnect, RoiStatus, RtmpOpenStatus, RtmpOutput, RtmpReconnectStatus,
+    RtmpSocket, Runner, RunnerAudio, RunnerDump, ServiceStatus, ShellAction, ShellEvent,
+    ShellFilter, ShellFrame, ShellInput, ShellLoop, ShellLoopFrame, ShellLoopSocket, ShellPublish,
+    ShellRound, ShellRtmp, ShellRunner, ShellSent, ShellSession, ShellSocket, ShellStatus,
+    ShellSummary, StatusBar, StreamStart, StreamStatus, StreamTarget, SyntheticCapture,
+    TimelineAction, TimelineRest, TimelineTools, Toolbar, Tuxedo, YouTubeTarget, OUTPUT_AV,
 };
 
 fn main() {
@@ -77,10 +81,7 @@ fn main() {
         },
     );
 
-    println!(
-        "frames={} bytes={}",
-        header.frames, header.bytes
-    );
+    println!("frames={} bytes={}", header.frames, header.bytes);
     println!("{}", status.one_line());
 
     let mut stream = ProgramStream::new();
@@ -112,7 +113,12 @@ fn main() {
             let pp = std::path::Path::new("stream_packets.bin");
             if std::fs::write(pp, &pk).is_ok() {
                 if let Some(h) = PayloadDump::header(&pk) {
-                    println!("packets={} packet_bytes={} saved={}", h.count, h.bytes, pp.display());
+                    println!(
+                        "packets={} packet_bytes={} saved={}",
+                        h.count,
+                        h.bytes,
+                        pp.display()
+                    );
                     if let Ok(loaded) = std::fs::read(pp) {
                         if let Some(h2) = PayloadDump::header(&loaded) {
                             println!("loaded_packets={} loaded_bytes={}", h2.count, h2.bytes);
@@ -140,7 +146,12 @@ fn main() {
                                     let _ = rx.recv_timeout(std::time::Duration::from_millis(200));
                                     std::thread::sleep(std::time::Duration::from_millis(50));
                                     let mut rc = Reconnect::new();
-                                    match RtmpSocket::send("127.0.0.1", addr.port(), &loaded, &mut rc) {
+                                    match RtmpSocket::send(
+                                        "127.0.0.1",
+                                        addr.port(),
+                                        &loaded,
+                                        &mut rc,
+                                    ) {
                                         Ok(sent) => {
                                             let open = RtmpOpenStatus::from(sent.bytes);
                                             println!("{}", open.one_line());
@@ -157,13 +168,19 @@ fn main() {
                                         use obs_rust_bitstream::video_fourcc::VideoFormat;
                                         use obs_rust_bitstream::video_frame::VideoFrame;
                                         let mut s = PhotoLayers::new();
-                                        if let Some(mut bg) = VideoFrame::new(VideoFormat::Y800, 16, 16) {
+                                        if let Some(mut bg) =
+                                            VideoFrame::new(VideoFormat::Y800, 16, 16)
+                                        {
                                             if let Some(p) = bg.planes.get_mut(0) {
-                                                for px in p.iter_mut() { *px = 100; }
+                                                for px in p.iter_mut() {
+                                                    *px = 100;
+                                                }
                                             }
                                             let mut top = bg.clone();
                                             if let Some(p) = top.planes.get_mut(0) {
-                                                for px in p.iter_mut() { *px = 200; }
+                                                for px in p.iter_mut() {
+                                                    *px = 200;
+                                                }
                                             }
                                             let _ = s.add("Background", bg);
                                             let _ = s.add("Layer 1", top);
@@ -173,8 +190,15 @@ fn main() {
                                         }
                                     } {
                                         let mut rc2 = Reconnect::new();
-                                        match RtmpSocket::send("127.0.0.1", addr.port(), &shell_payload, &mut rc2) {
-                                            Ok(sent) => println!("shell_socket_sent={}", sent.bytes),
+                                        match RtmpSocket::send(
+                                            "127.0.0.1",
+                                            addr.port(),
+                                            &shell_payload,
+                                            &mut rc2,
+                                        ) {
+                                            Ok(sent) => {
+                                                println!("shell_socket_sent={}", sent.bytes)
+                                            }
                                             Err(_) => println!("shell_socket_sent=0"),
                                         }
                                     }
@@ -184,21 +208,37 @@ fn main() {
                                         ShellAction::Size(30),
                                         ShellAction::NewLayer,
                                     ];
-                                    if let Some(loop_payload) = ShellLoopSocket::payload(&loop_actions) {
-                                        if let Some(loop_listener) = std::net::TcpListener::bind("127.0.0.1:0").ok() {
+                                    if let Some(loop_payload) =
+                                        ShellLoopSocket::payload(&loop_actions)
+                                    {
+                                        if let Ok(loop_listener) =
+                                            std::net::TcpListener::bind("127.0.0.1:0")
+                                        {
                                             if let Ok(loop_addr) = loop_listener.local_addr() {
                                                 let (ltx, lrx) = std::sync::mpsc::channel();
                                                 std::thread::spawn(move || {
                                                     let _ = ltx.send(());
                                                     let _ = loop_listener.accept();
                                                 });
-                                                let _ = lrx.recv_timeout(std::time::Duration::from_millis(1000));
-                                                std::thread::sleep(std::time::Duration::from_millis(200));
+                                                let _ = lrx.recv_timeout(
+                                                    std::time::Duration::from_millis(1000),
+                                                );
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(200),
+                                                );
                                                 let mut rc3 = Reconnect::new();
-                                                match RtmpSocket::send("127.0.0.1", loop_addr.port(), &loop_payload, &mut rc3) {
+                                                match RtmpSocket::send(
+                                                    "127.0.0.1",
+                                                    loop_addr.port(),
+                                                    &loop_payload,
+                                                    &mut rc3,
+                                                ) {
                                                     Ok(sent) => {
                                                         println!("shell_loop_sent={}", sent.bytes);
-                                                        let _ = std::fs::write("shell_loop_sent.txt", format!("{}", sent.bytes));
+                                                        let _ = std::fs::write(
+                                                            "shell_loop_sent.txt",
+                                                            format!("{}", sent.bytes),
+                                                        );
                                                         println!("shell_loop_sent_file=shell_loop_sent.txt");
                                                     }
                                                     Err(_) => println!("shell_loop_sent=0"),
@@ -235,20 +275,40 @@ fn main() {
             use obs_rust_bitstream::workspace::Workspace;
             let w = Workspace::new(16, 16);
             let s = obs_rust_bitstream::layer_stack::LayerStack::new();
-            println!("{}", UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Layer("Layer 1".into())));
-            println!("{}", UiView::render_with_target(&w, &s, &LayerSelect::new(), &EditTarget::Group("Group 1".into())));
+            println!(
+                "{}",
+                UiView::render_with_target(
+                    &w,
+                    &s,
+                    &LayerSelect::new(),
+                    &EditTarget::Layer("Layer 1".into())
+                )
+            );
+            println!(
+                "{}",
+                UiView::render_with_target(
+                    &w,
+                    &s,
+                    &LayerSelect::new(),
+                    &EditTarget::Group("Group 1".into())
+                )
+            );
             // Composite of the showing layers.
+            use obs_rust_bitstream::photo_layers::LayerStack as PhotoLayers;
             use obs_rust_bitstream::video_fourcc::VideoFormat;
             use obs_rust_bitstream::video_frame::VideoFrame;
-            use obs_rust_bitstream::photo_layers::LayerStack as PhotoLayers;
             let mut photos = PhotoLayers::new();
             if let Some(mut bg) = VideoFrame::new(VideoFormat::Y800, 4, 4) {
                 if let Some(p) = bg.planes.get_mut(0) {
-                    for px in p.iter_mut() { *px = 100; }
+                    for px in p.iter_mut() {
+                        *px = 100;
+                    }
                 }
                 let mut top = bg.clone();
                 if let Some(p) = top.planes.get_mut(0) {
-                    for px in p.iter_mut() { *px = 200; }
+                    for px in p.iter_mut() {
+                        *px = 200;
+                    }
                 }
                 let _ = photos.add("Background", bg);
                 let _ = photos.add("Layer 1", top);
@@ -279,7 +339,10 @@ fn main() {
             println!("shell_rtmp_file=shell_rtmp.txt");
             let (full_line, half_line) = ShellPublish::run();
             println!("shell_publish: full={} half={}", full_line, half_line);
-            let _ = std::fs::write("shell_publish.txt", format!("full={} half={}", full_line, half_line));
+            let _ = std::fs::write(
+                "shell_publish.txt",
+                format!("full={} half={}", full_line, half_line),
+            );
             println!("shell_publish_file=shell_publish.txt");
             let (sf, sh) = ShellSocket::run();
             println!("shell_socket: full={} half={}", sf, sh);
@@ -287,7 +350,10 @@ fn main() {
             println!("shell_socket_file=shell_socket.txt");
             let (sent_full, sent_half) = ShellSent::run();
             println!("shell_sent: full={} half={}", sent_full, sent_half);
-            let _ = std::fs::write("shell_sent.txt", format!("full={} half={}", sent_full, sent_half));
+            let _ = std::fs::write(
+                "shell_sent.txt",
+                format!("full={} half={}", sent_full, sent_half),
+            );
             println!("shell_sent_file=shell_sent.txt");
             let actions = [
                 ShellAction::Tool("Brush"),
@@ -303,8 +369,19 @@ fn main() {
             let _ = std::fs::write("shell_loop_frame.txt", format!("{}", encoded));
             println!("shell_loop_frame_file=shell_loop_frame.txt");
             if let Some(payload) = ShellLoopSocket::payload(&actions) {
-                println!("shell_loop_socket: {} valid={}", payload.len(), ShellLoopSocket::valid(&payload));
-                let _ = std::fs::write("shell_loop_socket.txt", format!("{} valid={}", payload.len(), ShellLoopSocket::valid(&payload)));
+                println!(
+                    "shell_loop_socket: {} valid={}",
+                    payload.len(),
+                    ShellLoopSocket::valid(&payload)
+                );
+                let _ = std::fs::write(
+                    "shell_loop_socket.txt",
+                    format!(
+                        "{} valid={}",
+                        payload.len(),
+                        ShellLoopSocket::valid(&payload)
+                    ),
+                );
                 println!("shell_loop_socket_file=shell_loop_socket.txt");
             }
             let summary = ShellSummary::line(&actions);
@@ -324,10 +401,16 @@ fn main() {
             println!("shell_event: {}", er);
             let (plain, bright) = ShellFilter::run();
             println!("shell_filter: plain={} bright={}", plain, bright);
-            let _ = std::fs::write("shell_filter.txt", format!("plain={} bright={}", plain, bright));
+            let _ = std::fs::write(
+                "shell_filter.txt",
+                format!("plain={} bright={}", plain, bright),
+            );
             println!("shell_filter_file=shell_filter.txt");
             let mut sw = Workspace::new(32, 32);
-            sw.click("Brush", obs_rust_bitstream::active_tool::ToolSource::Photoshop);
+            sw.click(
+                "Brush",
+                obs_rust_bitstream::active_tool::ToolSource::Photoshop,
+            );
             sw.options_mut().set("size", 30.0);
             let state = ShellSession::save(&sw, 1, "Layer 1");
             let line = ShellSession::to_line(&state);
@@ -340,7 +423,14 @@ fn main() {
                 let _ = std::fs::write("youtube.txt", yt.endpoint());
                 println!("youtube_file=youtube.txt");
             }
-            for p in [Platform::YouTube, Platform::Twitch, Platform::Facebook, Platform::X, Platform::Discord, Platform::Cloudflare] {
+            for p in [
+                Platform::YouTube,
+                Platform::Twitch,
+                Platform::Facebook,
+                Platform::X,
+                Platform::Discord,
+                Platform::Cloudflare,
+            ] {
                 if let Some(t) = StreamTarget::new(p, "demo") {
                     println!("platform: {}", t.line());
                 }
@@ -351,7 +441,13 @@ fn main() {
             let mut vt = obs_rust_bitstream::video_timeline::VideoTimeline::new();
             let _ = vt.add("clip", 0.0, 10.0, "src");
             if let Ok((l, r)) = Razor::split_video(&mut vt, "clip", 4.0) {
-                println!("razor_video: {} + {} dur={:.0}/{:.0}", l, r, vt.get(&l).unwrap().duration_secs(), vt.get(&r).unwrap().duration_secs());
+                println!(
+                    "razor_video: {} + {} dur={:.0}/{:.0}",
+                    l,
+                    r,
+                    vt.get(&l).unwrap().duration_secs(),
+                    vt.get(&r).unwrap().duration_secs()
+                );
             }
             let mut at = obs_rust_bitstream::audio_timeline::AudioTimeline::new();
             let _ = at.add("track", 0.0);
@@ -364,18 +460,33 @@ fn main() {
             let _ = ta.add("a", 0.0, 5.0, "s");
             let _ = ta.add("b", 5.0, 5.0, "s");
             if let Ok(cut) = TimelineAction::roll(&mut ta, "a", "b", 6.0) {
-                println!("timeline_roll: cut={:.0} a={:.0} b_start={:.0}", cut, ta.get("a").unwrap().duration_secs(), ta.get("b").unwrap().start_secs());
+                println!(
+                    "timeline_roll: cut={:.0} a={:.0} b_start={:.0}",
+                    cut,
+                    ta.get("a").unwrap().duration_secs(),
+                    ta.get("b").unwrap().start_secs()
+                );
             }
             let m = TimelineRest::marker(3.5, "beat");
             let area = TimelineRest::work_area(1.0, 5.0);
             let mut remap = obs_rust_bitstream::timeline_rest::TimeRemap::new();
             remap.add_key(0.0, 1.0);
             remap.add_key(2.0, 0.5);
-            println!("timeline_rest: marker={:.1} work={:.0}-{:.0} speed={:.1}", m.time, area.start, area.end, remap.speed_at(3.0));
+            println!(
+                "timeline_rest: marker={:.1} work={:.0}-{:.0} speed={:.1}",
+                m.time,
+                area.start,
+                area.end,
+                remap.speed_at(3.0)
+            );
             let mut tb = Toolbar::photoshop();
             tb.expand("Paint");
             tb.select("Brush");
-            println!("toolbar: active={} visible={}", tb.active(), tb.visible().len());
+            println!(
+                "toolbar: active={} visible={}",
+                tb.active(),
+                tb.visible().len()
+            );
             tb.retract("Paint");
             println!("toolbar_retracted: visible={}", tb.visible().len());
             println!("status: {}", StatusBar::line("Brush", 100.0, 1920, 1080));
@@ -386,12 +497,20 @@ fn main() {
             println!("resolution: {} {}", res.preset(), res.line());
             let tux = Tuxedo::theme();
             println!("tuxedo: {}", tux.css());
-            println!("tuxedo_status: {}", Tuxedo::status("Brush", 100.0, 3840, 2160));
+            println!(
+                "tuxedo_status: {}",
+                Tuxedo::status("Brush", 100.0, 3840, 2160)
+            );
             if let Ok(saved) = std::fs::read_to_string("shell_session.txt") {
                 if let Some(loaded) = ShellSession::from_line(&saved) {
                     let mut lw = Workspace::new(32, 32);
                     let layers = ShellSession::load(&mut lw, &loaded);
-                    println!("shell_session_loaded: tool={} size={:.0} layers={}", lw.active(), lw.options().get("size").unwrap_or(0.0), layers);
+                    println!(
+                        "shell_session_loaded: tool={} size={:.0} layers={}",
+                        lw.active(),
+                        lw.options().get("size").unwrap_or(0.0),
+                        layers
+                    );
                 }
             }
         }

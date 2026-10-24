@@ -5,12 +5,12 @@
 //!
 //! Differential: apply sets both weights.
 
+use crate::bitrate_slider::{BitrateSlider, SliderError};
 use crate::cancel_button::CancelButton;
 use crate::encode_cancel::EncodeCancel;
-use crate::preset_control::PresetControl;
 use crate::gop_slider::{GopError, GopSlider};
-use crate::bitrate_slider::{BitrateSlider, SliderError};
 use crate::live_weights::LiveWeights;
+use crate::preset_control::PresetControl;
 use crate::quality_slider::{QualityError, QualitySlider};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,8 +49,14 @@ impl EncoderControls {
     }
 
     /// Set bitrate and write the weight.
-    pub fn set_bitrate(&mut self, value: f32, weights: &mut LiveWeights) -> Result<(), ControlError> {
-        self.bitrate.set(value, weights).map_err(ControlError::Bitrate)
+    pub fn set_bitrate(
+        &mut self,
+        value: f32,
+        weights: &mut LiveWeights,
+    ) -> Result<(), ControlError> {
+        self.bitrate
+            .set(value, weights)
+            .map_err(ControlError::Bitrate)
     }
 
     pub fn gop(&self) -> f32 {
@@ -58,8 +64,14 @@ impl EncoderControls {
     }
 
     /// Set GOP size and write the weight.
-    pub fn set_quality(&mut self, value: f32, weights: &mut LiveWeights) -> Result<(), ControlError> {
-        self.quality.set(value, weights).map_err(ControlError::Quality)
+    pub fn set_quality(
+        &mut self,
+        value: f32,
+        weights: &mut LiveWeights,
+    ) -> Result<(), ControlError> {
+        self.quality
+            .set(value, weights)
+            .map_err(ControlError::Quality)
     }
 
     pub fn preset(&self) -> crate::preset_control::PresetKind {

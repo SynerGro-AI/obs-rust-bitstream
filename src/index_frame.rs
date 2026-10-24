@@ -59,7 +59,10 @@ impl IndexFrame {
 
     /// Expand to Y800 using the palette luminance.
     pub fn to_y800(&self) -> Vec<u8> {
-        self.indices.iter().map(|i| Palette16::luminance(*i)).collect()
+        self.indices
+            .iter()
+            .map(|i| Palette16::luminance(*i))
+            .collect()
     }
 }
 

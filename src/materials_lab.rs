@@ -78,7 +78,7 @@ impl Atom {
         let n = self.neutrons as f32;
         let ratio = n / z;
         // Real band: ~1.0 for light, up to ~1.5 for heavy.
-        ratio >= 0.8 && ratio <= 1.6
+        (0.8..=1.6).contains(&ratio)
     }
 
     /// Semi-empirical binding energy per nucleon (MeV), simplified.
@@ -122,10 +122,7 @@ impl MaterialsLab {
     }
 
     /// Synthesize an element by atomic number from the periodic table.
-    pub fn synthesize_z(
-        registry: &mut MaterialRegistry,
-        z: u32,
-    ) -> Result<(), LabError> {
+    pub fn synthesize_z(registry: &mut MaterialRegistry, z: u32) -> Result<(), LabError> {
         let e = PeriodicTable::get(z).ok_or(LabError::UnknownElement)?;
         let atom = Atom::new(e.z, e.neutrons, e.z);
         Self::synthesize(registry, e.name, &atom)

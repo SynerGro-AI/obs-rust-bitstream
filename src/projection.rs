@@ -55,8 +55,18 @@ impl Projection {
                 Matrix4::from_columns(
                     crate::vec4::Vec4::new(f, 0.0, 0.0, 0.0),
                     crate::vec4::Vec4::new(0.0, f, 0.0, 0.0),
-                    crate::vec4::Vec4::new(0.0, 0.0, (self.far + self.near) / (self.near - self.far), -1.0),
-                    crate::vec4::Vec4::new(0.0, 0.0, (2.0 * self.far * self.near) / (self.near - self.far), 0.0),
+                    crate::vec4::Vec4::new(
+                        0.0,
+                        0.0,
+                        (self.far + self.near) / (self.near - self.far),
+                        -1.0,
+                    ),
+                    crate::vec4::Vec4::new(
+                        0.0,
+                        0.0,
+                        (2.0 * self.far * self.near) / (self.near - self.far),
+                        0.0,
+                    ),
                 )
             }
             ProjectionKind::Orthographic => {
@@ -65,7 +75,12 @@ impl Projection {
                     crate::vec4::Vec4::new(s, 0.0, 0.0, 0.0),
                     crate::vec4::Vec4::new(0.0, s, 0.0, 0.0),
                     crate::vec4::Vec4::new(0.0, 0.0, -2.0 / (self.far - self.near), 0.0),
-                    crate::vec4::Vec4::new(0.0, 0.0, -(self.far + self.near) / (self.far - self.near), 1.0),
+                    crate::vec4::Vec4::new(
+                        0.0,
+                        0.0,
+                        -(self.far + self.near) / (self.far - self.near),
+                        1.0,
+                    ),
                 )
             }
         }

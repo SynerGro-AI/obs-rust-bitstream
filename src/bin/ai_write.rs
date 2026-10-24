@@ -2,32 +2,32 @@
 
 use obs_rust_bitstream::audio_sync::AudioSync;
 use obs_rust_bitstream::audio_timeline::AudioTimeline;
-use obs_rust_bitstream::effected_write::EffectedWrite;
-use obs_rust_bitstream::encoder_controls::EncoderControls;
-use obs_rust_bitstream::live_weights::LiveWeights;
-use obs_rust_bitstream::scene_transition::SceneTransition;
-use obs_rust_bitstream::scene_list::SceneList;
-use obs_rust_bitstream::scene::Scene;
-use obs_rust_bitstream::source_list::SourceList;
-use obs_rust_bitstream::frame_pacer::FramePacer;
-use obs_rust_bitstream::status_report::StatusReport;
-use obs_rust_bitstream::status_history::StatusHistory;
-use obs_rust_bitstream::capture_rate::CaptureRate;
 use obs_rust_bitstream::capture::Capture;
-use obs_rust_bitstream::file_capture::FileCapture;
+use obs_rust_bitstream::capture_rate::CaptureRate;
 use obs_rust_bitstream::capture_select::CaptureSource;
-use obs_rust_bitstream::timestamp_stamp::TimestampStamp;
-use obs_rust_bitstream::report::Report;
-use obs_rust_bitstream::rate_compare::RateCompare;
-use obs_rust_bitstream::write_timing::WriteTiming;
+use obs_rust_bitstream::effected_write::EffectedWrite;
 use obs_rust_bitstream::encode_cancel::EncodeCancel;
 use obs_rust_bitstream::encode_progress::EncodeProgress;
+use obs_rust_bitstream::encoder_controls::EncoderControls;
+use obs_rust_bitstream::file_capture::FileCapture;
+use obs_rust_bitstream::frame_pacer::FramePacer;
+use obs_rust_bitstream::live_weights::LiveWeights;
+use obs_rust_bitstream::rate_compare::RateCompare;
+use obs_rust_bitstream::report::Report;
+use obs_rust_bitstream::scene::Scene;
 use obs_rust_bitstream::scene_effect::SceneEffect;
+use obs_rust_bitstream::scene_list::SceneList;
+use obs_rust_bitstream::scene_transition::SceneTransition;
 use obs_rust_bitstream::sound_cc0::SoundCc0;
+use obs_rust_bitstream::source_list::SourceList;
+use obs_rust_bitstream::status_history::StatusHistory;
+use obs_rust_bitstream::status_report::StatusReport;
 use obs_rust_bitstream::system_status::SystemStatus;
 use obs_rust_bitstream::timed_sequence::TimedSequence;
+use obs_rust_bitstream::timestamp_stamp::TimestampStamp;
 use obs_rust_bitstream::video_fourcc::VideoFormat;
 use obs_rust_bitstream::video_frame::VideoFrame;
+use obs_rust_bitstream::write_timing::WriteTiming;
 use std::fs::File;
 use std::io::Write;
 
@@ -95,7 +95,10 @@ fn main() {
     Report::write(&status, 8, 16, 32, report_file).expect("report");
     println!("wrote report.txt");
     let report_text = std::fs::read_to_string("report.txt").expect("read report");
-    println!("report matches: {}", Report::matches_status(&report_text, &status));
+    println!(
+        "report matches: {}",
+        Report::matches_status(&report_text, &status)
+    );
     let mut stamped = frames[0].clone();
     TimestampStamp::stamp(&mut stamped, 0, 0, 60, 255).expect("stamp");
     println!("stamped frame with 00:01:00");
@@ -109,7 +112,10 @@ fn main() {
     weights.set("stamp.lum", 128.0).expect("lum");
     println!("stamp.lum set to 128");
     weights.set("stamp.opacity", 0.5).expect("opacity");
-    println!("stamp.opacity set to 0.5 (blend={})", TimestampStamp::blend(128, 0.5));
+    println!(
+        "stamp.opacity set to 0.5 (blend={})",
+        TimestampStamp::blend(128, 0.5)
+    );
     let (mut src, _live) = CaptureSource::best(16, 16);
     let mut captured_frames = Vec::new();
     for _ in 0..4 {
@@ -131,7 +137,9 @@ fn main() {
     )
     .expect("encode captured");
     println!("wrote captured.avbn");
-    let cap_size = std::fs::metadata("captured.avbn").map(|m| m.len()).unwrap_or(0);
+    let cap_size = std::fs::metadata("captured.avbn")
+        .map(|m| m.len())
+        .unwrap_or(0);
     println!("captured.avbn size: {} bytes", cap_size);
     // Write a tiny raw file and read it back.
     {
@@ -140,13 +148,19 @@ fn main() {
     }
     let mut file_cap = FileCapture::open("/tmp/demo.raw", 4, 4).expect("file cap");
     let from_file = file_cap.frame().expect("frame");
-    println!("file capture: {}x{} first={}", from_file.width, from_file.height, from_file.planes[0][0]);
+    println!(
+        "file capture: {}x{} first={}",
+        from_file.width, from_file.height, from_file.planes[0][0]
+    );
     let mut sel = CaptureSource::file("/tmp/demo.raw", 4, 4).expect("sel");
     let via_sel = sel.frame().expect("via sel");
     println!("via selector: first={}", via_sel.planes[0][0]);
     // Encode the file frame.
     let mut file_frames = Vec::new();
-    if let Some(f) = CaptureSource::file("/tmp/demo.raw", 4, 4).expect("open").frame() {
+    if let Some(f) = CaptureSource::file("/tmp/demo.raw", 4, 4)
+        .expect("open")
+        .frame()
+    {
         file_frames.push(f);
     }
     if !file_frames.is_empty() {
@@ -162,7 +176,9 @@ fn main() {
             fs,
         );
         println!("wrote from_file.avbn");
-        let sz = std::fs::metadata("from_file.avbn").map(|m| m.len()).unwrap_or(0);
+        let sz = std::fs::metadata("from_file.avbn")
+            .map(|m| m.len())
+            .unwrap_or(0);
         println!("from_file.avbn size: {} bytes", sz);
     }
     println!(
@@ -185,7 +201,10 @@ fn main() {
     .expect("stamped write");
     println!("wrote stamped.avbn");
     println!("base time: {}", TimestampStamp::now());
-    println!("stamped: {}", TimestampStamp::is_stamped(&stamped, 0, 0, 48));
+    println!(
+        "stamped: {}",
+        TimestampStamp::is_stamped(&stamped, 0, 0, 48)
+    );
     status.set_stamped(true);
     status.set_stamp_opacity(0.5);
     status.set_captured_frames(captured_frames.len());
@@ -225,19 +244,29 @@ fn main() {
     println!("one line: {}", status.one_line());
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
-    let read_back = SystemStatus::read_one_line(File::open("status.txt").expect("open")).unwrap_or_default();
+    let read_back =
+        SystemStatus::read_one_line(File::open("status.txt").expect("open")).unwrap_or_default();
     println!("read back: {}", read_back);
     println!("matches: {}", status.matches_one_line(&read_back));
     let mut history = StatusHistory::new(3);
     history.push(&status.one_line());
-    println!("history: {} last={}", history.len(), history.last().unwrap_or(""));
+    println!(
+        "history: {} last={}",
+        history.len(),
+        history.last().unwrap_or("")
+    );
     let hist_file = File::create("history.txt").expect("hist");
     history.write(hist_file).expect("write hist");
     println!("wrote history.txt");
     let loaded = StatusHistory::read(3, File::open("history.txt").expect("open")).expect("load");
-    println!("loaded: {} last={}", loaded.len(), loaded.last().unwrap_or(""));
+    println!(
+        "loaded: {} last={}",
+        loaded.len(),
+        loaded.last().unwrap_or("")
+    );
     println!("history matches: {}", history.matches_last(&loaded));
-    let header = StatusHistory::read_header(File::open("history.txt").expect("open")).unwrap_or_default();
+    let header =
+        StatusHistory::read_header(File::open("history.txt").expect("open")).unwrap_or_default();
     println!("header: {}", header);
     println!("header matches: {}", history.matches_header(&header));
     history.append_to("history.txt").expect("append");
@@ -246,7 +275,10 @@ fn main() {
     println!("oldest: {}", grown.first().unwrap_or(""));
     println!("lines: {}", grown.lines().len());
     println!("healthy lines: {}", grown.filter("healthy").len());
-    println!("latest healthy: {}", grown.latest_healthy().unwrap_or("none"));
+    println!(
+        "latest healthy: {}",
+        grown.latest_healthy().unwrap_or("none")
+    );
     println!("streak: {}", grown.streak());
     println!("best streak: {}", grown.best_streak());
     println!("at record: {}", grown.at_record());
@@ -257,11 +289,15 @@ fn main() {
     println!("dashboard at: {}", grown.dashboard_at(SystemStatus::now()));
     std::fs::write("dashboard.txt", grown.dashboard_at(SystemStatus::now())).expect("dash");
     println!("wrote dashboard.txt");
-    let dash = StatusHistory::read_dashboard(File::open("dashboard.txt").expect("open")).unwrap_or_default();
+    let dash = StatusHistory::read_dashboard(File::open("dashboard.txt").expect("open"))
+        .unwrap_or_default();
     println!("read dashboard: {}", dash);
     println!("timestamp: {}", StatusHistory::timestamp_of(&dash));
     println!("age: {}s", StatusHistory::age(&dash, SystemStatus::now()));
-    println!("fresh: {}", StatusHistory::fresh(&dash, SystemStatus::now(), 60));
+    println!(
+        "fresh: {}",
+        StatusHistory::fresh(&dash, SystemStatus::now(), 60)
+    );
     let report = StatusReport::from(&grown);
     println!("report: {}", report.summary());
     let rep_file = File::create("report.txt").expect("rep");
@@ -292,7 +328,10 @@ fn main() {
     let achieved = FramePacer::achieved(30, std::time::Duration::from_secs(1));
     println!("achieved: {:.0} fps", achieved);
     status.set_achieved_fps(achieved);
-    println!("status achieved: {}", status.summary().contains("achieved=30"));
+    println!(
+        "status achieved: {}",
+        status.summary().contains("achieved=30")
+    );
     println!("pacing: {}", FramePacer::summary(30.0, rate));
     status.set_pacing(&FramePacer::summary(30.0, rate));
     println!("status pacing: {}", status.summary().contains("pacing="));
@@ -335,14 +374,20 @@ fn main() {
     println!("scenes: {} names={:?}", scenes.len(), scenes.names());
     println!("scene list: {}", scenes.summary());
     status.set_scene_summary(&scenes.summary());
-    println!("status scene sum: {}", status.summary().contains("scene_sum="));
+    println!(
+        "status scene sum: {}",
+        status.summary().contains("scene_sum=")
+    );
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with scene sum");
     let t = SceneTransition::new("main", "break");
     println!("transition: {}", t.summary());
     status.set_transition(&t.summary());
-    println!("status transition: {}", status.summary().contains("transition="));
+    println!(
+        "status transition: {}",
+        status.summary().contains("transition=")
+    );
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with transition");
@@ -350,7 +395,8 @@ fn main() {
     let lines: Vec<String> = scenes.summaries();
     std::fs::write("scenes.txt", lines.join("\n")).expect("scenes");
     println!("wrote scenes.txt");
-    let loaded = SceneList::read_summaries(File::open("scenes.txt").expect("open")).unwrap_or_default();
+    let loaded =
+        SceneList::read_summaries(File::open("scenes.txt").expect("open")).unwrap_or_default();
     println!("loaded scenes: {}", loaded.len());
     println!("scenes match: {}", scenes.matches_summaries(&loaded));
     println!("switch to break: {}", scenes.switch("break"));
@@ -378,7 +424,9 @@ fn main() {
                 sb,
                 ss,
             );
-            let sz = std::fs::metadata("scene.avbn").map(|m| m.len()).unwrap_or(0);
+            let sz = std::fs::metadata("scene.avbn")
+                .map(|m| m.len())
+                .unwrap_or(0);
             println!("wrote scene.avbn ({} bytes)", sz);
         }
     }
@@ -392,7 +440,10 @@ fn main() {
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with scenes");
-    println!("status active: {}", status.summary().contains("active=file"));
+    println!(
+        "status active: {}",
+        status.summary().contains("active=file")
+    );
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");
     println!("wrote status.txt with active");
@@ -432,7 +483,9 @@ fn main() {
             pb,
             ps,
         );
-        let sz = std::fs::metadata("paced.avbn").map(|m| m.len()).unwrap_or(0);
+        let sz = std::fs::metadata("paced.avbn")
+            .map(|m| m.len())
+            .unwrap_or(0);
         println!("wrote paced.avbn ({} bytes)", sz);
     }
     println!("dashboard matches: {}", grown.matches_dashboard(&dash));
@@ -456,7 +509,9 @@ fn main() {
     let trend = StatusHistory::json_field(&json, "trend").unwrap_or_default();
     println!("json trend: {}", trend);
     println!("json matches: {}", grown.matches_json(&json));
-    grown.write_both("history.txt", "history.json").expect("both");
+    grown
+        .write_both("history.txt", "history.json")
+        .expect("both");
     println!("wrote both files");
     let final_status = File::create("status.txt").expect("final");
     status.write(final_status).expect("write final");

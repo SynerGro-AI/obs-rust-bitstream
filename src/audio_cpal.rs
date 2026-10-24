@@ -12,9 +12,9 @@ use crate::audio_capture::AudioCapture;
 #[cfg(feature = "audio")]
 mod imp {
     use super::*;
+    use crate::audio_capture::AudioSamples;
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use std::sync::{Arc, Mutex};
-    use crate::audio_capture::AudioSamples;
 
     pub struct CpalAudio {
         rate: u32,
@@ -102,8 +102,14 @@ mod tests {
     #[cfg(not(feature = "audio"))]
     #[test]
     fn disabled_is_clear() {
-        let e = open_cpal(48000, 1).err().expect("no backend without the feature");
-        assert!(e.contains("not enabled") && e.contains("--features audio"), "{}", e);
+        let e = open_cpal(48000, 1)
+            .err()
+            .expect("no backend without the feature");
+        assert!(
+            e.contains("not enabled") && e.contains("--features audio"),
+            "{}",
+            e
+        );
     }
 
     /// With the feature on, the cpal backend really runs: on a machine with
@@ -118,7 +124,11 @@ mod tests {
                 assert_eq!(a.channels(), 1);
                 let _ = a.samples(16);
             }
-            Err(e) => assert!(!e.contains("not enabled"), "audio feature built the stub: {}", e),
+            Err(e) => assert!(
+                !e.contains("not enabled"),
+                "audio feature built the stub: {}",
+                e
+            ),
         }
     }
 }

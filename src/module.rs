@@ -94,7 +94,10 @@ mod tests {
         assert!(Module::new("").is_err());
         let mut m = Module::new("m").unwrap();
         m.register_source("s").unwrap();
-        assert!(matches!(m.register_source("s"), Err(ModuleError::Duplicate)));
+        assert!(matches!(
+            m.register_source("s"),
+            Err(ModuleError::Duplicate)
+        ));
         assert!(matches!(m.register_source(""), Err(ModuleError::EmptyId)));
     }
 
@@ -102,6 +105,6 @@ mod tests {
     fn differential() {
         let mut m = Module::new("core").unwrap();
         m.register_filter("gain_filter").unwrap();
-        assert!(m.has_source("gain_filter") == false);
+        assert!(!m.has_source("gain_filter"));
     }
 }

@@ -18,13 +18,17 @@ pub struct Raster {
 impl Raster {
     /// Fully transparent raster.
     pub fn new(width: u32, height: u32) -> Self {
-        Self { width, height, data: vec![0; (width as usize) * (height as usize) * 4] }
+        Self {
+            width,
+            height,
+            data: vec![0; (width as usize) * (height as usize) * 4],
+        }
     }
 
     /// Solid colour raster.
     pub fn filled(width: u32, height: u32, rgba: [u8; 4]) -> Self {
         let mut r = Self::new(width, height);
-        for px in r.data.chunks_exact_mut(4) {
+        for px in r.data.as_chunks_mut::<4>().0 {
             px.copy_from_slice(&rgba);
         }
         r
@@ -35,7 +39,11 @@ impl Raster {
         if data.len() != (width as usize) * (height as usize) * 4 {
             return None;
         }
-        Some(Self { width, height, data })
+        Some(Self {
+            width,
+            height,
+            data,
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -47,7 +55,12 @@ impl Raster {
             return None;
         }
         let i = ((y as usize) * (self.width as usize) + x as usize) * 4;
-        Some([self.data[i], self.data[i + 1], self.data[i + 2], self.data[i + 3]])
+        Some([
+            self.data[i],
+            self.data[i + 1],
+            self.data[i + 2],
+            self.data[i + 3],
+        ])
     }
 
     /// Nearest-neighbour resample to a new size.
@@ -101,7 +114,12 @@ impl PixelRect {
         let y0 = a.1.min(b.1).max(0.0);
         let x1 = a.0.max(b.0).max(0.0);
         let y1 = a.1.max(b.1).max(0.0);
-        Self { x: x0 as u32, y: y0 as u32, w: (x1 - x0).round() as u32, h: (y1 - y0).round() as u32 }
+        Self {
+            x: x0 as u32,
+            y: y0 as u32,
+            w: (x1 - x0).round() as u32,
+            h: (y1 - y0).round() as u32,
+        }
     }
 
     /// Clamp to a raster. None if nothing remains.
@@ -114,7 +132,12 @@ impl PixelRect {
         if w == 0 || h == 0 {
             return None;
         }
-        Some(Self { x: self.x, y: self.y, w, h })
+        Some(Self {
+            x: self.x,
+            y: self.y,
+            w,
+            h,
+        })
     }
 
     pub fn contains(&self, x: u32, y: u32) -> bool {
@@ -124,6 +147,7 @@ impl PixelRect {
 
 /// Layer blend modes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum BlendMode {
     Normal,
     Multiply,
@@ -192,7 +216,13 @@ pub enum Filter {
 }
 
 impl Filter {
-    pub const ALL: [Filter; 5] = [Filter::None, Filter::Levels, Filter::Curves, Filter::Grayscale, Filter::Invert];
+    pub const ALL: [Filter; 5] = [
+        Filter::None,
+        Filter::Levels,
+        Filter::Curves,
+        Filter::Grayscale,
+        Filter::Invert,
+    ];
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -210,14 +240,14 @@ impl Filter {
             Filter::None => {}
             Filter::Levels => {
                 let gain = strength.max(0.0);
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     for c in px.iter_mut().take(3) {
                         *c = ((*c as f32 - 10.0).max(0.0) * gain).clamp(0.0, 255.0) as u8;
                     }
                 }
             }
             Filter::Curves => {
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     for c in px.iter_mut().take(3) {
                         let v = *c as f32 / 255.0;
                         *c = (v * v * 255.0).round() as u8;
@@ -225,15 +255,16 @@ impl Filter {
                 }
             }
             Filter::Grayscale => {
-                for px in r.data.chunks_exact_mut(4) {
-                    let l = (0.299 * px[0] as f32 + 0.587 * px[1] as f32 + 0.114 * px[2] as f32).round() as u8;
+                for px in r.data.as_chunks_mut::<4>().0 {
+                    let l = (0.299 * px[0] as f32 + 0.587 * px[1] as f32 + 0.114 * px[2] as f32)
+                        .round() as u8;
                     px[0] = l;
                     px[1] = l;
                     px[2] = l;
                 }
             }
             Filter::Invert => {
-                for px in r.data.chunks_exact_mut(4) {
+                for px in r.data.as_chunks_mut::<4>().0 {
                     for c in px.iter_mut().take(3) {
                         *c = 255 - *c;
                     }
@@ -256,14 +287,24 @@ pub struct ImageLayer {
 
 impl ImageLayer {
     pub fn new(name: &str, raster: Raster) -> Self {
-        Self { name: name.to_string(), visible: true, opacity: 1.0, blend: BlendMode::Normal, raster }
+        Self {
+            name: name.to_string(),
+            visible: true,
+            opacity: 1.0,
+            blend: BlendMode::Normal,
+            raster,
+        }
     }
 }
 
 /// Composite visible layers bottom-to-top into a `width × height`
 /// opaque raster. Layers of another size are resampled. Linear time.
 pub fn composite(layers: &[ImageLayer], width: u32, height: u32, background: [u8; 3]) -> Raster {
-    let mut out = Raster::filled(width, height, [background[0], background[1], background[2], 255]);
+    let mut out = Raster::filled(
+        width,
+        height,
+        [background[0], background[1], background[2], 255],
+    );
     for layer in layers.iter().filter(|l| l.visible && l.opacity > 0.0) {
         let resized;
         let src = if layer.raster.width == width && layer.raster.height == height {
@@ -280,7 +321,13 @@ pub fn composite(layers: &[ImageLayer], width: u32, height: u32, background: [u8
 /// Blend `top` over `base` (same size) with mode and opacity.
 pub fn blend_into(base: &mut Raster, top: &Raster, mode: BlendMode, opacity: f32) {
     let op = opacity.clamp(0.0, 1.0);
-    for (b, t) in base.data.chunks_exact_mut(4).zip(top.data.chunks_exact(4)) {
+    for (b, t) in base
+        .data
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(top.data.chunks_exact(4))
+    {
         let a = (t[3] as f32 / 255.0) * op;
         if a <= 0.0 {
             continue;
@@ -296,6 +343,7 @@ pub fn blend_into(base: &mut Raster, top: &Raster, mode: BlendMode, opacity: f32
 
 /// Brush settings.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Brush {
     /// Diameter in image pixels.
     pub size: f32,
@@ -310,7 +358,13 @@ pub struct Brush {
 
 impl Default for Brush {
     fn default() -> Self {
-        Self { size: 24.0, hardness: 0.8, flow: 1.0, spacing: 0.25, color: [201, 168, 76] }
+        Self {
+            size: 24.0,
+            hardness: 0.8,
+            flow: 1.0,
+            spacing: 0.25,
+            color: [201, 168, 76],
+        }
     }
 }
 
@@ -359,7 +413,8 @@ impl Brush {
                 } else {
                     let out_a = cov + a * (1.0 - cov);
                     for c in 0..3 {
-                        let v = (self.color[c] as f32 * cov + px[c] as f32 * a * (1.0 - cov)) / out_a.max(1e-6);
+                        let v = (self.color[c] as f32 * cov + px[c] as f32 * a * (1.0 - cov))
+                            / out_a.max(1e-6);
                         px[c] = v.round().clamp(0.0, 255.0) as u8;
                     }
                     px[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
@@ -369,7 +424,14 @@ impl Brush {
     }
 
     /// Stamp dabs along a segment at the brush spacing. Returns dab count.
-    pub fn stroke(&self, r: &mut Raster, from: (f32, f32), to: (f32, f32), erase: bool, clip: Option<PixelRect>) -> usize {
+    pub fn stroke(
+        &self,
+        r: &mut Raster,
+        from: (f32, f32),
+        to: (f32, f32),
+        erase: bool,
+        clip: Option<PixelRect>,
+    ) -> usize {
         let step = (self.size * self.spacing.clamp(0.05, 2.0)).max(1.0);
         let dx = to.0 - from.0;
         let dy = to.1 - from.1;
@@ -433,11 +495,22 @@ impl ViewTransform {
 
 /// Zoom steps used by the zoom buttons and shortcuts.
 pub fn zoom_step(current: f32, zoom_in: bool) -> f32 {
-    const STEPS: [f32; 15] = [0.05, 0.1, 0.167, 0.25, 0.333, 0.5, 0.667, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 16.0];
+    const STEPS: [f32; 15] = [
+        0.05, 0.1, 0.167, 0.25, 0.333, 0.5, 0.667, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 16.0,
+    ];
     if zoom_in {
-        STEPS.iter().copied().find(|s| *s > current * 1.001).unwrap_or(16.0)
+        STEPS
+            .iter()
+            .copied()
+            .find(|s| *s > current * 1.001)
+            .unwrap_or(16.0)
     } else {
-        STEPS.iter().rev().copied().find(|s| *s < current * 0.999).unwrap_or(0.05)
+        STEPS
+            .iter()
+            .rev()
+            .copied()
+            .find(|s| *s < current * 0.999)
+            .unwrap_or(0.05)
     }
 }
 
@@ -451,7 +524,11 @@ pub struct History<T: Clone> {
 
 impl<T: Clone> History<T> {
     pub fn new(limit: usize) -> Self {
-        Self { undo: Vec::new(), redo: Vec::new(), limit: limit.max(1) }
+        Self {
+            undo: Vec::new(),
+            redo: Vec::new(),
+            limit: limit.max(1),
+        }
     }
 
     /// Record the state before a change.
@@ -496,7 +573,12 @@ impl<T: Clone> History<T> {
 
 /// `hh:mm:ss` for a duration in seconds.
 pub fn format_clock(secs: u64) -> String {
-    format!("{:02}:{:02}:{:02}", secs / 3600, (secs / 60) % 60, secs % 60)
+    format!(
+        "{:02}:{:02}:{:02}",
+        secs / 3600,
+        (secs / 60) % 60,
+        secs % 60
+    )
 }
 
 /// Save target for a document: never the bundled asset itself.
@@ -505,14 +587,18 @@ pub fn save_target(path: &str) -> String {
     let p = std::path::Path::new(path);
     let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("untitled");
     let parent = p.parent().map(|d| d.to_path_buf()).unwrap_or_default();
-    let name = if stem.ends_with("_edit") { format!("{}.psd", stem) } else { format!("{}_edit.psd", stem) };
+    let name = if stem.ends_with("_edit") {
+        format!("{}.psd", stem)
+    } else {
+        format!("{}_edit.psd", stem)
+    };
     parent.join(name).to_string_lossy().into_owned()
 }
-
 
 /// Animated scalar: keys sorted by time, linear interpolation,
 /// held at both ends. Setting a key near an existing one replaces it.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct KeyTrack {
     keys: Vec<(f32, f32)>,
 }
@@ -539,7 +625,8 @@ impl KeyTrack {
             return;
         }
         self.keys.push((t, v));
-        self.keys.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        self.keys
+            .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 
     /// Remove the key closest to `t` within `tol`. True if removed.
@@ -549,7 +636,12 @@ impl KeyTrack {
             .iter()
             .enumerate()
             .filter(|(_, k)| (k.0 - t).abs() <= tol)
-            .min_by(|a, b| (a.1 .0 - t).abs().partial_cmp(&(b.1 .0 - t).abs()).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                (a.1 .0 - t)
+                    .abs()
+                    .partial_cmp(&(b.1 .0 - t).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|(i, _)| i);
         match best {
             Some(i) => {
@@ -620,7 +712,10 @@ mod tests {
         let mut top = ImageLayer::new("b", solid(1, 1, [255, 0, 0, 255]));
         top.visible = false;
         let layers = vec![ImageLayer::new("a", solid(1, 1, [0, 0, 255, 255])), top];
-        assert_eq!(composite(&layers, 1, 1, [0, 0, 0]).pixel(0, 0), Some([0, 0, 255, 255]));
+        assert_eq!(
+            composite(&layers, 1, 1, [0, 0, 0]).pixel(0, 0),
+            Some([0, 0, 255, 255])
+        );
     }
 
     #[test]
@@ -696,7 +791,13 @@ mod tests {
     #[test]
     fn brush_paints_at_point_only() {
         let mut r = Raster::new(50, 50);
-        let b = Brush { size: 10.0, hardness: 1.0, flow: 1.0, spacing: 0.25, color: [255, 0, 0] };
+        let b = Brush {
+            size: 10.0,
+            hardness: 1.0,
+            flow: 1.0,
+            spacing: 0.25,
+            color: [255, 0, 0],
+        };
         b.dab(&mut r, 25.0, 25.0, false, None);
         assert_eq!(r.pixel(25, 25), Some([255, 0, 0, 255]));
         assert_eq!(r.pixel(0, 0), Some([0, 0, 0, 0]));
@@ -706,7 +807,12 @@ mod tests {
     #[test]
     fn eraser_clears_alpha() {
         let mut r = Raster::filled(20, 20, [255, 255, 255, 255]);
-        let b = Brush { size: 8.0, hardness: 1.0, flow: 1.0, ..Brush::default() };
+        let b = Brush {
+            size: 8.0,
+            hardness: 1.0,
+            flow: 1.0,
+            ..Brush::default()
+        };
         b.dab(&mut r, 10.0, 10.0, true, None);
         assert_eq!(r.pixel(10, 10).map(|p| p[3]), Some(0));
         assert_eq!(r.pixel(0, 0).map(|p| p[3]), Some(255));
@@ -715,8 +821,23 @@ mod tests {
     #[test]
     fn dab_respects_clip() {
         let mut r = Raster::new(20, 20);
-        let b = Brush { size: 20.0, hardness: 1.0, ..Brush::default() };
-        b.dab(&mut r, 10.0, 10.0, false, Some(PixelRect { x: 0, y: 0, w: 10, h: 20 }));
+        let b = Brush {
+            size: 20.0,
+            hardness: 1.0,
+            ..Brush::default()
+        };
+        b.dab(
+            &mut r,
+            10.0,
+            10.0,
+            false,
+            Some(PixelRect {
+                x: 0,
+                y: 0,
+                w: 10,
+                h: 20,
+            }),
+        );
         assert_eq!(r.pixel(5, 10).map(|p| p[3]), Some(255));
         assert_eq!(r.pixel(15, 10).map(|p| p[3]), Some(0));
     }
@@ -731,7 +852,11 @@ mod tests {
     #[test]
     fn stroke_fills_gap() {
         let mut r = Raster::new(100, 10);
-        let b = Brush { size: 4.0, hardness: 1.0, ..Brush::default() };
+        let b = Brush {
+            size: 4.0,
+            hardness: 1.0,
+            ..Brush::default()
+        };
         let n = b.stroke(&mut r, (2.0, 5.0), (98.0, 5.0), false, None);
         assert!(n > 10);
         assert!(r.pixel(50, 5).map(|p| p[3]).unwrap_or(0) > 0);
@@ -739,7 +864,11 @@ mod tests {
 
     #[test]
     fn soft_brush_falls_off() {
-        let b = Brush { size: 20.0, hardness: 0.0, ..Brush::default() };
+        let b = Brush {
+            size: 20.0,
+            hardness: 0.0,
+            ..Brush::default()
+        };
         assert!(b.coverage(0.0) > b.coverage(5.0));
         assert_eq!(b.coverage(10.0), 0.0);
     }
@@ -747,20 +876,45 @@ mod tests {
     #[test]
     fn rect_from_corners_any_order() {
         let r = PixelRect::from_corners((10.0, 20.0), (2.0, 4.0));
-        assert_eq!(r, PixelRect { x: 2, y: 4, w: 8, h: 16 });
+        assert_eq!(
+            r,
+            PixelRect {
+                x: 2,
+                y: 4,
+                w: 8,
+                h: 16
+            }
+        );
     }
 
     #[test]
     fn crop_clamps() {
         let r = solid(10, 10, [1, 2, 3, 255]);
-        let c = r.cropped(PixelRect { x: 8, y: 8, w: 10, h: 10 });
+        let c = r.cropped(PixelRect {
+            x: 8,
+            y: 8,
+            w: 10,
+            h: 10,
+        });
         assert_eq!(c.map(|c| (c.width, c.height)), Some((2, 2)));
-        assert!(r.cropped(PixelRect { x: 20, y: 0, w: 1, h: 1 }).is_none());
+        assert!(r
+            .cropped(PixelRect {
+                x: 20,
+                y: 0,
+                w: 1,
+                h: 1
+            })
+            .is_none());
     }
 
     #[test]
     fn view_round_trip() {
-        let v = ViewTransform { viewport: (100.0, 50.0, 800.0, 600.0), image: (400, 300), zoom: 1.5, pan: (10.0, -5.0) };
+        let v = ViewTransform {
+            viewport: (100.0, 50.0, 800.0, 600.0),
+            image: (400, 300),
+            zoom: 1.5,
+            pan: (10.0, -5.0),
+        };
         let (sx, sy) = v.to_screen(123.0, 45.0);
         let (ix, iy) = v.to_image(sx, sy);
         assert!((ix - 123.0).abs() < 1e-3 && (iy - 45.0).abs() < 1e-3);
@@ -803,8 +957,14 @@ mod tests {
 
     #[test]
     fn save_target_never_overwrites_source() {
-        assert_eq!(save_target("assets/mountain_spire.psd"), "assets/mountain_spire_edit.psd");
-        assert_eq!(save_target("assets/mountain_spire_edit.psd"), "assets/mountain_spire_edit.psd");
+        assert_eq!(
+            save_target("assets/mountain_spire.psd"),
+            "assets/mountain_spire_edit.psd"
+        );
+        assert_eq!(
+            save_target("assets/mountain_spire_edit.psd"),
+            "assets/mountain_spire_edit.psd"
+        );
         assert_eq!(save_target("photo.jpg"), "photo_edit.psd");
     }
 

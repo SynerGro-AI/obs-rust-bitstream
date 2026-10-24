@@ -40,11 +40,7 @@ impl SceneEffect {
     }
 
     /// Apply the pipeline if enabled.
-    pub fn apply(
-        &self,
-        frame: &mut VideoFrame,
-        weights: &LiveWeights,
-    ) -> Result<(), PipeError> {
+    pub fn apply(&self, frame: &mut VideoFrame, weights: &LiveWeights) -> Result<(), PipeError> {
         if !self.enabled {
             return Ok(());
         }

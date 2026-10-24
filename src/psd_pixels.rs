@@ -10,7 +10,9 @@
 pub enum LayerKind {
     Pixels,
     /// Folder record (written *after* its children, bottom-first order).
-    GroupFolder { open: bool },
+    GroupFolder {
+        open: bool,
+    },
     /// Hidden divider that opens a group (written *before* its children).
     GroupEnd,
 }
@@ -52,7 +54,18 @@ impl PsdLayerPixels {
                 }
             }
         }
-        let mut l = PsdLayerPixels { name: name.to_string(), visible: true, opacity: 255, blend: *b"norm", top: 0, left: 0, bottom: 0, right: 0, rgba: Vec::new(), kind: LayerKind::Pixels };
+        let mut l = PsdLayerPixels {
+            name: name.to_string(),
+            visible: true,
+            opacity: 255,
+            blend: *b"norm",
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+            rgba: Vec::new(),
+            kind: LayerKind::Pixels,
+        };
         if x0 == u32::MAX {
             return l;
         }
@@ -93,7 +106,18 @@ impl PsdLayerPixels {
     }
 
     fn group(name: &str, kind: LayerKind, visible: bool) -> Self {
-        PsdLayerPixels { name: name.to_string(), visible, opacity: 255, blend: *b"pass", top: 0, left: 0, bottom: 0, right: 0, rgba: Vec::new(), kind }
+        PsdLayerPixels {
+            name: name.to_string(),
+            visible,
+            opacity: 255,
+            blend: *b"pass",
+            top: 0,
+            left: 0,
+            bottom: 0,
+            right: 0,
+            rgba: Vec::new(),
+            kind,
+        }
     }
     pub fn group_end() -> Self {
         Self::group("</Layer group>", LayerKind::GroupEnd, true)
@@ -163,11 +187,15 @@ pub fn packbits_decode(src: &[u8], want: usize) -> Result<Vec<u8>, String> {
             let k = 1 - n as isize;
             let b = *src.get(i).ok_or("truncated RLE run")?;
             i += 1;
-            out.extend(std::iter::repeat(b).take(k as usize));
+            out.extend(std::iter::repeat_n(b, k as usize));
         }
     }
     if out.len() < want {
-        return Err(format!("RLE row decodes to {} bytes, expected {}", out.len(), want));
+        return Err(format!(
+            "RLE row decodes to {} bytes, expected {}",
+            out.len(),
+            want
+        ));
     }
     out.truncate(want);
     Ok(out)
@@ -186,7 +214,9 @@ fn be32(v: &mut Vec<u8>, x: u32) {
 fn rle_channel(plane: &[u8], w: usize, h: usize) -> Vec<u8> {
     let mut out = Vec::new();
     be16(&mut out, 1);
-    let rows: Vec<Vec<u8>> = (0..h).map(|y| packbits_encode(&plane[y * w..(y + 1) * w])).collect();
+    let rows: Vec<Vec<u8>> = (0..h)
+        .map(|y| packbits_encode(&plane[y * w..(y + 1) * w]))
+        .collect();
     for r in &rows {
         be16(&mut out, r.len() as u16);
     }
@@ -197,8 +227,13 @@ fn rle_channel(plane: &[u8], w: usize, h: usize) -> Vec<u8> {
 }
 
 fn planes(rgba: &[u8], n: usize) -> [Vec<u8>; 4] {
-    let mut p = [Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n)];
-    for px in rgba.chunks_exact(4) {
+    let mut p = [
+        Vec::with_capacity(n),
+        Vec::with_capacity(n),
+        Vec::with_capacity(n),
+        Vec::with_capacity(n),
+    ];
+    for px in rgba.as_chunks::<4>().0 {
         for c in 0..4 {
             p[c].push(px[c]);
         }
@@ -207,7 +242,11 @@ fn planes(rgba: &[u8], n: usize) -> [Vec<u8>; 4] {
 }
 
 fn pascal_padded(name: &str) -> Vec<u8> {
-    let mut bytes: Vec<u8> = name.chars().map(|c| if c.is_ascii() { c as u8 } else { b'?' }).take(255).collect();
+    let mut bytes: Vec<u8> = name
+        .chars()
+        .map(|c| if c.is_ascii() { c as u8 } else { b'?' })
+        .take(255)
+        .collect();
     let mut out = vec![bytes.len() as u8];
     out.append(&mut bytes);
     while out.len() % 4 != 0 {
@@ -221,7 +260,7 @@ fn tagged(key: &[u8; 4], data: &[u8]) -> Vec<u8> {
     out.extend_from_slice(b"8BIM");
     out.extend_from_slice(key);
     let mut d = data.to_vec();
-    while d.len() % 4 != 0 {
+    while !d.len().is_multiple_of(4) {
         d.push(0);
     }
     be32(&mut out, d.len() as u32);
@@ -232,7 +271,10 @@ fn tagged(key: &[u8; 4], data: &[u8]) -> Vec<u8> {
 impl PsdPixels {
     pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
         if self.width == 0 || self.height == 0 || self.width > 30000 || self.height > 30000 {
-            return Err(format!("unsupported canvas size {}×{}", self.width, self.height));
+            return Err(format!(
+                "unsupported canvas size {}×{}",
+                self.width, self.height
+            ));
         }
         let mut f = Vec::new();
         f.extend_from_slice(b"8BPS");
@@ -251,13 +293,27 @@ impl PsdPixels {
         for l in &self.layers {
             let (w, h) = (l.width() as usize, l.height() as usize);
             if l.rgba.len() != w * h * 4 {
-                return Err(format!("layer '{}' has {} bytes for a {}×{} rect", l.name, l.rgba.len(), w, h));
+                return Err(format!(
+                    "layer '{}' has {} bytes for a {}×{} rect",
+                    l.name,
+                    l.rgba.len(),
+                    w,
+                    h
+                ));
             }
             let chans: Vec<(i16, Vec<u8>)> = if w * h == 0 {
-                [-1i16, 0, 1, 2].iter().map(|&id| (id, vec![0, 0])).collect()
+                [-1i16, 0, 1, 2]
+                    .iter()
+                    .map(|&id| (id, vec![0, 0]))
+                    .collect()
             } else {
                 let p = planes(&l.rgba, w * h);
-                vec![(-1, rle_channel(&p[3], w, h)), (0, rle_channel(&p[0], w, h)), (1, rle_channel(&p[1], w, h)), (2, rle_channel(&p[2], w, h))]
+                vec![
+                    (-1, rle_channel(&p[3], w, h)),
+                    (0, rle_channel(&p[0], w, h)),
+                    (1, rle_channel(&p[1], w, h)),
+                    (2, rle_channel(&p[2], w, h)),
+                ]
             };
             for v in [l.top, l.left, l.bottom, l.right] {
                 be32(&mut records, v as u32);
@@ -365,7 +421,10 @@ struct Rd<'a> {
 
 impl<'a> Rd<'a> {
     fn take(&mut self, n: usize) -> Result<&'a [u8], String> {
-        let s = self.b.get(self.p..self.p + n).ok_or_else(|| format!("file truncated at byte {}", self.p))?;
+        let s = self
+            .b
+            .get(self.p..self.p + n)
+            .ok_or_else(|| format!("file truncated at byte {}", self.p))?;
         self.p += n;
         Ok(s)
     }
@@ -427,10 +486,16 @@ fn max_decodable(len: usize) -> u64 {
 
 fn check_dims(what: &str, w: u64, h: u64) -> Result<(), String> {
     if w > MAX_SIDE as u64 || h > MAX_SIDE as u64 {
-        return Err(format!("{} is {} × {} px; the PSD limit is {} px per side", what, w, h, MAX_SIDE));
+        return Err(format!(
+            "{} is {} × {} px; the PSD limit is {} px per side",
+            what, w, h, MAX_SIDE
+        ));
     }
     if w.saturating_mul(h) > MAX_PIXELS {
-        return Err(format!("{} is {} × {} px, more than the {} px this app will allocate", what, w, h, MAX_PIXELS));
+        return Err(format!(
+            "{} is {} × {} px, more than the {} px this app will allocate",
+            what, w, h, MAX_PIXELS
+        ));
     }
     Ok(())
 }
@@ -520,14 +585,23 @@ impl PsdPixels {
                         let data = r.take(len)?;
                         match &key {
                             b"luni" if data.len() >= 4 => {
-                                let n = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
-                                let units: Vec<u16> = data[4..].chunks_exact(2).take(n).map(|c| u16::from_be_bytes([c[0], c[1]])).collect();
+                                let n = u32::from_be_bytes([data[0], data[1], data[2], data[3]])
+                                    as usize;
+                                let units: Vec<u16> = data[4..]
+                                    .as_chunks::<2>()
+                                    .0
+                                    .iter()
+                                    .take(n)
+                                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                                    .collect();
                                 if let Ok(s) = String::from_utf16(&units) {
                                     name = s.trim_end_matches('\0').to_string();
                                 }
                             }
                             b"lsct" | b"lsdk" if data.len() >= 4 => {
-                                kind = match u32::from_be_bytes([data[0], data[1], data[2], data[3]]) {
+                                kind = match u32::from_be_bytes([
+                                    data[0], data[1], data[2], data[3],
+                                ]) {
                                     1 => LayerKind::GroupFolder { open: true },
                                     2 => LayerKind::GroupFolder { open: false },
                                     3 => LayerKind::GroupEnd,
@@ -538,15 +612,36 @@ impl PsdPixels {
                         }
                     }
                     r.p = extra_end;
-                    recs.push((PsdLayerPixels { name, visible: flags & 0x02 == 0, opacity, blend, top, left, bottom, right, rgba: Vec::new(), kind }, chans));
+                    recs.push((
+                        PsdLayerPixels {
+                            name,
+                            visible: flags & 0x02 == 0,
+                            opacity,
+                            blend,
+                            top,
+                            left,
+                            bottom,
+                            right,
+                            rgba: Vec::new(),
+                            kind,
+                        },
+                        chans,
+                    ));
                 }
                 for (mut l, chans) in recs {
                     let (w, h) = (l.width() as usize, l.height() as usize);
                     check_dims(&format!("layer '{}'", l.name), w as u64, h as u64)?;
                     // allocate only what the file's channel data could fill
-                    let data: usize = chans.iter().map(|c| c.1).fold(0usize, |a, b| a.saturating_add(b));
-                    if (w * h) as u64 > max_decodable(data) || data > r.b.len().saturating_sub(r.p) {
-                        return Err(format!("layer '{}' claims {} × {} px but carries only {} bytes of pixel data", l.name, w, h, data));
+                    let data: usize = chans
+                        .iter()
+                        .map(|c| c.1)
+                        .fold(0usize, |a, b| a.saturating_add(b));
+                    if (w * h) as u64 > max_decodable(data) || data > r.b.len().saturating_sub(r.p)
+                    {
+                        return Err(format!(
+                            "layer '{}' claims {} × {} px but carries only {} bytes of pixel data",
+                            l.name, w, h, data
+                        ));
                     }
                     let mut rgba = vec![255u8; w * h * 4];
                     for (id, len) in chans {
@@ -561,7 +656,8 @@ impl PsdPixels {
                         if w * h == 0 {
                             continue;
                         }
-                        let plane = read_channel(raw, w, h).map_err(|e| format!("layer '{}': {}", l.name, e))?;
+                        let plane = read_channel(raw, w, h)
+                            .map_err(|e| format!("layer '{}': {}", l.name, e))?;
                         for (i, v) in plane.into_iter().enumerate() {
                             rgba[i * 4 + c] = v;
                         }
@@ -610,14 +706,19 @@ impl PsdPixels {
                 _ => return Err("merged image compression not supported".into()),
             }
             if channels < 4 {
-                for px in rgba.chunks_exact_mut(4) {
+                for px in rgba.as_chunks_mut::<4>().0 {
                     px[3] = 255;
                 }
             }
             Ok(rgba)
         })()
         .ok();
-        Ok(Self { width, height, layers, merged })
+        Ok(Self {
+            width,
+            height,
+            layers,
+            merged,
+        })
     }
 }
 
@@ -687,7 +788,14 @@ mod tests {
 
     #[test]
     fn packbits_roundtrip() {
-        let cases: Vec<Vec<u8>> = vec![vec![], vec![7], vec![1, 1, 1, 1], (0..300).map(|i| (i % 7) as u8).collect(), vec![0; 1000], (0..255u8).chain([9; 200]).chain(0..40).collect()];
+        let cases: Vec<Vec<u8>> = vec![
+            vec![],
+            vec![7],
+            vec![1, 1, 1, 1],
+            (0..300).map(|i| (i % 7) as u8).collect(),
+            vec![0; 1000],
+            (0..255u8).chain([9; 200]).chain(0..40).collect(),
+        ];
         for c in cases {
             let e = packbits_encode(&c);
             assert_eq!(packbits_decode(&e, c.len()).unwrap(), c);
@@ -698,7 +806,7 @@ mod tests {
     fn sample() -> PsdPixels {
         let (w, h) = (40u32, 30u32);
         let mut bg = vec![0u8; (w * h * 4) as usize];
-        for (i, px) in bg.chunks_exact_mut(4).enumerate() {
+        for (i, px) in bg.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             px.copy_from_slice(&[(i % 251) as u8, 100, 200, 255]);
         }
         let mut dot = vec![0u8; (w * h * 4) as usize];
@@ -714,8 +822,20 @@ mod tests {
         b.opacity = 128;
         b.blend = *b"mul ";
         b.visible = false;
-        let empty = PsdLayerPixels::from_canvas("Empty", w, h, &vec![0; (w * h * 4) as usize], (0, 0));
-        PsdPixels { width: w, height: h, layers: vec![a, PsdLayerPixels::group_end(), b, empty, PsdLayerPixels::group_folder("Group 1", true, true)], merged: Some(bg) }
+        let empty =
+            PsdLayerPixels::from_canvas("Empty", w, h, &vec![0; (w * h * 4) as usize], (0, 0));
+        PsdPixels {
+            width: w,
+            height: h,
+            layers: vec![
+                a,
+                PsdLayerPixels::group_end(),
+                b,
+                empty,
+                PsdLayerPixels::group_folder("Group 1", true, true),
+            ],
+            merged: Some(bg),
+        }
     }
 
     #[test]
@@ -725,7 +845,10 @@ mod tests {
         let back = PsdPixels::parse(&bytes).unwrap();
         assert_eq!(back, d);
         let dot = &back.layers[2];
-        assert_eq!((dot.left, dot.top, dot.width(), dot.height()), (20, 10, 8, 5));
+        assert_eq!(
+            (dot.left, dot.top, dot.width(), dot.height()),
+            (20, 10, 8, 5)
+        );
         assert_eq!(&dot.rgba[0..4], &[250, 10, 10, 200]);
         assert!(!dot.visible && dot.opacity == 128 && &dot.blend == b"mul ");
         assert_eq!(dot.name, "Dot · ünïcode");

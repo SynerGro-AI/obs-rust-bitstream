@@ -45,11 +45,15 @@ impl RecordingRegistry {
     }
 
     pub fn get(&self, name: &str) -> Result<&Recording, RecordingRegistryError> {
-        self.recordings.get(name).ok_or(RecordingRegistryError::Missing)
+        self.recordings
+            .get(name)
+            .ok_or(RecordingRegistryError::Missing)
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut Recording, RecordingRegistryError> {
-        self.recordings.get_mut(name).ok_or(RecordingRegistryError::Missing)
+        self.recordings
+            .get_mut(name)
+            .ok_or(RecordingRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -87,7 +91,10 @@ mod tests {
     #[test]
     fn missing_and_remove() {
         let mut r = RecordingRegistry::new();
-        assert!(matches!(r.get("nope"), Err(RecordingRegistryError::Missing)));
+        assert!(matches!(
+            r.get("nope"),
+            Err(RecordingRegistryError::Missing)
+        ));
         r.add("r").unwrap();
         assert!(r.remove("r"));
         assert!(!r.contains("r"));

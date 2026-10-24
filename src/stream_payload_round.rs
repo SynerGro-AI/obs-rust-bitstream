@@ -74,8 +74,16 @@ mod tests {
         let mut codec = H264Codec::new(16, 16, &w).unwrap();
         let mut cap = SyntheticCapture::new(16, 16);
         assert!(StreamPayloadRound::matches(
-            &mut r, &mut stream, &mut svc, &out, &mut w, &mut codec, &mut cap,
-            "twitch", "rtmp", 2,
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            &mut codec,
+            &mut cap,
+            "twitch",
+            "rtmp",
+            2,
         )
         .unwrap());
     }
@@ -90,8 +98,16 @@ mod tests {
         let mut codec = H264Codec::new(16, 16, &w).unwrap();
         let mut cap = SyntheticCapture::new(16, 16);
         assert!(StreamPayloadRound::matches(
-            &mut r, &mut stream, &mut svc, &out, &mut w, &mut codec, &mut cap,
-            "", "rtmp", 1,
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            &mut codec,
+            &mut cap,
+            "",
+            "rtmp",
+            1,
         )
         .is_err());
     }
@@ -112,13 +128,11 @@ mod tests {
         let mut capa = SyntheticCapture::new(16, 16);
         let mut capb = SyntheticCapture::new(16, 16);
         assert!(StreamPayloadRound::matches(
-            &mut ra, &mut sa, &mut sva, &out, &mut wa, &mut ca, &mut capa,
-            "twitch", "rtmp", 1,
+            &mut ra, &mut sa, &mut sva, &out, &mut wa, &mut ca, &mut capa, "twitch", "rtmp", 1,
         )
         .unwrap());
         assert!(StreamPayloadRound::matches(
-            &mut rb, &mut sb, &mut svb, &out, &mut wb, &mut cb, &mut capb,
-            "youtube", "rtmp", 2,
+            &mut rb, &mut sb, &mut svb, &out, &mut wb, &mut cb, &mut capb, "youtube", "rtmp", 2,
         )
         .unwrap());
     }

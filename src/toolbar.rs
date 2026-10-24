@@ -22,12 +22,36 @@ impl Toolbar {
     pub fn photoshop() -> Self {
         Self {
             groups: vec![
-                ToolGroup { name: "Select", tools: vec!["Move", "Marquee", "Lasso", "Quick Selection"], expanded: false },
-                ToolGroup { name: "Crop", tools: vec!["Crop", "Eyedropper"], expanded: false },
-                ToolGroup { name: "Paint", tools: vec!["Brush", "Pencil", "Eraser", "Gradient", "Paint Bucket"], expanded: false },
-                ToolGroup { name: "Retouch", tools: vec!["Clone Stamp", "Healing Brush", "Dodge", "Burn", "Sponge"], expanded: false },
-                ToolGroup { name: "Draw", tools: vec!["Pen", "Shape", "Text"], expanded: false },
-                ToolGroup { name: "View", tools: vec!["Hand", "Zoom"], expanded: false },
+                ToolGroup {
+                    name: "Select",
+                    tools: vec!["Move", "Marquee", "Lasso", "Quick Selection"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Crop",
+                    tools: vec!["Crop", "Eyedropper"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Paint",
+                    tools: vec!["Brush", "Pencil", "Eraser", "Gradient", "Paint Bucket"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Retouch",
+                    tools: vec!["Clone Stamp", "Healing Brush", "Dodge", "Burn", "Sponge"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Draw",
+                    tools: vec!["Pen", "Shape", "Text"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "View",
+                    tools: vec!["Hand", "Zoom"],
+                    expanded: false,
+                },
             ],
             active: "Move".to_string(),
         }
@@ -37,11 +61,31 @@ impl Toolbar {
     pub fn after_effects() -> Self {
         Self {
             groups: vec![
-                ToolGroup { name: "Select", tools: vec!["Selection", "Hand", "Zoom"], expanded: false },
-                ToolGroup { name: "Transform", tools: vec!["Rotation", "Pan Behind"], expanded: false },
-                ToolGroup { name: "Create", tools: vec!["Shape", "Pen", "Text", "Camera"], expanded: false },
-                ToolGroup { name: "Paint", tools: vec!["Brush", "Clone Stamp", "Eraser", "Roto Brush"], expanded: false },
-                ToolGroup { name: "Puppet", tools: vec!["Puppet Pin"], expanded: false },
+                ToolGroup {
+                    name: "Select",
+                    tools: vec!["Selection", "Hand", "Zoom"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Transform",
+                    tools: vec!["Rotation", "Pan Behind"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Create",
+                    tools: vec!["Shape", "Pen", "Text", "Camera"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Paint",
+                    tools: vec!["Brush", "Clone Stamp", "Eraser", "Roto Brush"],
+                    expanded: false,
+                },
+                ToolGroup {
+                    name: "Puppet",
+                    tools: vec!["Puppet Pin"],
+                    expanded: false,
+                },
             ],
             active: "Selection".to_string(),
         }

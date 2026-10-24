@@ -48,6 +48,12 @@ impl Curves {
     }
 }
 
+impl Default for Curves {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

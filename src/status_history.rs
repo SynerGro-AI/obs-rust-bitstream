@@ -58,12 +58,20 @@ impl StatusHistory {
 
     /// Most recent line that contains "healthy".
     pub fn latest_healthy(&self) -> Option<&str> {
-        self.lines.iter().rev().find(|l| l.contains("healthy")).map(|s| s.as_str())
+        self.lines
+            .iter()
+            .rev()
+            .find(|l| l.contains("healthy"))
+            .map(|s| s.as_str())
     }
 
     /// Consecutive healthy lines at the end.
     pub fn streak(&self) -> usize {
-        self.lines.iter().rev().take_while(|l| l.contains("healthy")).count()
+        self.lines
+            .iter()
+            .rev()
+            .take_while(|l| l.contains("healthy"))
+            .count()
     }
 
     /// Longest healthy streak in the history.
@@ -73,7 +81,9 @@ impl StatusHistory {
         for line in &self.lines {
             if line.contains("healthy") {
                 cur += 1;
-                if cur > best { best = cur; }
+                if cur > best {
+                    best = cur;
+                }
             } else {
                 cur = 0;
             }
@@ -138,7 +148,11 @@ impl StatusHistory {
     /// Age in seconds. 0 if no timestamp.
     pub fn age(line: &str, now: u64) -> u64 {
         let ts = Self::timestamp_of(line);
-        if ts == 0 { 0 } else { now.saturating_sub(ts) }
+        if ts == 0 {
+            0
+        } else {
+            now.saturating_sub(ts)
+        }
     }
 
     /// True if the dashboard is younger than max_age seconds.
@@ -192,7 +206,11 @@ impl StatusHistory {
                 }
             }
         }
-        if n == 0 { 0.0 } else { sum / n as f32 }
+        if n == 0 {
+            0.0
+        } else {
+            sum / n as f32
+        }
     }
 
     /// Min and max fps. (0.0, 0.0) if none.
@@ -205,14 +223,22 @@ impl StatusHistory {
                 let part = part.trim();
                 if let Some(num) = part.strip_suffix(" fps") {
                     if let Ok(v) = num.parse::<f32>() {
-                        if v < min { min = v; }
-                        if v > max { max = v; }
+                        if v < min {
+                            min = v;
+                        }
+                        if v > max {
+                            max = v;
+                        }
                         n += 1;
                     }
                 }
             }
         }
-        if n == 0 { (0.0, 0.0) } else { (min, max) }
+        if n == 0 {
+            (0.0, 0.0)
+        } else {
+            (min, max)
+        }
     }
 
     /// Difference between max and min fps.
@@ -240,7 +266,8 @@ impl StatusHistory {
         let last_fps = self.last().and_then(|line| {
             line.split('|').find_map(|part| {
                 let part = part.trim();
-                part.strip_suffix(" fps").and_then(|n| n.parse::<f32>().ok())
+                part.strip_suffix(" fps")
+                    .and_then(|n| n.parse::<f32>().ok())
             })
         });
         match last_fps {
@@ -258,7 +285,11 @@ impl StatusHistory {
             self.health_ratio() * 100.0,
             self.avg_fps(),
             self.trend(),
-            if self.stable(0.1) { "stable" } else { "variable" },
+            if self.stable(0.1) {
+                "stable"
+            } else {
+                "variable"
+            },
             self.streak(),
             if self.at_record() { " (record)" } else { "" },
             self.word()
@@ -272,8 +303,16 @@ impl StatusHistory {
 
     /// JSON with a timestamp and freshness.
     pub fn to_json_at(&self, now: u64) -> String {
-        let dash = if now == 0 { self.dashboard() } else { self.dashboard_at(now) };
-        let fresh = if now == 0 { true } else { Self::fresh(&dash, now, 60) };
+        let dash = if now == 0 {
+            self.dashboard()
+        } else {
+            self.dashboard_at(now)
+        };
+        let fresh = if now == 0 {
+            true
+        } else {
+            Self::fresh(&dash, now, 60)
+        };
         format!(
             "{{\"lines\":{},\"healthy\":{:.0},\"avg_fps\":{:.0},\"trend\":\"{}\",\"stable\":{},\"streak\":{},\"record\":{},\"word\":\"{}\",\"color\":\"{}\",\"report\":\"{}\",\"dashboard\":\"{}\",\"fresh\":{}}}",
             self.len(),
@@ -296,7 +335,7 @@ impl StatusHistory {
         let pattern = format!("\"{}\":", key);
         let start = json.find(&pattern)? + pattern.len();
         let rest = &json[start..];
-        let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+        let end = rest.find([',', '}']).unwrap_or(rest.len());
         Some(rest[..end].trim_matches('"').to_string())
     }
 
@@ -446,7 +485,11 @@ mod tests {
         assert!(h4.summary().contains("up"));
         assert!(h4.summary().contains("variable"));
         assert!(h4.summary().contains("streak"));
-        assert!(h4.summary().contains("good") || h4.summary().contains("warn") || h4.summary().contains("bad"));
+        assert!(
+            h4.summary().contains("good")
+                || h4.summary().contains("warn")
+                || h4.summary().contains("bad")
+        );
         assert!(h4.to_json().contains("\"record\":true"));
         assert!(h4.to_json().contains("\"word\":"));
         assert!(h4.to_json().contains("\"color\":"));
@@ -454,11 +497,16 @@ mod tests {
         assert!(h4.to_json().contains("\"dashboard\":"));
         assert!(h4.to_json_at(100).contains("\"fresh\":"));
         let json = h4.to_json();
-        assert_eq!(StatusHistory::json_field(&json, "trend"), Some("up".to_string()));
+        assert_eq!(
+            StatusHistory::json_field(&json, "trend"),
+            Some("up".to_string())
+        );
         assert!(h4.matches_json(&json));
         let text_path = "/tmp/both.txt";
         let json_path = "/tmp/both.json";
         h4.write_both(text_path, json_path).unwrap();
-        assert!(std::fs::read_to_string(json_path).unwrap().contains("record"));
+        assert!(std::fs::read_to_string(json_path)
+            .unwrap()
+            .contains("record"));
     }
 }

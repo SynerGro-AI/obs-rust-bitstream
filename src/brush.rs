@@ -88,8 +88,7 @@ impl Brush {
                     }
                     let i = (y as u32 * frame.width + x as u32) as usize;
                     if i < plane.len() {
-                        let blended =
-                            (plane[i] as f32 * (1.0 - fall) + color as f32 * fall) as u8;
+                        let blended = (plane[i] as f32 * (1.0 - fall) + color as f32 * fall) as u8;
                         plane[i] = blended;
                     }
                 }

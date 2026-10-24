@@ -14,7 +14,7 @@ pub fn f32_to_f16(v: f32) -> u16 {
     let bits = v.to_bits();
     let sign = ((bits >> 16) & 0x8000) as u16;
     let exp = ((bits >> 23) & 0xff) as i32;
-    let mant = (bits & 0x7fffff) as u32;
+    let mant = bits & 0x7fffff;
 
     if exp == 255 {
         // Inf or NaN

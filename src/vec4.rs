@@ -18,7 +18,12 @@ pub struct Vec4 {
 }
 
 impl Vec4 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0, w: 0.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        w: 0.0,
+    };
 
     #[inline]
     pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
@@ -27,17 +32,32 @@ impl Vec4 {
 
     #[inline]
     pub fn add(self, other: Self) -> Self {
-        Self::new(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w)
+        Self::new(
+            self.x + other.x,
+            self.y + other.y,
+            self.z + other.z,
+            self.w + other.w,
+        )
     }
 
     #[inline]
     pub fn sub(self, other: Self) -> Self {
-        Self::new(self.x - other.x, self.y - other.y, self.z - other.z, self.w - other.w)
+        Self::new(
+            self.x - other.x,
+            self.y - other.y,
+            self.z - other.z,
+            self.w - other.w,
+        )
     }
 
     #[inline]
     pub fn mul(self, other: Self) -> Self {
-        Self::new(self.x * other.x, self.y * other.y, self.z * other.z, self.w * other.w)
+        Self::new(
+            self.x * other.x,
+            self.y * other.y,
+            self.z * other.z,
+            self.w * other.w,
+        )
     }
 
     #[inline]
@@ -45,14 +65,24 @@ impl Vec4 {
         if other.x == 0.0 || other.y == 0.0 || other.z == 0.0 || other.w == 0.0 {
             None
         } else {
-            Some(Self::new(self.x / other.x, self.y / other.y, self.z / other.z, self.w / other.w))
+            Some(Self::new(
+                self.x / other.x,
+                self.y / other.y,
+                self.z / other.z,
+                self.w / other.w,
+            ))
         }
     }
 
     /// Fast path for graphics: assumes non-zero divisor.
     #[inline]
     pub fn div_fast(self, other: Self) -> Self {
-        Self::new(self.x / other.x, self.y / other.y, self.z / other.z, self.w / other.w)
+        Self::new(
+            self.x / other.x,
+            self.y / other.y,
+            self.z / other.z,
+            self.w / other.w,
+        )
     }
 
     #[inline]
@@ -97,7 +127,10 @@ mod tests {
     fn div_safe() {
         let a = Vec4::new(2.0, 4.0, 6.0, 8.0);
         assert!(a.div(Vec4::ZERO).is_none());
-        assert_eq!(a.div(Vec4::new(2.0, 2.0, 2.0, 2.0)), Some(Vec4::new(1.0, 2.0, 3.0, 4.0)));
+        assert_eq!(
+            a.div(Vec4::new(2.0, 2.0, 2.0, 2.0)),
+            Some(Vec4::new(1.0, 2.0, 3.0, 4.0))
+        );
     }
 
     #[test]

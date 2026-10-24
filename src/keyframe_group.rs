@@ -64,14 +64,19 @@ impl KeyframeGroup {
     }
 
     pub fn status(&self, track: usize) -> TrackStatus {
-        self.seen.get(track).copied().unwrap_or(TrackStatus::NotSeen)
+        self.seen
+            .get(track)
+            .copied()
+            .unwrap_or(TrackStatus::NotSeen)
     }
 
     /// Count of tracks that are Seen or Skipped.
     pub fn done_count(&self) -> usize {
-        self.seen.iter().take(self.required as usize).filter(|s| {
-            matches!(**s, TrackStatus::Seen | TrackStatus::Skipped)
-        }).count()
+        self.seen
+            .iter()
+            .take(self.required as usize)
+            .filter(|s| matches!(**s, TrackStatus::Seen | TrackStatus::Skipped))
+            .count()
     }
 
     /// True when all required tracks are Seen or Skipped.

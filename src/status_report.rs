@@ -93,7 +93,12 @@ mod tests {
         h.push("src | 100 fps | encode | healthy");
         let r = StatusReport::from(&h);
         assert_eq!(r.lines, 1);
-        assert!(r.summary().contains("healthy") || r.summary().contains("good") || r.summary().contains("warn") || r.summary().contains("bad"));
+        assert!(
+            r.summary().contains("healthy")
+                || r.summary().contains("good")
+                || r.summary().contains("warn")
+                || r.summary().contains("bad")
+        );
         let mut buf = Vec::new();
         r.write(&mut buf).unwrap();
         assert!(String::from_utf8_lossy(&buf).contains("fps"));

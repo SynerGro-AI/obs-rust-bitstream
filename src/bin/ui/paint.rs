@@ -9,14 +9,17 @@ use crate::commands::{parse_hex, AppCommand};
 use crate::text_raster;
 use crate::theme::{self, Palette, SP_SM};
 use crate::{resolve_asset, ToastKind, Toasts};
-use eframe::egui::{self, Color32, Pos2, Rect, Rounding, Stroke, Vec2};
+use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::paint_engine::{
-    blur_mask, clone_dab, composite_into, dab_rect, gradient_fill, heal_dab, paint_dab, thumbnail, tone_dab, union_rect, LayerGroup, LayerMask,
-    PaintLayer, Selection, TextSpec, spaced_dab_points,
+    blur_mask, clone_dab, composite_into, dab_rect, gradient_fill, heal_dab, paint_dab,
+    spaced_dab_points, thumbnail, tone_dab, union_rect, LayerGroup, LayerMask, PaintLayer,
+    Selection, TextSpec,
 };
-use obs_rust_bitstream::ui_canvas::{save_target, zoom_step, BlendMode, Brush, Filter, History, PixelRect, Raster, ViewTransform};
 use obs_rust_bitstream::psd_pixels::{LayerKind, PsdLayerPixels, PsdPixels};
+use obs_rust_bitstream::ui_canvas::{
+    save_target, zoom_step, BlendMode, Brush, Filter, History, PixelRect, Raster, ViewTransform,
+};
 use obs_rust_bitstream::Psd;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -65,10 +68,22 @@ impl Tool {
 
     pub const SECTIONS: [(&'static str, &'static [Tool]); 8] = [
         ("Move", &[Tool::Move]),
-        ("Selection", &[Tool::Marquee, Tool::Lasso, Tool::QuickSelect]),
+        (
+            "Selection",
+            &[Tool::Marquee, Tool::Lasso, Tool::QuickSelect],
+        ),
         ("Crop", &[Tool::Crop]),
         ("Retouch", &[Tool::Healing, Tool::Clone]),
-        ("Paint", &[Tool::Brush, Tool::Eraser, Tool::Gradient, Tool::Dodge, Tool::Burn]),
+        (
+            "Paint",
+            &[
+                Tool::Brush,
+                Tool::Eraser,
+                Tool::Gradient,
+                Tool::Dodge,
+                Tool::Burn,
+            ],
+        ),
         ("Draw", &[Tool::Pen]),
         ("Type", &[Tool::Type]),
         ("Navigate", &[Tool::Hand, Tool::Zoom, Tool::Eyedropper]),
@@ -120,7 +135,15 @@ impl Tool {
 
     pub fn from_id(s: &str) -> Option<Tool> {
         let k = s.trim().to_lowercase().replace([' ', '-'], "_");
-        Tool::ALL.iter().copied().find(|t| t.id() == k || t.label().to_lowercase().replace(' ', "_") == k || t.label().to_lowercase().trim_end_matches(" tool").replace(' ', "_") == k)
+        Tool::ALL.iter().copied().find(|t| {
+            t.id() == k
+                || t.label().to_lowercase().replace(' ', "_") == k
+                || t.label()
+                    .to_lowercase()
+                    .trim_end_matches(" tool")
+                    .replace(' ', "_")
+                    == k
+        })
     }
 
     pub fn icon(&self) -> &'static str {
@@ -197,7 +220,10 @@ impl Tool {
     }
 
     pub fn is_stroke(&self) -> bool {
-        matches!(self, Tool::Brush | Tool::Eraser | Tool::Dodge | Tool::Burn | Tool::Clone | Tool::Healing)
+        matches!(
+            self,
+            Tool::Brush | Tool::Eraser | Tool::Dodge | Tool::Burn | Tool::Clone | Tool::Healing
+        )
     }
 }
 
@@ -262,6 +288,8 @@ pub struct PaintState {
     pub doc: PaintDoc,
     history: History<PaintDoc>,
     coalesce: Option<String>,
+    /// Bumped by every document edit, undo and redo (dirty tracking).
+    pub edits: u64,
     pub tool: Tool,
     pub brush: Brush,
     /// Dodge/burn exposure 0..=1.
@@ -328,7 +356,9 @@ fn placeholder(w: u32, h: u32) -> Raster {
 fn cloud_layer(w: u32, h: u32) -> Raster {
     let (sw, sh) = ((w / 4).max(2), (h / 4).max(2));
     let hash = |x: i32, y: i32, s: i32| -> f32 {
-        let mut n = (x.wrapping_mul(374761393)).wrapping_add(y.wrapping_mul(668265263)).wrapping_add(s.wrapping_mul(1442695041)) as u32;
+        let mut n = (x.wrapping_mul(374761393))
+            .wrapping_add(y.wrapping_mul(668265263))
+            .wrapping_add(s.wrapping_mul(1442695041)) as u32;
         n = (n ^ (n >> 13)).wrapping_mul(1274126177);
         ((n ^ (n >> 16)) & 0xffff) as f32 / 65535.0
     };
@@ -344,7 +374,9 @@ fn cloud_layer(w: u32, h: u32) -> Raster {
     for y in 0..sh {
         for x in 0..sw {
             let (fx, fy) = (x as f32 / sw as f32, y as f32 / sh as f32);
-            let v = noise(fx * 6.0, fy * 4.0, 1) * 0.55 + noise(fx * 13.0, fy * 9.0, 2) * 0.3 + noise(fx * 27.0, fy * 19.0, 3) * 0.15;
+            let v = noise(fx * 6.0, fy * 4.0, 1) * 0.55
+                + noise(fx * 13.0, fy * 9.0, 2) * 0.3
+                + noise(fx * 27.0, fy * 19.0, 3) * 0.15;
             let fade = (1.0 - fy / 0.55).clamp(0.0, 1.0);
             small[(y * sw + x) as usize] = ((v - 0.45) * 2.4).clamp(0.0, 1.0) * fade;
         }
@@ -361,7 +393,8 @@ fn cloud_layer(w: u32, h: u32) -> Raster {
             let x1 = (x0 + 1).min(sw - 1);
             let tx = fx - x0 as f32;
             let g = |xx: u32, yy: u32| small[(yy * sw + xx) as usize];
-            let v = (g(x0, y0) * (1.0 - tx) + g(x1, y0) * tx) * (1.0 - ty) + (g(x0, y1) * (1.0 - tx) + g(x1, y1) * tx) * ty;
+            let v = (g(x0, y0) * (1.0 - tx) + g(x1, y0) * tx) * (1.0 - ty)
+                + (g(x0, y1) * (1.0 - tx) + g(x1, y1) * tx) * ty;
             let i = ((y * w + x) * 4) as usize;
             r.data[i..i + 4].copy_from_slice(&[255, 236, 214, (v * 255.0) as u8]);
         }
@@ -371,7 +404,14 @@ fn cloud_layer(w: u32, h: u32) -> Raster {
 
 fn sky_layer(w: u32, h: u32) -> Raster {
     let mut r = Raster::new(w, h);
-    gradient_fill(&mut r, (w as f32 * 0.5, 0.0), (w as f32 * 0.5, h as f32 * 0.5), [255, 150, 60, 255], [255, 150, 60, 0], None);
+    gradient_fill(
+        &mut r,
+        (w as f32 * 0.5, 0.0),
+        (w as f32 * 0.5, h as f32 * 0.5),
+        [255, 150, 60, 255],
+        [255, 150, 60, 0],
+        None,
+    );
     r
 }
 
@@ -402,9 +442,21 @@ fn lights_layer(w: u32, h: u32) -> Raster {
         let x = w as f32 * (0.42 + 0.12 * (t * 9.0).sin() * (1.0 - t * 0.5) + (rnd() - 0.5) * 0.05);
         let y = h as f32 * (0.98 - 0.42 * t + (rnd() - 0.5) * 0.02);
         let size = (3.0 + rnd() * 6.0) * (1.2 - t * 0.6);
-        let b = Brush { size: size * 3.0, hardness: 0.0, flow: 0.55, spacing: 0.25, color: [255, 196, 96] };
+        let b = Brush {
+            size: size * 3.0,
+            hardness: 0.0,
+            flow: 0.55,
+            spacing: 0.25,
+            color: [255, 196, 96],
+        };
         paint_dab(&mut r, &b, x, y, false, None);
-        let core = Brush { size: size * 0.8, hardness: 0.5, flow: 0.9, spacing: 0.25, color: [255, 236, 180] };
+        let core = Brush {
+            size: size * 0.8,
+            hardness: 0.5,
+            flow: 0.9,
+            spacing: 0.25,
+            color: [255, 236, 180],
+        };
         paint_dab(&mut r, &core, x, y, false, None);
     }
     r
@@ -412,11 +464,22 @@ fn lights_layer(w: u32, h: u32) -> Raster {
 
 impl PaintState {
     pub fn new(toasts: &mut Toasts) -> Self {
-        let mut doc = PaintDoc { layers: Vec::new(), groups: Vec::new(), width: 0, height: 0, selection: None, selected: 0, next_id: 0 };
+        let mut doc = PaintDoc {
+            layers: Vec::new(),
+            groups: Vec::new(),
+            width: 0,
+            height: 0,
+            selection: None,
+            selected: 0,
+            next_id: 0,
+        };
         let base = match load_raster("assets/mountain_spire.jpg") {
             Ok(r) => r,
             Err(_) => {
-                toasts.push(ToastKind::Warn, "assets/ not found next to the app; showing a placeholder image.");
+                toasts.push(
+                    ToastKind::Warn,
+                    "assets/ not found next to the app; showing a placeholder image.",
+                );
                 placeholder(1168, 784)
             }
         };
@@ -426,7 +489,12 @@ impl PaintState {
         let id = doc.alloc_id();
         doc.layers.push(PaintLayer::new(id, "Mountain Spire", base));
         let gid = doc.alloc_id();
-        doc.groups.push(LayerGroup { id: gid, name: "Environment".into(), visible: true, collapsed: false });
+        doc.groups.push(LayerGroup {
+            id: gid,
+            name: "Environment".into(),
+            visible: true,
+            collapsed: false,
+        });
         let id = doc.alloc_id();
         let mut sky = PaintLayer::new(id, "Sky Gradient", sky_layer(w, h));
         sky.blend = BlendMode::Overlay;
@@ -446,11 +514,24 @@ impl PaintState {
         doc.layers.push(rock);
         if let Ok(r) = load_raster("assets/mist_overlay.jpg") {
             let id = doc.alloc_id();
-            let r = if (r.width, r.height) == (w, h) { r } else { r.resized(w, h) };
+            let r = if (r.width, r.height) == (w, h) {
+                r
+            } else {
+                r.resized(w, h)
+            };
             let mut mist = PaintLayer::new(id, "Mist Overlay", r);
             mist.blend = BlendMode::Screen;
             mist.opacity = 0.45;
-            let mut m = LayerMask::from_selection(&Selection::from_rect(w, h, PixelRect { x: 0, y: h * 2 / 5, w, h: h - h * 2 / 5 }));
+            let mut m = LayerMask::from_selection(&Selection::from_rect(
+                w,
+                h,
+                PixelRect {
+                    x: 0,
+                    y: h * 2 / 5,
+                    w,
+                    h: h - h * 2 / 5,
+                },
+            ));
             m.feather = 40.0;
             mist.mask = Some(m);
             doc.layers.push(mist);
@@ -460,7 +541,8 @@ impl PaintState {
         lights.blend = BlendMode::Screen;
         doc.layers.push(lights);
         let id = doc.alloc_id();
-        doc.layers.push(PaintLayer::new(id, "Paint", Raster::new(w, h)));
+        doc.layers
+            .push(PaintLayer::new(id, "Paint", Raster::new(w, h)));
         doc.selected = doc.layers.len() - 1;
         for l in &mut doc.layers {
             if let Some(m) = &mut l.mask {
@@ -472,6 +554,7 @@ impl PaintState {
             doc,
             history: History::new(40),
             coalesce: None,
+            edits: 0,
             tool: Tool::Brush,
             brush: Brush::default(),
             exposure: 0.5,
@@ -522,7 +605,12 @@ impl PaintState {
     }
 
     fn mark_all(&mut self) {
-        self.dirty = Some(PixelRect { x: 0, y: 0, w: self.doc.width, h: self.doc.height });
+        self.dirty = Some(PixelRect {
+            x: 0,
+            y: 0,
+            w: self.doc.width,
+            h: self.doc.height,
+        });
         self.thumb_gen += 1;
     }
 
@@ -531,12 +619,14 @@ impl PaintState {
     }
 
     fn checkpoint(&mut self) {
+        self.edits += 1;
         self.history.push(self.doc.clone());
         self.coalesce = None;
     }
 
     /// One undo step for a burst of the same edit (slider drags).
     fn checkpoint_coalesced(&mut self, key: String) {
+        self.edits += 1;
         if self.coalesce.as_deref() != Some(key.as_str()) {
             self.history.push(self.doc.clone());
             self.coalesce = Some(key);
@@ -557,8 +647,12 @@ impl PaintState {
 
     fn restore(&mut self, d: PaintDoc) {
         let resized = (d.width, d.height) != (self.doc.width, self.doc.height);
+        self.edits += 1;
         self.doc = d;
-        self.doc.selected = self.doc.selected.min(self.doc.layers.len().saturating_sub(1));
+        self.doc.selected = self
+            .doc
+            .selected
+            .min(self.doc.layers.len().saturating_sub(1));
         if resized {
             self.flat = Raster::new(self.doc.width, self.doc.height);
             self.tex = None;
@@ -607,7 +701,11 @@ impl PaintState {
     pub fn find_layer(&self, key: Option<&str>) -> Result<usize, String> {
         let n = self.doc.layers.len();
         let Some(k) = key.map(|k| k.trim()).filter(|k| !k.is_empty()) else {
-            return if n == 0 { Err("no layers".into()) } else { Ok(self.doc.selected.min(n - 1)) };
+            return if n == 0 {
+                Err("no layers".into())
+            } else {
+                Ok(self.doc.selected.min(n - 1))
+            };
         };
         if let Ok(i) = k.parse::<usize>() {
             if i >= 1 && i <= n {
@@ -616,17 +714,36 @@ impl PaintState {
             return Err(format!("layer index {} out of range 1-{}", i, n));
         }
         let lk = k.to_lowercase();
-        if let Some(i) = self.doc.layers.iter().position(|l| l.name.to_lowercase() == lk) {
+        if let Some(i) = self
+            .doc
+            .layers
+            .iter()
+            .position(|l| l.name.to_lowercase() == lk)
+        {
             return Ok(i);
         }
-        if let Some(i) = self.doc.layers.iter().position(|l| l.name.to_lowercase().contains(&lk)) {
+        if let Some(i) = self
+            .doc
+            .layers
+            .iter()
+            .position(|l| l.name.to_lowercase().contains(&lk))
+        {
             return Ok(i);
         }
-        Err(format!("no layer named '{}' (layers: {})", k, self.layer_names().join(", ")))
+        Err(format!(
+            "no layer named '{}' (layers: {})",
+            k,
+            self.layer_names().join(", ")
+        ))
     }
 
     pub fn layer_names(&self) -> Vec<String> {
-        self.doc.layers.iter().rev().map(|l| l.name.clone()).collect()
+        self.doc
+            .layers
+            .iter()
+            .rev()
+            .map(|l| l.name.clone())
+            .collect()
     }
 
     fn editable(&self, i: usize) -> Result<(), String> {
@@ -653,7 +770,8 @@ impl PaintState {
     pub fn begin_stroke(&mut self) -> Result<(), String> {
         self.checkpoint();
         let i = self.begin_pixel_edit()?;
-        self.stroke_src = matches!(self.tool, Tool::Clone | Tool::Healing).then(|| self.doc.layers[i].raster.clone());
+        self.stroke_src = matches!(self.tool, Tool::Clone | Tool::Healing)
+            .then(|| self.doc.layers[i].raster.clone());
         self.last_dab = None;
         self.stroking = true;
         self.stroke_rect = None;
@@ -728,7 +846,9 @@ impl PaintState {
     }
 
     pub fn apply_crop_rect(&mut self, rect: PixelRect) -> Result<String, String> {
-        let r = rect.clamped(self.doc.width, self.doc.height).ok_or("crop box is outside the canvas")?;
+        let r = rect
+            .clamped(self.doc.width, self.doc.height)
+            .ok_or("crop box is outside the canvas")?;
         self.checkpoint();
         for l in &mut self.doc.layers {
             l.bake_offset();
@@ -769,15 +889,34 @@ impl PaintState {
         }
     }
 
-    pub fn add_text(&mut self, text: &str, x: f32, y: f32, size: Option<f32>, color: Option<[u8; 3]>) -> Result<String, String> {
+    pub fn add_text(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        size: Option<f32>,
+        color: Option<[u8; 3]>,
+    ) -> Result<String, String> {
         if text.trim().is_empty() {
             return Err("empty text".into());
         }
         self.checkpoint();
         let id = self.doc.alloc_id();
-        let name: String = text.lines().next().unwrap_or("Text").chars().take(24).collect();
+        let name: String = text
+            .lines()
+            .next()
+            .unwrap_or("Text")
+            .chars()
+            .take(24)
+            .collect();
         let mut l = PaintLayer::new(id, &name, Raster::new(self.doc.width, self.doc.height));
-        l.text = Some(TextSpec { text: text.to_string(), x, y, size: size.unwrap_or(self.text_size).clamp(4.0, 600.0), color: color.unwrap_or(self.brush.color) });
+        l.text = Some(TextSpec {
+            text: text.to_string(),
+            x,
+            y,
+            size: size.unwrap_or(self.text_size).clamp(4.0, 600.0),
+            color: color.unwrap_or(self.brush.color),
+        });
         let at = (self.doc.selected + 1).min(self.doc.layers.len());
         l.group = self.doc.layers.get(self.doc.selected).and_then(|s| s.group);
         self.doc.layers.insert(at, l);
@@ -809,7 +948,17 @@ impl PaintState {
                 format!("Gaussian blur {} px", r)
             }
             other => {
-                let filt = Filter::ALL.iter().copied().find(|x| x.label().to_lowercase() == other).filter(|x| *x != Filter::None).ok_or_else(|| format!("unknown filter '{}' (levels, curves, grayscale, invert, blur)", other))?;
+                let filt = Filter::ALL
+                    .iter()
+                    .copied()
+                    .find(|x| x.label().to_lowercase() == other)
+                    .filter(|x| *x != Filter::None)
+                    .ok_or_else(|| {
+                        format!(
+                            "unknown filter '{}' (levels, curves, grayscale, invert, blur)",
+                            other
+                        )
+                    })?;
                 filt.apply(&mut after, strength.unwrap_or(1.2));
                 filt.label().to_string()
             }
@@ -819,7 +968,8 @@ impl PaintState {
                 let m = s.mask[k] as f32 / 255.0;
                 for c in 0..4 {
                     let b = before.data[k * 4 + c] as f32;
-                    after.data[k * 4 + c] = (b + (after.data[k * 4 + c] as f32 - b) * m).round() as u8;
+                    after.data[k * 4 + c] =
+                        (b + (after.data[k * 4 + c] as f32 - b) * m).round() as u8;
                 }
             }
         }
@@ -831,7 +981,13 @@ impl PaintState {
 
     pub fn flattened(&self) -> Raster {
         let mut out = Raster::new(self.doc.width, self.doc.height);
-        composite_into(&mut out, &self.doc.layers, &self.doc.groups, [0, 0, 0], None);
+        composite_into(
+            &mut out,
+            &self.doc.layers,
+            &self.doc.groups,
+            [0, 0, 0],
+            None,
+        );
         out
     }
 
@@ -848,8 +1004,16 @@ impl PaintState {
         }
         let r = load_raster(&path).map_err(|e| format!("couldn't open {}: {}", path, e))?;
         self.checkpoint();
-        let name = std::path::Path::new(&path).file_stem().and_then(|s| s.to_str()).unwrap_or("Image").to_string();
-        let r = if (r.width, r.height) == (self.doc.width, self.doc.height) { r } else { r.resized(self.doc.width, self.doc.height) };
+        let name = std::path::Path::new(&path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Image")
+            .to_string();
+        let r = if (r.width, r.height) == (self.doc.width, self.doc.height) {
+            r
+        } else {
+            r.resized(self.doc.width, self.doc.height)
+        };
         let id = self.doc.alloc_id();
         let at = (self.doc.selected + 1).min(self.doc.layers.len());
         self.doc.layers.insert(at, PaintLayer::new(id, &name, r));
@@ -860,9 +1024,17 @@ impl PaintState {
 
     /// Decode image bytes into a new layer above the active one.
     pub fn add_image_layer(&mut self, name: &str, bytes: &[u8]) -> Result<String, String> {
-        let img = image::load_from_memory(bytes).map_err(|e| format!("couldn't decode image: {}", e))?;
-        let img = img.resize_to_fill(self.doc.width, self.doc.height, image::imageops::FilterType::Triangle).to_rgba8();
-        let r = Raster::from_rgba(self.doc.width, self.doc.height, img.into_raw()).ok_or("bad image size")?;
+        let img =
+            image::load_from_memory(bytes).map_err(|e| format!("couldn't decode image: {}", e))?;
+        let img = img
+            .resize_to_fill(
+                self.doc.width,
+                self.doc.height,
+                image::imageops::FilterType::Triangle,
+            )
+            .to_rgba8();
+        let r = Raster::from_rgba(self.doc.width, self.doc.height, img.into_raw())
+            .ok_or("bad image size")?;
         self.checkpoint();
         let id = self.doc.alloc_id();
         let at = (self.doc.selected + 1).min(self.doc.layers.len());
@@ -885,14 +1057,27 @@ impl PaintState {
             }
         };
         let (w, h) = (d.width, d.height);
-        let mut doc = PaintDoc { layers: Vec::new(), groups: Vec::new(), width: w, height: h, selection: None, selected: 0, next_id: 0 };
+        let mut doc = PaintDoc {
+            layers: Vec::new(),
+            groups: Vec::new(),
+            width: w,
+            height: h,
+            selection: None,
+            selected: 0,
+            next_id: 0,
+        };
         let mut stack: Vec<u32> = Vec::new();
         let mut unsupported = 0;
         for l in &d.layers {
             match l.kind {
                 LayerKind::GroupEnd => {
                     let gid = doc.alloc_id();
-                    doc.groups.push(LayerGroup { id: gid, name: "Group".into(), visible: true, collapsed: false });
+                    doc.groups.push(LayerGroup {
+                        id: gid,
+                        name: "Group".into(),
+                        visible: true,
+                        collapsed: false,
+                    });
                     stack.push(gid);
                 }
                 LayerKind::GroupFolder { open } => {
@@ -905,7 +1090,8 @@ impl PaintState {
                     }
                 }
                 LayerKind::Pixels => {
-                    let r = Raster::from_rgba(w, h, l.to_canvas(w, h)).ok_or("layer size mismatch")?;
+                    let r =
+                        Raster::from_rgba(w, h, l.to_canvas(w, h)).ok_or("layer size mismatch")?;
                     let id = doc.alloc_id();
                     let mut pl = PaintLayer::new(id, &l.name, r);
                     pl.visible = l.visible;
@@ -920,14 +1106,26 @@ impl PaintState {
             }
         }
         if doc.layers.is_empty() {
-            let merged = d.merged.clone().ok_or("PSD has neither layers nor a merged image")?;
+            let merged = d
+                .merged
+                .clone()
+                .ok_or("PSD has neither layers nor a merged image")?;
             let id = doc.alloc_id();
-            doc.layers.push(PaintLayer::new(id, "Background", Raster::from_rgba(w, h, merged).ok_or("merged image size mismatch")?));
+            doc.layers.push(PaintLayer::new(
+                id,
+                "Background",
+                Raster::from_rgba(w, h, merged).ok_or("merged image size mismatch")?,
+            ));
         }
         doc.selected = doc.layers.len() - 1;
         self.checkpoint();
         self.doc = doc;
-        self.doc_name = std::path::Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or("document").trim_end_matches("_edit").to_string();
+        self.doc_name = std::path::Path::new(path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("document")
+            .trim_end_matches("_edit")
+            .to_string();
         self.crop = None;
         self.pen.clear();
         self.clone_anchor = None;
@@ -936,9 +1134,24 @@ impl PaintState {
         self.fit_pending = true;
         self.mark_all();
         let n = self.doc.layers.len();
-        let summary = format!("{} × {}, {} layers, {} groups", w, h, n, self.doc.groups.len());
+        let summary = format!(
+            "{} × {}, {} layers, {} groups",
+            w,
+            h,
+            n,
+            self.doc.groups.len()
+        );
         self.psd = Some(summary.clone());
-        Ok(format!("opened {} ({}{})", path, summary, if unsupported > 0 { format!("; {} unsupported blend modes shown as Normal", unsupported) } else { String::new() }))
+        Ok(format!(
+            "opened {} ({}{})",
+            path,
+            summary,
+            if unsupported > 0 {
+                format!("; {} unsupported blend modes shown as Normal", unsupported)
+            } else {
+                String::new()
+            }
+        ))
     }
 
     /// The document as a layered PSD: pixels per layer (masks baked into
@@ -949,7 +1162,11 @@ impl PaintState {
         let mut prev: Option<u32> = None;
         let folder = |gid: u32| {
             let g = self.doc.groups.iter().find(|g| g.id == gid);
-            PsdLayerPixels::group_folder(g.map(|g| g.name.as_str()).unwrap_or("Group"), g.map(|g| g.visible).unwrap_or(true), !g.map(|g| g.collapsed).unwrap_or(false))
+            PsdLayerPixels::group_folder(
+                g.map(|g| g.name.as_str()).unwrap_or("Group"),
+                g.map(|g| g.visible).unwrap_or(true),
+                !g.map(|g| g.collapsed).unwrap_or(false),
+            )
         };
         for l in &self.doc.layers {
             if l.group != prev {
@@ -969,13 +1186,23 @@ impl PaintState {
                 for y in 0..l.raster.height {
                     for x in 0..l.raster.width {
                         let (dx, dy) = (x as i32 + ox, y as i32 + oy);
-                        let k = if dx >= 0 && dy >= 0 && (dx as u32) < w && (dy as u32) < h { m.factor(dx as u32, dy as u32) } else { 0.0 };
+                        let k = if dx >= 0 && dy >= 0 && (dx as u32) < w && (dy as u32) < h {
+                            m.factor(dx as u32, dy as u32)
+                        } else {
+                            0.0
+                        };
                         let i = ((y * l.raster.width + x) * 4 + 3) as usize;
                         rgba[i] = (rgba[i] as f32 * k).round() as u8;
                     }
                 }
             }
-            let mut pl = PsdLayerPixels::from_canvas(&l.name, l.raster.width, l.raster.height, &rgba, l.offset);
+            let mut pl = PsdLayerPixels::from_canvas(
+                &l.name,
+                l.raster.width,
+                l.raster.height,
+                &rgba,
+                l.offset,
+            );
             pl.visible = l.visible;
             pl.opacity = (l.opacity.clamp(0.0, 1.0) * l.fill.clamp(0.0, 1.0) * 255.0).round() as u8;
             pl.blend = blend_key(l.blend);
@@ -984,23 +1211,70 @@ impl PaintState {
         if let Some(g) = prev {
             layers.push(folder(g));
         }
-        PsdPixels { width: w, height: h, layers, merged: Some(self.flattened().data) }
+        PsdPixels {
+            width: w,
+            height: h,
+            layers,
+            merged: Some(self.flattened().data),
+        }
     }
 
-    pub fn save_psd(&mut self) -> Result<String, String> {
+    /// Suggested PSD file name: `<name>_edit.psd`, never the source file.
+    pub fn psd_file_name(&self) -> String {
+        let t = save_target(&format!("{}.psd", self.doc_name));
+        std::path::Path::new(&t)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or(t)
+    }
+
+    /// Suggested PNG export file name: `<name>_export.png`.
+    pub fn png_file_name(&self) -> String {
+        let stem = std::path::Path::new(&self.doc_name)
+            .file_stem()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "untitled".into());
+        format!("{}_export.png", stem)
+    }
+
+    /// Write the layered PSD to `path` (atomically).
+    pub fn save_psd_to(&mut self, path: &std::path::Path) -> Result<String, String> {
         let d = self.to_psd();
-        let target = save_target(&format!("{}.psd", self.doc_name));
-        d.save(std::path::Path::new(&target)).map_err(|e| format!("save failed: {}", e))?;
-        let n = d.layers.iter().filter(|l| l.kind == LayerKind::Pixels).count();
+        let bytes = d.to_bytes()?;
+        crate::project::write_atomic(path, &bytes).map_err(|e| format!("save failed: {}", e))?;
+        let n = d
+            .layers
+            .iter()
+            .filter(|l| l.kind == LayerKind::Pixels)
+            .count();
         self.psd = Some(format!("{} × {}, {} layers saved", d.width, d.height, n));
-        Ok(format!("saved {} ({} layers with pixels)", target, n))
+        Ok(format!(
+            "saved {} ({} layers with pixels)",
+            path.display(),
+            n
+        ))
     }
 
-    pub fn export_png(&mut self) -> Result<String, String> {
+    /// Write the flattened image as PNG to `path` (atomically).
+    pub fn export_png_to(&mut self, path: &std::path::Path) -> Result<String, String> {
+        use image::ImageEncoder;
         let flat = self.flattened();
-        let target = format!("{}_export.png", self.doc_name);
-        image::save_buffer(&target, &flat.data, flat.width, flat.height, image::ExtendedColorType::Rgba8).map_err(|e| format!("export failed: {}", e))?;
-        Ok(format!("exported {} ({} × {})", target, flat.width, flat.height))
+        let mut bytes = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut bytes)
+            .write_image(
+                &flat.data,
+                flat.width,
+                flat.height,
+                image::ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| format!("export failed: {}", e))?;
+        crate::project::write_atomic(path, &bytes).map_err(|e| format!("export failed: {}", e))?;
+        Ok(format!(
+            "exported {} ({} × {})",
+            path.display(),
+            flat.width,
+            flat.height
+        ))
     }
 
     fn set_tool(&mut self, t: Tool) {
@@ -1023,7 +1297,13 @@ impl PaintState {
                 }
                 None => Err(format!("unknown tool '{}'", tool)),
             },
-            C::SetBrush { size, hardness, flow, color, exposure } => {
+            C::SetBrush {
+                size,
+                hardness,
+                flow,
+                color,
+                exposure,
+            } => {
                 let mut parts = Vec::new();
                 if let Some(s) = size {
                     self.brush.size = s.clamp(1.0, 500.0);
@@ -1045,7 +1325,10 @@ impl PaintState {
                     match parse_hex(c) {
                         Some(rgb) => {
                             self.brush.color = rgb;
-                            parts.push(format!("colour #{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]));
+                            parts.push(format!(
+                                "colour #{:02X}{:02X}{:02X}",
+                                rgb[0], rgb[1], rgb[2]
+                            ));
                         }
                         None => return Some(Err(format!("bad colour '{}', use #RRGGBB", c))),
                     }
@@ -1061,14 +1344,22 @@ impl PaintState {
                 if !self.tool.is_stroke() {
                     self.set_tool(Tool::Brush);
                 }
-                self.stroke_points(&pts).map(|_| format!("{} stroke through {} points", self.tool.label(), pts.len()))
+                self.stroke_points(&pts)
+                    .map(|_| format!("{} stroke through {} points", self.tool.label(), pts.len()))
             }
             C::Gradient { x0, y0, x1, y1 } => (|| {
                 self.checkpoint();
                 let i = self.begin_pixel_edit()?;
                 let c = self.brush.color;
                 let sel = self.doc.selection.clone();
-                gradient_fill(self.doc.layers[i].raster_mut(), (*x0, *y0), (*x1, *y1), [c[0], c[1], c[2], 255], [c[0], c[1], c[2], 0], sel.as_ref());
+                gradient_fill(
+                    self.doc.layers[i].raster_mut(),
+                    (*x0, *y0),
+                    (*x1, *y1),
+                    [c[0], c[1], c[2], 255],
+                    [c[0], c[1], c[2], 0],
+                    sel.as_ref(),
+                );
                 self.mark_all();
                 Ok(format!("gradient on {}", self.doc.layers[i].name))
             })(),
@@ -1093,8 +1384,15 @@ impl PaintState {
                 let i = self.find_layer(None)?;
                 self.checkpoint();
                 let gid = self.doc.alloc_id();
-                let nm = name.clone().unwrap_or_else(|| format!("Group {}", self.doc.groups.len() + 1));
-                self.doc.groups.push(LayerGroup { id: gid, name: nm.clone(), visible: true, collapsed: false });
+                let nm = name
+                    .clone()
+                    .unwrap_or_else(|| format!("Group {}", self.doc.groups.len() + 1));
+                self.doc.groups.push(LayerGroup {
+                    id: gid,
+                    name: nm.clone(),
+                    visible: true,
+                    collapsed: false,
+                });
                 self.doc.layers[i].group = Some(gid);
                 self.mark_all();
                 Ok(format!("grouped {} into “{}”", self.doc.layers[i].name, nm))
@@ -1119,7 +1417,10 @@ impl PaintState {
                 }
                 self.checkpoint();
                 let l = self.doc.layers.remove(i);
-                self.doc.selected = i.min(self.doc.layers.len() - 1).max(if i > 0 { i - 1 } else { 0 }).min(self.doc.layers.len() - 1);
+                self.doc.selected = i
+                    .min(self.doc.layers.len() - 1)
+                    .max(if i > 0 { i - 1 } else { 0 })
+                    .min(self.doc.layers.len() - 1);
                 self.mark_all();
                 Ok(format!("deleted “{}”", l.name))
             })(),
@@ -1143,10 +1444,17 @@ impl PaintState {
                 // Keep groups contiguous: stay in the own group only while
                 // touching a member, join a group we land inside of.
                 let above = self.doc.layers.get(to + 1).and_then(|l| l.group);
-                let below = to.checked_sub(1).and_then(|k| self.doc.layers.get(k)).and_then(|l| l.group);
+                let below = to
+                    .checked_sub(1)
+                    .and_then(|k| self.doc.layers.get(k))
+                    .and_then(|l| l.group);
                 let own = self.doc.layers[to].group;
                 if !(own.is_some() && (above == own || below == own)) {
-                    self.doc.layers[to].group = if above.is_some() && above == below { above } else { None };
+                    self.doc.layers[to].group = if above.is_some() && above == below {
+                        above
+                    } else {
+                        None
+                    };
                 }
                 self.doc.selected = to;
                 self.mark_all();
@@ -1170,35 +1478,64 @@ impl PaintState {
                 self.checkpoint_coalesced(format!("opacity{}", self.doc.layers[i].id));
                 self.doc.layers[i].opacity = pct(*opacity);
                 self.mark_all();
-                Ok(format!("set {} opacity {:.0}%", self.doc.layers[i].name, opacity.clamp(0.0, 100.0)))
+                Ok(format!(
+                    "set {} opacity {:.0}%",
+                    self.doc.layers[i].name,
+                    opacity.clamp(0.0, 100.0)
+                ))
             })(),
             C::SetLayerFill { layer, fill } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
                 self.checkpoint_coalesced(format!("fill{}", self.doc.layers[i].id));
                 self.doc.layers[i].fill = pct(*fill);
                 self.mark_all();
-                Ok(format!("set {} fill {:.0}%", self.doc.layers[i].name, fill.clamp(0.0, 100.0)))
+                Ok(format!(
+                    "set {} fill {:.0}%",
+                    self.doc.layers[i].name,
+                    fill.clamp(0.0, 100.0)
+                ))
             })(),
             C::SetLayerBlend { layer, mode } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
-                let m = BlendMode::ALL.iter().copied().find(|b| b.label().eq_ignore_ascii_case(mode.trim()) || b.label().replace(' ', "_").eq_ignore_ascii_case(mode.trim())).ok_or_else(|| format!("unknown blend mode '{}'", mode))?;
+                let m = BlendMode::ALL
+                    .iter()
+                    .copied()
+                    .find(|b| {
+                        b.label().eq_ignore_ascii_case(mode.trim())
+                            || b.label()
+                                .replace(' ', "_")
+                                .eq_ignore_ascii_case(mode.trim())
+                    })
+                    .ok_or_else(|| format!("unknown blend mode '{}'", mode))?;
                 self.checkpoint();
                 self.doc.layers[i].blend = m;
                 self.mark_all();
-                Ok(format!("set {} blend to {}", self.doc.layers[i].name, m.label()))
+                Ok(format!(
+                    "set {} blend to {}",
+                    self.doc.layers[i].name,
+                    m.label()
+                ))
             })(),
             C::SetLayerVisibility { layer, visible } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
                 self.checkpoint();
                 self.doc.layers[i].visible = *visible;
                 self.mark_all();
-                Ok(format!("{} {}", if *visible { "showed" } else { "hid" }, self.doc.layers[i].name))
+                Ok(format!(
+                    "{} {}",
+                    if *visible { "showed" } else { "hid" },
+                    self.doc.layers[i].name
+                ))
             })(),
             C::SetLayerLocked { layer, locked } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
                 self.checkpoint();
                 self.doc.layers[i].locked = *locked;
-                Ok(format!("{} {}", if *locked { "locked" } else { "unlocked" }, self.doc.layers[i].name))
+                Ok(format!(
+                    "{} {}",
+                    if *locked { "locked" } else { "unlocked" },
+                    self.doc.layers[i].name
+                ))
             })(),
             C::OffsetLayer { layer, dx, dy } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
@@ -1211,11 +1548,20 @@ impl PaintState {
                 Ok(format!("moved {} by {}, {} px", nm, dx, dy))
             })(),
             C::SetGroupVisibility { group, visible } => (|| {
-                let gi = self.doc.groups.iter().position(|g| g.name.eq_ignore_ascii_case(group.trim())).ok_or_else(|| format!("no group named '{}'", group))?;
+                let gi = self
+                    .doc
+                    .groups
+                    .iter()
+                    .position(|g| g.name.eq_ignore_ascii_case(group.trim()))
+                    .ok_or_else(|| format!("no group named '{}'", group))?;
                 self.checkpoint();
                 self.doc.groups[gi].visible = *visible;
                 self.mark_all();
-                Ok(format!("{} group {}", if *visible { "showed" } else { "hid" }, self.doc.groups[gi].name))
+                Ok(format!(
+                    "{} group {}",
+                    if *visible { "showed" } else { "hid" },
+                    self.doc.groups[gi].name
+                ))
             })(),
             C::AddMask { layer } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
@@ -1227,12 +1573,25 @@ impl PaintState {
                 let from_sel = self.doc.selection.is_some();
                 self.doc.layers[i].mask = Some(m);
                 self.mark_all();
-                Ok(format!("added {} mask to {}", if from_sel { "selection" } else { "reveal-all" }, self.doc.layers[i].name))
+                Ok(format!(
+                    "added {} mask to {}",
+                    if from_sel { "selection" } else { "reveal-all" },
+                    self.doc.layers[i].name
+                ))
             })(),
-            C::SetMask { layer, density, feather, invert, enabled } => (|| {
+            C::SetMask {
+                layer,
+                density,
+                feather,
+                invert,
+                enabled,
+            } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
                 if self.doc.layers[i].mask.is_none() {
-                    return Err(format!("{} has no mask (add_mask first)", self.doc.layers[i].name));
+                    return Err(format!(
+                        "{} has no mask (add_mask first)",
+                        self.doc.layers[i].name
+                    ));
                 }
                 self.checkpoint_coalesced(format!("mask{}", self.doc.layers[i].id));
                 let mut parts = Vec::new();
@@ -1247,16 +1606,28 @@ impl PaintState {
                     }
                     if let Some(v) = invert {
                         m.invert = *v;
-                        parts.push(if *v { "inverted".into() } else { "not inverted".into() });
+                        parts.push(if *v {
+                            "inverted".into()
+                        } else {
+                            "not inverted".into()
+                        });
                     }
                     if let Some(e) = enabled {
                         m.enabled = *e;
-                        parts.push(if *e { "enabled".into() } else { "disabled".into() });
+                        parts.push(if *e {
+                            "enabled".into()
+                        } else {
+                            "disabled".into()
+                        });
                     }
                     m.prepare();
                 }
                 self.mark_all();
-                Ok(format!("{} mask {}", self.doc.layers[i].name, parts.join(", ")))
+                Ok(format!(
+                    "{} mask {}",
+                    self.doc.layers[i].name,
+                    parts.join(", ")
+                ))
             })(),
             C::RemoveMask { layer } => (|| {
                 let i = self.find_layer(layer.as_deref())?;
@@ -1321,8 +1692,16 @@ impl PaintState {
                 None => Err("nothing selected".into()),
             },
             C::ApplyFilter { filter, strength } => self.apply_filter(filter, *strength),
-            C::Crop { x, y, w, h } => self.apply_crop_rect(PixelRect::from_corners((*x, *y), (x + w, y + h))),
-            C::AddText { text, x, y, size, color } => {
+            C::Crop { x, y, w, h } => {
+                self.apply_crop_rect(PixelRect::from_corners((*x, *y), (x + w, y + h)))
+            }
+            C::AddText {
+                text,
+                x,
+                y,
+                size,
+                color,
+            } => {
                 let col = match color {
                     Some(c) => match parse_hex(c) {
                         Some(v) => Some(v),
@@ -1334,7 +1713,12 @@ impl PaintState {
             }
             C::PenAddPoint { x, y } => {
                 self.pen.push((*x, *y));
-                Ok(format!("path point {} at {:.0}, {:.0}", self.pen.len(), x, y))
+                Ok(format!(
+                    "path point {} at {:.0}, {:.0}",
+                    self.pen.len(),
+                    x,
+                    y
+                ))
             }
             C::PenStroke => {
                 if self.pen.len() < 2 {
@@ -1345,7 +1729,9 @@ impl PaintState {
                     if !matches!(self.tool, Tool::Brush | Tool::Eraser) {
                         self.tool = Tool::Brush;
                     }
-                    let r = self.stroke_points(&pts).map(|_| format!("stroked path ({} points)", pts.len()));
+                    let r = self
+                        .stroke_points(&pts)
+                        .map(|_| format!("stroked path ({} points)", pts.len()));
                     self.tool = prev;
                     r
                 }
@@ -1355,7 +1741,11 @@ impl PaintState {
                     Err("the pen path needs 3+ points".into())
                 } else {
                     self.checkpoint();
-                    self.doc.selection = Some(Selection::from_polygon(self.doc.width, self.doc.height, &self.pen));
+                    self.doc.selection = Some(Selection::from_polygon(
+                        self.doc.width,
+                        self.doc.height,
+                        &self.pen,
+                    ));
                     Ok("path → selection".into())
                 }
             }
@@ -1392,11 +1782,14 @@ impl PaintState {
                 self.pan += Vec2::new(*dx, *dy);
                 Ok(format!("panned {:.0}, {:.0}", dx, dy))
             }
-            C::SavePsd => self.save_psd(),
-            C::ExportPng => self.export_png(),
             _ => return None,
         };
-        if r.is_ok() && !matches!(cmd, C::SetLayerOpacity { .. } | C::SetLayerFill { .. } | C::SetMask { .. }) {
+        if r.is_ok()
+            && !matches!(
+                cmd,
+                C::SetLayerOpacity { .. } | C::SetLayerFill { .. } | C::SetMask { .. }
+            )
+        {
             self.coalesce = None;
         }
         self.thumb_gen += 1;
@@ -1412,7 +1805,11 @@ impl PaintState {
             .enumerate()
             .rev()
             .map(|(i, l)| {
-                let g = l.group.and_then(|g| self.doc.groups.iter().find(|x| x.id == g)).map(|g| format!(" in {}", g.name)).unwrap_or_default();
+                let g = l
+                    .group
+                    .and_then(|g| self.doc.groups.iter().find(|x| x.id == g))
+                    .map(|g| format!(" in {}", g.name))
+                    .unwrap_or_default();
                 format!(
                     "{}{} [{} {:.0}% fill {:.0}%{}{}{}{}]",
                     if i == self.doc.selected { "*" } else { "" },
@@ -1446,16 +1843,31 @@ impl PaintState {
 // ---- UI ---------------------------------------------------------------------
 
 fn checker(painter: &egui::Painter, r: Rect, p: &Palette) {
-    let a = if p.dark { Color32::from_gray(58) } else { Color32::from_gray(220) };
-    let b = if p.dark { Color32::from_gray(38) } else { Color32::from_gray(250) };
-    painter.rect_filled(r, Rounding::ZERO, a);
+    let a = if p.dark {
+        Color32::from_gray(58)
+    } else {
+        Color32::from_gray(220)
+    };
+    let b = if p.dark {
+        Color32::from_gray(38)
+    } else {
+        Color32::from_gray(250)
+    };
+    painter.rect_filled(r, CornerRadius::ZERO, a);
     let s = 5.0;
     let mut y = r.top();
     let mut row = 0;
     while y < r.bottom() {
         let mut x = r.left() + if row % 2 == 0 { 0.0 } else { s };
         while x < r.right() {
-            painter.rect_filled(Rect::from_min_max(Pos2::new(x, y), Pos2::new((x + s).min(r.right()), (y + s).min(r.bottom()))), Rounding::ZERO, b);
+            painter.rect_filled(
+                Rect::from_min_max(
+                    Pos2::new(x, y),
+                    Pos2::new((x + s).min(r.right()), (y + s).min(r.bottom())),
+                ),
+                CornerRadius::ZERO,
+                b,
+            );
             x += 2.0 * s;
         }
         y += s;
@@ -1479,9 +1891,14 @@ fn selection_outline(s: &Selection) -> Raster {
             // Two pixels thick so the ants survive texture minification when zoomed out.
             let out_at = |dx: i64, dy: i64| {
                 let (nx, ny) = (x as i64 + dx, y as i64 + dy);
-                nx < 0 || ny < 0 || nx >= s.width as i64 || ny >= s.height as i64 || s.at(nx as u32, ny as u32) <= 127
+                nx < 0
+                    || ny < 0
+                    || nx >= s.width as i64
+                    || ny >= s.height as i64
+                    || s.at(nx as u32, ny as u32) <= 127
             };
-            let edge = (1..=2).any(|d| out_at(-d, 0) || out_at(d, 0) || out_at(0, -d) || out_at(0, d));
+            let edge =
+                (1..=2).any(|d| out_at(-d, 0) || out_at(d, 0) || out_at(0, -d) || out_at(0, d));
             if edge {
                 let i = ((y * s.width + x) * 4) as usize;
                 let c = if ((x + y) / 4) % 2 == 0 { 255 } else { 0 };
@@ -1514,16 +1931,32 @@ impl PaintState {
                     m.prepare();
                 }
             }
-            composite_into(&mut self.flat, &self.doc.layers, &self.doc.groups, [0, 0, 0], Some(r));
+            composite_into(
+                &mut self.flat,
+                &self.doc.layers,
+                &self.doc.groups,
+                [0, 0, 0],
+                Some(r),
+            );
             let full = r.x == 0 && r.y == 0 && r.w == self.flat.width && r.h == self.flat.height;
             match (&mut self.tex, full) {
                 (Some(t), false) => {
                     if let Some(sub) = self.flat.cropped(r) {
-                        t.set_partial([r.x as usize, r.y as usize], color_image(&sub), egui::TextureOptions::LINEAR);
+                        t.set_partial(
+                            [r.x as usize, r.y as usize],
+                            color_image(&sub),
+                            egui::TextureOptions::LINEAR,
+                        );
                     }
                 }
                 (Some(t), true) => t.set(color_image(&self.flat), egui::TextureOptions::LINEAR),
-                (None, _) => self.tex = Some(ctx.load_texture("paint-flat", color_image(&self.flat), egui::TextureOptions::LINEAR)),
+                (None, _) => {
+                    self.tex = Some(ctx.load_texture(
+                        "paint-flat",
+                        color_image(&self.flat),
+                        egui::TextureOptions::LINEAR,
+                    ))
+                }
             }
         }
         if !self.stroking {
@@ -1538,7 +1971,11 @@ impl PaintState {
                             t.0 = gen;
                         }
                         None => {
-                            let tex = ctx.load_texture(format!("thumb{}", l.id), img, egui::TextureOptions::LINEAR);
+                            let tex = ctx.load_texture(
+                                format!("thumb{}", l.id),
+                                img,
+                                egui::TextureOptions::LINEAR,
+                            );
                             self.thumbs.insert(l.id, (gen, tex));
                         }
                     }
@@ -1552,7 +1989,11 @@ impl PaintState {
                             r.data[k * 4..k * 4 + 4].copy_from_slice(&[v, v, v, 255]);
                         }
                         let img = color_image(&thumbnail(&r, 44));
-                        let tex = ctx.load_texture(format!("mthumb{}", l.id), img, egui::TextureOptions::LINEAR);
+                        let tex = ctx.load_texture(
+                            format!("mthumb{}", l.id),
+                            img,
+                            egui::TextureOptions::LINEAR,
+                        );
                         self.thumbs.insert(key, (gen, tex));
                     }
                 }
@@ -1560,7 +2001,13 @@ impl PaintState {
         }
         if ov.src != self.doc.selection {
             ov.src = self.doc.selection.clone();
-            ov.tex = ov.src.as_ref().map(|s| ctx.load_texture("sel-outline", color_image(&selection_outline(s)), egui::TextureOptions::NEAREST));
+            ov.tex = ov.src.as_ref().map(|s| {
+                ctx.load_texture(
+                    "sel-outline",
+                    color_image(&selection_outline(s)),
+                    egui::TextureOptions::NEAREST,
+                )
+            });
         }
     }
 
@@ -1572,178 +2019,354 @@ impl PaintState {
             }
             if self.sections_open[si] {
                 for t in tools.iter() {
-                    let resp = theme::tool_row(ui, p, t.icon(), t.label(), t.key_label(), self.tool == *t, true).on_hover_text(t.hint());
+                    let resp = theme::tool_row(
+                        ui,
+                        p,
+                        t.icon(),
+                        t.label(),
+                        t.key_label(),
+                        self.tool == *t,
+                        true,
+                    )
+                    .on_hover_text(t.hint());
                     if resp.clicked() {
-                        bus.push(AppCommand::SelectTool { tool: t.id().into() });
+                        bus.push(AppCommand::SelectTool {
+                            tool: t.id().into(),
+                        });
                     }
                 }
             }
         }
         ui.spacing_mut().item_spacing.y = 5.0;
         ui.add_space(SP_SM);
-        egui::Frame::none().inner_margin(egui::Margin::symmetric(SP_SM, 0.0)).show(ui, |ui| {
-            ui.label(theme::section(p, "File"));
-            let resp = ui.add(egui::TextEdit::singleline(&mut self.path).hint_text("image.jpg / .png or .psd").desired_width(f32::INFINITY));
-            let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            ui.horizontal(|ui| {
-                let w = (ui.available_width() - 2.0 * SP_SM) / 3.0;
-                if ui.add_sized([w, 24.0], theme::toggle_button(p, "Open", false)).on_hover_text("Images become a new layer; a PSD opens with all of its layers").clicked() || enter {
-                    bus.push(AppCommand::OpenFile { path: self.path.clone() });
-                }
-                if ui.add_sized([w, 24.0], theme::toggle_button(p, "Save PSD", false)).on_hover_text("Writes <name>_edit.psd; never overwrites the source").clicked() {
-                    bus.push(AppCommand::SavePsd);
-                }
-                if ui.add_sized([w, 24.0], theme::primary_button(p, "Export")).on_hover_text("Flattened PNG").clicked() {
-                    bus.push(AppCommand::ExportPng);
-                }
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::symmetric(SP_SM as i8, 0))
+            .show(ui, |ui| {
+                ui.label(theme::section(p, "File"));
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut self.path)
+                        .hint_text("image.jpg / .png or .psd")
+                        .desired_width(f32::INFINITY),
+                );
+                let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.horizontal(|ui| {
+                    let w = (ui.available_width() - 2.0 * SP_SM) / 3.0;
+                    if ui
+                        .add_sized([w, 24.0], theme::toggle_button(p, "Open", false))
+                        .on_hover_text(
+                            "Images become a new layer; a PSD opens with all of its layers",
+                        )
+                        .clicked()
+                        || enter
+                    {
+                        bus.push(AppCommand::OpenFile {
+                            path: self.path.clone(),
+                        });
+                    }
+                    if ui
+                        .add_sized([w, 24.0], theme::toggle_button(p, "Save PSD", false))
+                        .on_hover_text("Save a layered PSD (asks where; suggests <name>_edit.psd)")
+                        .clicked()
+                    {
+                        bus.push(AppCommand::SavePsd { path: None });
+                    }
+                    if ui
+                        .add_sized([w, 24.0], theme::primary_button(p, "Export"))
+                        .on_hover_text("Export a flattened PNG (asks where)")
+                        .clicked()
+                    {
+                        bus.push(AppCommand::ExportPng { path: None });
+                    }
+                });
             });
-        });
     }
 
     /// Photoshop-style contextual options bar above the canvas.
     pub fn options_bar(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::icon_button(ui, p, ic::CORNERS_OUT, "Fit to window  (Ctrl+0)", false).clicked() {
-                    bus.push(AppCommand::Zoom { percent: None, fit: Some(true) });
+                if theme::icon_button(ui, p, ic::CORNERS_OUT, "Fit to window  (Ctrl+0)", false)
+                    .clicked()
+                {
+                    bus.push(AppCommand::Zoom {
+                        percent: None,
+                        fit: Some(true),
+                    });
                 }
-                if theme::icon_button(ui, p, ic::MAGNIFYING_GLASS_PLUS, "Zoom in  (Ctrl+=)", false).clicked() {
-                    bus.push(AppCommand::Zoom { percent: Some(zoom_step(self.zoom, true) * 100.0), fit: None });
+                if theme::icon_button(ui, p, ic::MAGNIFYING_GLASS_PLUS, "Zoom in  (Ctrl+=)", false)
+                    .clicked()
+                {
+                    bus.push(AppCommand::Zoom {
+                        percent: Some(zoom_step(self.zoom, true) * 100.0),
+                        fit: None,
+                    });
                 }
-                ui.label(egui::RichText::new(format!("{:.0}%", self.zoom * 100.0)).monospace().size(11.5).color(p.muted));
-                if theme::icon_button(ui, p, ic::MAGNIFYING_GLASS_MINUS, "Zoom out  (Ctrl+−)", false).clicked() {
-                    bus.push(AppCommand::Zoom { percent: Some(zoom_step(self.zoom, false) * 100.0), fit: None });
+                ui.label(
+                    egui::RichText::new(format!("{:.0}%", self.zoom * 100.0))
+                        .monospace()
+                        .size(11.5)
+                        .color(p.muted),
+                );
+                if theme::icon_button(
+                    ui,
+                    p,
+                    ic::MAGNIFYING_GLASS_MINUS,
+                    "Zoom out  (Ctrl+−)",
+                    false,
+                )
+                .clicked()
+                {
+                    bus.push(AppCommand::Zoom {
+                        percent: Some(zoom_step(self.zoom, false) * 100.0),
+                        fit: None,
+                    });
                 }
                 theme::vdivider(ui, p, 20.0);
                 ui.add_enabled_ui(self.can_redo(), |ui| {
-                    if theme::icon_button(ui, p, ic::ARROW_CLOCKWISE, "Redo  (Ctrl+Shift+Z)", false).clicked() {
+                    if theme::icon_button(ui, p, ic::ARROW_CLOCKWISE, "Redo  (Ctrl+Shift+Z)", false)
+                        .clicked()
+                    {
                         bus.push(AppCommand::Redo);
                     }
                 });
                 ui.add_enabled_ui(self.can_undo(), |ui| {
-                    if theme::icon_button(ui, p, ic::ARROW_COUNTER_CLOCKWISE, "Undo  (Ctrl+Z)", false).clicked() {
+                    if theme::icon_button(
+                        ui,
+                        p,
+                        ic::ARROW_COUNTER_CLOCKWISE,
+                        "Undo  (Ctrl+Z)",
+                        false,
+                    )
+                    .clicked()
+                    {
                         bus.push(AppCommand::Undo);
                     }
                 });
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true), |ui| {
-                ui.label(egui::RichText::new(self.tool.icon()).size(16.0).color(p.accent));
-                ui.label(egui::RichText::new(self.tool.label()).strong().color(p.text));
-                theme::vdivider(ui, p, 20.0);
-                let t = self.tool;
-                let mut brush = self.brush;
-                let mut changed = false;
-                let dv = |ui: &mut egui::Ui, label: &str, v: &mut f32, range: std::ops::RangeInclusive<f32>, suffix: &str, speed: f64| -> bool {
-                    ui.label(theme::muted(p, label));
-                    ui.add(egui::DragValue::new(v).range(range).suffix(suffix).speed(speed).max_decimals(0)).changed()
-                };
-                if t.is_stroke() || t == Tool::Pen {
-                    changed |= dv(ui, "Size", &mut brush.size, 1.0..=500.0, " px", 0.5);
-                    let mut h = brush.hardness * 100.0;
-                    if dv(ui, "Hardness", &mut h, 0.0..=100.0, "%", 0.5) {
-                        brush.hardness = h / 100.0;
-                        changed = true;
-                    }
-                }
-                if matches!(t, Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Pen) {
-                    let mut f = brush.flow * 100.0;
-                    if dv(ui, "Flow", &mut f, 1.0..=100.0, "%", 0.5) {
-                        brush.flow = f / 100.0;
-                        changed = true;
-                    }
-                }
-                if changed {
-                    bus.push(AppCommand::SetBrush { size: Some(brush.size), hardness: Some(brush.hardness * 100.0), flow: Some(brush.flow * 100.0), color: None, exposure: None });
-                }
-                if matches!(t, Tool::Dodge | Tool::Burn) {
-                    let mut e = self.exposure * 100.0;
-                    if dv(ui, "Exposure", &mut e, 1.0..=100.0, "%", 0.5) {
-                        bus.push(AppCommand::SetBrush { size: None, hardness: None, flow: None, color: None, exposure: Some(e) });
-                    }
-                }
-                if matches!(t, Tool::Brush | Tool::Gradient | Tool::Type | Tool::Pen | Tool::Eyedropper) {
-                    ui.label(theme::muted(p, "Colour"));
-                    let mut c = self.brush.color;
-                    let resp = egui::color_picker::color_edit_button_srgb(ui, &mut c).on_hover_text(format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2]));
-                    if resp.changed() {
-                        bus.push(AppCommand::SetBrush { size: None, hardness: None, flow: None, color: Some(format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])), exposure: None });
-                    }
-                }
-                match t {
-                    Tool::Type => {
-                        ui.label(theme::muted(p, "Size"));
-                        ui.add(egui::DragValue::new(&mut self.text_size).range(6.0..=400.0).suffix(" px").speed(0.5));
-                    }
-                    Tool::QuickSelect => {
-                        ui.label(theme::muted(p, "Tolerance"));
-                        ui.add(egui::DragValue::new(&mut self.tolerance).range(0..=255));
-                    }
-                    Tool::Clone => {
-                        let txt = match (self.clone_anchor, self.clone_offset) {
-                            (_, Some(o)) => format!("Source offset {:.0}, {:.0}", o.0, o.1),
-                            (Some(a), None) => format!("Source {:.0}, {:.0}: paint to clone", a.0, a.1),
-                            _ => "Alt-click to set the source".into(),
+                ui.with_layout(
+                    egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+                    |ui| {
+                        ui.label(
+                            egui::RichText::new(self.tool.icon())
+                                .size(16.0)
+                                .color(p.accent),
+                        );
+                        ui.label(
+                            egui::RichText::new(self.tool.label())
+                                .strong()
+                                .color(p.text),
+                        );
+                        theme::vdivider(ui, p, 20.0);
+                        let t = self.tool;
+                        let mut brush = self.brush;
+                        let mut changed = false;
+                        let dv = |ui: &mut egui::Ui,
+                                  label: &str,
+                                  v: &mut f32,
+                                  range: std::ops::RangeInclusive<f32>,
+                                  suffix: &str,
+                                  speed: f64|
+                         -> bool {
+                            ui.label(theme::muted(p, label));
+                            ui.add(
+                                egui::DragValue::new(v)
+                                    .range(range)
+                                    .suffix(suffix)
+                                    .speed(speed)
+                                    .max_decimals(0),
+                            )
+                            .changed()
                         };
-                        ui.label(theme::muted(p, &txt));
-                    }
-                    Tool::Crop => {
-                        if let Some(c) = self.crop {
-                            ui.label(egui::RichText::new(format!("{} × {}", c.w, c.h)).monospace().color(p.text));
-                            if ui.add(theme::primary_button(p, "Apply")).clicked() {
-                                bus.push(AppCommand::Crop { x: c.x as f32, y: c.y as f32, w: c.w as f32, h: c.h as f32 });
+                        if t.is_stroke() || t == Tool::Pen {
+                            changed |= dv(ui, "Size", &mut brush.size, 1.0..=500.0, " px", 0.5);
+                            let mut h = brush.hardness * 100.0;
+                            if dv(ui, "Hardness", &mut h, 0.0..=100.0, "%", 0.5) {
+                                brush.hardness = h / 100.0;
+                                changed = true;
                             }
-                            if ui.add(theme::toggle_button(p, "Cancel", false)).clicked() {
-                                self.crop = None;
+                        }
+                        if matches!(t, Tool::Brush | Tool::Eraser | Tool::Clone | Tool::Pen) {
+                            let mut f = brush.flow * 100.0;
+                            if dv(ui, "Flow", &mut f, 1.0..=100.0, "%", 0.5) {
+                                brush.flow = f / 100.0;
+                                changed = true;
                             }
-                        } else {
-                            ui.label(theme::muted(p, "Drag a crop box"));
                         }
-                    }
-                    Tool::Pen => {
-                        ui.label(theme::muted(p, &format!("{} points", self.pen.len())));
-                        let ok = self.pen.len() >= 2;
-                        if ui.add_enabled(ok, theme::toggle_button(p, "Stroke", false)).clicked() {
-                            bus.push(AppCommand::PenStroke);
+                        if changed {
+                            bus.push(AppCommand::SetBrush {
+                                size: Some(brush.size),
+                                hardness: Some(brush.hardness * 100.0),
+                                flow: Some(brush.flow * 100.0),
+                                color: None,
+                                exposure: None,
+                            });
                         }
-                        if ui.add_enabled(self.pen.len() >= 3, theme::toggle_button(p, "To selection", false)).clicked() {
-                            bus.push(AppCommand::PenToSelection);
+                        if matches!(t, Tool::Dodge | Tool::Burn) {
+                            let mut e = self.exposure * 100.0;
+                            if dv(ui, "Exposure", &mut e, 1.0..=100.0, "%", 0.5) {
+                                bus.push(AppCommand::SetBrush {
+                                    size: None,
+                                    hardness: None,
+                                    flow: None,
+                                    color: None,
+                                    exposure: Some(e),
+                                });
+                            }
                         }
-                        if ui.add_enabled(!self.pen.is_empty(), theme::toggle_button(p, "Clear", false)).clicked() {
-                            bus.push(AppCommand::PenClear);
+                        if matches!(
+                            t,
+                            Tool::Brush
+                                | Tool::Gradient
+                                | Tool::Type
+                                | Tool::Pen
+                                | Tool::Eyedropper
+                        ) {
+                            ui.label(theme::muted(p, "Colour"));
+                            let mut c = self.brush.color;
+                            let resp = egui::color_picker::color_edit_button_srgb(ui, &mut c)
+                                .on_hover_text(format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2]));
+                            if resp.changed() {
+                                bus.push(AppCommand::SetBrush {
+                                    size: None,
+                                    hardness: None,
+                                    flow: None,
+                                    color: Some(format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])),
+                                    exposure: None,
+                                });
+                            }
                         }
-                    }
-                    _ => {}
-                }
-                if matches!(t, Tool::Marquee | Tool::Lasso | Tool::QuickSelect) {
-                    if ui.add(theme::toggle_button(p, "All", false)).clicked() {
-                        bus.push(AppCommand::SelectAll);
-                    }
-                    if ui.add_enabled(self.doc.selection.is_some(), theme::toggle_button(p, "Deselect", false)).clicked() {
-                        bus.push(AppCommand::Deselect);
-                    }
-                    if ui.add_enabled(self.doc.selection.is_some(), theme::toggle_button(p, "Invert", false)).clicked() {
-                        bus.push(AppCommand::InvertSelection);
-                    }
-                }
-                });
+                        match t {
+                            Tool::Type => {
+                                ui.label(theme::muted(p, "Size"));
+                                ui.add(
+                                    egui::DragValue::new(&mut self.text_size)
+                                        .range(6.0..=400.0)
+                                        .suffix(" px")
+                                        .speed(0.5),
+                                );
+                            }
+                            Tool::QuickSelect => {
+                                ui.label(theme::muted(p, "Tolerance"));
+                                ui.add(egui::DragValue::new(&mut self.tolerance).range(0..=255));
+                            }
+                            Tool::Clone => {
+                                let txt = match (self.clone_anchor, self.clone_offset) {
+                                    (_, Some(o)) => format!("Source offset {:.0}, {:.0}", o.0, o.1),
+                                    (Some(a), None) => {
+                                        format!("Source {:.0}, {:.0}: paint to clone", a.0, a.1)
+                                    }
+                                    _ => "Alt-click to set the source".into(),
+                                };
+                                ui.label(theme::muted(p, &txt));
+                            }
+                            Tool::Crop => {
+                                if let Some(c) = self.crop {
+                                    ui.label(
+                                        egui::RichText::new(format!("{} × {}", c.w, c.h))
+                                            .monospace()
+                                            .color(p.text),
+                                    );
+                                    if ui.add(theme::primary_button(p, "Apply")).clicked() {
+                                        bus.push(AppCommand::Crop {
+                                            x: c.x as f32,
+                                            y: c.y as f32,
+                                            w: c.w as f32,
+                                            h: c.h as f32,
+                                        });
+                                    }
+                                    if ui.add(theme::toggle_button(p, "Cancel", false)).clicked() {
+                                        self.crop = None;
+                                    }
+                                } else {
+                                    ui.label(theme::muted(p, "Drag a crop box"));
+                                }
+                            }
+                            Tool::Pen => {
+                                ui.label(theme::muted(p, &format!("{} points", self.pen.len())));
+                                let ok = self.pen.len() >= 2;
+                                if ui
+                                    .add_enabled(ok, theme::toggle_button(p, "Stroke", false))
+                                    .clicked()
+                                {
+                                    bus.push(AppCommand::PenStroke);
+                                }
+                                if ui
+                                    .add_enabled(
+                                        self.pen.len() >= 3,
+                                        theme::toggle_button(p, "To selection", false),
+                                    )
+                                    .clicked()
+                                {
+                                    bus.push(AppCommand::PenToSelection);
+                                }
+                                if ui
+                                    .add_enabled(
+                                        !self.pen.is_empty(),
+                                        theme::toggle_button(p, "Clear", false),
+                                    )
+                                    .clicked()
+                                {
+                                    bus.push(AppCommand::PenClear);
+                                }
+                            }
+                            _ => {}
+                        }
+                        if matches!(t, Tool::Marquee | Tool::Lasso | Tool::QuickSelect) {
+                            if ui.add(theme::toggle_button(p, "All", false)).clicked() {
+                                bus.push(AppCommand::SelectAll);
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.doc.selection.is_some(),
+                                    theme::toggle_button(p, "Deselect", false),
+                                )
+                                .clicked()
+                            {
+                                bus.push(AppCommand::Deselect);
+                            }
+                            if ui
+                                .add_enabled(
+                                    self.doc.selection.is_some(),
+                                    theme::toggle_button(p, "Invert", false),
+                                )
+                                .clicked()
+                            {
+                                bus.push(AppCommand::InvertSelection);
+                            }
+                        }
+                    },
+                );
             });
         });
     }
 
-    pub fn center(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>, toasts: &mut Toasts, ov: &mut SelOverlay) {
+    pub fn center(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Palette,
+        bus: &mut Vec<AppCommand>,
+        toasts: &mut Toasts,
+        ov: &mut SelOverlay,
+    ) {
         let ctx = ui.ctx().clone();
         self.refresh(&ctx, ov);
         let avail = ui.available_size();
         let (resp, painter) = ui.allocate_painter(avail, egui::Sense::click_and_drag());
         let rect = resp.rect;
-        painter.rect_filled(rect, Rounding::ZERO, p.canvas);
+        painter.rect_filled(rect, CornerRadius::ZERO, p.canvas);
         let (w, h) = (self.doc.width, self.doc.height);
         if self.fit_pending && rect.width() > 10.0 {
             self.zoom = ViewTransform::fit_zoom(rect.width(), rect.height(), (w, h), 28.0);
             self.pan = Vec2::ZERO;
             self.fit_pending = false;
         }
-        let mut view = ViewTransform { viewport: (rect.min.x, rect.min.y, rect.width(), rect.height()), image: (w, h), zoom: self.zoom, pan: (self.pan.x, self.pan.y) };
-        let (alt, shift, cmd) = ctx.input(|i| (i.modifiers.alt, i.modifiers.shift, i.modifiers.command));
+        let mut view = ViewTransform {
+            viewport: (rect.min.x, rect.min.y, rect.width(), rect.height()),
+            image: (w, h),
+            zoom: self.zoom,
+            pan: (self.pan.x, self.pan.y),
+        };
+        let (alt, shift, cmd) =
+            ctx.input(|i| (i.modifiers.alt, i.modifiers.shift, i.modifiers.command));
         if resp.hovered() {
             let (scroll, zoom_delta) = ctx.input(|i| (i.raw_scroll_delta, i.zoom_delta()));
             let pointer = resp.hover_pos().unwrap_or(rect.center());
@@ -1765,7 +2388,8 @@ impl PaintState {
             view.zoom = self.zoom;
             view.pan = (self.pan.x, self.pan.y);
         }
-        let panning = resp.dragged_by(egui::PointerButton::Middle) || (self.tool == Tool::Hand && resp.dragged_by(egui::PointerButton::Primary));
+        let panning = resp.dragged_by(egui::PointerButton::Middle)
+            || (self.tool == Tool::Hand && resp.dragged_by(egui::PointerButton::Primary));
         if panning {
             self.pan += resp.drag_delta();
             view.pan = (self.pan.x, self.pan.y);
@@ -1773,24 +2397,42 @@ impl PaintState {
         let (ix, iy, iw, ih) = view.image_rect();
         let img_rect = Rect::from_min_size(Pos2::new(ix, iy), Vec2::new(iw, ih));
         let clip = painter.with_clip_rect(rect);
-        clip.rect_filled(img_rect.translate(Vec2::new(0.0, 5.0)).expand(3.0), Rounding::same(3.0), Color32::from_black_alpha(if p.dark { 140 } else { 50 }));
+        clip.rect_filled(
+            img_rect.translate(Vec2::new(0.0, 5.0)).expand(3.0),
+            CornerRadius::same(3),
+            Color32::from_black_alpha(if p.dark { 140 } else { 50 }),
+        );
         let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
         if let Some(t) = &self.tex {
             clip.image(t.id(), img_rect, uv, Color32::WHITE);
         }
-        clip.rect_stroke(img_rect.expand(0.5), Rounding::ZERO, Stroke::new(1.0_f32, p.accent.gamma_multiply(0.85)));
+        clip.rect_stroke(
+            img_rect.expand(0.5),
+            CornerRadius::ZERO,
+            Stroke::new(1.0_f32, p.accent.gamma_multiply(0.85)),
+            egui::StrokeKind::Middle,
+        );
         if let Some(t) = &ov.tex {
             clip.image(t.id(), img_rect, uv, Color32::WHITE);
         }
         let hover = resp.hover_pos();
         self.cursor_px = hover.and_then(|hp| {
             let (x, y) = view.to_image(hp.x, hp.y);
-            if view.in_image(x, y) { Some((x as u32, y as u32)) } else { None }
+            if view.in_image(x, y) {
+                Some((x as u32, y as u32))
+            } else {
+                None
+            }
         });
-        let pointer_img = resp.interact_pointer_pos().map(|pp| view.to_image(pp.x, pp.y));
+        let pointer_img = resp
+            .interact_pointer_pos()
+            .map(|pp| view.to_image(pp.x, pp.y));
         // egui reports drag_started only after the pointer moved; anchor
         // gestures at the press position so fast drags keep their start.
-        let origin_img = ui.input(|i| i.pointer.press_origin()).map(|pp| view.to_image(pp.x, pp.y)).or(pointer_img);
+        let origin_img = ui
+            .input(|i| i.pointer.press_origin())
+            .map(|pp| view.to_image(pp.x, pp.y))
+            .or(pointer_img);
         let started = resp.drag_started_by(egui::PointerButton::Primary) && !panning;
         let dragging = resp.dragged_by(egui::PointerButton::Primary) && !panning;
         let stopped = resp.drag_stopped();
@@ -1801,11 +2443,17 @@ impl PaintState {
                     if let Some(pt) = pointer_img {
                         bus.push(AppCommand::SetCloneSource { x: pt.0, y: pt.1 });
                     }
-                } else if t == Tool::Clone && self.clone_anchor.is_none() && self.clone_offset.is_none() && (clicked || started) {
+                } else if t == Tool::Clone
+                    && self.clone_anchor.is_none()
+                    && self.clone_offset.is_none()
+                    && (clicked || started)
+                {
                     toasts.push(ToastKind::Info, "Alt-click to set a clone source first.");
                 } else {
                     if started || clicked {
-                        if let (Tool::Clone, Some(a), None, Some(pt)) = (t, self.clone_anchor, self.clone_offset, origin_img) {
+                        if let (Tool::Clone, Some(a), None, Some(pt)) =
+                            (t, self.clone_anchor, self.clone_offset, origin_img)
+                        {
                             self.clone_offset = Some((a.0 - pt.0, a.1 - pt.1));
                         }
                         match self.begin_stroke() {
@@ -1832,7 +2480,10 @@ impl PaintState {
             }
             Tool::Move => {
                 if started {
-                    match self.find_layer(None).and_then(|i| self.editable(i).map(|_| i)) {
+                    match self
+                        .find_layer(None)
+                        .and_then(|i| self.editable(i).map(|_| i))
+                    {
                         Ok(i) => {
                             self.checkpoint();
                             self.move_origin = Some(self.doc.layers[i].offset);
@@ -1841,9 +2492,14 @@ impl PaintState {
                         Err(e) => toasts.push(ToastKind::Warn, &e),
                     }
                 }
-                if let (true, Some(o), Some(a), Some(b)) = (dragging, self.move_origin, self.drag_from, pointer_img) {
+                if let (true, Some(o), Some(a), Some(b)) =
+                    (dragging, self.move_origin, self.drag_from, pointer_img)
+                {
                     let i = self.doc.selected;
-                    self.doc.layers[i].offset = (o.0 + (b.0 - a.0).round() as i32, o.1 + (b.1 - a.1).round() as i32);
+                    self.doc.layers[i].offset = (
+                        o.0 + (b.0 - a.0).round() as i32,
+                        o.1 + (b.1 - a.1).round() as i32,
+                    );
                     self.mark_all();
                 }
                 if stopped {
@@ -1896,14 +2552,21 @@ impl PaintState {
                 }
                 if dragging {
                     if let Some(pt) = pointer_img {
-                        if self.lasso.last().map(|l| (l.0 - pt.0).abs() + (l.1 - pt.1).abs() > 1.5 / self.zoom).unwrap_or(true) {
+                        if self
+                            .lasso
+                            .last()
+                            .map(|l| (l.0 - pt.0).abs() + (l.1 - pt.1).abs() > 1.5 / self.zoom)
+                            .unwrap_or(true)
+                        {
                             self.lasso.push(pt);
                         }
                     }
                 }
                 if stopped {
                     if self.lasso.len() >= 3 {
-                        bus.push(AppCommand::SelectPolygon { points: self.lasso.iter().map(|p| [p.0, p.1]).collect() });
+                        bus.push(AppCommand::SelectPolygon {
+                            points: self.lasso.iter().map(|p| [p.0, p.1]).collect(),
+                        });
                     }
                     self.lasso.clear();
                 }
@@ -1916,15 +2579,24 @@ impl PaintState {
                     if let Some(pt) = pointer_img {
                         if shift {
                             let prev = self.doc.selection.clone();
-                            if let Some(Ok(_)) = self.apply(&AppCommand::MagicWand { x: pt.0, y: pt.1, tolerance: None }) {
-                                if let (Some(prev), Some(cur)) = (prev, self.doc.selection.as_mut()) {
+                            if let Some(Ok(_)) = self.apply(&AppCommand::MagicWand {
+                                x: pt.0,
+                                y: pt.1,
+                                tolerance: None,
+                            }) {
+                                if let (Some(prev), Some(cur)) = (prev, self.doc.selection.as_mut())
+                                {
                                     for (d, v) in cur.mask.iter_mut().zip(prev.mask.iter()) {
                                         *d = (*d).max(*v);
                                     }
                                 }
                             }
                         } else {
-                            bus.push(AppCommand::MagicWand { x: pt.0, y: pt.1, tolerance: None });
+                            bus.push(AppCommand::MagicWand {
+                                x: pt.0,
+                                y: pt.1,
+                                tolerance: None,
+                            });
                         }
                     }
                 }
@@ -1938,7 +2610,12 @@ impl PaintState {
                 }
                 if stopped {
                     if let (Some(a), Some(b)) = (self.drag_from, self.drag_to) {
-                        bus.push(AppCommand::Gradient { x0: a.0, y0: a.1, x1: b.0, y1: b.1 });
+                        bus.push(AppCommand::Gradient {
+                            x0: a.0,
+                            y0: a.1,
+                            x1: b.0,
+                            y1: b.1,
+                        });
                     }
                     self.drag_from = None;
                     self.drag_to = None;
@@ -1954,7 +2631,13 @@ impl PaintState {
             Tool::Type => {
                 if clicked && self.text_draft.is_none() {
                     if let (Some(pt), Some(sp)) = (pointer_img, resp.interact_pointer_pos()) {
-                        self.text_draft = Some(TextDraft { x: pt.0, y: pt.1, text: String::new(), screen: sp, focus: true });
+                        self.text_draft = Some(TextDraft {
+                            x: pt.0,
+                            y: pt.1,
+                            text: String::new(),
+                            screen: sp,
+                            focus: true,
+                        });
                     }
                 }
             }
@@ -1968,12 +2651,16 @@ impl PaintState {
                     self.pan += Vec2::new(pointer.x - after.0, pointer.y - after.1);
                 }
             }
-            Tool::Eyedropper => {
-                if clicked {
-                    if let Some((x, y)) = pointer_img {
-                        if let Some(px) = self.flat.pixel(x.max(0.0) as u32, y.max(0.0) as u32) {
-                            bus.push(AppCommand::SetBrush { size: None, hardness: None, flow: None, color: Some(format!("#{:02X}{:02X}{:02X}", px[0], px[1], px[2])), exposure: None });
-                        }
+            Tool::Eyedropper if clicked => {
+                if let Some((x, y)) = pointer_img {
+                    if let Some(px) = self.flat.pixel(x.max(0.0) as u32, y.max(0.0) as u32) {
+                        bus.push(AppCommand::SetBrush {
+                            size: None,
+                            hardness: None,
+                            flow: None,
+                            color: Some(format!("#{:02X}{:02X}{:02X}", px[0], px[1], px[2])),
+                            exposure: None,
+                        });
                     }
                 }
             }
@@ -1986,22 +2673,44 @@ impl PaintState {
             Pos2::new(s.0, s.1)
         };
         if let Some(c) = self.crop {
-            let r = Rect::from_min_max(to_screen(c.x as f32, c.y as f32), to_screen((c.x + c.w) as f32, (c.y + c.h) as f32));
+            let r = Rect::from_min_max(
+                to_screen(c.x as f32, c.y as f32),
+                to_screen((c.x + c.w) as f32, (c.y + c.h) as f32),
+            );
             let shade = Color32::from_black_alpha(150);
             for s in [
                 Rect::from_min_max(img_rect.min, Pos2::new(img_rect.max.x, r.min.y)),
                 Rect::from_min_max(Pos2::new(img_rect.min.x, r.max.y), img_rect.max),
-                Rect::from_min_max(Pos2::new(img_rect.min.x, r.min.y), Pos2::new(r.min.x, r.max.y)),
-                Rect::from_min_max(Pos2::new(r.max.x, r.min.y), Pos2::new(img_rect.max.x, r.max.y)),
+                Rect::from_min_max(
+                    Pos2::new(img_rect.min.x, r.min.y),
+                    Pos2::new(r.min.x, r.max.y),
+                ),
+                Rect::from_min_max(
+                    Pos2::new(r.max.x, r.min.y),
+                    Pos2::new(img_rect.max.x, r.max.y),
+                ),
             ] {
-                clip.rect_filled(s, Rounding::ZERO, shade);
+                clip.rect_filled(s, CornerRadius::ZERO, shade);
             }
-            clip.rect_stroke(r, Rounding::ZERO, Stroke::new(1.5_f32, p.accent));
+            clip.rect_stroke(
+                r,
+                CornerRadius::ZERO,
+                Stroke::new(1.5_f32, p.accent),
+                egui::StrokeKind::Middle,
+            );
             for k in 1..3 {
                 let fx = r.left() + r.width() * k as f32 / 3.0;
                 let fy = r.top() + r.height() * k as f32 / 3.0;
-                clip.vline(fx, r.y_range(), Stroke::new(1.0_f32, p.accent.gamma_multiply(0.4)));
-                clip.hline(r.x_range(), fy, Stroke::new(1.0_f32, p.accent.gamma_multiply(0.4)));
+                clip.vline(
+                    fx,
+                    r.y_range(),
+                    Stroke::new(1.0_f32, p.accent.gamma_multiply(0.4)),
+                );
+                clip.hline(
+                    r.x_range(),
+                    fy,
+                    Stroke::new(1.0_f32, p.accent.gamma_multiply(0.4)),
+                );
             }
         }
         if self.lasso.len() > 1 {
@@ -2011,15 +2720,27 @@ impl PaintState {
         if !self.pen.is_empty() {
             let pts: Vec<Pos2> = self.pen.iter().map(|p| to_screen(p.0, p.1)).collect();
             if pts.len() > 1 {
-                clip.add(egui::Shape::line(pts.clone(), Stroke::new(1.5_f32, p.accent)));
+                clip.add(egui::Shape::line(
+                    pts.clone(),
+                    Stroke::new(1.5_f32, p.accent),
+                ));
             }
             for q in &pts {
-                clip.rect(Rect::from_center_size(*q, Vec2::splat(7.0)), Rounding::ZERO, p.panel, Stroke::new(1.2_f32, p.accent));
+                clip.rect(
+                    Rect::from_center_size(*q, Vec2::splat(7.0)),
+                    CornerRadius::ZERO,
+                    p.panel,
+                    Stroke::new(1.2_f32, p.accent),
+                    egui::StrokeKind::Middle,
+                );
             }
         }
         if let (Some(a), Some(b)) = (self.drag_from, self.drag_to) {
             if self.tool == Tool::Gradient {
-                clip.line_segment([to_screen(a.0, a.1), to_screen(b.0, b.1)], Stroke::new(2.0_f32, Color32::WHITE));
+                clip.line_segment(
+                    [to_screen(a.0, a.1), to_screen(b.0, b.1)],
+                    Stroke::new(2.0_f32, Color32::WHITE),
+                );
                 clip.circle_filled(to_screen(a.0, a.1), 4.0, p.accent);
             }
         }
@@ -2027,16 +2748,28 @@ impl PaintState {
             if self.tool.is_stroke() {
                 let r = (self.brush.size / 2.0 * self.zoom).max(1.0);
                 clip.circle_stroke(hp, r, Stroke::new(1.0_f32, Color32::from_white_alpha(210)));
-                clip.circle_stroke(hp, r + 1.0, Stroke::new(1.0_f32, Color32::from_black_alpha(160)));
+                clip.circle_stroke(
+                    hp,
+                    r + 1.0,
+                    Stroke::new(1.0_f32, Color32::from_black_alpha(160)),
+                );
                 if self.tool == Tool::Clone {
                     let src = match (self.clone_offset, self.clone_anchor) {
-                        (Some(o), _) => Some(Pos2::new(hp.x + o.0 * self.zoom, hp.y + o.1 * self.zoom)),
+                        (Some(o), _) => {
+                            Some(Pos2::new(hp.x + o.0 * self.zoom, hp.y + o.1 * self.zoom))
+                        }
                         (None, Some(a)) => Some(to_screen(a.0, a.1)),
                         _ => None,
                     };
                     if let Some(s) = src {
-                        clip.line_segment([s - Vec2::new(6.0, 0.0), s + Vec2::new(6.0, 0.0)], Stroke::new(1.5_f32, p.accent));
-                        clip.line_segment([s - Vec2::new(0.0, 6.0), s + Vec2::new(0.0, 6.0)], Stroke::new(1.5_f32, p.accent));
+                        clip.line_segment(
+                            [s - Vec2::new(6.0, 0.0), s + Vec2::new(6.0, 0.0)],
+                            Stroke::new(1.5_f32, p.accent),
+                        );
+                        clip.line_segment(
+                            [s - Vec2::new(0.0, 6.0), s + Vec2::new(0.0, 6.0)],
+                            Stroke::new(1.5_f32, p.accent),
+                        );
                     }
                 }
             }
@@ -2062,40 +2795,60 @@ impl PaintState {
             _ => egui::CursorIcon::Crosshair,
         };
         if resp.hovered() {
-            ctx.set_cursor_icon(if panning { egui::CursorIcon::Grabbing } else { cursor });
+            ctx.set_cursor_icon(if panning {
+                egui::CursorIcon::Grabbing
+            } else {
+                cursor
+            });
         }
         // floating type box
         let mut commit = None;
         let mut cancel = false;
         if let Some(d) = &mut self.text_draft {
-            egui::Area::new(egui::Id::new("type-draft")).fixed_pos(d.screen).order(egui::Order::Foreground).show(&ctx, |ui| {
-                egui::Frame::popup(ui.style()).stroke(Stroke::new(1.0_f32, p.accent)).show(ui, |ui| {
-                    ui.label(theme::section(p, "New text layer"));
-                    let r = ui.add(egui::TextEdit::singleline(&mut d.text).hint_text("Type, then Enter").desired_width(220.0).font(egui::FontId::proportional(15.0)));
-                    if d.focus {
-                        r.request_focus();
-                        d.focus = false;
-                    }
-                    if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        commit = Some((d.text.clone(), d.x, d.y));
-                    }
-                    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                        cancel = true;
-                    }
-                    ui.horizontal(|ui| {
-                        if ui.add(theme::primary_button(p, "Add")).clicked() {
-                            commit = Some((d.text.clone(), d.x, d.y));
-                        }
-                        if ui.add(theme::toggle_button(p, "Cancel", false)).clicked() {
-                            cancel = true;
-                        }
-                    });
+            egui::Area::new(egui::Id::new("type-draft"))
+                .fixed_pos(d.screen)
+                .order(egui::Order::Foreground)
+                .show(&ctx, |ui| {
+                    egui::Frame::popup(ui.style())
+                        .stroke(Stroke::new(1.0_f32, p.accent))
+                        .show(ui, |ui| {
+                            ui.label(theme::section(p, "New text layer"));
+                            let r = ui.add(
+                                egui::TextEdit::singleline(&mut d.text)
+                                    .hint_text("Type, then Enter")
+                                    .desired_width(220.0)
+                                    .font(egui::FontId::proportional(15.0)),
+                            );
+                            if d.focus {
+                                r.request_focus();
+                                d.focus = false;
+                            }
+                            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                commit = Some((d.text.clone(), d.x, d.y));
+                            }
+                            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                cancel = true;
+                            }
+                            ui.horizontal(|ui| {
+                                if ui.add(theme::primary_button(p, "Add")).clicked() {
+                                    commit = Some((d.text.clone(), d.x, d.y));
+                                }
+                                if ui.add(theme::toggle_button(p, "Cancel", false)).clicked() {
+                                    cancel = true;
+                                }
+                            });
+                        });
                 });
-            });
         }
         if let Some((t, x, y)) = commit {
             if !t.trim().is_empty() {
-                bus.push(AppCommand::AddText { text: t, x, y, size: Some(self.text_size), color: None });
+                bus.push(AppCommand::AddText {
+                    text: t,
+                    x,
+                    y,
+                    size: Some(self.text_size),
+                    color: None,
+                });
             }
             self.text_draft = None;
         }
@@ -2115,28 +2868,34 @@ impl PaintState {
             self.layers_open = !self.layers_open;
         }
         if self.layers_open {
-            egui::Frame::none().inner_margin(egui::Margin::symmetric(SP_SM, 6.0)).show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 4.0;
-                self.layers_ui(ui, p, bus);
-            });
+            egui::Frame::NONE
+                .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    self.layers_ui(ui, p, bus);
+                });
         }
         if theme::panel_header(ui, p, "Masks", Some("Ps"), self.masks_open) {
             self.masks_open = !self.masks_open;
         }
         if self.masks_open {
-            egui::Frame::none().inner_margin(egui::Margin::symmetric(SP_SM, 6.0)).show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 4.0;
-                self.masks_ui(ui, p, bus);
-            });
+            egui::Frame::NONE
+                .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    self.masks_ui(ui, p, bus);
+                });
         }
         if theme::panel_header(ui, p, "Properties", Some("Ps"), self.props_open) {
             self.props_open = !self.props_open;
         }
         if self.props_open {
-            egui::Frame::none().inner_margin(egui::Margin::symmetric(SP_SM, 6.0)).show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 3.0;
-                self.properties_ui(ui, p);
-            });
+            egui::Frame::NONE
+                .inner_margin(egui::Margin::symmetric(SP_SM as i8, 6))
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    self.properties_ui(ui, p);
+                });
         }
     }
 
@@ -2151,21 +2910,51 @@ impl PaintState {
             (l.blend, l.opacity, l.fill, l.locked, l.name.clone())
         };
         ui.horizontal(|ui| {
-            egui::ComboBox::from_id_salt("blend").width(118.0).selected_text(blend.label()).show_ui(ui, |ui| {
-                for m in BlendMode::ALL {
-                    if ui.selectable_label(m == blend, m.label()).clicked() {
-                        bus.push(AppCommand::SetLayerBlend { layer: Some(name.clone()), mode: m.label().into() });
+            egui::ComboBox::from_id_salt("blend")
+                .width(118.0)
+                .selected_text(blend.label())
+                .show_ui(ui, |ui| {
+                    for m in BlendMode::ALL {
+                        if ui.selectable_label(m == blend, m.label()).clicked() {
+                            bus.push(AppCommand::SetLayerBlend {
+                                layer: Some(name.clone()),
+                                mode: m.label().into(),
+                            });
+                        }
                     }
-                }
-            });
+                });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::icon_button(ui, p, if locked { ic::LOCK } else { ic::LOCK_OPEN }, if locked { "Unlock layer" } else { "Lock layer pixels" }, locked).clicked() {
-                    bus.push(AppCommand::SetLayerLocked { layer: Some(name.clone()), locked: !locked });
+                if theme::icon_button(
+                    ui,
+                    p,
+                    if locked { ic::LOCK } else { ic::LOCK_OPEN },
+                    if locked {
+                        "Unlock layer"
+                    } else {
+                        "Lock layer pixels"
+                    },
+                    locked,
+                )
+                .clicked()
+                {
+                    bus.push(AppCommand::SetLayerLocked {
+                        layer: Some(name.clone()),
+                        locked: !locked,
+                    });
                 }
                 let mut v = op * 100.0;
-                let r = ui.add(egui::DragValue::new(&mut v).range(0.0..=100.0).suffix("%").speed(0.5).max_decimals(0));
+                let r = ui.add(
+                    egui::DragValue::new(&mut v)
+                        .range(0.0..=100.0)
+                        .suffix("%")
+                        .speed(0.5)
+                        .max_decimals(0),
+                );
                 if r.changed() {
-                    bus.push(AppCommand::SetLayerOpacity { layer: Some(name.clone()), opacity: v });
+                    bus.push(AppCommand::SetLayerOpacity {
+                        layer: Some(name.clone()),
+                        opacity: v,
+                    });
                 }
                 if r.drag_stopped() || r.lost_focus() {
                     self.end_coalesce();
@@ -2174,13 +2963,25 @@ impl PaintState {
             });
         });
         ui.horizontal(|ui| {
-            ui.label(theme::muted(p, &format!("{} layers · {} groups", n, self.doc.groups.len())));
+            ui.label(theme::muted(
+                p,
+                &format!("{} layers · {} groups", n, self.doc.groups.len()),
+            ));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(26.0);
                 let mut v = fill * 100.0;
-                let r = ui.add(egui::DragValue::new(&mut v).range(0.0..=100.0).suffix("%").speed(0.5).max_decimals(0));
+                let r = ui.add(
+                    egui::DragValue::new(&mut v)
+                        .range(0.0..=100.0)
+                        .suffix("%")
+                        .speed(0.5)
+                        .max_decimals(0),
+                );
                 if r.changed() {
-                    bus.push(AppCommand::SetLayerFill { layer: Some(name.clone()), fill: v });
+                    bus.push(AppCommand::SetLayerFill {
+                        layer: Some(name.clone()),
+                        fill: v,
+                    });
                 }
                 if r.drag_stopped() || r.lost_focus() {
                     self.end_coalesce();
@@ -2189,37 +2990,86 @@ impl PaintState {
             });
         });
         ui.add_space(2.0);
-        egui::Frame::none().stroke(Stroke::new(1.0_f32, p.border)).fill(p.bg).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.spacing_mut().item_spacing.y = 0.0;
-            egui::ScrollArea::vertical().id_salt("layers-scroll").max_height(250.0).auto_shrink([false, true]).show(ui, |ui| {
-                let mut last_group: Option<u32> = None;
-                for i in (0..n).rev() {
-                    let g = self.doc.layers[i].group;
-                    if g.is_some() && g != last_group {
-                        if let Some(gi) = self.doc.groups.iter().position(|x| Some(x.id) == g) {
-                            self.group_row(ui, p, gi, bus);
+        egui::Frame::NONE
+            .stroke(Stroke::new(1.0_f32, p.border))
+            .fill(p.bg)
+            // egui >= 0.31 adds the stroke to the frame size; a -1 outer margin
+            // keeps the 0.29 list geometry (stroke straddles the edge again).
+            .outer_margin(egui::Margin::same(-1))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.spacing_mut().item_spacing.y = 0.0;
+                egui::ScrollArea::vertical()
+                    .id_salt("layers-scroll")
+                    .max_height(250.0)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        let mut last_group: Option<u32> = None;
+                        for i in (0..n).rev() {
+                            let g = self.doc.layers[i].group;
+                            if g.is_some() && g != last_group {
+                                if let Some(gi) =
+                                    self.doc.groups.iter().position(|x| Some(x.id) == g)
+                                {
+                                    self.group_row(ui, p, gi, bus);
+                                }
+                            }
+                            last_group = g;
+                            let collapsed = g
+                                .and_then(|id| self.doc.groups.iter().find(|x| x.id == id))
+                                .map(|x| x.collapsed)
+                                .unwrap_or(false);
+                            if !collapsed {
+                                self.layer_row(ui, p, i, g.is_some(), bus);
+                            }
                         }
-                    }
-                    last_group = g;
-                    let collapsed = g.and_then(|id| self.doc.groups.iter().find(|x| x.id == id)).map(|x| x.collapsed).unwrap_or(false);
-                    if !collapsed {
-                        self.layer_row(ui, p, i, g.is_some(), bus);
-                    }
-                }
+                    });
             });
-        });
         ui.add_space(2.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             let acts: [(&str, &str, AppCommand); 7] = [
-                (ic::FILE_PLUS, "New layer", AppCommand::AddLayer { name: None }),
-                (ic::FOLDER_SIMPLE_PLUS, "Group active layer", AppCommand::AddGroup { name: None }),
-                (ic::CIRCLE_HALF, "Add layer mask (from selection)", AppCommand::AddMask { layer: None }),
-                (ic::COPY, "Duplicate layer", AppCommand::DuplicateLayer { layer: None }),
-                (ic::ARROW_UP, "Move layer up", AppCommand::MoveLayer { layer: None, direction: "up".into() }),
-                (ic::ARROW_DOWN, "Move layer down", AppCommand::MoveLayer { layer: None, direction: "down".into() }),
-                (ic::TRASH, "Delete layer", AppCommand::RemoveLayer { layer: None }),
+                (
+                    ic::FILE_PLUS,
+                    "New layer",
+                    AppCommand::AddLayer { name: None },
+                ),
+                (
+                    ic::FOLDER_SIMPLE_PLUS,
+                    "Group active layer",
+                    AppCommand::AddGroup { name: None },
+                ),
+                (
+                    ic::CIRCLE_HALF,
+                    "Add layer mask (from selection)",
+                    AppCommand::AddMask { layer: None },
+                ),
+                (
+                    ic::COPY,
+                    "Duplicate layer",
+                    AppCommand::DuplicateLayer { layer: None },
+                ),
+                (
+                    ic::ARROW_UP,
+                    "Move layer up",
+                    AppCommand::MoveLayer {
+                        layer: None,
+                        direction: "up".into(),
+                    },
+                ),
+                (
+                    ic::ARROW_DOWN,
+                    "Move layer down",
+                    AppCommand::MoveLayer {
+                        layer: None,
+                        direction: "down".into(),
+                    },
+                ),
+                (
+                    ic::TRASH,
+                    "Delete layer",
+                    AppCommand::RemoveLayer { layer: None },
+                ),
             ];
             for (icon, tip, cmd) in acts {
                 if theme::icon_button_sized(ui, p, icon, tip, false, 26.0, 15.0).clicked() {
@@ -2231,88 +3081,219 @@ impl PaintState {
 
     fn group_row(&mut self, ui: &mut egui::Ui, p: &Palette, gi: usize, bus: &mut Vec<AppCommand>) {
         let g = self.doc.groups[gi].clone();
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 24.0), egui::Sense::click());
+        let (rect, resp) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), 24.0), egui::Sense::click());
         if resp.hovered() {
-            ui.painter().rect_filled(rect, Rounding::ZERO, p.surface_hi);
+            ui.painter()
+                .rect_filled(rect, CornerRadius::ZERO, p.surface_hi);
         }
         let eye = Rect::from_min_size(rect.min, Vec2::new(24.0, rect.height()));
-        let eresp = ui.interact(eye, egui::Id::new(("geye", g.id)), egui::Sense::click()).on_hover_text(if g.visible { "Hide group" } else { "Show group" });
-        ui.painter().text(eye.center(), egui::Align2::CENTER_CENTER, if g.visible { ic::EYE } else { ic::EYE_SLASH }, egui::FontId::proportional(13.0), if g.visible { p.text } else { p.muted });
+        let eresp = ui
+            .interact(eye, egui::Id::new(("geye", g.id)), egui::Sense::click())
+            .on_hover_text(if g.visible {
+                "Hide group"
+            } else {
+                "Show group"
+            });
+        ui.painter().text(
+            eye.center(),
+            egui::Align2::CENTER_CENTER,
+            if g.visible { ic::EYE } else { ic::EYE_SLASH },
+            egui::FontId::proportional(13.0),
+            if g.visible { p.text } else { p.muted },
+        );
         if eresp.clicked() {
-            bus.push(AppCommand::SetGroupVisibility { group: g.name.clone(), visible: !g.visible });
+            bus.push(AppCommand::SetGroupVisibility {
+                group: g.name.clone(),
+                visible: !g.visible,
+            });
         }
-        let caret = if g.collapsed { ic::CARET_RIGHT } else { ic::CARET_DOWN };
-        ui.painter().text(Pos2::new(rect.left() + 32.0, rect.center().y), egui::Align2::CENTER_CENTER, caret, egui::FontId::proportional(11.0), p.muted);
-        ui.painter().text(Pos2::new(rect.left() + 48.0, rect.center().y), egui::Align2::CENTER_CENTER, if g.collapsed { ic::FOLDER } else { ic::FOLDER_OPEN }, egui::FontId::proportional(14.0), p.accent);
-        ui.painter().text(Pos2::new(rect.left() + 62.0, rect.center().y), egui::Align2::LEFT_CENTER, &g.name, egui::FontId::proportional(12.0), p.text);
-        ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1.0_f32, p.border));
+        let caret = if g.collapsed {
+            ic::CARET_RIGHT
+        } else {
+            ic::CARET_DOWN
+        };
+        ui.painter().text(
+            Pos2::new(rect.left() + 32.0, rect.center().y),
+            egui::Align2::CENTER_CENTER,
+            caret,
+            egui::FontId::proportional(11.0),
+            p.muted,
+        );
+        ui.painter().text(
+            Pos2::new(rect.left() + 48.0, rect.center().y),
+            egui::Align2::CENTER_CENTER,
+            if g.collapsed {
+                ic::FOLDER
+            } else {
+                ic::FOLDER_OPEN
+            },
+            egui::FontId::proportional(14.0),
+            p.accent,
+        );
+        ui.painter().text(
+            Pos2::new(rect.left() + 62.0, rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            &g.name,
+            egui::FontId::proportional(12.0),
+            p.text,
+        );
+        ui.painter().hline(
+            rect.x_range(),
+            rect.bottom(),
+            Stroke::new(1.0_f32, p.border),
+        );
         if resp.clicked() && !eresp.clicked() {
             self.doc.groups[gi].collapsed = !g.collapsed;
         }
     }
 
-    fn layer_row(&mut self, ui: &mut egui::Ui, p: &Palette, i: usize, indent: bool, bus: &mut Vec<AppCommand>) {
+    fn layer_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &Palette,
+        i: usize,
+        indent: bool,
+        bus: &mut Vec<AppCommand>,
+    ) {
         let l = &self.doc.layers[i];
-        let (id, name, visible, locked, is_text, has_mask) = (l.id, l.name.clone(), l.visible, l.locked, l.text.is_some(), l.mask.is_some());
+        let (id, name, visible, locked, is_text, has_mask) = (
+            l.id,
+            l.name.clone(),
+            l.visible,
+            l.locked,
+            l.text.is_some(),
+            l.mask.is_some(),
+        );
         let selected = i == self.doc.selected;
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), egui::Sense::click());
+        let (rect, resp) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), egui::Sense::click());
         let painter = ui.painter();
         if selected {
-            painter.rect(rect.shrink(1.0), Rounding::same(2.0), p.accent_soft(), Stroke::new(1.0_f32, p.accent));
+            painter.rect(
+                rect.shrink(1.0),
+                CornerRadius::same(2),
+                p.accent_soft(),
+                Stroke::new(1.0_f32, p.accent),
+                egui::StrokeKind::Middle,
+            );
         } else if resp.hovered() {
-            painter.rect_filled(rect, Rounding::ZERO, p.surface_hi);
+            painter.rect_filled(rect, CornerRadius::ZERO, p.surface_hi);
         }
         let eye = Rect::from_min_size(rect.min, Vec2::new(24.0, rect.height()));
-        painter.text(eye.center(), egui::Align2::CENTER_CENTER, if visible { ic::EYE } else { ic::EYE_SLASH }, egui::FontId::proportional(13.0), if visible { p.text } else { p.muted });
+        painter.text(
+            eye.center(),
+            egui::Align2::CENTER_CENTER,
+            if visible { ic::EYE } else { ic::EYE_SLASH },
+            egui::FontId::proportional(13.0),
+            if visible { p.text } else { p.muted },
+        );
         let x0 = rect.left() + 26.0 + if indent { 14.0 } else { 0.0 };
         let thumb = Rect::from_min_size(Pos2::new(x0, rect.top() + 4.0), Vec2::new(36.0, 24.0));
         checker(painter, thumb, p);
         if is_text {
-            painter.rect_filled(thumb, Rounding::ZERO, p.surface_hi);
-            painter.text(thumb.center(), egui::Align2::CENTER_CENTER, ic::TEXT_T, egui::FontId::proportional(15.0), p.text);
+            painter.rect_filled(thumb, CornerRadius::ZERO, p.surface_hi);
+            painter.text(
+                thumb.center(),
+                egui::Align2::CENTER_CENTER,
+                ic::TEXT_T,
+                egui::FontId::proportional(15.0),
+                p.text,
+            );
         } else if let Some((_, t)) = self.thumbs.get(&id) {
             let ts = t.size_vec2();
             let s = (thumb.width() / ts.x).min(thumb.height() / ts.y);
             let r = Rect::from_center_size(thumb.center(), ts * s);
-            painter.image(t.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+            painter.image(
+                t.id(),
+                r,
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
         }
-        painter.rect_stroke(thumb, Rounding::ZERO, Stroke::new(1.0_f32, p.border));
+        painter.rect_stroke(
+            thumb,
+            CornerRadius::ZERO,
+            Stroke::new(1.0_f32, p.border),
+            egui::StrokeKind::Middle,
+        );
         let mut nx = thumb.right() + 6.0;
         if has_mask {
             let mr = Rect::from_min_size(Pos2::new(nx, rect.top() + 4.0), Vec2::new(24.0, 24.0));
-            painter.rect_filled(mr, Rounding::ZERO, Color32::BLACK);
+            painter.rect_filled(mr, CornerRadius::ZERO, Color32::BLACK);
             if let Some((_, t)) = self.thumbs.get(&(id | 0x8000_0000)) {
-                painter.image(t.id(), mr, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+                painter.image(
+                    t.id(),
+                    mr,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
             }
-            painter.rect_stroke(mr, Rounding::ZERO, Stroke::new(1.0_f32, p.line));
+            painter.rect_stroke(
+                mr,
+                CornerRadius::ZERO,
+                Stroke::new(1.0_f32, p.line),
+                egui::StrokeKind::Middle,
+            );
             nx = mr.right() + 6.0;
         }
         let editing = matches!(&self.rename, Some((k, _)) if *k == i);
         if !editing {
-            painter.text(Pos2::new(nx, rect.center().y), egui::Align2::LEFT_CENTER, &name, egui::FontId::proportional(12.0), if selected { p.accent } else { p.text });
+            painter.text(
+                Pos2::new(nx, rect.center().y),
+                egui::Align2::LEFT_CENTER,
+                &name,
+                egui::FontId::proportional(12.0),
+                if selected { p.accent } else { p.text },
+            );
         }
         let mut rx = rect.right() - 12.0;
         if locked {
-            painter.text(Pos2::new(rx, rect.center().y), egui::Align2::CENTER_CENTER, ic::LOCK, egui::FontId::proportional(12.0), p.muted);
+            painter.text(
+                Pos2::new(rx, rect.center().y),
+                egui::Align2::CENTER_CENTER,
+                ic::LOCK,
+                egui::FontId::proportional(12.0),
+                p.muted,
+            );
             rx -= 16.0;
         }
         if is_text {
-            painter.text(Pos2::new(rx, rect.center().y), egui::Align2::CENTER_CENTER, ic::TEXT_AA, egui::FontId::proportional(12.0), p.muted);
+            painter.text(
+                Pos2::new(rx, rect.center().y),
+                egui::Align2::CENTER_CENTER,
+                ic::TEXT_AA,
+                egui::FontId::proportional(12.0),
+                p.muted,
+            );
         }
-        let eresp = ui.interact(eye, egui::Id::new(("eye", id)), egui::Sense::click()).on_hover_text(if visible { "Hide layer" } else { "Show layer" });
+        let eresp = ui
+            .interact(eye, egui::Id::new(("eye", id)), egui::Sense::click())
+            .on_hover_text(if visible { "Hide layer" } else { "Show layer" });
         if eresp.clicked() {
-            bus.push(AppCommand::SetLayerVisibility { layer: Some(name.clone()), visible: !visible });
+            bus.push(AppCommand::SetLayerVisibility {
+                layer: Some(name.clone()),
+                visible: !visible,
+            });
         } else if resp.clicked() && !selected {
-            bus.push(AppCommand::SelectLayer { layer: (self.doc.layers.len() - i).to_string() });
+            bus.push(AppCommand::SelectLayer {
+                layer: (self.doc.layers.len() - i).to_string(),
+            });
         }
         if resp.double_clicked() {
             self.rename = Some((i, name.clone()));
         }
         if editing {
             let mut done = None;
-            let er = Rect::from_min_max(Pos2::new(nx, rect.top() + 5.0), Pos2::new(rect.right() - 30.0, rect.bottom() - 5.0));
+            let er = Rect::from_min_max(
+                Pos2::new(nx, rect.top() + 5.0),
+                Pos2::new(rect.right() - 30.0, rect.bottom() - 5.0),
+            );
             if let Some((_, buf)) = &mut self.rename {
-                let r = ui.put(er, egui::TextEdit::singleline(buf).font(egui::FontId::proportional(12.0)));
+                let r = ui.put(
+                    er,
+                    egui::TextEdit::singleline(buf).font(egui::FontId::proportional(12.0)),
+                );
                 r.request_focus();
                 if r.lost_focus() {
                     done = Some(buf.clone());
@@ -2320,7 +3301,10 @@ impl PaintState {
             }
             if let Some(nm) = done {
                 if nm.trim() != name && !nm.trim().is_empty() {
-                    bus.push(AppCommand::RenameLayer { layer: Some((self.doc.layers.len() - i).to_string()), name: nm });
+                    bus.push(AppCommand::RenameLayer {
+                        layer: Some((self.doc.layers.len() - i).to_string()),
+                        name: nm,
+                    });
                 }
                 self.rename = None;
             }
@@ -2329,27 +3313,66 @@ impl PaintState {
         resp.context_menu(|ui| {
             if ui.button("Rename…").clicked() {
                 self.rename = Some((i, name.clone()));
-                ui.close_menu();
+                ui.close();
             }
             for (label, cmd) in [
-                ("Duplicate", AppCommand::DuplicateLayer { layer: Some(idx.clone()) }),
-                ("Add mask", AppCommand::AddMask { layer: Some(idx.clone()) }),
-                (if locked { "Unlock" } else { "Lock" }, AppCommand::SetLayerLocked { layer: Some(idx.clone()), locked: !locked }),
-                ("Move up", AppCommand::MoveLayer { layer: Some(idx.clone()), direction: "up".into() }),
-                ("Move down", AppCommand::MoveLayer { layer: Some(idx.clone()), direction: "down".into() }),
-                ("Delete", AppCommand::RemoveLayer { layer: Some(idx.clone()) }),
+                (
+                    "Duplicate",
+                    AppCommand::DuplicateLayer {
+                        layer: Some(idx.clone()),
+                    },
+                ),
+                (
+                    "Add mask",
+                    AppCommand::AddMask {
+                        layer: Some(idx.clone()),
+                    },
+                ),
+                (
+                    if locked { "Unlock" } else { "Lock" },
+                    AppCommand::SetLayerLocked {
+                        layer: Some(idx.clone()),
+                        locked: !locked,
+                    },
+                ),
+                (
+                    "Move up",
+                    AppCommand::MoveLayer {
+                        layer: Some(idx.clone()),
+                        direction: "up".into(),
+                    },
+                ),
+                (
+                    "Move down",
+                    AppCommand::MoveLayer {
+                        layer: Some(idx.clone()),
+                        direction: "down".into(),
+                    },
+                ),
+                (
+                    "Delete",
+                    AppCommand::RemoveLayer {
+                        layer: Some(idx.clone()),
+                    },
+                ),
             ] {
                 if ui.button(label).clicked() {
                     bus.push(cmd);
-                    ui.close_menu();
+                    ui.close();
                 }
             }
         });
-        ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1.0_f32, p.border));
+        ui.painter().hline(
+            rect.x_range(),
+            rect.bottom(),
+            Stroke::new(1.0_f32, p.border),
+        );
     }
 
     fn masks_ui(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
-        let Some(l) = self.doc.layers.get(self.doc.selected) else { return };
+        let Some(l) = self.doc.layers.get(self.doc.selected) else {
+            return;
+        };
         let name = l.name.clone();
         let id = l.id;
         match l.mask.clone() {
@@ -2357,9 +3380,19 @@ impl PaintState {
                 ui.horizontal(|ui| {
                     ui.label(theme::muted(p, "Density:"));
                     let mut d = m.density * 100.0;
-                    let r = ui.add(egui::Slider::new(&mut d, 0.0..=100.0).suffix("%").max_decimals(0));
+                    let r = ui.add(
+                        egui::Slider::new(&mut d, 0.0..=100.0)
+                            .suffix("%")
+                            .max_decimals(0),
+                    );
                     if r.changed() {
-                        bus.push(AppCommand::SetMask { layer: Some(name.clone()), density: Some(d), feather: None, invert: None, enabled: None });
+                        bus.push(AppCommand::SetMask {
+                            layer: Some(name.clone()),
+                            density: Some(d),
+                            feather: None,
+                            invert: None,
+                            enabled: None,
+                        });
                     }
                     if r.drag_stopped() {
                         self.end_coalesce();
@@ -2368,9 +3401,19 @@ impl PaintState {
                 ui.horizontal(|ui| {
                     ui.label(theme::muted(p, "Feather:"));
                     let mut f = m.feather;
-                    let r = ui.add(egui::Slider::new(&mut f, 0.0..=100.0).suffix(" px").max_decimals(1));
+                    let r = ui.add(
+                        egui::Slider::new(&mut f, 0.0..=100.0)
+                            .suffix(" px")
+                            .max_decimals(1),
+                    );
                     if r.changed() {
-                        bus.push(AppCommand::SetMask { layer: Some(name.clone()), density: None, feather: Some(f), invert: None, enabled: None });
+                        bus.push(AppCommand::SetMask {
+                            layer: Some(name.clone()),
+                            density: None,
+                            feather: Some(f),
+                            invert: None,
+                            enabled: None,
+                        });
                     }
                     if r.drag_stopped() {
                         self.end_coalesce();
@@ -2378,45 +3421,135 @@ impl PaintState {
                 });
                 ui.horizontal(|ui| {
                     if let Some((_, t)) = self.thumbs.get(&(id | 0x8000_0000)) {
-                        let (r, _) = ui.allocate_exact_size(Vec2::new(54.0, 36.0), egui::Sense::hover());
-                        ui.painter().image(t.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
-                        ui.painter().rect_stroke(r, Rounding::ZERO, Stroke::new(1.0_f32, p.line));
+                        let (r, _) =
+                            ui.allocate_exact_size(Vec2::new(54.0, 36.0), egui::Sense::hover());
+                        ui.painter().image(
+                            t.id(),
+                            r,
+                            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                            Color32::WHITE,
+                        );
+                        ui.painter().rect_stroke(
+                            r,
+                            CornerRadius::ZERO,
+                            Stroke::new(1.0_f32, p.line),
+                            egui::StrokeKind::Middle,
+                        );
                     }
                     ui.vertical(|ui| {
-                        theme::prop(ui, p, "Mask", format!("{}", name));
+                        theme::prop(ui, p, "Mask", name.to_string());
                         theme::prop(ui, p, "Kind", "Pixel · Grayscale");
                         theme::prop(ui, p, "Invert", if m.invert { "On" } else { "Off" });
                     });
                 });
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
-                    if theme::icon_button_sized(ui, p, ic::PLUS, "Replace mask from selection", false, 26.0, 15.0).clicked() {
-                        bus.push(AppCommand::AddMask { layer: Some(name.clone()) });
+                    if theme::icon_button_sized(
+                        ui,
+                        p,
+                        ic::PLUS,
+                        "Replace mask from selection",
+                        false,
+                        26.0,
+                        15.0,
+                    )
+                    .clicked()
+                    {
+                        bus.push(AppCommand::AddMask {
+                            layer: Some(name.clone()),
+                        });
                     }
-                    if theme::icon_button_sized(ui, p, ic::SWAP, "Invert mask", m.invert, 26.0, 15.0).clicked() {
-                        bus.push(AppCommand::SetMask { layer: Some(name.clone()), density: None, feather: None, invert: Some(!m.invert), enabled: None });
+                    if theme::icon_button_sized(
+                        ui,
+                        p,
+                        ic::SWAP,
+                        "Invert mask",
+                        m.invert,
+                        26.0,
+                        15.0,
+                    )
+                    .clicked()
+                    {
+                        bus.push(AppCommand::SetMask {
+                            layer: Some(name.clone()),
+                            density: None,
+                            feather: None,
+                            invert: Some(!m.invert),
+                            enabled: None,
+                        });
                     }
-                    if theme::icon_button_sized(ui, p, if m.enabled { ic::EYE } else { ic::EYE_SLASH }, if m.enabled { "Disable mask" } else { "Enable mask" }, !m.enabled, 26.0, 15.0).clicked() {
-                        bus.push(AppCommand::SetMask { layer: Some(name.clone()), density: None, feather: None, invert: None, enabled: Some(!m.enabled) });
+                    if theme::icon_button_sized(
+                        ui,
+                        p,
+                        if m.enabled { ic::EYE } else { ic::EYE_SLASH },
+                        if m.enabled {
+                            "Disable mask"
+                        } else {
+                            "Enable mask"
+                        },
+                        !m.enabled,
+                        26.0,
+                        15.0,
+                    )
+                    .clicked()
+                    {
+                        bus.push(AppCommand::SetMask {
+                            layer: Some(name.clone()),
+                            density: None,
+                            feather: None,
+                            invert: None,
+                            enabled: Some(!m.enabled),
+                        });
                     }
-                    if theme::icon_button_sized(ui, p, ic::SELECTION, "Load mask as selection", false, 26.0, 15.0).clicked() {
-                        let mut s = Selection { width: m.width, height: m.height, mask: (*m.data).clone() };
+                    if theme::icon_button_sized(
+                        ui,
+                        p,
+                        ic::SELECTION,
+                        "Load mask as selection",
+                        false,
+                        26.0,
+                        15.0,
+                    )
+                    .clicked()
+                    {
+                        let mut s = Selection {
+                            width: m.width,
+                            height: m.height,
+                            mask: (*m.data).clone(),
+                        };
                         if m.invert {
                             s.invert();
                         }
                         self.checkpoint();
                         self.doc.selection = Some(s);
                     }
-                    if theme::icon_button_sized(ui, p, ic::TRASH, "Delete mask", false, 26.0, 15.0).clicked() {
-                        bus.push(AppCommand::RemoveMask { layer: Some(name.clone()) });
+                    if theme::icon_button_sized(ui, p, ic::TRASH, "Delete mask", false, 26.0, 15.0)
+                        .clicked()
+                    {
+                        bus.push(AppCommand::RemoveMask {
+                            layer: Some(name.clone()),
+                        });
                     }
                 });
             }
             None => {
                 ui.label(theme::muted(p, &format!("“{}” has no mask.", name)));
                 ui.horizontal(|ui| {
-                    if ui.add(theme::toggle_button(p, if self.doc.selection.is_some() { "Add mask from selection" } else { "Add reveal-all mask" }, false)).clicked() {
-                        bus.push(AppCommand::AddMask { layer: Some(name.clone()) });
+                    if ui
+                        .add(theme::toggle_button(
+                            p,
+                            if self.doc.selection.is_some() {
+                                "Add mask from selection"
+                            } else {
+                                "Add reveal-all mask"
+                            },
+                            false,
+                        ))
+                        .clicked()
+                    {
+                        bus.push(AppCommand::AddMask {
+                            layer: Some(name.clone()),
+                        });
                     }
                 });
             }
@@ -2425,27 +3558,259 @@ impl PaintState {
 
     fn properties_ui(&mut self, ui: &mut egui::Ui, p: &Palette) {
         let (w, h) = (self.doc.width, self.doc.height);
-        ui.label(egui::RichText::new("Canvas Size").size(11.5).strong().color(p.text));
+        ui.label(
+            egui::RichText::new("Canvas Size")
+                .size(11.5)
+                .strong()
+                .color(p.text),
+        );
         theme::prop(ui, p, "Width:", format!("{} px", w));
         theme::prop(ui, p, "Height:", format!("{} px", h));
         theme::prop(ui, p, "Resolution:", "72 Pixels/Inch (default)");
         ui.add_space(4.0);
-        ui.label(egui::RichText::new("Color Profile").size(11.5).strong().color(p.text));
+        ui.label(
+            egui::RichText::new("Color Profile")
+                .size(11.5)
+                .strong()
+                .color(p.text),
+        );
         theme::prop(ui, p, "Working RGB:", "sRGB (assumed)");
         let mut proof = false;
-        ui.add_enabled(false, egui::Checkbox::new(&mut proof, "Proof Colors")).on_disabled_hover_text("Coming soon: soft-proofing needs ICC support");
+        ui.add_enabled(false, egui::Checkbox::new(&mut proof, "Proof Colors"))
+            .on_disabled_hover_text("Coming soon: soft-proofing needs ICC support");
         ui.add_space(4.0);
-        ui.label(egui::RichText::new("Info").size(11.5).strong().color(p.text));
+        ui.label(
+            egui::RichText::new("Info")
+                .size(11.5)
+                .strong()
+                .color(p.text),
+        );
         let mut seen = std::collections::HashSet::new();
-        let bytes: usize = self.doc.layers.iter().filter(|l| seen.insert(Arc::as_ptr(&l.raster) as usize)).map(|l| l.raster.data.len()).sum();
-        theme::prop(ui, p, "Document Size:", format!("{:.1} MB", bytes as f64 / 1_048_576.0));
+        let bytes: usize = self
+            .doc
+            .layers
+            .iter()
+            .filter(|l| seen.insert(Arc::as_ptr(&l.raster) as usize))
+            .map(|l| l.raster.data.len())
+            .sum();
+        theme::prop(
+            ui,
+            p,
+            "Document Size:",
+            format!("{:.1} MB", bytes as f64 / 1_048_576.0),
+        );
         theme::prop(ui, p, "Bit Depth:", "8-bit/Channel");
         theme::prop(ui, p, "Channels:", "RGB + Alpha");
-        theme::prop(ui, p, "Layers:", format!("{} in {} groups", self.doc.layers.len(), self.doc.groups.len()));
-        let sel = self.doc.selection.as_ref().and_then(|s| s.bounds()).map(|b| format!("{} × {} at {}, {}", b.w, b.h, b.x, b.y)).unwrap_or_else(|| "None".into());
+        theme::prop(
+            ui,
+            p,
+            "Layers:",
+            format!(
+                "{} in {} groups",
+                self.doc.layers.len(),
+                self.doc.groups.len()
+            ),
+        );
+        let sel = self
+            .doc
+            .selection
+            .as_ref()
+            .and_then(|s| s.bounds())
+            .map(|b| format!("{} × {} at {}, {}", b.w, b.h, b.x, b.y))
+            .unwrap_or_else(|| "None".into());
         theme::prop(ui, p, "Selection:", sel);
         if let Some(d) = &self.psd {
             theme::prop(ui, p, "PSD:", d.clone());
         }
+    }
+}
+
+// ---- project files ------------------------------------------------------------
+
+use crate::project::{Assets, RasterRef};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MaskFile {
+    pub width: u32,
+    pub height: u32,
+    pub data: String,
+    pub density: f32,
+    pub feather: f32,
+    pub invert: bool,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LayerFile {
+    pub id: u32,
+    pub name: String,
+    pub visible: bool,
+    pub opacity: f32,
+    pub fill: f32,
+    pub blend: BlendMode,
+    pub raster: RasterRef,
+    pub offset: (i32, i32),
+    pub mask: Option<MaskFile>,
+    pub group: Option<u32>,
+    pub locked: bool,
+    pub text: Option<TextSpec>,
+}
+
+/// Paint mode in a `.seraphina` project.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PaintFile {
+    pub width: u32,
+    pub height: u32,
+    pub layers: Vec<LayerFile>,
+    pub groups: Vec<LayerGroup>,
+    /// Selection plane (`width * height` bytes).
+    pub selection: Option<String>,
+    pub selected: usize,
+    pub next_id: u32,
+    pub doc_name: String,
+    pub path: String,
+    pub psd: Option<String>,
+    pub source_ppi: Option<f32>,
+    pub tool: String,
+    pub brush: Brush,
+    pub exposure: f32,
+    pub tolerance: u8,
+    pub text_size: f32,
+    pub pen: Vec<(f32, f32)>,
+    pub clone_offset: Option<(f32, f32)>,
+}
+
+impl PaintState {
+    pub fn to_file(&self, a: &mut Assets) -> PaintFile {
+        let d = &self.doc;
+        let layers = d
+            .layers
+            .iter()
+            .map(|l| LayerFile {
+                id: l.id,
+                name: l.name.clone(),
+                visible: l.visible,
+                opacity: l.opacity,
+                fill: l.fill,
+                blend: l.blend,
+                raster: a.put_raster(&format!("paint {}", l.name), &l.raster),
+                offset: l.offset,
+                mask: l.mask.as_ref().map(|m| MaskFile {
+                    width: m.width,
+                    height: m.height,
+                    data: a.put(&format!("mask {}", l.name), (*m.data).clone()),
+                    density: m.density,
+                    feather: m.feather,
+                    invert: m.invert,
+                    enabled: m.enabled,
+                }),
+                group: l.group,
+                locked: l.locked,
+                text: l.text.clone(),
+            })
+            .collect();
+        PaintFile {
+            width: d.width,
+            height: d.height,
+            layers,
+            groups: d.groups.clone(),
+            selection: d
+                .selection
+                .as_ref()
+                .map(|s| a.put("selection", s.mask.clone())),
+            selected: d.selected,
+            next_id: d.next_id,
+            doc_name: self.doc_name.clone(),
+            path: self.path.clone(),
+            psd: self.psd.clone(),
+            source_ppi: self.source_ppi,
+            tool: self.tool.id().to_string(),
+            brush: self.brush,
+            exposure: self.exposure,
+            tolerance: self.tolerance,
+            text_size: self.text_size,
+            pen: self.pen.clone(),
+            clone_offset: self.clone_offset,
+        }
+    }
+
+    /// Replace the document with a project's (undo history starts fresh).
+    pub fn load_file(&mut self, f: PaintFile, a: &Assets) -> Result<(), String> {
+        let (w, h) = (f.width, f.height);
+        if w == 0 || h == 0 {
+            return Err("paint document has no size".into());
+        }
+        let mut layers = Vec::with_capacity(f.layers.len());
+        for l in f.layers {
+            let mut p = PaintLayer::new(l.id, &l.name, a.raster(&l.raster)?);
+            p.visible = l.visible;
+            p.opacity = l.opacity;
+            p.fill = l.fill;
+            p.blend = l.blend;
+            p.offset = l.offset;
+            p.group = l.group;
+            p.locked = l.locked;
+            p.text = l.text;
+            if let Some(m) = l.mask {
+                let sel = Selection {
+                    width: m.width,
+                    height: m.height,
+                    mask: a.plane(&m.data, m.width, m.height)?,
+                };
+                let mut mk = LayerMask::from_selection(&sel);
+                mk.density = m.density;
+                mk.feather = m.feather;
+                mk.invert = m.invert;
+                mk.enabled = m.enabled;
+                mk.prepare();
+                p.mask = Some(mk);
+            }
+            layers.push(p);
+        }
+        let selection = match f.selection {
+            Some(s) => Some(Selection {
+                width: w,
+                height: h,
+                mask: a.plane(&s, w, h)?,
+            }),
+            None => None,
+        };
+        let doc = PaintDoc {
+            layers,
+            groups: f.groups,
+            width: w,
+            height: h,
+            selection,
+            selected: f.selected,
+            next_id: f.next_id,
+        };
+        self.history = History::new(40);
+        self.restore(doc);
+        self.flat = Raster::new(w, h);
+        self.tex = None;
+        self.thumbs.clear();
+        self.fit_pending = true;
+        self.crop = None;
+        self.text_draft = None;
+        self.rename = None;
+        self.stroking = false;
+        self.stroke_src = None;
+        self.drag_from = None;
+        self.drag_to = None;
+        self.lasso.clear();
+        self.doc_name = f.doc_name;
+        self.path = f.path;
+        self.psd = f.psd;
+        self.source_ppi = f.source_ppi;
+        self.tool = Tool::from_id(&f.tool).unwrap_or(Tool::Brush);
+        self.brush = f.brush;
+        self.exposure = f.exposure;
+        self.tolerance = f.tolerance;
+        self.text_size = f.text_size;
+        self.pen = f.pen;
+        self.clone_offset = f.clone_offset;
+        self.mark_all();
+        Ok(())
     }
 }

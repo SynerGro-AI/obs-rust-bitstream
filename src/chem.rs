@@ -102,7 +102,16 @@ pub fn vib_modes(formula: &str) -> Option<(bool, &'static [(f64, u32)])> {
         "NO" => (true, &[(1904.2, 1)]),
         "HCl" => (true, &[(2990.9, 1)]),
         "CO2" => (true, &[(1333.0, 1), (667.4, 2), (2349.2, 1)]),
-        "C2H2" => (true, &[(3374.0, 1), (1974.0, 1), (3289.0, 1), (612.0, 2), (730.0, 2)]),
+        "C2H2" => (
+            true,
+            &[
+                (3374.0, 1),
+                (1974.0, 1),
+                (3289.0, 1),
+                (612.0, 2),
+                (730.0, 2),
+            ],
+        ),
         "H2O" => (false, &[(3657.0, 1), (1594.7, 1), (3755.9, 1)]),
         "NO2" => (false, &[(1318.0, 1), (749.7, 1), (1617.8, 1)]),
         "SO2" => (false, &[(1151.4, 1), (517.7, 1), (1361.8, 1)]),
@@ -115,7 +124,13 @@ pub fn vib_modes(formula: &str) -> Option<(bool, &'static [(f64, u32)])> {
 fn rrho(formula: &str) -> Option<(f64, Vec<(f64, f64)>)> {
     let (linear, modes) = vib_modes(formula)?;
     let rigid = if linear { 3.5 * R } else { 4.0 * R };
-    Some((rigid, modes.iter().map(|(nu, g)| (C2 * nu * 100.0, *g as f64)).collect()))
+    Some((
+        rigid,
+        modes
+            .iter()
+            .map(|(nu, g)| (C2 * nu * 100.0, *g as f64))
+            .collect(),
+    ))
 }
 
 fn einstein_h(theta: f64, t: f64) -> f64 {
@@ -137,7 +152,13 @@ impl Species {
     pub fn cp_at(&self, t: f64) -> f64 {
         let t = t.max(1.0);
         match (self.state, rrho(self.formula)) {
-            (State::Gas, Some((rigid, modes))) => rigid + modes.iter().map(|(th, g)| g * einstein_cp(*th, t)).sum::<f64>(),
+            (State::Gas, Some((rigid, modes))) => {
+                rigid
+                    + modes
+                        .iter()
+                        .map(|(th, g)| g * einstein_cp(*th, t))
+                        .sum::<f64>()
+            }
             _ => self.cp,
         }
     }
@@ -145,7 +166,14 @@ impl Species {
     pub fn h(&self, t: f64) -> f64 {
         let t = t.max(1.0);
         match (self.state, rrho(self.formula)) {
-            (State::Gas, Some((rigid, modes))) => self.dhf * 1e3 + rigid * (t - T0) + modes.iter().map(|(th, g)| g * (einstein_h(*th, t) - einstein_h(*th, T0))).sum::<f64>(),
+            (State::Gas, Some((rigid, modes))) => {
+                self.dhf * 1e3
+                    + rigid * (t - T0)
+                    + modes
+                        .iter()
+                        .map(|(th, g)| g * (einstein_h(*th, t) - einstein_h(*th, T0)))
+                        .sum::<f64>()
+            }
             _ => self.dhf * 1e3 + self.cp * (t - T0),
         }
     }
@@ -153,7 +181,14 @@ impl Species {
     pub fn s_at(&self, t: f64) -> f64 {
         let t = t.max(1.0);
         match (self.state, rrho(self.formula)) {
-            (State::Gas, Some((rigid, modes))) => self.s + rigid * (t / T0).ln() + modes.iter().map(|(th, g)| g * (einstein_s(*th, t) - einstein_s(*th, T0))).sum::<f64>(),
+            (State::Gas, Some((rigid, modes))) => {
+                self.s
+                    + rigid * (t / T0).ln()
+                    + modes
+                        .iter()
+                        .map(|(th, g)| g * (einstein_s(*th, t) - einstein_s(*th, T0)))
+                        .sum::<f64>()
+            }
             _ => self.s + self.cp * (t / T0).ln(),
         }
     }
@@ -165,7 +200,9 @@ impl Species {
         format!("{}({})", self.formula, self.state.tag())
     }
     pub fn molar_mass(&self) -> f64 {
-        parse_formula(self.formula).map(|c| c.molar_mass() as f64).unwrap_or(0.0)
+        parse_formula(self.formula)
+            .map(|c| c.molar_mass() as f64)
+            .unwrap_or(0.0)
     }
 }
 
@@ -175,7 +212,15 @@ const CRC: &str = "CRC Handbook 5-4";
 
 macro_rules! sp {
     ($f:expr, $n:expr, $st:ident, $h:expr, $s:expr, $cp:expr, $src:expr) => {
-        Species { formula: $f, name: $n, state: State::$st, dhf: $h, s: $s, cp: $cp, source: $src }
+        Species {
+            formula: $f,
+            name: $n,
+            state: State::$st,
+            dhf: $h,
+            s: $s,
+            cp: $cp,
+            source: $src,
+        }
     };
 }
 
@@ -187,9 +232,33 @@ pub static SPECIES: &[Species] = &[
     sp!("Cl2", "chlorine", Gas, 0.0, 223.081, 33.949, CODATA),
     sp!("H2O", "water", Liquid, -285.830, 69.95, 75.351, CODATA),
     sp!("H2O", "steam", Gas, -241.826, 188.835, 33.609, CODATA),
-    sp!("H2O2", "hydrogen peroxide", Liquid, -187.78, 109.6, 89.1, CRC),
-    sp!("CO2", "carbon dioxide", Gas, -393.51, 213.785, 37.135, CODATA),
-    sp!("CO", "carbon monoxide", Gas, -110.53, 197.660, 29.141, CODATA),
+    sp!(
+        "H2O2",
+        "hydrogen peroxide",
+        Liquid,
+        -187.78,
+        109.6,
+        89.1,
+        CRC
+    ),
+    sp!(
+        "CO2",
+        "carbon dioxide",
+        Gas,
+        -393.51,
+        213.785,
+        37.135,
+        CODATA
+    ),
+    sp!(
+        "CO",
+        "carbon monoxide",
+        Gas,
+        -110.53,
+        197.660,
+        29.141,
+        CODATA
+    ),
     sp!("C", "graphite", Solid, 0.0, 5.74, 8.517, CODATA),
     sp!("C", "diamond", Solid, 1.895, 2.377, 6.113, CRC),
     sp!("CH4", "methane", Gas, -74.87, 186.25, 35.69, JANAF),
@@ -202,9 +271,25 @@ pub static SPECIES: &[Species] = &[
     sp!("NH3", "ammonia", Gas, -45.94, 192.77, 35.06, CODATA),
     sp!("NO", "nitric oxide", Gas, 91.29, 210.76, 29.86, JANAF),
     sp!("NO2", "nitrogen dioxide", Gas, 33.10, 240.04, 37.2, JANAF),
-    sp!("N2O4", "dinitrogen tetroxide", Gas, 9.16, 304.29, 77.28, CRC),
+    sp!(
+        "N2O4",
+        "dinitrogen tetroxide",
+        Gas,
+        9.16,
+        304.29,
+        77.28,
+        CRC
+    ),
     sp!("N2O5", "dinitrogen pentoxide", Gas, 13.3, 355.7, 95.3, CRC),
-    sp!("HCl", "hydrogen chloride", Gas, -92.31, 186.902, 29.136, CODATA),
+    sp!(
+        "HCl",
+        "hydrogen chloride",
+        Gas,
+        -92.31,
+        186.902,
+        29.136,
+        CODATA
+    ),
     sp!("Na", "sodium", Solid, 0.0, 51.30, 28.23, CODATA),
     sp!("NaCl", "sodium chloride", Solid, -411.12, 72.11, 50.50, CRC),
     sp!("Fe", "iron", Solid, 0.0, 27.32, 25.10, CODATA),
@@ -216,7 +301,15 @@ pub static SPECIES: &[Species] = &[
     sp!("Mg", "magnesium", Solid, 0.0, 32.67, 24.87, CODATA),
     sp!("MgO", "periclase", Solid, -601.6, 26.95, 37.2, CRC),
     sp!("S", "sulfur (rhombic)", Solid, 0.0, 32.054, 22.64, CODATA),
-    sp!("SO2", "sulfur dioxide", Gas, -296.81, 248.223, 39.87, CODATA),
+    sp!(
+        "SO2",
+        "sulfur dioxide",
+        Gas,
+        -296.81,
+        248.223,
+        39.87,
+        CODATA
+    ),
     sp!("CaCO3", "calcite", Solid, -1207.6, 91.7, 83.5, CRC),
     sp!("CaO", "lime", Solid, -634.92, 38.1, 42.0, CRC),
     sp!("Si", "silicon", Solid, 0.0, 18.81, 20.00, CODATA),
@@ -234,7 +327,8 @@ pub fn species(formula: &str, state: Option<State>, t: f64) -> Option<&'static S
     if let Some(st) = state {
         return all.into_iter().find(|s| s.state == st);
     }
-    all.into_iter().min_by(|a, b| a.g(t).partial_cmp(&b.g(t)).unwrap())
+    all.into_iter()
+        .min_by(|a, b| a.g(t).partial_cmp(&b.g(t)).unwrap())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,15 +371,23 @@ fn parse_side(side: &str) -> Result<Vec<Term>, ChemError> {
             continue;
         }
         // optional leading coefficient (integer or decimal or n/m)
-        let split = t.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '/' || c == ' ')).unwrap_or(t.len());
+        let split = t
+            .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '/' || c == ' '))
+            .unwrap_or(t.len());
         let (num, rest) = t.split_at(split);
         let num = num.trim();
         let coef = if num.is_empty() {
             f64::NAN
         } else if let Some((a, b)) = num.split_once('/') {
-            a.trim().parse::<f64>().map_err(|_| ChemError::Syntax(t.into()))? / b.trim().parse::<f64>().map_err(|_| ChemError::Syntax(t.into()))?
+            a.trim()
+                .parse::<f64>()
+                .map_err(|_| ChemError::Syntax(t.into()))?
+                / b.trim()
+                    .parse::<f64>()
+                    .map_err(|_| ChemError::Syntax(t.into()))?
         } else {
-            num.parse::<f64>().map_err(|_| ChemError::Syntax(t.into()))?
+            num.parse::<f64>()
+                .map_err(|_| ChemError::Syntax(t.into()))?
         };
         let mut f = rest.trim().to_string();
         let mut state = None;
@@ -300,7 +402,11 @@ fn parse_side(side: &str) -> Result<Vec<Term>, ChemError> {
             return Err(ChemError::Syntax(format!("missing formula in '{}'", t)));
         }
         parse_formula(&f).map_err(|e| ChemError::Formula(format!("{}: {:?}", f, e)))?;
-        out.push(Term { coef, formula: f, state });
+        out.push(Term {
+            coef,
+            formula: f,
+            state,
+        });
     }
     if out.is_empty() {
         return Err(ChemError::Syntax("empty side".into()));
@@ -311,10 +417,24 @@ fn parse_side(side: &str) -> Result<Vec<Term>, ChemError> {
 /// Parse "CH4 + 2 O2 -> CO2 + 2 H2O(l)" (also `=`, `→`, `⇌`, `<=>`).
 /// Without coefficients the equation is balanced automatically.
 pub fn parse_equation(src: &str) -> Result<Equation, ChemError> {
-    let s = src.replace('→', "->").replace('⇌', "->").replace("<=>", "->").replace("<->", "->").replace("=>", "->");
-    let (l, r) = s.split_once("->").or_else(|| s.split_once('=')).ok_or_else(|| ChemError::Syntax("use -> between reactants and products".into()))?;
-    let mut eq = Equation { reactants: parse_side(l)?, products: parse_side(r)? };
-    let any_given = eq.reactants.iter().chain(&eq.products).any(|t| !t.coef.is_nan());
+    let s = src
+        .replace(['→', '⇌'], "->")
+        .replace("<=>", "->")
+        .replace("<->", "->")
+        .replace("=>", "->");
+    let (l, r) = s
+        .split_once("->")
+        .or_else(|| s.split_once('='))
+        .ok_or_else(|| ChemError::Syntax("use -> between reactants and products".into()))?;
+    let mut eq = Equation {
+        reactants: parse_side(l)?,
+        products: parse_side(r)?,
+    };
+    let any_given = eq
+        .reactants
+        .iter()
+        .chain(&eq.products)
+        .any(|t| !t.coef.is_nan());
     if any_given {
         for t in eq.reactants.iter_mut().chain(eq.products.iter_mut()) {
             if t.coef.is_nan() {
@@ -331,27 +451,55 @@ pub fn parse_equation(src: &str) -> Result<Equation, ChemError> {
 }
 
 fn gcd(a: i128, b: i128) -> i128 {
-    if b == 0 { a.abs() } else { gcd(b, a % b) }
+    if b == 0 {
+        a.abs()
+    } else {
+        gcd(b, a % b)
+    }
 }
 
 impl Equation {
     fn elements(&self) -> Vec<u32> {
-        let mut z: Vec<u32> = self.reactants.iter().chain(&self.products).flat_map(|t| parse_formula(&t.formula).map(|c| c.0.iter().map(|(z, _)| *z).collect::<Vec<_>>()).unwrap_or_default()).collect();
+        let mut z: Vec<u32> = self
+            .reactants
+            .iter()
+            .chain(&self.products)
+            .flat_map(|t| {
+                parse_formula(&t.formula)
+                    .map(|c| c.0.iter().map(|(z, _)| *z).collect::<Vec<_>>())
+                    .unwrap_or_default()
+            })
+            .collect();
         z.sort();
         z.dedup();
         z
     }
 
     fn count(formula: &str, z: u32) -> i128 {
-        parse_formula(formula).map(|c| c.0.iter().filter(|(e, _)| *e == z).map(|(_, n)| *n as i128).sum()).unwrap_or(0)
+        parse_formula(formula)
+            .map(|c| {
+                c.0.iter()
+                    .filter(|(e, _)| *e == z)
+                    .map(|(_, n)| *n as i128)
+                    .sum()
+            })
+            .unwrap_or(0)
     }
 
     /// `Some(description)` when atoms are not conserved.
     pub fn imbalance(&self) -> Option<String> {
         let mut bad = Vec::new();
         for z in self.elements() {
-            let l: f64 = self.reactants.iter().map(|t| t.coef * Self::count(&t.formula, z) as f64).sum();
-            let r: f64 = self.products.iter().map(|t| t.coef * Self::count(&t.formula, z) as f64).sum();
+            let l: f64 = self
+                .reactants
+                .iter()
+                .map(|t| t.coef * Self::count(&t.formula, z) as f64)
+                .sum();
+            let r: f64 = self
+                .products
+                .iter()
+                .map(|t| t.coef * Self::count(&t.formula, z) as f64)
+                .sum();
             if (l - r).abs() > 1e-9 {
                 let sym = element_data::get(z).map(|e| e.symbol).unwrap_or("?");
                 bad.push(format!("{} {} vs {}", sym, l, r));
@@ -364,14 +512,31 @@ impl Equation {
     /// (one-dimensional null space of the element matrix, exact rationals).
     pub fn balance(&mut self) -> Result<(), ChemError> {
         let zs = self.elements();
-        let terms: Vec<(String, i128)> = self.reactants.iter().map(|t| (t.formula.clone(), 1)).chain(self.products.iter().map(|t| (t.formula.clone(), -1))).collect();
+        let terms: Vec<(String, i128)> = self
+            .reactants
+            .iter()
+            .map(|t| (t.formula.clone(), 1))
+            .chain(self.products.iter().map(|t| (t.formula.clone(), -1)))
+            .collect();
         let n = terms.len();
         // rows: elements; rational matrix as (num, den)
-        let mut m: Vec<Vec<(i128, i128)>> = zs.iter().map(|&z| terms.iter().map(|(f, sgn)| (sgn * Self::count(f, z), 1)).collect()).collect();
+        let mut m: Vec<Vec<(i128, i128)>> = zs
+            .iter()
+            .map(|&z| {
+                terms
+                    .iter()
+                    .map(|(f, sgn)| (sgn * Self::count(f, z), 1))
+                    .collect()
+            })
+            .collect();
         let norm = |(a, b): (i128, i128)| {
             let g = gcd(a, b).max(1);
             let (a, b) = (a / g, b / g);
-            if b < 0 { (-a, -b) } else { (a, b) }
+            if b < 0 {
+                (-a, -b)
+            } else {
+                (a, b)
+            }
         };
         let sub = |x: (i128, i128), y: (i128, i128)| norm((x.0 * y.1 - y.0 * x.1, x.1 * y.1));
         let mul = |x: (i128, i128), y: (i128, i128)| norm((x.0 * y.0, x.1 * y.1));
@@ -380,7 +545,9 @@ impl Equation {
         let mut pivots = Vec::new();
         let mut row = 0;
         for col in 0..n {
-            let Some(pr) = (row..m.len()).find(|&r| m[r][col].0 != 0) else { continue };
+            let Some(pr) = (row..m.len()).find(|&r| m[r][col].0 != 0) else {
+                continue;
+            };
             m.swap(row, pr);
             let pv = m[row][col];
             for c in 0..n {
@@ -402,7 +569,11 @@ impl Equation {
         }
         let free: Vec<usize> = (0..n).filter(|c| !pivots.contains(c)).collect();
         if free.len() != 1 {
-            return Err(ChemError::Unbalanced(if free.is_empty() { "no solution with these species".into() } else { "several independent reactions; give coefficients".into() }));
+            return Err(ChemError::Unbalanced(if free.is_empty() {
+                "no solution with these species".into()
+            } else {
+                "several independent reactions; give coefficients".into()
+            }));
         }
         let fc = free[0];
         let mut x = vec![(0i128, 1i128); n];
@@ -416,23 +587,52 @@ impl Equation {
             ints.iter_mut().for_each(|v| *v = -*v);
         }
         if ints.iter().any(|v| *v <= 0) {
-            return Err(ChemError::Unbalanced("a species would need a negative or zero coefficient".into()));
+            return Err(ChemError::Unbalanced(
+                "a species would need a negative or zero coefficient".into(),
+            ));
         }
         let g = ints.iter().fold(0, |g, v| gcd(g, *v));
-        for (t, v) in self.reactants.iter_mut().chain(self.products.iter_mut()).zip(ints) {
+        for (t, v) in self
+            .reactants
+            .iter_mut()
+            .chain(self.products.iter_mut())
+            .zip(ints)
+        {
             t.coef = (v / g) as f64;
         }
         Ok(())
     }
 
     pub fn display(&self) -> String {
-        let side = |ts: &Vec<Term>| ts.iter().map(|t| format!("{}{}{}", if (t.coef - 1.0).abs() < 1e-12 { String::new() } else { format!("{} ", fmt_coef(t.coef)) }, t.formula, t.state.map(|s| format!("({})", s.tag())).unwrap_or_default())).collect::<Vec<_>>().join(" + ");
+        let side = |ts: &Vec<Term>| {
+            ts.iter()
+                .map(|t| {
+                    format!(
+                        "{}{}{}",
+                        if (t.coef - 1.0).abs() < 1e-12 {
+                            String::new()
+                        } else {
+                            format!("{} ", fmt_coef(t.coef))
+                        },
+                        t.formula,
+                        t.state
+                            .map(|s| format!("({})", s.tag()))
+                            .unwrap_or_default()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" + ")
+        };
         format!("{} → {}", side(&self.reactants), side(&self.products))
     }
 }
 
 fn fmt_coef(c: f64) -> String {
-    if (c - c.round()).abs() < 1e-9 { format!("{}", c.round() as i64) } else { format!("{}", c) }
+    if (c - c.round()).abs() < 1e-9 {
+        format!("{}", c.round() as i64)
+    } else {
+        format!("{}", c)
+    }
 }
 
 /// Kinetic law for a reaction.
@@ -461,7 +661,14 @@ impl RateLaw {
 pub fn rate_law(eq: &Equation) -> RateLaw {
     let has = |f: &str| eq.reactants.iter().any(|t| t.formula == f);
     let cal = 4.184;
-    let wd = |fuel: &str, a: f64, ea_kcal: f64, af: f64, bo: f64| RateLaw { a, ea: ea_kcal * 1000.0 * cal, orders: vec![(fuel.into(), af), ("O2".into(), bo)], per: fuel.into(), source: "Westbrook & Dryer 1981, Comb. Sci. Tech. 27:31, Table 2", estimated: false };
+    let wd = |fuel: &str, a: f64, ea_kcal: f64, af: f64, bo: f64| RateLaw {
+        a,
+        ea: ea_kcal * 1000.0 * cal,
+        orders: vec![(fuel.into(), af), ("O2".into(), bo)],
+        per: fuel.into(),
+        source: "Westbrook & Dryer 1981, Comb. Sci. Tech. 27:31, Table 2",
+        estimated: false,
+    };
     if has("O2") {
         if has("CH4") {
             return wd("CH4", 8.3e5, 30.0, -0.3, 1.3);
@@ -479,18 +686,46 @@ pub fn rate_law(eq: &Equation) -> RateLaw {
             return wd("C2H5OH", 1.5e12, 30.0, 0.15, 1.6);
         }
         if has("H2") {
-            return RateLaw { a: 1.8e13, ea: 35.0 * 1000.0 * cal, orders: vec![("H2".into(), 1.0), ("O2".into(), 0.5)], per: "H2".into(), source: "Marinov, Westbrook & Pitz 1996 (global H2/air)", estimated: false };
+            return RateLaw {
+                a: 1.8e13,
+                ea: 35.0 * 1000.0 * cal,
+                orders: vec![("H2".into(), 1.0), ("O2".into(), 0.5)],
+                per: "H2".into(),
+                source: "Marinov, Westbrook & Pitz 1996 (global H2/air)",
+                estimated: false,
+            };
         }
     }
     if has("N2O5") && eq.reactants.len() == 1 {
-        return RateLaw { a: 4.94e13, ea: 103.4e3, orders: vec![("N2O5".into(), 1.0)], per: "N2O5".into(), source: "first-order N2O5 decomposition (Daniels & Johnston 1921; Ea 103 kJ/mol)", estimated: false };
+        return RateLaw {
+            a: 4.94e13,
+            ea: 103.4e3,
+            orders: vec![("N2O5".into(), 1.0)],
+            per: "N2O5".into(),
+            source: "first-order N2O5 decomposition (Daniels & Johnston 1921; Ea 103 kJ/mol)",
+            estimated: false,
+        };
     }
     if has("N2O4") && eq.reactants.len() == 1 {
         // fast elementary dissociation; equilibrium is reached in microseconds
-        return RateLaw { a: 1.0e16, ea: 57.0e3, orders: vec![("N2O4".into(), 1.0)], per: "N2O4".into(), source: "N2O4 dissociation, order-of-magnitude rate (equilibrium is what matters)", estimated: true };
+        return RateLaw {
+            a: 1.0e16,
+            ea: 57.0e3,
+            orders: vec![("N2O4".into(), 1.0)],
+            per: "N2O4".into(),
+            source: "N2O4 dissociation, order-of-magnitude rate (equilibrium is what matters)",
+            estimated: true,
+        };
     }
     let first = eq.reactants[0].formula.clone();
-    RateLaw { a: 1.0e10, ea: 100.0e3, orders: vec![(first.clone(), 1.0)], per: first, source: "no published rate law in the table; generic estimate", estimated: true }
+    RateLaw {
+        a: 1.0e10,
+        ea: 100.0e3,
+        orders: vec![(first.clone(), 1.0)],
+        per: first,
+        source: "no published rate law in the table; generic estimate",
+        estimated: true,
+    }
 }
 
 /// Thermochemistry of a balanced equation at temperature `t`.
@@ -523,14 +758,34 @@ impl Thermo {
 
 /// Resolve each term to a table entry at `t`.
 pub fn resolve(eq: &Equation, t: f64) -> Result<Vec<&'static Species>, ChemError> {
-    eq.reactants.iter().chain(&eq.products).map(|term| species(&term.formula, term.state, t).ok_or_else(|| ChemError::Unknown(format!("{}{}", term.formula, term.state.map(|s| format!("({})", s.tag())).unwrap_or_default())))).collect()
+    eq.reactants
+        .iter()
+        .chain(&eq.products)
+        .map(|term| {
+            species(&term.formula, term.state, t).ok_or_else(|| {
+                ChemError::Unknown(format!(
+                    "{}{}",
+                    term.formula,
+                    term.state
+                        .map(|s| format!("({})", s.tag()))
+                        .unwrap_or_default()
+                ))
+            })
+        })
+        .collect()
 }
 
 pub fn thermo(eq: &Equation, t: f64) -> Result<Thermo, ChemError> {
     let picked = resolve(eq, t)?;
     let nr = eq.reactants.len();
     let (mut dh, mut ds, mut dn, mut dcp) = (0.0, 0.0, 0.0, 0.0);
-    for (i, (term, sp)) in eq.reactants.iter().chain(&eq.products).zip(&picked).enumerate() {
+    for (i, (term, sp)) in eq
+        .reactants
+        .iter()
+        .chain(&eq.products)
+        .zip(&picked)
+        .enumerate()
+    {
         let nu = if i < nr { -term.coef } else { term.coef };
         dh += nu * sp.h(t);
         ds += nu * sp.s_at(t);
@@ -540,7 +795,16 @@ pub fn thermo(eq: &Equation, t: f64) -> Result<Thermo, ChemError> {
         }
     }
     let dg = dh - t * ds;
-    Ok(Thermo { t, dh, ds, dg, k: (-dg / (R * t)).exp(), dn_gas: dn, dcp, picked })
+    Ok(Thermo {
+        t,
+        dh,
+        ds,
+        dg,
+        k: (-dg / (R * t)).exp(),
+        dn_gas: dn,
+        dcp,
+        picked,
+    })
 }
 
 /// A well-mixed, constant-pressure, adiabatic reactor (or with a fixed
@@ -577,15 +841,40 @@ impl Reactor {
         let mut n: Vec<f64> = Vec::new();
         let picked = resolve(eq, t)?;
         let nr = eq.reactants.len();
-        for (i, (term, sp)) in eq.reactants.iter().chain(&eq.products).zip(picked).enumerate() {
+        for (i, (term, sp)) in eq
+            .reactants
+            .iter()
+            .chain(&eq.products)
+            .zip(picked)
+            .enumerate()
+        {
             let v = if i < nr { -term.coef } else { term.coef };
             species.push(sp);
             nu.push(v);
             n.push(if i < nr { term.coef * scale } else { 0.0 });
         }
-        let o2: f64 = eq.reactants.iter().filter(|t| t.formula == "O2").map(|t| t.coef * scale).sum();
+        let o2: f64 = eq
+            .reactants
+            .iter()
+            .filter(|t| t.formula == "O2")
+            .map(|t| t.coef * scale)
+            .sum();
         let inert = if air { 3.76 * o2 } else { 0.0 };
-        Ok(Self { eq: eq.clone(), species, n, nu, t, p, law: rate_law(eq), time: 0.0, extent: 0.0, ua: 0.0, t_wall: t, q_out: 0.0, inert })
+        Ok(Self {
+            eq: eq.clone(),
+            species,
+            n,
+            nu,
+            t,
+            p,
+            law: rate_law(eq),
+            time: 0.0,
+            extent: 0.0,
+            ua: 0.0,
+            t_wall: t,
+            q_out: 0.0,
+            inert,
+        })
     }
 
     fn n2(&self) -> Option<&'static Species> {
@@ -594,17 +883,33 @@ impl Reactor {
 
     /// Total enthalpy (J) of the mixture at its temperature.
     pub fn enthalpy(&self) -> f64 {
-        let h: f64 = self.species.iter().zip(&self.n).map(|(s, n)| n * h_with_latent(s, self.t)).sum();
+        let h: f64 = self
+            .species
+            .iter()
+            .zip(&self.n)
+            .map(|(s, n)| n * h_with_latent(s, self.t))
+            .sum();
         h + self.inert * self.n2().map(|s| s.h(self.t)).unwrap_or(0.0)
     }
 
     pub fn heat_capacity(&self) -> f64 {
-        let c: f64 = self.species.iter().zip(&self.n).map(|(s, n)| n * (s.cp_at(self.t) + latent(s, self.t).1)).sum();
+        let c: f64 = self
+            .species
+            .iter()
+            .zip(&self.n)
+            .map(|(s, n)| n * (s.cp_at(self.t) + latent(s, self.t).1))
+            .sum();
         c + self.inert * self.n2().map(|s| s.cp_at(self.t)).unwrap_or(29.124)
     }
 
     pub fn gas_moles(&self) -> f64 {
-        self.species.iter().zip(&self.n).filter(|(s, _)| s.state == State::Gas).map(|(_, n)| *n).sum::<f64>() + self.inert
+        self.species
+            .iter()
+            .zip(&self.n)
+            .filter(|(s, _)| s.state == State::Gas)
+            .map(|(_, n)| *n)
+            .sum::<f64>()
+            + self.inert
     }
 
     /// Ideal-gas volume, m³.
@@ -641,10 +946,18 @@ impl Reactor {
         }
         // mol/cm³/s × cm³ = mol/s of the reference species
         let mut rate = r * vcm3;
-        let coef = self.eq.reactants.iter().find(|t| t.formula == self.law.per).map(|t| t.coef).unwrap_or(1.0);
+        let coef = self
+            .eq
+            .reactants
+            .iter()
+            .find(|t| t.formula == self.law.per)
+            .map(|t| t.coef)
+            .unwrap_or(1.0);
         rate /= coef;
         // detailed balance: the net rate vanishes at equilibrium
-        let k_eq = thermo(&self.eq, self.t).map(|th| th.k).unwrap_or(f64::INFINITY);
+        let k_eq = thermo(&self.eq, self.t)
+            .map(|th| th.k)
+            .unwrap_or(f64::INFINITY);
         let q = self.quotient();
         rate * (1.0 - (q / k_eq).min(1e6))
     }
@@ -669,7 +982,11 @@ impl Reactor {
             let (mut lo, mut hi) = (1.0, 60_000.0);
             for _ in 0..100 {
                 self.t = 0.5 * (lo + hi);
-                if self.enthalpy() > h_before { hi = self.t } else { lo = self.t }
+                if self.enthalpy() > h_before {
+                    hi = self.t
+                } else {
+                    lo = self.t
+                }
                 if hi - lo < 1e-9 {
                     break;
                 }
@@ -698,7 +1015,14 @@ impl Reactor {
                 self.apply(0.0, left);
                 break;
             }
-            let limit = self.species.iter().zip(&self.n).zip(&self.nu).filter(|((_, _), v)| (**v < 0.0) == (r > 0.0) && **v != 0.0).map(|((_, n), v)| n / v.abs()).fold(f64::INFINITY, f64::min);
+            let limit = self
+                .species
+                .iter()
+                .zip(&self.n)
+                .zip(&self.nu)
+                .filter(|((_, _), v)| (**v < 0.0) == (r > 0.0) && **v != 0.0)
+                .map(|((_, n), v)| n / v.abs())
+                .fold(f64::INFINITY, f64::min);
             // the limiting reactant is effectively gone: finish it in one
             // step (negative orders would otherwise make the steps Zeno-like)
             if limit.is_finite() && limit <= 1e-9 * (self.extent.abs() + limit) {
@@ -726,7 +1050,11 @@ impl Reactor {
                     let mid = 0.5 * (lo + hi);
                     let mut t2 = self.clone();
                     t2.apply(dxi * mid, h * mid);
-                    if t2.rate() * r > 0.0 { lo = mid } else { hi = mid }
+                    if t2.rate() * r > 0.0 {
+                        lo = mid
+                    } else {
+                        hi = mid
+                    }
                 }
                 let mut t2 = self.clone();
                 t2.apply(dxi * lo, h * lo);
@@ -840,7 +1168,11 @@ pub fn adiabatic_temperature(eq: &Equation, t0: f64, air: bool) -> Result<f64, C
     }
     for _ in 0..100 {
         let mid = 0.5 * (lo + hi);
-        if h_products(mid) > h0 { hi = mid } else { lo = mid }
+        if h_products(mid) > h0 {
+            hi = mid
+        } else {
+            lo = mid
+        }
     }
     Ok(0.5 * (lo + hi))
 }
@@ -856,16 +1188,29 @@ mod tests {
     #[test]
     fn balances_equations_exactly() {
         let e = eq("C3H8 + O2 -> CO2 + H2O");
-        let c: Vec<f64> = e.reactants.iter().chain(&e.products).map(|t| t.coef).collect();
+        let c: Vec<f64> = e
+            .reactants
+            .iter()
+            .chain(&e.products)
+            .map(|t| t.coef)
+            .collect();
         assert_eq!(c, vec![1.0, 5.0, 3.0, 4.0]);
         let e = eq("Fe2O3 + Al -> Al2O3 + Fe");
-        let c: Vec<f64> = e.reactants.iter().chain(&e.products).map(|t| t.coef).collect();
+        let c: Vec<f64> = e
+            .reactants
+            .iter()
+            .chain(&e.products)
+            .map(|t| t.coef)
+            .collect();
         assert_eq!(c, vec![1.0, 2.0, 1.0, 2.0]);
         let e = eq("C6H12O6 + O2 -> CO2 + H2O");
         assert_eq!(e.display(), "C6H12O6 + 6 O2 → 6 CO2 + 6 H2O");
         // given coefficients are checked
-        assert!(matches!(parse_equation("H2 + O2 -> H2O + 1 O2"), Err(ChemError::Unbalanced(_))));
-        assert!(matches!(parse_equation("2 H2 + O2 -> 2 H2O"), Ok(_)));
+        assert!(matches!(
+            parse_equation("H2 + O2 -> H2O + 1 O2"),
+            Err(ChemError::Unbalanced(_))
+        ));
+        assert!(parse_equation("2 H2 + O2 -> 2 H2O").is_ok());
         assert!(parse_equation("H2 + O2").is_err());
         assert!(parse_equation("Xy2 -> X").is_err());
         // fractional coefficients
@@ -908,7 +1253,11 @@ mod tests {
         let mut hi = 450.0;
         for _ in 0..60 {
             let mid = 0.5 * (lo + hi);
-            if species("H2O", None, mid).unwrap().state == State::Liquid { lo = mid } else { hi = mid }
+            if species("H2O", None, mid).unwrap().state == State::Liquid {
+                lo = mid
+            } else {
+                hi = mid
+            }
         }
         assert!((lo - 373.15).abs() < 3.0, "{}", lo);
     }
@@ -936,9 +1285,19 @@ mod tests {
         r.advance(10.0);
         // at the end Q = K(T_final) (adiabatic: the endothermic dissociation cools it)
         let k = thermo(&e, r.t).unwrap().k;
-        assert!((r.quotient() / k - 1.0).abs() < 1e-3, "Q {} K {}", r.quotient(), k);
+        assert!(
+            (r.quotient() / k - 1.0).abs() < 1e-3,
+            "Q {} K {}",
+            r.quotient(),
+            k
+        );
         assert!(r.t < T0);
-        assert!((r.enthalpy() - h0).abs() < 1e-6 * h0.abs().max(1.0), "{} vs {}", r.enthalpy(), h0);
+        assert!(
+            (r.enthalpy() - h0).abs() < 1e-6 * h0.abs().max(1.0),
+            "{} vs {}",
+            r.enthalpy(),
+            h0
+        );
         // 1 mol N2O4 at 1 bar, 298 K: α ≈ 0.19 by Kp = 4α²/(1−α²)
         let mut iso = Reactor::new(&e, T0, P0, 1.0, false).unwrap();
         iso.law.a = 1e3;
@@ -988,7 +1347,11 @@ mod tests {
         assert!(tad > 2250.0 && tad < 2450.0, "{}", tad);
         let mut cold = Reactor::new(&e, T0, 101_325.0, 1.0, true).unwrap();
         cold.advance(10.0);
-        assert!(cold.conversion() < 1e-6, "no reaction at room temperature: {}", cold.conversion());
+        assert!(
+            cold.conversion() < 1e-6,
+            "no reaction at room temperature: {}",
+            cold.conversion()
+        );
         let mut hot = Reactor::new(&e, 1500.0, 101_325.0, 1.0, true).unwrap();
         let h0 = hot.enthalpy();
         hot.advance(0.05);
@@ -1005,12 +1368,28 @@ mod rrho_tests {
     #[test]
     fn statistical_heat_capacities_match_janaf() {
         // JANAF Cp at 298 / 1000 / 2000 K (J/mol·K)
-        let cases = [("N2", 29.12, 32.70, 36.0), ("CO2", 37.12, 54.31, 60.35), ("H2O", 33.59, 41.27, 51.18), ("O2", 29.38, 34.88, 37.74)];
+        let cases = [
+            ("N2", 29.12, 32.70, 36.0),
+            ("CO2", 37.12, 54.31, 60.35),
+            ("H2O", 33.59, 41.27, 51.18),
+            ("O2", 29.38, 34.88, 37.74),
+        ];
         for (f, c298, c1000, c2000) in cases {
             let s = species(f, Some(State::Gas), 300.0).unwrap();
-            for (t, want, tol) in [(298.15, c298, 0.03), (1000.0, c1000, 0.04), (2000.0, c2000, 0.06)] {
+            for (t, want, tol) in [
+                (298.15, c298, 0.03),
+                (1000.0, c1000, 0.04),
+                (2000.0, c2000, 0.06),
+            ] {
                 let got = s.cp_at(t);
-                assert!((got - want).abs() / want < tol, "{} at {} K: {} vs {}", f, t, got, want);
+                assert!(
+                    (got - want).abs() / want < tol,
+                    "{} at {} K: {} vs {}",
+                    f,
+                    t,
+                    got,
+                    want
+                );
             }
         }
     }

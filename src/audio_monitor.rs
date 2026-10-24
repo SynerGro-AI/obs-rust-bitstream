@@ -52,7 +52,11 @@ impl AudioMonitor {
 
     /// Effective gain: 0 if muted, otherwise volume.
     pub fn gain(&self) -> f32 {
-        if self.muted { 0.0 } else { self.volume }
+        if self.muted {
+            0.0
+        } else {
+            self.volume
+        }
     }
 }
 

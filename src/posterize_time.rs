@@ -25,7 +25,7 @@ impl PosterizeTime {
 
     /// Feed a frame. Returns the held frame.
     pub fn step(&mut self, frame: &VideoFrame) -> VideoFrame {
-        if self.held.is_none() || self.count % self.every == 0 {
+        if self.held.is_none() || self.count.is_multiple_of(self.every) {
             self.held = Some(frame.clone());
         }
         self.count += 1;

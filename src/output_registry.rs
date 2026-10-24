@@ -49,7 +49,9 @@ impl OutputRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut OutputContext, OutputRegistryError> {
-        self.outputs.get_mut(name).ok_or(OutputRegistryError::Missing)
+        self.outputs
+            .get_mut(name)
+            .ok_or(OutputRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -97,7 +99,14 @@ mod tests {
     fn differential() {
         let mut r = OutputRegistry::new();
         r.add("out").unwrap();
-        r.get_mut("out").unwrap().settings_mut().set_string("url", "rtmp://x").unwrap();
-        assert_eq!(r.get("out").unwrap().settings().get_string("url").unwrap(), "rtmp://x");
+        r.get_mut("out")
+            .unwrap()
+            .settings_mut()
+            .set_string("url", "rtmp://x")
+            .unwrap();
+        assert_eq!(
+            r.get("out").unwrap().settings().get_string("url").unwrap(),
+            "rtmp://x"
+        );
     }
 }

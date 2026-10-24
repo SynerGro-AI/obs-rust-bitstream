@@ -6,61 +6,61 @@
 //!
 //! Differential: add a source through the core and read it back.
 
-use crate::collection_registry::CollectionRegistry;
-use crate::display_registry::DisplayRegistry;
-use crate::monitor_registry::MonitorRegistry;
-use crate::recording_registry::RecordingRegistry;
-use crate::replay_registry::ReplayRegistry;
-use crate::canvas_registry::CanvasRegistry;
-use crate::profile_registry::ProfileRegistry;
-use crate::streaming_registry::StreamingRegistry;
-use crate::virtual_cam_registry::VirtualCamRegistry;
-use crate::transition_registry::TransitionRegistry;
-use crate::encoder_registry::EncoderRegistry;
-use crate::hotkey_registry::HotkeyRegistry;
-use crate::filter_registry::FilterRegistry;
-use crate::module_registry::ModuleRegistry;
-use crate::output_registry::OutputRegistry;
-use crate::scene_registry::SceneRegistry;
-use crate::service_registry::ServiceRegistry;
-use crate::source_registry::SourceRegistry;
-use crate::pixel_canvas::PixelCanvas;
-use crate::preview::{Preview, PreviewFrame};
+use crate::action::Action;
 use crate::ai::AiAssistant;
 use crate::audio_timeline::AudioTimeline;
-use crate::effect_list::EffectList;
-use crate::replay_save::{ReplaySave, SaveFormat};
-use crate::instant_replay::InstantReplay;
-use crate::presence::Presence;
 use crate::audit::Audit;
-use crate::sign_in::Session as SignIn;
-use crate::organization::Organization;
-use crate::file_cache::FileCache;
-use crate::fingerprint::FingerprintStore;
-use crate::schedule::Schedule;
-use crate::macro_seq::Macro;
-use crate::log::Log;
 use crate::bind_profile::BindProfile;
-use crate::keybind::Keybind;
+use crate::canvas_registry::CanvasRegistry;
+use crate::collection_registry::CollectionRegistry;
+use crate::cue_sheet::CueSheet;
+use crate::display_registry::DisplayRegistry;
+use crate::effect_list::EffectList;
+use crate::encoder_registry::EncoderRegistry;
+use crate::file_cache::FileCache;
+use crate::filter_registry::FilterRegistry;
+use crate::fingerprint::FingerprintStore;
 use crate::frame_clock::FrameClock;
-use crate::virtual_camera::VirtualCamera;
-use crate::program_stream::ProgramStream;
-use crate::program_record::ProgramRecord;
-use crate::tally::Tally;
-use crate::multiview::Multiview;
-use crate::studio::Studio;
-use crate::options_menu::OptionsMenu;
-use crate::live_feed::LiveFeed;
+use crate::hotkey_registry::HotkeyRegistry;
+use crate::instant_replay::InstantReplay;
+use crate::keybind::Keybind;
 use crate::keyer::Keyer;
 use crate::live_camera::LiveCamera;
+use crate::live_feed::LiveFeed;
+use crate::log::Log;
+use crate::macro_seq::Macro;
+use crate::module_registry::ModuleRegistry;
+use crate::monitor_registry::MonitorRegistry;
+use crate::multiview::Multiview;
+use crate::options_menu::OptionsMenu;
+use crate::organization::Organization;
+use crate::output_registry::OutputRegistry;
 use crate::performance::Performance;
+use crate::pixel_canvas::PixelCanvas;
+use crate::presence::Presence;
+use crate::preview::{Preview, PreviewFrame};
+use crate::profile_registry::ProfileRegistry;
 use crate::program::Program;
+use crate::program_record::ProgramRecord;
+use crate::program_stream::ProgramStream;
+use crate::recording_registry::RecordingRegistry;
+use crate::replay_registry::ReplayRegistry;
+use crate::replay_save::{ReplaySave, SaveFormat};
+use crate::scene_registry::SceneRegistry;
+use crate::schedule::Schedule;
+use crate::service_registry::ServiceRegistry;
 use crate::session::Session;
-use crate::cue_sheet::CueSheet;
-use crate::action::Action;
+use crate::show_state::{ShowMode, ShowState};
+use crate::sign_in::Session as SignIn;
+use crate::source_registry::SourceRegistry;
 use crate::speech::Speech;
 use crate::storyboard::Storyboard;
-use crate::show_state::{ShowMode, ShowState};
+use crate::streaming_registry::StreamingRegistry;
+use crate::studio::Studio;
+use crate::tally::Tally;
+use crate::transition_registry::TransitionRegistry;
+use crate::virtual_cam_registry::VirtualCamRegistry;
+use crate::virtual_camera::VirtualCamera;
 
 #[derive(Clone, Debug, Default)]
 pub struct Core {
@@ -138,7 +138,9 @@ impl Core {
         if !self.modules.has_source_type(type_id) {
             return Err(CoreError::TypeNotRegistered);
         }
-        self.sources.add_with_type(name, type_id).map_err(|_| CoreError::Duplicate)
+        self.sources
+            .add_with_type(name, type_id)
+            .map_err(|_| CoreError::Duplicate)
     }
 
     /// Create a filter only if its type id is registered by a loaded module.
@@ -149,7 +151,9 @@ impl Core {
         if !self.modules.has_filter_type(type_id) {
             return Err(CoreError::TypeNotRegistered);
         }
-        self.filters.add(name, type_id).map_err(|_| CoreError::Duplicate)
+        self.filters
+            .add(name, type_id)
+            .map_err(|_| CoreError::Duplicate)
     }
 
     /// Load a module by id. Empty and duplicate ids are rejected.
@@ -162,8 +166,15 @@ impl Core {
     }
 
     /// Register a source type on a loaded module.
-    pub fn register_source_type(&mut self, module_id: &str, type_id: &str) -> Result<(), CoreError> {
-        let m = self.modules.get_mut(module_id).map_err(|_| CoreError::TypeNotRegistered)?;
+    pub fn register_source_type(
+        &mut self,
+        module_id: &str,
+        type_id: &str,
+    ) -> Result<(), CoreError> {
+        let m = self
+            .modules
+            .get_mut(module_id)
+            .map_err(|_| CoreError::TypeNotRegistered)?;
         m.register_source(type_id).map_err(|e| match e {
             crate::module::ModuleError::EmptyId => CoreError::EmptyName,
             crate::module::ModuleError::Duplicate => CoreError::Duplicate,
@@ -171,8 +182,15 @@ impl Core {
     }
 
     /// Register a filter type on a loaded module.
-    pub fn register_filter_type(&mut self, module_id: &str, type_id: &str) -> Result<(), CoreError> {
-        let m = self.modules.get_mut(module_id).map_err(|_| CoreError::TypeNotRegistered)?;
+    pub fn register_filter_type(
+        &mut self,
+        module_id: &str,
+        type_id: &str,
+    ) -> Result<(), CoreError> {
+        let m = self
+            .modules
+            .get_mut(module_id)
+            .map_err(|_| CoreError::TypeNotRegistered)?;
         m.register_filter(type_id).map_err(|e| match e {
             crate::module::ModuleError::EmptyId => CoreError::EmptyName,
             crate::module::ModuleError::Duplicate => CoreError::Duplicate,
@@ -514,29 +532,53 @@ impl Core {
     }
 
     /// Save the replay as a clip, gif, or video.
-    pub fn save_replay(&mut self, name: &str, format: SaveFormat) -> Result<(), crate::replay_save::SaveError> {
+    pub fn save_replay(
+        &mut self,
+        name: &str,
+        format: SaveFormat,
+    ) -> Result<(), crate::replay_save::SaveError> {
         self.saves.save_as(name, &self.replay, format)
     }
 
     /// Export a saved clip to a file path.
-    pub fn export(&self, name: &str, path: &str) -> Result<crate::export::Export, crate::export::ExportError> {
+    pub fn export(
+        &self,
+        name: &str,
+        path: &str,
+    ) -> Result<crate::export::Export, crate::export::ExportError> {
         crate::export::Export::write(&self.saves, name, path)
     }
 
     /// Export a saved clip and return its bytes.
-    pub fn export_bytes(&self, name: &str, path: &str) -> Result<Vec<u8>, crate::export::ExportError> {
+    pub fn export_bytes(
+        &self,
+        name: &str,
+        path: &str,
+    ) -> Result<Vec<u8>, crate::export::ExportError> {
         let e = self.export(name, path)?;
         Ok(crate::file_writer::FileWriter::encode(&e))
     }
 
     /// Share an export to a target.
-    pub fn share(&self, name: &str, path: &str, target: &str) -> Result<crate::share::Share, crate::share::ShareError> {
-        let bytes = self.export_bytes(name, path).map_err(|_| crate::share::ShareError::EmptyPayload)?;
+    pub fn share(
+        &self,
+        name: &str,
+        path: &str,
+        target: &str,
+    ) -> Result<crate::share::Share, crate::share::ShareError> {
+        let bytes = self
+            .export_bytes(name, path)
+            .map_err(|_| crate::share::ShareError::EmptyPayload)?;
         crate::share::Share::post(target, &bytes)
     }
 
     /// Share an export and return the confirmation message.
-    pub fn share_and_confirm(&self, name: &str, path: &str, target: &str) -> Result<String, crate::share::ShareError> {
+    pub fn share_and_confirm(
+        &self,
+        name: &str,
+        path: &str,
+        target: &str,
+    ) -> Result<String, crate::share::ShareError> {
         let s = self.share(name, path, target)?;
         crate::notify::Notify::confirm(&s).map_err(|_| crate::share::ShareError::EmptyTarget)
     }
@@ -609,7 +651,9 @@ impl Core {
         self.key_macros.record(key);
         match action.as_str() {
             "record" => self.start_recording(),
-            "stream" => { let _ = self.start_stream("rtmp://live"); }
+            "stream" => {
+                let _ = self.start_stream("rtmp://live");
+            }
             "vcam" => self.start_vcam(),
             "stop_record" => self.stop_recording(),
             "stop_stream" => self.stop_stream(),
@@ -655,12 +699,20 @@ impl Core {
     }
 
     /// Edit a macro's sequence.
-    pub fn edit_macro(&mut self, name: &str, keys: &[&str]) -> Result<(), crate::macro_seq::MacroError> {
+    pub fn edit_macro(
+        &mut self,
+        name: &str,
+        keys: &[&str],
+    ) -> Result<(), crate::macro_seq::MacroError> {
         self.key_macros.edit(name, keys)
     }
 
     /// Rename a macro.
-    pub fn rename_macro(&mut self, from: &str, to: &str) -> Result<(), crate::macro_seq::MacroError> {
+    pub fn rename_macro(
+        &mut self,
+        from: &str,
+        to: &str,
+    ) -> Result<(), crate::macro_seq::MacroError> {
         self.key_macros.rename(from, to)
     }
 
@@ -679,12 +731,20 @@ impl Core {
     }
 
     /// Schedule a macro at a frame.
-    pub fn schedule_at(&mut self, name: &str, frame: u64) -> Result<(), crate::schedule::ScheduleError> {
+    pub fn schedule_at(
+        &mut self,
+        name: &str,
+        frame: u64,
+    ) -> Result<(), crate::schedule::ScheduleError> {
         self.timed.at(name, frame)
     }
 
     /// Schedule a macro at a time and date.
-    pub fn schedule_datetime(&mut self, name: &str, datetime: &str) -> Result<(), crate::schedule::ScheduleError> {
+    pub fn schedule_datetime(
+        &mut self,
+        name: &str,
+        datetime: &str,
+    ) -> Result<(), crate::schedule::ScheduleError> {
         self.timed.at_datetime(name, datetime)
     }
 
@@ -709,8 +769,14 @@ impl Core {
     }
 
     /// Store a file's bytes and fingerprint.
-    pub fn remember(&mut self, path: &str, bytes: &[u8]) -> Result<(), crate::fingerprint::FingerprintError> {
-        self.cache.store(path, bytes).map_err(|_| crate::fingerprint::FingerprintError::EmptyPath)?;
+    pub fn remember(
+        &mut self,
+        path: &str,
+        bytes: &[u8],
+    ) -> Result<(), crate::fingerprint::FingerprintError> {
+        self.cache
+            .store(path, bytes)
+            .map_err(|_| crate::fingerprint::FingerprintError::EmptyPath)?;
         self.fingerprints.store(path, bytes)
     }
 
@@ -730,7 +796,9 @@ impl Core {
     /// Invite a member into the organization.
     pub fn invite(&mut self, name: &str, role: &str) -> Result<(), crate::invite::InviteError> {
         let invite = crate::invite::Invite::new(name, role)?;
-        invite.accept(&mut self.team).map_err(|_| crate::invite::InviteError::AlreadyMember)
+        invite
+            .accept(&mut self.team)
+            .map_err(|_| crate::invite::InviteError::AlreadyMember)
     }
 
     pub fn signed_in(&self) -> &SignIn {
@@ -779,7 +847,9 @@ impl Core {
         let reverse = crate::undo::Undo::reverse(action)?.to_string();
         match reverse.as_str() {
             "record" => self.start_recording(),
-            "stream" => { let _ = self.start_stream("rtmp://live"); }
+            "stream" => {
+                let _ = self.start_stream("rtmp://live");
+            }
             "vcam" => self.start_vcam(),
             "stop_record" => self.stop_recording(),
             "stop_stream" => self.stop_stream(),
@@ -795,7 +865,9 @@ impl Core {
         let action = crate::redo::Redo::next(&self.log)?;
         match action.as_str() {
             "record" => self.start_recording(),
-            "stream" => { let _ = self.start_stream("rtmp://live"); }
+            "stream" => {
+                let _ = self.start_stream("rtmp://live");
+            }
             "vcam" => self.start_vcam(),
             "stop_record" => self.stop_recording(),
             "stop_stream" => self.stop_stream(),
@@ -837,7 +909,11 @@ impl Core {
     }
 
     /// Switch the live camera and mark it on the multiview.
-    pub fn switch_camera(&mut self, input: &crate::input_device::InputDevice, cameras: &[&str]) -> Option<String> {
+    pub fn switch_camera(
+        &mut self,
+        input: &crate::input_device::InputDevice,
+        cameras: &[&str],
+    ) -> Option<String> {
         let switched = self.feed.from_key(input, cameras);
         if let Some(ref cam) = switched {
             let _ = self.multiview.set_live(cam);
@@ -1070,13 +1146,28 @@ mod tests {
         let mut c = Core::new();
         c.sources_mut().add("cam").unwrap();
         c.outputs_mut().add("stream").unwrap();
-        c.encoders_mut().add("h264", "obs_x264", EncoderType::Video).unwrap();
+        c.encoders_mut()
+            .add("h264", "obs_x264", EncoderType::Video)
+            .unwrap();
         c.services_mut().add("Twitch", "rtmp_common").unwrap();
         c.scenes_mut().add("Main").unwrap();
         c.filters_mut().add("blur", "gpu_blur").unwrap();
 
-        c.sources_mut().get_mut("cam").unwrap().settings_mut().set_int("w", 1920).unwrap();
-        assert_eq!(c.sources().get("cam").unwrap().settings().get_int("w").unwrap(), 1920);
+        c.sources_mut()
+            .get_mut("cam")
+            .unwrap()
+            .settings_mut()
+            .set_int("w", 1920)
+            .unwrap();
+        assert_eq!(
+            c.sources()
+                .get("cam")
+                .unwrap()
+                .settings()
+                .get_int("w")
+                .unwrap(),
+            1920
+        );
         assert_eq!(c.outputs().get("stream").unwrap().name(), "stream");
         assert_eq!(c.scenes().get("Main").unwrap().len(), 0);
     }
@@ -1085,11 +1176,22 @@ mod tests {
     fn create_requires_registered_type() {
         let mut c = Core::new();
         c.modules_mut().add("obs-ffmpeg").unwrap();
-        c.modules_mut().get_mut("obs-ffmpeg").unwrap().register_source("ffmpeg_source").unwrap();
-        c.modules_mut().get_mut("obs-ffmpeg").unwrap().register_filter("gain_filter").unwrap();
+        c.modules_mut()
+            .get_mut("obs-ffmpeg")
+            .unwrap()
+            .register_source("ffmpeg_source")
+            .unwrap();
+        c.modules_mut()
+            .get_mut("obs-ffmpeg")
+            .unwrap()
+            .register_filter("gain_filter")
+            .unwrap();
 
         assert!(c.create_source("cam", "ffmpeg_source").is_ok());
-        assert!(matches!(c.create_source("cam2", "missing"), Err(CoreError::TypeNotRegistered)));
+        assert!(matches!(
+            c.create_source("cam2", "missing"),
+            Err(CoreError::TypeNotRegistered)
+        ));
         assert!(c.create_filter("g", "gain_filter").is_ok());
         assert_eq!(c.sources().get("cam").unwrap().name(), "cam");
         assert_eq!(c.sources().get("cam").unwrap().type_id(), "ffmpeg_source");
@@ -1102,7 +1204,10 @@ mod tests {
         c.scenes_mut().add("Main").unwrap();
         c.set_current_scene("Main").unwrap();
         assert_eq!(c.current_scene(), Some("Main"));
-        assert!(matches!(c.set_current_scene("missing"), Err(CoreError::TypeNotRegistered)));
+        assert!(matches!(
+            c.set_current_scene("missing"),
+            Err(CoreError::TypeNotRegistered)
+        ));
     }
 
     #[test]
@@ -1114,7 +1219,10 @@ mod tests {
         c.set_preview_scene("Overlay").unwrap();
         assert_eq!(c.program_scene(), Some("Main"));
         assert_eq!(c.preview_scene(), Some("Overlay"));
-        assert!(matches!(c.set_program_scene("missing"), Err(CoreError::TypeNotRegistered)));
+        assert!(matches!(
+            c.set_program_scene("missing"),
+            Err(CoreError::TypeNotRegistered)
+        ));
     }
 
     #[test]
@@ -1135,6 +1243,9 @@ mod tests {
         c.profiles_mut().add("Default").unwrap();
         c.set_current_profile("Default").unwrap();
         assert_eq!(c.current_profile(), Some("Default"));
-        assert!(matches!(c.set_current_profile("missing"), Err(CoreError::TypeNotRegistered)));
+        assert!(matches!(
+            c.set_current_profile("missing"),
+            Err(CoreError::TypeNotRegistered)
+        ));
     }
 }

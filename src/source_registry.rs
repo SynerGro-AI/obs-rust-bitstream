@@ -116,7 +116,11 @@ mod tests {
     fn differential() {
         let mut r = SourceRegistry::new();
         r.add("src").unwrap();
-        r.get_mut("src").unwrap().settings_mut().set_int("w", 1280).unwrap();
+        r.get_mut("src")
+            .unwrap()
+            .settings_mut()
+            .set_int("w", 1280)
+            .unwrap();
         assert_eq!(r.get("src").unwrap().settings().get_int("w").unwrap(), 1280);
     }
 }

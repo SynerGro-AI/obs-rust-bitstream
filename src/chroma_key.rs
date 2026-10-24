@@ -33,10 +33,7 @@ impl ChromaKey {
     }
 
     /// Read key and tolerance from live weights.
-    pub fn from_weights(
-        frame: &mut VideoFrame,
-        weights: &LiveWeights,
-    ) -> Result<(), ChromaError> {
+    pub fn from_weights(frame: &mut VideoFrame, weights: &LiveWeights) -> Result<(), ChromaError> {
         let key = weights.get("key.chroma").unwrap_or(0.0) as u8;
         let tol = weights.get("key.chroma.tol").unwrap_or(10.0) as u8;
         Self::apply(frame, key, tol)

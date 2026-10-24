@@ -64,16 +64,36 @@ pub fn alpha_of(symbol: &str) -> f64 {
 pub enum Wave {
     Dc(f64),
     /// v0 → v1 after `delay`, linear `rise`, held `width`, back over `rise`, repeating every `period` (0 = once)
-    Pulse { v0: f64, v1: f64, delay: f64, rise: f64, width: f64, period: f64 },
-    Sine { offset: f64, amp: f64, freq: f64 },
+    Pulse {
+        v0: f64,
+        v1: f64,
+        delay: f64,
+        rise: f64,
+        width: f64,
+        period: f64,
+    },
+    Sine {
+        offset: f64,
+        amp: f64,
+        freq: f64,
+    },
 }
 
 impl Wave {
     pub fn at(&self, t: f64) -> f64 {
         match *self {
             Wave::Dc(v) => v,
-            Wave::Sine { offset, amp, freq } => offset + amp * (2.0 * std::f64::consts::PI * freq * t).sin(),
-            Wave::Pulse { v0, v1, delay, rise, width, period } => {
+            Wave::Sine { offset, amp, freq } => {
+                offset + amp * (2.0 * std::f64::consts::PI * freq * t).sin()
+            }
+            Wave::Pulse {
+                v0,
+                v1,
+                delay,
+                rise,
+                width,
+                period,
+            } => {
                 if t < delay {
                     return v0;
                 }
@@ -119,10 +139,24 @@ pub struct MosParams {
 impl MosParams {
     /// A generic 180 nm-class bulk device (V_dd 1.8 V). Representative values, not a foundry PDK.
     pub fn nmos(w_over_l: f64) -> Self {
-        Self { kind: MosKind::N, vth: 0.45, kp: 300e-6, w_over_l, n: 1.3, lambda: 0.05 }
+        Self {
+            kind: MosKind::N,
+            vth: 0.45,
+            kp: 300e-6,
+            w_over_l,
+            n: 1.3,
+            lambda: 0.05,
+        }
     }
     pub fn pmos(w_over_l: f64) -> Self {
-        Self { kind: MosKind::P, vth: 0.45, kp: 100e-6, w_over_l, n: 1.3, lambda: 0.05 }
+        Self {
+            kind: MosKind::P,
+            vth: 0.45,
+            kp: 100e-6,
+            w_over_l,
+            n: 1.3,
+            lambda: 0.05,
+        }
     }
 
     fn softplus(x: f64) -> f64 {
@@ -172,7 +206,14 @@ impl Wire {
         let e = element_data::by_symbol(symbol)?;
         let pr = element_props::props(e.z)?;
         let rho20 = pr.electrical_resistivity?;
-        Some(Self { symbol: e.symbol, rho20, alpha: alpha_of(e.symbol), length, area: std::f64::consts::PI * diameter * diameter / 4.0, melting_k: e.melting_k.map(|m| m as f64) })
+        Some(Self {
+            symbol: e.symbol,
+            rho20,
+            alpha: alpha_of(e.symbol),
+            length,
+            area: std::f64::consts::PI * diameter * diameter / 4.0,
+            melting_k: e.melting_k.map(|m| m as f64),
+        })
     }
     pub fn resistance(&self, t: f64) -> f64 {
         self.rho20 * (1.0 + self.alpha * (t - 293.15)).max(0.05) * self.length / self.area
@@ -202,13 +243,47 @@ pub struct Thermal {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Elem {
-    R { a: usize, b: usize, r: f64, wire: Option<Wire>, thermal: Option<Thermal> },
-    C { a: usize, b: usize, c: f64, v: f64 },
-    L { a: usize, b: usize, l: f64, i: f64 },
-    V { a: usize, b: usize, wave: Wave },
-    I { a: usize, b: usize, wave: Wave },
-    D { a: usize, k: usize, is300: f64, n: f64 },
-    M { d: usize, g: usize, s: usize, p: MosParams },
+    R {
+        a: usize,
+        b: usize,
+        r: f64,
+        wire: Option<Wire>,
+        thermal: Option<Thermal>,
+    },
+    C {
+        a: usize,
+        b: usize,
+        c: f64,
+        v: f64,
+    },
+    L {
+        a: usize,
+        b: usize,
+        l: f64,
+        i: f64,
+    },
+    V {
+        a: usize,
+        b: usize,
+        wave: Wave,
+    },
+    I {
+        a: usize,
+        b: usize,
+        wave: Wave,
+    },
+    D {
+        a: usize,
+        k: usize,
+        is300: f64,
+        n: f64,
+    },
+    M {
+        d: usize,
+        g: usize,
+        s: usize,
+        p: MosParams,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -236,8 +311,13 @@ pub enum CircuitError {
 impl std::fmt::Display for CircuitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CircuitError::Singular => write!(f, "singular matrix (a floating node or a loop of voltage sources)"),
-            CircuitError::NoConvergence(n) => write!(f, "Newton did not converge in {} iterations", n),
+            CircuitError::Singular => write!(
+                f,
+                "singular matrix (a floating node or a loop of voltage sources)"
+            ),
+            CircuitError::NoConvergence(n) => {
+                write!(f, "Newton did not converge in {} iterations", n)
+            }
             CircuitError::UnknownNode(n) => write!(f, "unknown node {}", n),
         }
     }
@@ -248,7 +328,8 @@ const GMIN: f64 = 1e-12;
 fn solve_dense(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     let n = b.len();
     for col in 0..n {
-        let piv = (col..n).max_by(|&i, &j| a[i][col].abs().partial_cmp(&a[j][col].abs()).unwrap())?;
+        let piv =
+            (col..n).max_by(|&i, &j| a[i][col].abs().partial_cmp(&a[j][col].abs()).unwrap())?;
         if a[piv][col].abs() < 1e-300 {
             return None;
         }
@@ -274,7 +355,16 @@ fn solve_dense(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
 
 impl Circuit {
     pub fn new() -> Self {
-        Self { nodes: vec!["0".into()], elems: Vec::new(), temp: 300.0, time: 0.0, v: vec![0.0], i_src: Vec::new(), events: Vec::new(), newton_iters: 0 }
+        Self {
+            nodes: vec!["0".into()],
+            elems: Vec::new(),
+            temp: 300.0,
+            time: 0.0,
+            v: vec![0.0],
+            i_src: Vec::new(),
+            events: Vec::new(),
+            newton_iters: 0,
+        }
     }
 
     /// Node index by name, created on first use ("0" / "gnd" is ground).
@@ -307,7 +397,13 @@ impl Circuit {
     }
     pub fn r(&mut self, a: &str, b: &str, r: f64) -> usize {
         let (a, b) = (self.node(a), self.node(b));
-        self.add(Elem::R { a, b, r, wire: None, thermal: None })
+        self.add(Elem::R {
+            a,
+            b,
+            r,
+            wire: None,
+            thermal: None,
+        })
     }
     pub fn c(&mut self, a: &str, b: &str, c: f64) -> usize {
         let (a, b) = (self.node(a), self.node(b));
@@ -328,7 +424,12 @@ impl Circuit {
     /// Silicon junction diode, I_s = 1e-14 A at 300 K unless given.
     pub fn diode(&mut self, anode: &str, cathode: &str) -> usize {
         let (a, k) = (self.node(anode), self.node(cathode));
-        self.add(Elem::D { a, k, is300: 1e-14, n: 1.0 })
+        self.add(Elem::D {
+            a,
+            k,
+            is300: 1e-14,
+            n: 1.0,
+        })
     }
     pub fn mos(&mut self, d: &str, g: &str, s: &str, p: MosParams) -> usize {
         let (d, g, s) = (self.node(d), self.node(g), self.node(s));
@@ -339,16 +440,39 @@ impl Circuit {
     pub fn wire(&mut self, a: &str, b: &str, w: Wire, h: f64, ambient: f64) -> usize {
         let (a, b) = (self.node(a), self.node(b));
         let z = element_data::by_symbol(w.symbol).map(|e| e.z).unwrap_or(29);
-        let rho_mass = element_data::get(z).and_then(|e| e.density).map(|d| d as f64 * 1000.0).unwrap_or(8000.0);
-        let cp = element_props::props(z).and_then(|p| p.specific_heat).map(|c| c as f64 * 1000.0).unwrap_or(400.0);
-        let thermal = Thermal { heat_capacity: rho_mass * w.volume() * cp, g_ambient: h * w.surface(), temp: ambient, ambient, heat: 0.0, open: false };
+        let rho_mass = element_data::get(z)
+            .and_then(|e| e.density)
+            .map(|d| d as f64 * 1000.0)
+            .unwrap_or(8000.0);
+        let cp = element_props::props(z)
+            .and_then(|p| p.specific_heat)
+            .map(|c| c as f64 * 1000.0)
+            .unwrap_or(400.0);
+        let thermal = Thermal {
+            heat_capacity: rho_mass * w.volume() * cp,
+            g_ambient: h * w.surface(),
+            temp: ambient,
+            ambient,
+            heat: 0.0,
+            open: false,
+        };
         let r = w.resistance(ambient);
-        self.add(Elem::R { a, b, r, wire: Some(w), thermal: Some(thermal) })
+        self.add(Elem::R {
+            a,
+            b,
+            r,
+            wire: Some(w),
+            thermal: Some(thermal),
+        })
     }
 
     fn n_unknowns(&self) -> (usize, usize) {
         let nv = self.nodes.len() - 1;
-        let ns = self.elems.iter().filter(|e| matches!(e, Elem::V { .. })).count();
+        let ns = self
+            .elems
+            .iter()
+            .filter(|e| matches!(e, Elem::V { .. }))
+            .count();
         (nv, ns)
     }
 
@@ -364,9 +488,18 @@ impl Circuit {
         let n = nv + ns;
         let temp = self.temp;
         let mut x: Vec<f64> = self.v[1..].to_vec();
-        x.extend(self.i_src.iter().copied().chain(std::iter::repeat(0.0)).take(ns));
+        x.extend(
+            self.i_src
+                .iter()
+                .copied()
+                .chain(std::iter::repeat(0.0))
+                .take(ns),
+        );
         let idx = |node: usize| if node == 0 { None } else { Some(node - 1) };
-        let nonlinear = self.elems.iter().any(|e| matches!(e, Elem::D { .. } | Elem::M { .. }));
+        let nonlinear = self
+            .elems
+            .iter()
+            .any(|e| matches!(e, Elem::D { .. } | Elem::M { .. }));
         let max_it = if nonlinear { 300 } else { 1 };
         for it in 0..max_it {
             let mut a = vec![vec![0.0; n]; n];
@@ -399,8 +532,18 @@ impl Circuit {
             let mut si = 0;
             for e in &self.elems {
                 match e {
-                    Elem::R { a: p, b: q, r, thermal, .. } => {
-                        let r = if thermal.as_ref().is_some_and(|t| t.open) { 1e12 } else { r.max(1e-9) };
+                    Elem::R {
+                        a: p,
+                        b: q,
+                        r,
+                        thermal,
+                        ..
+                    } => {
+                        let r = if thermal.as_ref().is_some_and(|t| t.open) {
+                            1e12
+                        } else {
+                            r.max(1e-9)
+                        };
                         stamp_g(&mut a, *p, *q, 1.0 / r);
                     }
                     Elem::C { a: p, b: q, c, v } => {
@@ -431,7 +574,12 @@ impl Circuit {
                         si += 1;
                     }
                     Elem::I { a: p, b: q, wave } => stamp_i(&mut rhs, *p, *q, wave.at(t)),
-                    Elem::D { a: p, k: q, is300, n: nd } => {
+                    Elem::D {
+                        a: p,
+                        k: q,
+                        is300,
+                        n: nd,
+                    } => {
                         let vt = nd * thermal_voltage(temp);
                         let is = Self::is_at(*is300, temp);
                         let vd = vnode(&x, *p) - vnode(&x, *q);
@@ -451,9 +599,12 @@ impl Circuit {
                         let (vd, vg, vs) = (vnode(&x, *d), vnode(&x, *g), vnode(&x, *s));
                         let i0 = p.ids(vg, vd, vs, temp);
                         let hh = 1e-6;
-                        let dg = (p.ids(vg + hh, vd, vs, temp) - p.ids(vg - hh, vd, vs, temp)) / (2.0 * hh);
-                        let dd = (p.ids(vg, vd + hh, vs, temp) - p.ids(vg, vd - hh, vs, temp)) / (2.0 * hh);
-                        let ds = (p.ids(vg, vd, vs + hh, temp) - p.ids(vg, vd, vs - hh, temp)) / (2.0 * hh);
+                        let dg = (p.ids(vg + hh, vd, vs, temp) - p.ids(vg - hh, vd, vs, temp))
+                            / (2.0 * hh);
+                        let dd = (p.ids(vg, vd + hh, vs, temp) - p.ids(vg, vd - hh, vs, temp))
+                            / (2.0 * hh);
+                        let ds = (p.ids(vg, vd, vs + hh, temp) - p.ids(vg, vd, vs - hh, temp))
+                            / (2.0 * hh);
                         let ieq = i0 - dg * vg - dd * vd - ds * vs;
                         // I(d→s) = dg·vg + dd·vd + ds·vs + ieq
                         for (row, sign) in [(*d, 1.0), (*s, -1.0)] {
@@ -499,7 +650,9 @@ impl Circuit {
                 return Err(CircuitError::NoConvergence(max_it));
             }
         }
-        self.v = std::iter::once(0.0).chain(x[..nv].iter().copied()).collect();
+        self.v = std::iter::once(0.0)
+            .chain(x[..nv].iter().copied())
+            .collect();
         self.i_src = x[nv..].to_vec();
         Ok(())
     }
@@ -544,7 +697,14 @@ impl Circuit {
         let time = self.time + h;
         let mut events = Vec::new();
         for e in &mut self.elems {
-            if let Elem::R { a, b, r, wire, thermal: Some(th) } = e {
+            if let Elem::R {
+                a,
+                b,
+                r,
+                wire,
+                thermal: Some(th),
+            } = e
+            {
                 if th.open {
                     continue;
                 }
@@ -559,7 +719,13 @@ impl Circuit {
                     if let Some(m) = w.melting_k {
                         if th.temp >= m {
                             th.open = true;
-                            events.push((time, format!("{} wire melted at {:.0} K: circuit open (fuse blown)", w.symbol, th.temp)));
+                            events.push((
+                                time,
+                                format!(
+                                    "{} wire melted at {:.0} K: circuit open (fuse blown)",
+                                    w.symbol, th.temp
+                                ),
+                            ));
                         }
                     }
                 }
@@ -573,7 +739,9 @@ impl Circuit {
         let v = &self.v;
         let temp = self.temp;
         match &self.elems[i] {
-            Elem::R { a, b, r, thermal, .. } => {
+            Elem::R {
+                a, b, r, thermal, ..
+            } => {
                 if thermal.as_ref().is_some_and(|t| t.open) {
                     0.0
                 } else {
@@ -581,7 +749,10 @@ impl Circuit {
                 }
             }
             Elem::V { .. } => {
-                let k = self.elems[..i].iter().filter(|e| matches!(e, Elem::V { .. })).count();
+                let k = self.elems[..i]
+                    .iter()
+                    .filter(|e| matches!(e, Elem::V { .. }))
+                    .count();
                 self.i_src.get(k).copied().unwrap_or(0.0)
             }
             Elem::I { wave, .. } => wave.at(self.time),
@@ -637,7 +808,11 @@ pub fn si_intrinsic(t: f64) -> f64 {
 
 /// Caughey–Thomas mobility (cm²/V·s) with Arora/Masetti parameters for Si.
 pub fn si_mobility(electrons: bool, n_total: f64, t: f64) -> f64 {
-    let (mmin, mmax, nref, a, texp) = if electrons { (68.5, 1414.0, 9.2e16, 0.711, -2.42) } else { (44.9, 470.5, 2.23e17, 0.719, -2.2) };
+    let (mmin, mmax, nref, a, texp) = if electrons {
+        (68.5, 1414.0, 9.2e16, 0.711, -2.42)
+    } else {
+        (44.9, 470.5, 2.23e17, 0.719, -2.2)
+    };
     let lattice = mmax * (t / 300.0).powf(texp);
     mmin + (lattice - mmin).max(0.0) / (1.0 + (n_total / nref).powf(a))
 }
@@ -670,7 +845,14 @@ pub fn doped_silicon(nd: f64, na: f64, t: f64) -> Doped {
     let mu_n = si_mobility(true, total, t);
     let mu_p = si_mobility(false, total, t);
     let sigma = Q * (n * mu_n + p * mu_p);
-    Doped { n, p, mu_n, mu_p, resistivity: 1.0 / sigma, ni }
+    Doped {
+        n,
+        p,
+        mu_n,
+        mu_p,
+        resistivity: 1.0 / sigma,
+        ni,
+    }
 }
 
 #[cfg(test)]
@@ -688,7 +870,10 @@ mod tests {
         assert!((c.voltage("mid") - 20.0 / 3.0).abs() < 1e-7);
         // the source delivers V²/R_total
         assert!((c.power(0) + 100.0 / 3000.0).abs() < 1e-9, "{}", c.power(0));
-        assert!((c.power(1) + c.power(2) + c.power(0)).abs() < 1e-9, "power balance (gmin aside)");
+        assert!(
+            (c.power(1) + c.power(2) + c.power(0)).abs() < 1e-9,
+            "power balance (gmin aside)"
+        );
     }
 
     #[test]
@@ -703,13 +888,29 @@ mod tests {
             c.step(h).unwrap();
         }
         let want = 1.0 - (-1.0f64).exp();
-        assert!((c.voltage("out") - want).abs() < 5e-4, "{} vs {}", c.voltage("out"), want);
+        assert!(
+            (c.voltage("out") - want).abs() < 5e-4,
+            "{} vs {}",
+            c.voltage("out"),
+            want
+        );
     }
 
     #[test]
     fn lc_rings_at_its_resonant_frequency() {
         let mut c = Circuit::new();
-        c.vsrc("in", "0", Wave::Pulse { v0: 0.0, v1: 1.0, delay: 0.0, rise: 1e-9, width: 1.0, period: 0.0 });
+        c.vsrc(
+            "in",
+            "0",
+            Wave::Pulse {
+                v0: 0.0,
+                v1: 1.0,
+                delay: 0.0,
+                rise: 1e-9,
+                width: 1.0,
+                period: 0.0,
+            },
+        );
         c.r("in", "a", 1.0);
         c.l("a", "b", 1e-3);
         c.c("b", "0", 1e-6);
@@ -726,7 +927,12 @@ mod tests {
             prev = v;
         }
         let period = (crossings[3] - crossings[1]) / 2.0;
-        assert!((1.0 / period - f0).abs() / f0 < 0.01, "{} vs {}", 1.0 / period, f0);
+        assert!(
+            (1.0 / period - f0).abs() / f0 < 0.01,
+            "{} vs {}",
+            1.0 / period,
+            f0
+        );
     }
 
     #[test]
@@ -739,7 +945,11 @@ mod tests {
         let vd = c.voltage("a");
         let i = (5.0 - vd) / 4300.0;
         // Shockley exactly: V = V_T ln(I/I_s + 1)
-        assert!((vd - thermal_voltage(300.0) * (i / 1e-14 + 1.0).ln()).abs() < 1e-6, "{}", vd);
+        assert!(
+            (vd - thermal_voltage(300.0) * (i / 1e-14 + 1.0).ln()).abs() < 1e-6,
+            "{}",
+            vd
+        );
         assert!(vd > 0.6 && vd < 0.7, "{}", vd);
         // hotter junction: about −2 mV/K at constant current
         c.temp = 350.0;
@@ -774,7 +984,11 @@ mod tests {
         let mut hi = 1.8;
         for _ in 0..40 {
             let m = 0.5 * (lo + hi);
-            if vtc(m, 300.0) > m { lo = m } else { hi = m }
+            if vtc(m, 300.0) > m {
+                lo = m
+            } else {
+                hi = m
+            }
         }
         assert!((lo - 0.9).abs() < 0.05, "V_M {}", lo);
         let gain = (vtc(0.95, 300.0) - vtc(0.85, 300.0)) / 0.1;
@@ -792,7 +1006,11 @@ mod tests {
         let i1 = p.ids(0.10, 1.0, 0.0, 300.0);
         let i2 = p.ids(0.20, 1.0, 0.0, 300.0);
         let mv_dec = 100.0 / (i2 / i1).log10();
-        assert!((mv_dec - 1.3 * thermal_voltage(300.0) * 1e3 * std::f64::consts::LN_10).abs() < 3.0, "{}", mv_dec);
+        assert!(
+            (mv_dec - 1.3 * thermal_voltage(300.0) * 1e3 * std::f64::consts::LN_10).abs() < 3.0,
+            "{}",
+            mv_dec
+        );
         // leakage at V_GS = 0 grows by orders of magnitude when hot
         assert!(p.ids(0.0, 1.8, 0.0, 400.0) > 100.0 * p.ids(0.0, 1.8, 0.0, 300.0));
     }
@@ -814,12 +1032,24 @@ mod tests {
         // intrinsic Si ~2–4e5 Ω·cm at 300 K
         let i = doped_silicon(0.0, 0.0, 300.0);
         assert!(i.ni > 5e9 && i.ni < 1.6e10, "{}", i.ni);
-        assert!(i.resistivity > 1e5 && i.resistivity < 6e5, "{}", i.resistivity);
+        assert!(
+            i.resistivity > 1e5 && i.resistivity < 6e5,
+            "{}",
+            i.resistivity
+        );
         // n-type 1e16: ≈ 0.45–0.5 Ω·cm; p-type 1e16: ≈ 1.4 Ω·cm
         let n = doped_silicon(1e16, 0.0, 300.0);
-        assert!(n.resistivity > 0.4 && n.resistivity < 0.6, "{}", n.resistivity);
+        assert!(
+            n.resistivity > 0.4 && n.resistivity < 0.6,
+            "{}",
+            n.resistivity
+        );
         let p = doped_silicon(0.0, 1e16, 300.0);
-        assert!(p.resistivity > 1.2 && p.resistivity < 1.6, "{}", p.resistivity);
+        assert!(
+            p.resistivity > 1.2 && p.resistivity < 1.6,
+            "{}",
+            p.resistivity
+        );
         // hot enough and intrinsic carriers swamp the doping (the device stops being a device)
         let hot = doped_silicon(1e15, 0.0, 600.0);
         assert!(hot.ni > 1e15, "{}", hot.ni);
@@ -836,9 +1066,21 @@ mod tests {
         for _ in 0..2500 {
             c.step(1e-2).unwrap();
         }
-        let Elem::R { thermal: Some(th), r, .. } = &c.elems[wi] else { panic!() };
+        let Elem::R {
+            thermal: Some(th),
+            r,
+            ..
+        } = &c.elems[wi]
+        else {
+            panic!()
+        };
         let p = 0.04 * r;
-        assert!((p - th.g_ambient * (th.temp - 293.15)).abs() / p < 0.01, "{} vs {}", p, th.g_ambient * (th.temp - 293.15));
+        assert!(
+            (p - th.g_ambient * (th.temp - 293.15)).abs() / p < 0.01,
+            "{} vs {}",
+            p,
+            th.g_ambient * (th.temp - 293.15)
+        );
         // 10 A melts it within a fraction of a second and the circuit opens
         let mut f = Circuit::new();
         f.vsrc("in", "0", Wave::Dc(1.0));

@@ -38,7 +38,17 @@ impl LowerThird {
 
     /// Label shown on screen. Empty when hidden.
     pub fn label(&self) -> &str {
-        if self.visible { &self.text } else { "" }
+        if self.visible {
+            &self.text
+        } else {
+            ""
+        }
+    }
+}
+
+impl Default for LowerThird {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

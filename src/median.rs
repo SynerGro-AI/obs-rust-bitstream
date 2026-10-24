@@ -52,8 +52,8 @@ mod tests {
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
         f.planes[0].fill(32);
-        f.planes[0][1 * 4 + 1] = 255;
+        f.planes[0][4 + 1] = 255;
         Median::apply(&mut f).unwrap();
-        assert_eq!(f.planes[0][1 * 4 + 1], 32);
+        assert_eq!(f.planes[0][4 + 1], 32);
     }
 }

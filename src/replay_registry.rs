@@ -49,7 +49,9 @@ impl ReplayRegistry {
     }
 
     pub fn get_mut(&mut self, name: &str) -> Result<&mut ReplayBuffer, ReplayRegistryError> {
-        self.buffers.get_mut(name).ok_or(ReplayRegistryError::Missing)
+        self.buffers
+            .get_mut(name)
+            .ok_or(ReplayRegistryError::Missing)
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
@@ -80,7 +82,10 @@ mod tests {
     fn duplicate_and_empty() {
         let mut r = ReplayRegistry::new();
         r.add("a", 10).unwrap();
-        assert!(matches!(r.add("a", 10), Err(ReplayRegistryError::Duplicate)));
+        assert!(matches!(
+            r.add("a", 10),
+            Err(ReplayRegistryError::Duplicate)
+        ));
         assert!(matches!(r.add("", 10), Err(ReplayRegistryError::EmptyName)));
     }
 

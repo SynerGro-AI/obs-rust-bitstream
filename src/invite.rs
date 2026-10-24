@@ -5,7 +5,7 @@
 //!
 //! Differential: create + accept round-trips.
 
-use crate::organization::{Organization, OrgError};
+use crate::organization::{OrgError, Organization};
 use crate::role::Role;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

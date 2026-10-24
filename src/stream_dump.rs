@@ -28,9 +28,7 @@ impl StreamDump {
         id: &str,
         frames: usize,
     ) -> Result<(StreamStatus, Vec<u8>), StreamRunError> {
-        let status = StreamRun::run(
-            runner, stream, service, output, weights, name, id, frames,
-        )?;
+        let status = StreamRun::run(runner, stream, service, output, weights, name, id, frames)?;
         let buf = StreamFile::write(&status);
         Ok((status, buf))
     }
@@ -65,7 +63,14 @@ mod tests {
         let out = OutputInfo::new("rec", "Recording", OUTPUT_AV).unwrap();
         let mut w = LiveWeights::new();
         let (st, buf) = StreamDump::run_and_write(
-            &mut r, &mut stream, &mut svc, &out, &mut w, "twitch", "rtmp", 1,
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            "twitch",
+            "rtmp",
+            1,
         )
         .unwrap();
         assert!(st.streaming);
@@ -80,7 +85,14 @@ mod tests {
         let out = OutputInfo::new("rec", "Recording", OUTPUT_AV).unwrap();
         let mut w = LiveWeights::new();
         assert!(StreamDump::run_and_write(
-            &mut r, &mut stream, &mut svc, &out, &mut w, "", "rtmp", 1
+            &mut r,
+            &mut stream,
+            &mut svc,
+            &out,
+            &mut w,
+            "",
+            "rtmp",
+            1
         )
         .is_err());
     }

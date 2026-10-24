@@ -57,6 +57,12 @@ impl OnionSkin {
     }
 }
 
+impl Default for OnionSkin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

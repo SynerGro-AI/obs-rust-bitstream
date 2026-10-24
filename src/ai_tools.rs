@@ -10,8 +10,8 @@
 use crate::ai::AiAssistant;
 use crate::blend::{Blend, BlendMode};
 use crate::color_balance::ColorBalance;
-use crate::inner_glow::InnerGlow;
 use crate::drop_shadow::DropShadow;
+use crate::inner_glow::InnerGlow;
 use crate::sharpen::Sharpen;
 use crate::tone_curves::Curves as ToneCurves;
 use crate::video_frame::VideoFrame;
@@ -105,7 +105,7 @@ impl AiTools {
     /// Suggest a magic-wand tolerance.
     pub fn suggest_tolerance(ai: &AiAssistant, frame: &VideoFrame) -> (u8, String) {
         let avg = Self::average(frame);
-        let tol = if avg < 64 || avg > 192 { 20 } else { 10 };
+        let tol = if !(64..=192).contains(&avg) { 20 } else { 10 };
         let reason = ai.assist(&format!("tolerance for avg {}", avg));
         (tol, reason)
     }

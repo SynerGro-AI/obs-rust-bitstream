@@ -25,7 +25,8 @@ impl SetDrivenKey {
     /// Add a (driver, driven) pair.
     pub fn add(&mut self, driver: f32, driven: f32) {
         self.keys.push((driver, driven));
-        self.keys.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        self.keys
+            .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     }
 
     pub fn len(&self) -> usize {
@@ -50,11 +51,7 @@ impl SetDrivenKey {
     }
 
     /// Read a driven value from live weights and set it.
-    pub fn from_weights(
-        &mut self,
-        index: usize,
-        weights: &LiveWeights,
-    ) -> Result<(), DrivenError> {
+    pub fn from_weights(&mut self, index: usize, weights: &LiveWeights) -> Result<(), DrivenError> {
         if index >= self.keys.len() {
             return Err(DrivenError::Empty);
         }

@@ -36,11 +36,11 @@ pub fn s16le_to_f32(raw: &[u8], channels: u16) -> Option<Vec<f32>> {
         return None;
     }
     let frame_bytes = 2 * channels as usize;
-    if raw.len() % frame_bytes != 0 {
+    if !raw.len().is_multiple_of(frame_bytes) {
         return None;
     }
     let mut out = Vec::with_capacity(raw.len() / 2);
-    for chunk in raw.chunks_exact(2) {
+    for chunk in raw.as_chunks::<2>().0 {
         let s = i16::from_le_bytes([chunk[0], chunk[1]]);
         out.push(s as f32 / 32768.0);
     }

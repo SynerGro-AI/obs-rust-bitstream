@@ -19,7 +19,12 @@ pub struct AlignTool;
 
 impl AlignTool {
     /// Align positions to an edge of the canvas. Returns the new positions.
-    pub fn align(positions: &[(f32, f32)], canvas_w: f32, canvas_h: f32, how: Align) -> Vec<(f32, f32)> {
+    pub fn align(
+        positions: &[(f32, f32)],
+        canvas_w: f32,
+        canvas_h: f32,
+        how: Align,
+    ) -> Vec<(f32, f32)> {
         positions
             .iter()
             .map(|&(x, y)| match how {
@@ -46,7 +51,10 @@ impl AlignTool {
             .enumerate()
             .map(|(i, _)| {
                 let t = i as f32 / (n - 1.0);
-                (first.0 + (last.0 - first.0) * t, first.1 + (last.1 - first.1) * t)
+                (
+                    first.0 + (last.0 - first.0) * t,
+                    first.1 + (last.1 - first.1) * t,
+                )
             })
             .collect()
     }

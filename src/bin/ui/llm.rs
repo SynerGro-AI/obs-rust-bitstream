@@ -32,11 +32,21 @@ pub struct ChatMsg {
 
 impl ChatMsg {
     pub fn new(role: &str, content: &str) -> Self {
-        Self { role: role.into(), content: content.into(), tool_calls: Vec::new(), tool_call_id: None }
+        Self {
+            role: role.into(),
+            content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }
     }
 
     pub fn tool_result(id: &str, content: &str) -> Self {
-        Self { role: "tool".into(), content: content.into(), tool_calls: Vec::new(), tool_call_id: Some(id.into()) }
+        Self {
+            role: "tool".into(),
+            content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: Some(id.into()),
+        }
     }
 
     pub fn to_json(&self) -> Value {
@@ -61,16 +71,31 @@ pub trait LlmProvider: Send + Sync {
     fn name(&self) -> String;
     /// Blocking call (run it off the UI thread). `on_token` receives
     /// streamed content deltas when the provider streams.
-    fn complete(&self, messages: &[ChatMsg], tools: &Value, on_token: &mut dyn FnMut(&str)) -> Result<LlmReply, String>;
+    fn complete(
+        &self,
+        messages: &[ChatMsg],
+        tools: &Value,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<LlmReply, String>;
 }
 
 /// Parse a non-streamed chat completion body.
 pub fn parse_completion(body: &Value) -> Result<LlmReply, String> {
     if let Some(e) = body.get("error") {
-        return Err(e.get("message").and_then(|m| m.as_str()).map(String::from).unwrap_or_else(|| e.to_string()));
+        return Err(e
+            .get("message")
+            .and_then(|m| m.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| e.to_string()));
     }
-    let msg = body.pointer("/choices/0/message").ok_or("response has no choices[0].message")?;
-    let content = msg.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+    let msg = body
+        .pointer("/choices/0/message")
+        .ok_or("response has no choices[0].message")?;
+    let content = msg
+        .get("content")
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
     let tool_calls = msg
         .get("tool_calls")
         .and_then(|t| t.as_array())
@@ -78,8 +103,16 @@ pub fn parse_completion(body: &Value) -> Result<LlmReply, String> {
             a.iter()
                 .enumerate()
                 .map(|(i, t)| ToolCall {
-                    id: t.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(|| format!("call_{}", i)),
-                    name: t.pointer("/function/name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    id: t
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .map(String::from)
+                        .unwrap_or_else(|| format!("call_{}", i)),
+                    name: t
+                        .pointer("/function/name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                     arguments: match t.pointer("/function/arguments") {
                         Some(Value::String(s)) => s.clone(),
                         Some(v) => v.to_string(),
@@ -89,7 +122,10 @@ pub fn parse_completion(body: &Value) -> Result<LlmReply, String> {
                 .collect()
         })
         .unwrap_or_default();
-    Ok(LlmReply { content, tool_calls })
+    Ok(LlmReply {
+        content,
+        tool_calls,
+    })
 }
 
 /// Accumulates OpenAI-style SSE deltas (content + indexed tool calls).
@@ -103,23 +139,39 @@ impl SseAccumulator {
     /// Feed one SSE line. Returns a content delta if there was one.
     pub fn feed(&mut self, line: &str) -> Result<Option<String>, String> {
         let line = line.trim();
-        let Some(data) = line.strip_prefix("data:") else { return Ok(None) };
+        let Some(data) = line.strip_prefix("data:") else {
+            return Ok(None);
+        };
         let data = data.trim();
         if data == "[DONE]" {
             self.done = true;
             return Ok(None);
         }
-        let v: Value = serde_json::from_str(data).map_err(|e| format!("bad stream chunk: {}", e))?;
+        let v: Value =
+            serde_json::from_str(data).map_err(|e| format!("bad stream chunk: {}", e))?;
         if let Some(e) = v.get("error") {
-            return Err(e.get("message").and_then(|m| m.as_str()).unwrap_or("stream error").to_string());
+            return Err(e
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("stream error")
+                .to_string());
         }
-        let Some(delta) = v.pointer("/choices/0/delta") else { return Ok(None) };
+        let Some(delta) = v.pointer("/choices/0/delta") else {
+            return Ok(None);
+        };
         if let Some(calls) = delta.get("tool_calls").and_then(|t| t.as_array()) {
             for c in calls {
-                let idx = c.get("index").and_then(|i| i.as_u64()).unwrap_or(self.reply.tool_calls.len() as u64) as usize;
+                let idx =
+                    c.get("index")
+                        .and_then(|i| i.as_u64())
+                        .unwrap_or(self.reply.tool_calls.len() as u64) as usize;
                 while self.reply.tool_calls.len() <= idx {
                     let n = self.reply.tool_calls.len();
-                    self.reply.tool_calls.push(ToolCall { id: format!("call_{}", n), name: String::new(), arguments: String::new() });
+                    self.reply.tool_calls.push(ToolCall {
+                        id: format!("call_{}", n),
+                        name: String::new(),
+                        arguments: String::new(),
+                    });
                 }
                 let t = &mut self.reply.tool_calls[idx];
                 if let Some(id) = c.get("id").and_then(|v| v.as_str()) {
@@ -154,7 +206,10 @@ pub struct OpenAiCompat {
 }
 
 fn env(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 impl OpenAiCompat {
@@ -167,26 +222,55 @@ impl OpenAiCompat {
     pub fn from_env() -> Option<Self> {
         let key = env("SERAPHINA_GROK_API_KEY").or_else(|| env("XAI_API_KEY"));
         let base = env("SERAPHINA_BASE_URL");
-        let endpoint = env("SERAPHINA_GROK_ENDPOINT").or_else(|| base.as_ref().map(|b| format!("{}/chat/completions", b.trim_end_matches('/'))));
+        let endpoint = env("SERAPHINA_GROK_ENDPOINT").or_else(|| {
+            base.as_ref()
+                .map(|b| format!("{}/chat/completions", b.trim_end_matches('/')))
+        });
         if key.is_none() && endpoint.is_none() {
             return None;
         }
-        let endpoint = endpoint.unwrap_or_else(|| format!("{}/chat/completions", Self::DEFAULT_BASE));
-        let model = env("SERAPHINA_GROK_MODEL").or_else(|| env("SERAPHINA_MODEL")).unwrap_or_else(|| Self::DEFAULT_MODEL.into());
-        Some(Self { endpoint, model, key, stream: env("SERAPHINA_NO_STREAM").is_none() })
+        let endpoint =
+            endpoint.unwrap_or_else(|| format!("{}/chat/completions", Self::DEFAULT_BASE));
+        let model = env("SERAPHINA_GROK_MODEL")
+            .or_else(|| env("SERAPHINA_MODEL"))
+            .unwrap_or_else(|| Self::DEFAULT_MODEL.into());
+        Some(Self {
+            endpoint,
+            model,
+            key,
+            stream: env("SERAPHINA_NO_STREAM").is_none(),
+        })
     }
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout_connect(std::time::Duration::from_secs(15)).timeout_read(std::time::Duration::from_secs(120)).build()
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(15))
+        .timeout_read(std::time::Duration::from_secs(120))
+        .build()
 }
 
 fn http_error(e: ureq::Error) -> String {
     match e {
         ureq::Error::Status(code, r) => {
             let body = r.into_string().unwrap_or_default();
-            let msg = serde_json::from_str::<Value>(&body).ok().and_then(|v| v.pointer("/error/message").or_else(|| v.get("error")).map(|m| m.as_str().map(String::from).unwrap_or_else(|| m.to_string()))).unwrap_or(body);
-            format!("HTTP {}: {}", code, msg.chars().take(300).collect::<String>())
+            let msg = serde_json::from_str::<Value>(&body)
+                .ok()
+                .and_then(|v| {
+                    v.pointer("/error/message")
+                        .or_else(|| v.get("error"))
+                        .map(|m| {
+                            m.as_str()
+                                .map(String::from)
+                                .unwrap_or_else(|| m.to_string())
+                        })
+                })
+                .unwrap_or(body);
+            format!(
+                "HTTP {}: {}",
+                code,
+                msg.chars().take(300).collect::<String>()
+            )
         }
         ureq::Error::Transport(t) => format!("network error: {}", t),
     }
@@ -194,11 +278,21 @@ fn http_error(e: ureq::Error) -> String {
 
 impl LlmProvider for OpenAiCompat {
     fn name(&self) -> String {
-        let host = self.endpoint.split('/').nth(2).unwrap_or(&self.endpoint).to_string();
+        let host = self
+            .endpoint
+            .split('/')
+            .nth(2)
+            .unwrap_or(&self.endpoint)
+            .to_string();
         format!("{} · {}", self.model, host)
     }
 
-    fn complete(&self, messages: &[ChatMsg], tools: &Value, on_token: &mut dyn FnMut(&str)) -> Result<LlmReply, String> {
+    fn complete(
+        &self,
+        messages: &[ChatMsg],
+        tools: &Value,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<LlmReply, String> {
         let mut body = json!({
             "model": self.model,
             "messages": messages.iter().map(|m| m.to_json()).collect::<Vec<_>>(),
@@ -209,7 +303,9 @@ impl LlmProvider for OpenAiCompat {
             body["tools"] = tools.clone();
             body["tool_choice"] = json!("auto");
         }
-        let mut req = agent().post(&self.endpoint).set("Content-Type", "application/json");
+        let mut req = agent()
+            .post(&self.endpoint)
+            .set("Content-Type", "application/json");
         if let Some(k) = &self.key {
             req = req.set("Authorization", &format!("Bearer {}", k));
         }
@@ -260,7 +356,11 @@ fn run_cli(program: &str, args: &[&str], home: Option<&std::path::Path>) -> Resu
     if out.status.success() {
         Ok(text)
     } else {
-        Err(format!("{} {}", text, String::from_utf8_lossy(&out.stderr).trim()))
+        Err(format!(
+            "{} {}",
+            text,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
     }
 }
 
@@ -269,7 +369,11 @@ impl SeraphinaCli {
     pub fn detect() -> Option<Self> {
         let program = env("SERAPHINA_CLI").unwrap_or_else(|| "seraphina".into());
         let v = run_cli(&program, &["--version"], None).ok()?;
-        v.to_lowercase().contains("seraphina").then(|| Self { program, version: v.trim().to_string(), home: None })
+        v.to_lowercase().contains("seraphina").then(|| Self {
+            program,
+            version: v.trim().to_string(),
+            home: None,
+        })
     }
 
     /// Intents forwarded to the CLI, matching its own grammar
@@ -279,8 +383,18 @@ impl SeraphinaCli {
     /// are left to the user's own shell.
     pub fn is_native_intent(text: &str) -> bool {
         let t = text.trim().to_lowercase();
-        let with_arg = |k: &str| t.strip_prefix(k).map(|r| r.starts_with(' ') && !r.trim().is_empty()).unwrap_or(false);
-        t == "help" || t == "version" || t == "recall" || with_arg("recall") || with_arg("remember") || with_arg("triad") || with_arg("plan-grok")
+        let with_arg = |k: &str| {
+            t.strip_prefix(k)
+                .map(|r| r.starts_with(' ') && !r.trim().is_empty())
+                .unwrap_or(false)
+        };
+        t == "help"
+            || t == "version"
+            || t == "recall"
+            || with_arg("recall")
+            || with_arg("remember")
+            || with_arg("triad")
+            || with_arg("plan-grok")
     }
 
     pub fn intent(&self, text: &str) -> Result<String, String> {
@@ -297,8 +411,14 @@ impl SeraphinaCli {
             .filter(|l| !l.is_empty() && !l.starts_with('('))
             .map(|l| {
                 let first = l.split_whitespace().next().unwrap_or("");
-                let stamped = first.len() >= 19 && first.as_bytes().get(4) == Some(&b'-') && first.contains('T');
-                if stamped { l[first.len()..].trim().to_string() } else { l.to_string() }
+                let stamped = first.len() >= 19
+                    && first.as_bytes().get(4) == Some(&b'-')
+                    && first.contains('T');
+                if stamped {
+                    l[first.len()..].trim().to_string()
+                } else {
+                    l.to_string()
+                }
             })
             .filter(|l| !l.is_empty())
             .collect()
@@ -306,7 +426,10 @@ impl SeraphinaCli {
 
     /// Up to `n` recent memory notes for the system prompt.
     pub fn recall(&self, n: usize) -> Vec<String> {
-        self.intent("recall").map(|s| Self::parse_recall(&s)).map(|v| v[v.len().saturating_sub(n)..].to_vec()).unwrap_or_default()
+        self.intent("recall")
+            .map(|s| Self::parse_recall(&s))
+            .map(|v| v[v.len().saturating_sub(n)..].to_vec())
+            .unwrap_or_default()
     }
 }
 
@@ -319,13 +442,21 @@ pub enum AgentEvent {
 
 /// Run one completion round on a worker thread. `system_extra` is
 /// evaluated on the worker (e.g. memory recall via the CLI).
-pub fn spawn_round(provider: Arc<dyn LlmProvider>, mut messages: Vec<ChatMsg>, tools: Value, cli: Option<SeraphinaCli>) -> Receiver<AgentEvent> {
+pub fn spawn_round(
+    provider: Arc<dyn LlmProvider>,
+    mut messages: Vec<ChatMsg>,
+    tools: Value,
+    cli: Option<SeraphinaCli>,
+) -> Receiver<AgentEvent> {
     let (tx, rx): (Sender<AgentEvent>, Receiver<AgentEvent>) = channel();
     std::thread::spawn(move || {
         if let (Some(cli), Some(sys)) = (cli, messages.first_mut()) {
             let mem = cli.recall(8);
             if !mem.is_empty() {
-                sys.content.push_str(&format!("\n\nSeraphina.AGI memory (most recent notes from ~/.seraphina):\n- {}", mem.join("\n- ")));
+                sys.content.push_str(&format!(
+                    "\n\nSeraphina.AGI memory (most recent notes from ~/.seraphina):\n- {}",
+                    mem.join("\n- ")
+                ));
             }
         }
         let tx2 = tx.clone();
@@ -342,7 +473,14 @@ pub fn spawn_round(provider: Arc<dyn LlmProvider>, mut messages: Vec<ChatMsg>, t
 pub fn spawn_cli(cli: SeraphinaCli, text: String) -> Receiver<AgentEvent> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let r = cli.intent(&text).map(|s| LlmReply { content: if s.trim().is_empty() { "(no output)".into() } else { s }, tool_calls: Vec::new() });
+        let r = cli.intent(&text).map(|s| LlmReply {
+            content: if s.trim().is_empty() {
+                "(no output)".into()
+            } else {
+                s
+            },
+            tool_calls: Vec::new(),
+        });
         let _ = tx.send(AgentEvent::Done(r));
     });
     rx
@@ -366,7 +504,10 @@ pub struct MockProvider {
 #[cfg(test)]
 impl MockProvider {
     pub fn new(replies: Vec<LlmReply>) -> Self {
-        Self { replies: std::sync::Mutex::new(replies), seen: std::sync::Mutex::new(Vec::new()) }
+        Self {
+            replies: std::sync::Mutex::new(replies),
+            seen: std::sync::Mutex::new(Vec::new()),
+        }
     }
 }
 
@@ -376,11 +517,21 @@ impl LlmProvider for MockProvider {
         "mock".into()
     }
 
-    fn complete(&self, messages: &[ChatMsg], _tools: &Value, on_token: &mut dyn FnMut(&str)) -> Result<LlmReply, String> {
+    fn complete(
+        &self,
+        messages: &[ChatMsg],
+        _tools: &Value,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<LlmReply, String> {
         if let Ok(mut s) = self.seen.lock() {
             s.push(messages.to_vec());
         }
-        let r = self.replies.lock().map_err(|e| e.to_string())?.pop().unwrap_or_default();
+        let r = self
+            .replies
+            .lock()
+            .map_err(|e| e.to_string())?
+            .pop()
+            .unwrap_or_default();
         if !r.content.is_empty() {
             on_token(&r.content);
         }
@@ -398,7 +549,8 @@ mod tests {
         let r = parse_completion(&body).unwrap_or_default();
         assert_eq!(r.tool_calls.len(), 1);
         assert_eq!(r.tool_calls[0].name, "set_layer_opacity");
-        let cmd = crate::commands::parse_tool_call(&r.tool_calls[0].name, &r.tool_calls[0].arguments);
+        let cmd =
+            crate::commands::parse_tool_call(&r.tool_calls[0].name, &r.tool_calls[0].arguments);
         assert!(cmd.is_ok(), "{:?}", cmd);
         assert!(parse_completion(&json!({"error":{"message":"bad key"}})).is_err());
     }
@@ -432,21 +584,33 @@ mod tests {
     #[test]
     fn message_json_shape() {
         let mut m = ChatMsg::new("assistant", "");
-        m.tool_calls.push(ToolCall { id: "x".into(), name: "undo".into(), arguments: "{}".into() });
+        m.tool_calls.push(ToolCall {
+            id: "x".into(),
+            name: "undo".into(),
+            arguments: "{}".into(),
+        });
         let v = m.to_json();
         assert_eq!(v["tool_calls"][0]["function"]["name"], "undo");
-        assert_eq!(ChatMsg::tool_result("x", "ok").to_json()["tool_call_id"], "x");
+        assert_eq!(
+            ChatMsg::tool_result("x", "ok").to_json()["tool_call_id"],
+            "x"
+        );
     }
 
     #[test]
     fn cli_whitelist() {
-        assert!(SeraphinaCli::is_native_intent("remember the gold is #DEB04C"));
+        assert!(SeraphinaCli::is_native_intent(
+            "remember the gold is #DEB04C"
+        ));
         assert!(SeraphinaCli::is_native_intent("recall"));
         assert!(SeraphinaCli::is_native_intent("recall gold"));
         assert!(SeraphinaCli::is_native_intent("triad hello"));
         assert!(SeraphinaCli::is_native_intent("plan-grok a vignette"));
         assert!(SeraphinaCli::is_native_intent("Version"));
-        assert!(!SeraphinaCli::is_native_intent("triad"), "the CLI rejects a bare triad");
+        assert!(
+            !SeraphinaCli::is_native_intent("triad"),
+            "the CLI rejects a bare triad"
+        );
         assert!(!SeraphinaCli::is_native_intent("remember"));
         assert!(!SeraphinaCli::is_native_intent("recallx"));
         assert!(!SeraphinaCli::is_native_intent("build glyph 179"));
@@ -456,7 +620,10 @@ mod tests {
     #[test]
     fn recall_output_drops_timestamps() {
         let out = "  2026-10-20T15:53:39-06:00  the studio test note: gold theme\n  2026-10-20T16:01:02-06:00  second\n";
-        assert_eq!(SeraphinaCli::parse_recall(out), vec!["the studio test note: gold theme", "second"]);
+        assert_eq!(
+            SeraphinaCli::parse_recall(out),
+            vec!["the studio test note: gold theme", "second"]
+        );
         assert!(SeraphinaCli::parse_recall("  (no memory yet)").is_empty());
     }
 
@@ -473,19 +640,37 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
         cli.home = Some(home.clone());
         assert!(cli.version.starts_with("seraphina "), "{}", cli.version);
-        assert!(cli.intent("version").unwrap().contains(cli.version.trim_start_matches("seraphina ").trim()));
+        assert!(cli
+            .intent("version")
+            .unwrap()
+            .contains(cli.version.trim_start_matches("seraphina ").trim()));
         assert!(cli.intent("help").unwrap().contains("remember <text>"));
         assert!(cli.recall(5).is_empty());
-        assert!(cli.intent("remember studio note: gold on black").unwrap().contains("remembered"));
+        assert!(cli
+            .intent("remember studio note: gold on black")
+            .unwrap()
+            .contains("remembered"));
         cli.intent("remember second note").unwrap();
-        assert_eq!(cli.recall(5), vec!["studio note: gold on black", "second note"]);
+        assert_eq!(
+            cli.recall(5),
+            vec!["studio note: gold on black", "second note"]
+        );
         assert!(cli.intent("recall gold").unwrap().contains("gold on black"));
         let t = cli.intent("triad keep the layers tidy").unwrap();
         assert!(t.contains("consensus:") && t.contains("response:"), "{}", t);
         assert!(cli.intent("build glyph 179").is_err());
-        if std::env::var("XAI_API_KEY").or_else(|_| std::env::var("SERAPHINA_GROK_API_KEY")).map(|k| !k.trim().is_empty()).unwrap_or(false) {
-            let p = cli.intent("plan-grok three steps to add a gold vignette").unwrap();
-            eprintln!("LIVE plan-grok: {}", p.lines().take(4).collect::<Vec<_>>().join(" | "));
+        if std::env::var("XAI_API_KEY")
+            .or_else(|_| std::env::var("SERAPHINA_GROK_API_KEY"))
+            .map(|k| !k.trim().is_empty())
+            .unwrap_or(false)
+        {
+            let p = cli
+                .intent("plan-grok three steps to add a gold vignette")
+                .unwrap();
+            eprintln!(
+                "LIVE plan-grok: {}",
+                p.lines().take(4).collect::<Vec<_>>().join(" | ")
+            );
             assert!(p.contains("grok plan"), "{}", p);
         }
         let _ = std::fs::remove_dir_all(&home);
@@ -495,10 +680,15 @@ mod tests {
     #[test]
     fn live_xai_smoke_test_if_key_present() {
         let Some(p) = OpenAiCompat::from_env().filter(|p| p.key.is_some()) else {
-            eprintln!("live_xai_smoke_test: skipped (no XAI_API_KEY / SERAPHINA_GROK_API_KEY in env)");
+            eprintln!(
+                "live_xai_smoke_test: skipped (no XAI_API_KEY / SERAPHINA_GROK_API_KEY in env)"
+            );
             return;
         };
-        let msgs = vec![ChatMsg::new("system", "Reply with one word."), ChatMsg::new("user", "Say OK")];
+        let msgs = vec![
+            ChatMsg::new("system", "Reply with one word."),
+            ChatMsg::new("user", "Say OK"),
+        ];
         let r = p.complete(&msgs, &json!([]), &mut |_| {});
         assert!(r.is_ok(), "{:?}", r);
     }

@@ -24,7 +24,7 @@ pub fn chroma_420_size(width: u32, height: u32) -> Option<usize> {
     if width == 0 || height == 0 {
         None
     } else {
-        Some(((width as usize + 1) / 2) * ((height as usize + 1) / 2))
+        Some((width as usize).div_ceil(2) * (height as usize).div_ceil(2))
     }
 }
 
@@ -33,18 +33,18 @@ pub fn chroma_422_size(width: u32, height: u32) -> Option<usize> {
     if width == 0 || height == 0 {
         None
     } else {
-        Some(((width as usize + 1) / 2) * (height as usize))
+        Some((width as usize).div_ceil(2) * (height as usize))
     }
 }
 
 /// Simple scalar UYVY → YUY2 swap for a single line.
 /// Returns None if the input length is odd.
 pub fn uyvy_to_yuy2_line(input: &[u8]) -> Option<Vec<u8>> {
-    if input.len() % 2 != 0 {
+    if !input.len().is_multiple_of(2) {
         return None;
     }
     let mut out = Vec::with_capacity(input.len());
-    for chunk in input.chunks_exact(4) {
+    for chunk in input.as_chunks::<4>().0 {
         // UYVY → YUY2: U Y0 V Y1 → Y0 U Y1 V
         if chunk.len() == 4 {
             out.push(chunk[1]); // Y0

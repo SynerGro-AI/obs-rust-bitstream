@@ -63,13 +63,23 @@ impl<'a> Lexer<'a> {
 
             let (kind, end) = if Self::is_alpha(c) {
                 let mut e = start;
-                while self.input[e..].chars().next().map(Self::is_alpha).unwrap_or(false) {
+                while self.input[e..]
+                    .chars()
+                    .next()
+                    .map(Self::is_alpha)
+                    .unwrap_or(false)
+                {
                     e += self.input[e..].chars().next().unwrap().len_utf8();
                 }
                 (TokenType::Alpha, e)
             } else if Self::is_digit(c) {
                 let mut e = start;
-                while self.input[e..].chars().next().map(Self::is_digit).unwrap_or(false) {
+                while self.input[e..]
+                    .chars()
+                    .next()
+                    .map(Self::is_digit)
+                    .unwrap_or(false)
+                {
                     e += self.input[e..].chars().next().unwrap().len_utf8();
                 }
                 (TokenType::Digit, e)

@@ -103,7 +103,10 @@ mod tests {
     fn differential() {
         let mut r = SceneRegistry::new();
         r.add("scene").unwrap();
-        r.get_mut("scene").unwrap().add_item("cam", "camera_src").unwrap();
+        r.get_mut("scene")
+            .unwrap()
+            .add_item("cam", "camera_src")
+            .unwrap();
         assert!(r.get("scene").unwrap().contains("cam"));
     }
 }

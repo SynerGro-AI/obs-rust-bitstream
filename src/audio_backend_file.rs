@@ -38,7 +38,10 @@ mod tests {
             backend: "alsa".to_string(),
             live: false,
         };
-        assert_eq!(AudioBackendFile::live(&AudioBackendFile::write(&s)), Some(false));
+        assert_eq!(
+            AudioBackendFile::live(&AudioBackendFile::write(&s)),
+            Some(false)
+        );
     }
 
     #[test]
@@ -47,7 +50,10 @@ mod tests {
             backend: "cpal".to_string(),
             live: true,
         };
-        assert_eq!(AudioBackendFile::live(&AudioBackendFile::write(&s)), Some(true));
+        assert_eq!(
+            AudioBackendFile::live(&AudioBackendFile::write(&s)),
+            Some(true)
+        );
     }
 
     #[test]
@@ -66,7 +72,13 @@ mod tests {
             backend: "cpal".to_string(),
             live: true,
         };
-        assert_eq!(AudioBackendFile::live(&AudioBackendFile::write(&a)), Some(false));
-        assert_eq!(AudioBackendFile::live(&AudioBackendFile::write(&b)), Some(true));
+        assert_eq!(
+            AudioBackendFile::live(&AudioBackendFile::write(&a)),
+            Some(false)
+        );
+        assert_eq!(
+            AudioBackendFile::live(&AudioBackendFile::write(&b)),
+            Some(true)
+        );
     }
 }

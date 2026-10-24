@@ -18,12 +18,7 @@ pub struct LensFlare;
 
 impl LensFlare {
     /// strength is 0..=255.
-    pub fn apply(
-        frame: &mut VideoFrame,
-        cx: u32,
-        cy: u32,
-        strength: u8,
-    ) -> Result<(), FlareError> {
+    pub fn apply(frame: &mut VideoFrame, cx: u32, cy: u32, strength: u8) -> Result<(), FlareError> {
         if frame.format != VideoFormat::Y800 {
             return Err(FlareError::WrongFormat);
         }

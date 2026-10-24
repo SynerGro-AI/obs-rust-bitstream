@@ -31,7 +31,9 @@ impl QualitySlider {
             return Err(QualityError::OutOfRange);
         }
         self.value = value;
-        weights.set("h264.qp", value).map_err(|_| QualityError::OutOfRange)?;
+        weights
+            .set("h264.qp", value)
+            .map_err(|_| QualityError::OutOfRange)?;
         Ok(())
     }
 
@@ -42,6 +44,12 @@ impl QualitySlider {
                 self.value = v;
             }
         }
+    }
+}
+
+impl Default for QualitySlider {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

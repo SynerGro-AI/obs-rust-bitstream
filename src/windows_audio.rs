@@ -129,7 +129,9 @@ mod tests {
         match WindowsAudio::open(48000, 2) {
             Ok(_) => {}
             Err(e) => {
-                assert!(e.contains("WASAPI") || e.contains("not available") || e.contains("not yet"));
+                assert!(
+                    e.contains("WASAPI") || e.contains("not available") || e.contains("not yet")
+                );
             }
         }
     }

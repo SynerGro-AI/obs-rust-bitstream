@@ -10,7 +10,7 @@ pub struct Deinterlace;
 impl Deinterlace {
     /// Weave top and bottom fields. Each field is half the height.
     pub fn weave(top: &[u8], bottom: &[u8], width: usize) -> Vec<u8> {
-        if width == 0 || top.len() != bottom.len() || top.len() % width != 0 {
+        if width == 0 || top.len() != bottom.len() || !top.len().is_multiple_of(width) {
             return Vec::new();
         }
         let rows = top.len() / width;

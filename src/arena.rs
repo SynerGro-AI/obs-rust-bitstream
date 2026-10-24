@@ -31,6 +31,7 @@ pub const SIGMA: f64 = 5.670_374_419e-8;
 pub const DT: f32 = 1.0 / 240.0;
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Environment {
     pub name: String,
     /// m/s² (downward).
@@ -48,21 +49,56 @@ pub struct Environment {
 impl Environment {
     pub fn earth() -> Self {
         // ISA sea level: 15 °C, 101 325 Pa, 1.225 kg/m³
-        Self { name: "Earth".into(), gravity: G0, air_density: 1.225, pressure: 101_325.0, temperature: 288.15, wind: [0.0; 3] }
+        Self {
+            name: "Earth".into(),
+            gravity: G0,
+            air_density: 1.225,
+            pressure: 101_325.0,
+            temperature: 288.15,
+            wind: [0.0; 3],
+        }
     }
     pub fn moon() -> Self {
-        Self { name: "Moon".into(), gravity: 1.62, air_density: 0.0, pressure: 0.0, temperature: 250.0, wind: [0.0; 3] }
+        Self {
+            name: "Moon".into(),
+            gravity: 1.62,
+            air_density: 0.0,
+            pressure: 0.0,
+            temperature: 250.0,
+            wind: [0.0; 3],
+        }
     }
     pub fn mars() -> Self {
-        Self { name: "Mars".into(), gravity: 3.721, air_density: 0.020, pressure: 610.0, temperature: 210.0, wind: [0.0; 3] }
+        Self {
+            name: "Mars".into(),
+            gravity: 3.721,
+            air_density: 0.020,
+            pressure: 610.0,
+            temperature: 210.0,
+            wind: [0.0; 3],
+        }
     }
     /// Earth gravity with the air pumped out (the hammer-and-feather demo).
     pub fn vacuum() -> Self {
-        Self { name: "Vacuum chamber".into(), gravity: G0, air_density: 0.0, pressure: 0.0, temperature: 293.15, wind: [0.0; 3] }
+        Self {
+            name: "Vacuum chamber".into(),
+            gravity: G0,
+            air_density: 0.0,
+            pressure: 0.0,
+            temperature: 293.15,
+            wind: [0.0; 3],
+        }
     }
     /// Deep space: no gravity, no air, 2.725 K background.
     pub fn space() -> Self {
-        Self { name: "Deep space".into(), gravity: 0.0, air_density: 0.0, pressure: 0.0, temperature: 2.725, wind: [0.0; 3] }
+        Self {
+            name: "Deep space".into(),
+            gravity: 0.0,
+            air_density: 0.0,
+            pressure: 0.0,
+            temperature: 2.725,
+            wind: [0.0; 3],
+        }
     }
 
     pub fn preset(name: &str) -> Option<Self> {
@@ -72,7 +108,10 @@ impl Environment {
             "mars" => Self::mars(),
             "vacuum" | "vacuum chamber" => Self::vacuum(),
             "space" | "deep space" | "zero-g" | "zero_g" => Self::space(),
-            "custom" => Self { name: "Custom".into(), ..Self::earth() },
+            "custom" => Self {
+                name: "Custom".into(),
+                ..Self::earth()
+            },
             _ => return None,
         })
     }
@@ -86,6 +125,7 @@ impl Environment {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Body {
     pub name: String,
     pub material: String,
@@ -115,8 +155,19 @@ pub struct Body {
 
 impl Body {
     /// A body from a material and a box; `volume` from the mesh (or the box when `None`).
-    pub fn new(name: &str, material: &str, env: EnvMeta, half: [f32; 3], pos: [f32; 3], volume: Option<f32>, temp: f32, pressure: f64) -> Self {
-        let v = volume.unwrap_or(8.0 * half[0] * half[1] * half[2]).max(1e-9);
+    pub fn new(
+        name: &str,
+        material: &str,
+        env: EnvMeta,
+        half: [f32; 3],
+        pos: [f32; 3],
+        volume: Option<f32>,
+        temp: f32,
+        pressure: f64,
+    ) -> Self {
+        let v = volume
+            .unwrap_or(8.0 * half[0] * half[1] * half[2])
+            .max(1e-9);
         let phase = env.phase_at(temp, pressure);
         let rho = env.density_in(phase, temp, pressure).unwrap_or(1000.0);
         Self {
@@ -146,7 +197,8 @@ impl Body {
             return 4.0 * h[0] * h[2];
         }
         // projected area of a box along dir
-        4.0 * (h[1] * h[2] * dir[0].abs() + h[0] * h[2] * dir[1].abs() + h[0] * h[1] * dir[2].abs()) / d
+        4.0 * (h[1] * h[2] * dir[0].abs() + h[0] * h[2] * dir[1].abs() + h[0] * h[1] * dir[2].abs())
+            / d
     }
 
     pub fn surface_area(&self) -> f32 {
@@ -171,7 +223,11 @@ impl Body {
     /// Latent heat per kg absorbed going solid → `phase` (matches `apply_heat`).
     fn latent_content_per_kg(&self) -> f64 {
         let lf = self.env.latent_fusion.unwrap_or(0.0) as f64;
-        let lv = self.env.latent_vaporization.or(self.env.latent_fusion).unwrap_or(0.0) as f64;
+        let lv = self
+            .env
+            .latent_vaporization
+            .or(self.env.latent_fusion)
+            .unwrap_or(0.0) as f64;
         let direct = self.env.sublimes || self.env.melting_k.is_none();
         match self.phase {
             Phase::Solid => 0.0,
@@ -184,7 +240,9 @@ impl Body {
     /// Internal (thermal) energy relative to a solid at 0 K with constant c:
     /// U = m·c·T + m·Σ L (phases passed) + banked latent heat.
     pub fn internal(&self) -> f64 {
-        self.heat_capacity() * self.temp + self.mass as f64 * self.latent_content_per_kg() + self.latent
+        self.heat_capacity() * self.temp
+            + self.mass as f64 * self.latent_content_per_kg()
+            + self.latent
     }
 
     /// Effective weight factor (m − ρ_air·V): gravity minus buoyancy.
@@ -194,6 +252,7 @@ impl Body {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Events {
     pub log: Vec<(f64, String)>,
 }
@@ -202,6 +261,7 @@ pub struct Events {
 /// a flow; everything inside is a stock (kinetic, potential, internal).
 /// `residual = (stocks now − stocks at start) − (flows in)` must stay ≈ 0.
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ledger {
     /// J delivered by heaters.
     pub heater_in: f64,
@@ -242,6 +302,7 @@ impl EnergyTotals {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Arena {
     pub env: Environment,
     pub bodies: Vec<Body>,
@@ -268,7 +329,17 @@ const TOUCH: f32 = 2e-3;
 
 impl Arena {
     pub fn new(env: Environment) -> Self {
-        Self { env, bodies: Vec::new(), time: 0.0, ground: true, exchange: true, conduction: true, events: Events::default(), ledger: Ledger::default(), acc: 0.0 }
+        Self {
+            env,
+            bodies: Vec::new(),
+            time: 0.0,
+            ground: true,
+            exchange: true,
+            conduction: true,
+            events: Events::default(),
+            ledger: Ledger::default(),
+            acc: 0.0,
+        }
     }
 
     pub fn add(&mut self, b: Body) -> usize {
@@ -321,7 +392,10 @@ impl Arena {
     fn mechanical(&self) -> f64 {
         let g = self.env.gravity as f64;
         let rho = self.env.air_density;
-        self.bodies.iter().map(|b| b.kinetic() + b.weight_mass(rho) * g * b.pos[1] as f64).sum()
+        self.bodies
+            .iter()
+            .map(|b| b.kinetic() + b.weight_mass(rho) * g * b.pos[1] as f64)
+            .sum()
     }
 
     /// Stocks − start − flows. Zero means energy is conserved.
@@ -405,7 +479,12 @@ impl Arena {
         let mut touched = vec![false; self.bodies.len()];
         // ground
         if self.ground {
-            for (idx, b) in self.bodies.iter_mut().enumerate().filter(|(_, b)| !b.fixed && !b.vaporised) {
+            for (idx, b) in self
+                .bodies
+                .iter_mut()
+                .enumerate()
+                .filter(|(_, b)| !b.fixed && !b.vaporised)
+            {
                 let bottom = b.pos[1] - b.half[1];
                 if bottom < 0.0 {
                     touched[idx] = true;
@@ -413,15 +492,31 @@ impl Arena {
                     if b.vel[1] < 0.0 {
                         let vn = -b.vel[1];
                         // liquids don't bounce
-                        let e = if b.phase == Phase::Solid { b.env.restitution } else { 0.0 };
+                        let e = if b.phase == Phase::Solid {
+                            b.env.restitution
+                        } else {
+                            0.0
+                        };
                         // rest threshold: below the speed gained in one step, stop bouncing
                         let e = if vn < 2.0 * g * DT + 1e-3 { 0.0 } else { e };
                         let jn = (1.0 + e) * vn;
                         b.vel[1] = e * vn;
-                        friction(&mut b.vel, jn, b.env.friction_kinetic, b.env.friction_static, g);
+                        friction(
+                            &mut b.vel,
+                            jn,
+                            b.env.friction_kinetic,
+                            b.env.friction_static,
+                            g,
+                        );
                     } else if b.vel[1].abs() < 1e-6 {
                         // resting contact: friction from the normal force over one step
-                        friction(&mut b.vel, g * DT, b.env.friction_kinetic, b.env.friction_static, g);
+                        friction(
+                            &mut b.vel,
+                            g * DT,
+                            b.env.friction_kinetic,
+                            b.env.friction_static,
+                            g,
+                        );
                     }
                 }
             }
@@ -437,16 +532,33 @@ impl Arena {
                 if a.vaporised || b.vaporised || (a.fixed && b.fixed) {
                     continue;
                 }
-                let d = [b.pos[0] - a.pos[0], b.pos[1] - a.pos[1], b.pos[2] - a.pos[2]];
-                let ov = [a.half[0] + b.half[0] - d[0].abs(), a.half[1] + b.half[1] - d[1].abs(), a.half[2] + b.half[2] - d[2].abs()];
+                let d = [
+                    b.pos[0] - a.pos[0],
+                    b.pos[1] - a.pos[1],
+                    b.pos[2] - a.pos[2],
+                ];
+                let ov = [
+                    a.half[0] + b.half[0] - d[0].abs(),
+                    a.half[1] + b.half[1] - d[1].abs(),
+                    a.half[2] + b.half[2] - d[2].abs(),
+                ];
                 if ov[0] <= 0.0 || ov[1] <= 0.0 || ov[2] <= 0.0 {
                     continue;
                 }
                 // axis of least penetration
-                let ax = if ov[0] < ov[1] && ov[0] < ov[2] { 0 } else if ov[1] < ov[2] { 1 } else { 2 };
+                let ax = if ov[0] < ov[1] && ov[0] < ov[2] {
+                    0
+                } else if ov[1] < ov[2] {
+                    1
+                } else {
+                    2
+                };
                 let mut nrm = [0.0; 3];
                 nrm[ax] = if d[ax] >= 0.0 { 1.0 } else { -1.0 };
-                let (ia, ib) = (if a.fixed { 0.0 } else { 1.0 / a.mass.max(1e-9) }, if b.fixed { 0.0 } else { 1.0 / b.mass.max(1e-9) });
+                let (ia, ib) = (
+                    if a.fixed { 0.0 } else { 1.0 / a.mass.max(1e-9) },
+                    if b.fixed { 0.0 } else { 1.0 / b.mass.max(1e-9) },
+                );
                 let it = ia + ib;
                 if it <= 0.0 {
                     continue;
@@ -457,11 +569,19 @@ impl Arena {
                     a.pos[k] -= nrm[k] * pen * ia / it;
                     b.pos[k] += nrm[k] * pen * ib / it;
                 }
-                let rv = [b.vel[0] - a.vel[0], b.vel[1] - a.vel[1], b.vel[2] - a.vel[2]];
+                let rv = [
+                    b.vel[0] - a.vel[0],
+                    b.vel[1] - a.vel[1],
+                    b.vel[2] - a.vel[2],
+                ];
                 let vn = dot(rv, nrm);
                 if vn < 0.0 {
                     let solid = a.phase == Phase::Solid && b.phase == Phase::Solid;
-                    let e = if solid { (a.env.restitution * b.env.restitution).sqrt() } else { 0.0 };
+                    let e = if solid {
+                        (a.env.restitution * b.env.restitution).sqrt()
+                    } else {
+                        0.0
+                    };
                     let e = if -vn < 2.0 * g * DT + 1e-3 { 0.0 } else { e };
                     let jn = -(1.0 + e) * vn / it;
                     for k in 0..3 {
@@ -469,9 +589,17 @@ impl Arena {
                         b.vel[k] += jn * nrm[k] * ib;
                     }
                     // friction on the tangential relative velocity
-                    let rv = [b.vel[0] - a.vel[0], b.vel[1] - a.vel[1], b.vel[2] - a.vel[2]];
+                    let rv = [
+                        b.vel[0] - a.vel[0],
+                        b.vel[1] - a.vel[1],
+                        b.vel[2] - a.vel[2],
+                    ];
                     let vn2 = dot(rv, nrm);
-                    let vt = [rv[0] - vn2 * nrm[0], rv[1] - vn2 * nrm[1], rv[2] - vn2 * nrm[2]];
+                    let vt = [
+                        rv[0] - vn2 * nrm[0],
+                        rv[1] - vn2 * nrm[1],
+                        rv[2] - vn2 * nrm[2],
+                    ];
                     let st = norm(vt);
                     if st > 1e-9 {
                         let mu = (a.env.friction_kinetic * b.env.friction_kinetic).sqrt();
@@ -492,7 +620,13 @@ impl Arena {
         // resting stack's penetration-and-correction cycle sums to zero
         // instead of pumping heat between bodies.
         let heat = e_before - self.mechanical();
-        let c_sum: f64 = self.bodies.iter().zip(&touched).filter(|(_, t)| **t).map(|(b, _)| b.heat_capacity()).sum();
+        let c_sum: f64 = self
+            .bodies
+            .iter()
+            .zip(&touched)
+            .filter(|(_, t)| **t)
+            .map(|(b, _)| b.heat_capacity())
+            .sum();
         let mut deposits = Vec::new();
         if c_sum > 0.0 && heat != 0.0 {
             for (i, b) in self.bodies.iter().enumerate().filter(|(i, _)| touched[*i]) {
@@ -519,8 +653,13 @@ impl Arena {
                     if a.vaporised || b.vaporised {
                         continue;
                     }
-                    let Some((area, la, lb)) = contact_patch(a, b) else { continue };
-                    let (ka, kb) = (a.env.thermal_conductivity.unwrap_or(1.0).max(1e-3) as f64, b.env.thermal_conductivity.unwrap_or(1.0).max(1e-3) as f64);
+                    let Some((area, la, lb)) = contact_patch(a, b) else {
+                        continue;
+                    };
+                    let (ka, kb) = (
+                        a.env.thermal_conductivity.unwrap_or(1.0).max(1e-3) as f64,
+                        b.env.thermal_conductivity.unwrap_or(1.0).max(1e-3) as f64,
+                    );
                     let r = (la as f64 / ka + lb as f64 / kb) / area as f64;
                     let (ca, cb) = (a.heat_capacity(), b.heat_capacity());
                     let cred = ca * cb / (ca + cb);
@@ -558,11 +697,19 @@ impl Arena {
     }
 
     pub fn total_kinetic(&self) -> f64 {
-        self.bodies.iter().filter(|b| !b.vaporised).map(|b| b.kinetic()).sum()
+        self.bodies
+            .iter()
+            .filter(|b| !b.vaporised)
+            .map(|b| b.kinetic())
+            .sum()
     }
 
     pub fn total_potential(&self) -> f64 {
-        self.bodies.iter().filter(|b| !b.vaporised).map(|b| b.mass as f64 * self.env.gravity as f64 * (b.pos[1] - b.half[1]) as f64).sum()
+        self.bodies
+            .iter()
+            .filter(|b| !b.vaporised)
+            .map(|b| b.mass as f64 * self.env.gravity as f64 * (b.pos[1] - b.half[1]) as f64)
+            .sum()
     }
 }
 
@@ -581,7 +728,9 @@ fn contact_patch(a: &Body, b: &Body) -> Option<(f32, f32, f32)> {
         return None;
     }
     // the contact axis is the one with the smallest overlap
-    let ax = (0..3).min_by(|&x, &y| lap[x].partial_cmp(&lap[y]).unwrap()).unwrap();
+    let ax = (0..3)
+        .min_by(|&x, &y| lap[x].partial_cmp(&lap[y]).unwrap())
+        .unwrap();
     let _ = gap;
     let (u, v) = ((ax + 1) % 3, (ax + 2) % 3);
     let area = lap[u].max(0.0) * lap[v].max(0.0);
@@ -602,7 +751,11 @@ fn friction(v: &mut [f32; 3], jn: f32, mu_k: f32, _mu_s: f32, _g: f32) {
 pub fn apply_heat(b: &mut Body, mut e: f64, pressure: f64, time: f64, ev: &mut Events) {
     let c = b.heat_capacity();
     let m = b.mass.max(1e-9) as f64;
-    let melt = if b.env.sublimes { None } else { b.env.melting_k.map(|t| t as f64) };
+    let melt = if b.env.sublimes {
+        None
+    } else {
+        b.env.melting_k.map(|t| t as f64)
+    };
     let boil = b.env.boiling_at(pressure).map(|t| t as f64);
     let mut guard = 0;
     while e.abs() > 1e-12 && guard < 8 {
@@ -661,7 +814,17 @@ pub fn apply_heat(b: &mut Body, mut e: f64, pressure: f64, time: f64, ev: &mut E
 
 fn on_phase(b: &mut Body, from: Phase, time: f64, ev: &mut Events) {
     let to = b.phase;
-    ev.log.push((time, format!("{} ({}) {} → {} at {:.1} K", b.name, b.material, from.label(), to.label(), b.temp)));
+    ev.log.push((
+        time,
+        format!(
+            "{} ({}) {} → {} at {:.1} K",
+            b.name,
+            b.material,
+            from.label(),
+            to.label(),
+            b.temp
+        ),
+    ));
     match to {
         Phase::Liquid => {
             // slump into a puddle of the same volume: quarter height, double width/depth
@@ -688,7 +851,16 @@ mod tests {
     }
 
     fn cube(name: &str, mat: &str, y: f32, env: &Environment) -> Body {
-        Body::new(name, mat, env_of(mat), [0.5, 0.5, 0.5], [0.0, y, 0.0], None, env.temperature, env.pressure)
+        Body::new(
+            name,
+            mat,
+            env_of(mat),
+            [0.5, 0.5, 0.5],
+            [0.0, y, 0.0],
+            None,
+            env.temperature,
+            env.pressure,
+        )
     }
 
     #[test]
@@ -696,11 +868,42 @@ mod tests {
         let e = Environment::earth();
         let g = cube("g", "gold", 1.0, &e);
         assert!((g.mass - 19_300.0).abs() < 1.0);
-        let a = Body::new("a", "aluminum", env_of("aluminum"), [0.05, 0.05, 0.05], [0.0; 3], None, 293.0, e.pressure);
-        assert!((a.mass - 2.7).abs() < 0.01, "10 cm Al cube = 2.7 kg: {}", a.mass);
+        let a = Body::new(
+            "a",
+            "aluminum",
+            env_of("aluminum"),
+            [0.05, 0.05, 0.05],
+            [0.0; 3],
+            None,
+            293.0,
+            e.pressure,
+        );
+        assert!(
+            (a.mass - 2.7).abs() < 0.01,
+            "10 cm Al cube = 2.7 kg: {}",
+            a.mass
+        );
         // water at 20 °C is liquid (997), ice below 0 °C solid (917)
-        let w = Body::new("w", "water", env_of("water"), [0.5; 3], [0.0; 3], None, 293.0, e.pressure);
-        let ice = Body::new("i", "water", env_of("water"), [0.5; 3], [0.0; 3], None, 263.0, e.pressure);
+        let w = Body::new(
+            "w",
+            "water",
+            env_of("water"),
+            [0.5; 3],
+            [0.0; 3],
+            None,
+            293.0,
+            e.pressure,
+        );
+        let ice = Body::new(
+            "i",
+            "water",
+            env_of("water"),
+            [0.5; 3],
+            [0.0; 3],
+            None,
+            263.0,
+            e.pressure,
+        );
         assert_eq!(w.phase, Phase::Liquid);
         assert_eq!(ice.phase, Phase::Solid);
         assert!((w.mass - 997.0).abs() < 1.0 && (ice.mass - 917.0).abs() < 1.0);
@@ -712,14 +915,30 @@ mod tests {
             let mut a = Arena::new(env.clone());
             a.ground = false;
             a.add(cube("hammer", "iron", 100.0, &env));
-            a.add(Body::new("feather", "graphite", env_of("graphite"), [0.1, 0.001, 0.02], [3.0, 100.0, 0.0], None, env.temperature, env.pressure));
+            a.add(Body::new(
+                "feather",
+                "graphite",
+                env_of("graphite"),
+                [0.1, 0.001, 0.02],
+                [3.0, 100.0, 0.0],
+                None,
+                env.temperature,
+                env.pressure,
+            ));
             for _ in 0..480 {
                 a.step();
             }
             let t = a.time as f32;
             let expect = 100.0 - 0.5 * env.gravity * t * t;
             for b in &a.bodies {
-                assert!((b.pos[1] - expect).abs() < 0.02 * (100.0 - expect).max(1.0), "{} {}: {} vs {}", env.name, b.name, b.pos[1], expect);
+                assert!(
+                    (b.pos[1] - expect).abs() < 0.02 * (100.0 - expect).max(1.0),
+                    "{} {}: {} vs {}",
+                    env.name,
+                    b.name,
+                    b.pos[1],
+                    expect
+                );
             }
             // hammer and feather land together without air
             assert!((a.bodies[0].pos[1] - a.bodies[1].pos[1]).abs() < 1e-3);
@@ -732,7 +951,16 @@ mod tests {
         let mut a = Arena::new(env.clone());
         a.ground = false;
         // 10 cm aluminium cube
-        let mut b = Body::new("al", "aluminum", env_of("aluminum"), [0.05; 3], [0.0, 5000.0, 0.0], None, env.temperature, env.pressure);
+        let mut b = Body::new(
+            "al",
+            "aluminum",
+            env_of("aluminum"),
+            [0.05; 3],
+            [0.0, 5000.0, 0.0],
+            None,
+            env.temperature,
+            env.pressure,
+        );
         b.drag_cd = 1.05;
         a.add(b);
         a.exchange = false;
@@ -743,12 +971,26 @@ mod tests {
         let area = 0.01;
         // v_t = sqrt(2 (m g − ρ V g) / (ρ C_d A))
         let vt = (2.0 * (b.mass - 1.225 * b.volume) * G0 / (1.225 * 1.05 * area)).sqrt();
-        assert!((-b.vel[1] - vt).abs() / vt < 0.01, "{} vs {}", -b.vel[1], vt);
+        assert!(
+            (-b.vel[1] - vt).abs() / vt < 0.01,
+            "{} vs {}",
+            -b.vel[1],
+            vt
+        );
         // feather vs hammer in air: the light, broad one is slower
         let mut a = Arena::new(env.clone());
         a.ground = false;
         a.add(cube("hammer", "iron", 100.0, &env));
-        a.add(Body::new("feather", "graphite", env_of("graphite"), [0.1, 0.001, 0.02], [3.0, 100.0, 0.0], None, env.temperature, env.pressure));
+        a.add(Body::new(
+            "feather",
+            "graphite",
+            env_of("graphite"),
+            [0.1, 0.001, 0.02],
+            [3.0, 100.0, 0.0],
+            None,
+            env.temperature,
+            env.pressure,
+        ));
         for _ in 0..480 {
             a.step();
         }
@@ -762,11 +1004,24 @@ mod tests {
         let mut a = Arena::new(env.clone());
         a.ground = false;
         a.exchange = false;
-        a.add(Body::new("sheet", "graphite", env_of("graphite"), [0.001, 0.1, 0.1], [0.0, 100.0, 0.0], None, env.temperature, env.pressure));
+        a.add(Body::new(
+            "sheet",
+            "graphite",
+            env_of("graphite"),
+            [0.001, 0.1, 0.1],
+            [0.0, 100.0, 0.0],
+            None,
+            env.temperature,
+            env.pressure,
+        ));
         for _ in 0..240 {
             a.step();
         }
-        assert!(a.bodies[0].vel[0] > 1.0, "wind accelerates it downwind: {:?}", a.bodies[0].vel);
+        assert!(
+            a.bodies[0].vel[0] > 1.0,
+            "wind accelerates it downwind: {:?}",
+            a.bodies[0].vel
+        );
         // a body less dense than air rises (helium-like)
         let mut light = env_of("water");
         light.density = Some(0.18);
@@ -776,7 +1031,16 @@ mod tests {
         let mut a = Arena::new(Environment::earth());
         a.ground = false;
         a.exchange = false;
-        a.add(Body::new("balloon", "helium-ish", light, [0.5; 3], [0.0, 1.0, 0.0], None, 288.0, 101_325.0));
+        a.add(Body::new(
+            "balloon",
+            "helium-ish",
+            light,
+            [0.5; 3],
+            [0.0, 1.0, 0.0],
+            None,
+            288.0,
+            101_325.0,
+        ));
         for _ in 0..240 {
             a.step();
         }
@@ -807,7 +1071,12 @@ mod tests {
             }
         }
         let expect = 2.0 * 0.49;
-        assert!((peak_after - expect).abs() < 0.03, "{} vs {}", peak_after, expect);
+        assert!(
+            (peak_after - expect).abs() < 0.03,
+            "{} vs {}",
+            peak_after,
+            expect
+        );
     }
 
     #[test]
@@ -824,7 +1093,12 @@ mod tests {
         let mu = env_of("iron").friction_kinetic;
         let expect = 16.0 / (2.0 * mu * G0);
         let got = a.bodies[0].pos[0];
-        assert!((got - expect).abs() / expect < 0.03, "{} vs {}", got, expect);
+        assert!(
+            (got - expect).abs() / expect < 0.03,
+            "{} vs {}",
+            got,
+            expect
+        );
         assert!(a.bodies[0].vel[0].abs() < 1e-4);
     }
 
@@ -848,7 +1122,10 @@ mod tests {
         }
         let p1: f32 = a.bodies.iter().map(|b| b.mass * b.vel[0]).sum();
         assert!((p1 - p0).abs() / p0.abs() < 1e-4, "{} {}", p0, p1);
-        assert!(a.bodies[0].vel[0] < 3.0 && a.bodies[1].vel[0] > -1.0, "they bounced");
+        assert!(
+            a.bodies[0].vel[0] < 3.0 && a.bodies[1].vel[0] > -1.0,
+            "they bounced"
+        );
         // relative speed scaled by e = √(e₁e₂)
         let e = (env_of("copper").restitution * env_of("aluminum").restitution).sqrt();
         let rel = a.bodies[1].vel[0] - a.bodies[0].vel[0];
@@ -861,7 +1138,16 @@ mod tests {
         let env = Environment::earth();
         let mut a = Arena::new(env.clone());
         a.exchange = false;
-        let mut ice = Body::new("ice", "water", env_of("water"), [0.05, 0.05, 0.05], [0.0, 0.05, 0.0], None, 263.15, env.pressure);
+        let mut ice = Body::new(
+            "ice",
+            "water",
+            env_of("water"),
+            [0.05, 0.05, 0.05],
+            [0.0, 0.05, 0.0],
+            None,
+            263.15,
+            env.pressure,
+        );
         ice.heater = 1000.0;
         let m = ice.mass;
         a.add(ice);
@@ -884,12 +1170,35 @@ mod tests {
         }
         let melted_at = melted_at.expect("melted");
         let boiled_at = boiled_at.expect("boiled");
-        assert!((melted_at - (t_warm + t_melt)).abs() < 0.5, "melt {} vs {}", melted_at, t_warm + t_melt);
+        assert!(
+            (melted_at - (t_warm + t_melt)).abs() < 0.5,
+            "melt {} vs {}",
+            melted_at,
+            t_warm + t_melt
+        );
         let total = t_warm + t_melt + t_heat + t_boil;
-        assert!((boiled_at - total).abs() / total < 0.002, "boil {} vs {}", boiled_at, total);
-        assert!(a.events.log.iter().any(|(_, s)| s.contains("solid → liquid")));
+        assert!(
+            (boiled_at - total).abs() / total < 0.002,
+            "boil {} vs {}",
+            boiled_at,
+            total
+        );
+        assert!(a
+            .events
+            .log
+            .iter()
+            .any(|(_, s)| s.contains("solid → liquid")));
         // a liquid puddle is flatter and wider
-        let mut b2 = Body::new("w", "water", env_of("water"), [0.05; 3], [0.0, 0.05, 0.0], None, 272.0, env.pressure);
+        let mut b2 = Body::new(
+            "w",
+            "water",
+            env_of("water"),
+            [0.05; 3],
+            [0.0, 0.05, 0.0],
+            None,
+            272.0,
+            env.pressure,
+        );
         let mut ev = Events::default();
         apply_heat(&mut b2, 1e6, env.pressure, 0.0, &mut ev);
         assert_eq!(b2.phase, Phase::Liquid);
@@ -900,7 +1209,16 @@ mod tests {
     fn cools_by_convection_and_radiation_toward_ambient() {
         let env = Environment::earth();
         let mut a = Arena::new(env.clone());
-        a.add(Body::new("hot", "copper", env_of("copper"), [0.05; 3], [0.0, 0.05, 0.0], None, 600.0, env.pressure));
+        a.add(Body::new(
+            "hot",
+            "copper",
+            env_of("copper"),
+            [0.05; 3],
+            [0.0, 0.05, 0.0],
+            None,
+            600.0,
+            env.pressure,
+        ));
         let t0 = a.bodies[0].temp;
         for _ in 0..240 * 60 {
             a.step();
@@ -909,16 +1227,40 @@ mod tests {
         assert!(t1 < t0 && t1 > env.temperature as f64, "{} → {}", t0, t1);
         // exact first step: dT = (h A ΔT + εσA(T∞⁴−T⁴)) dt / (m c)
         let mut a = Arena::new(env.clone());
-        a.add(Body::new("hot", "copper", env_of("copper"), [0.05; 3], [0.0, 0.05, 0.0], None, 600.0, env.pressure));
+        a.add(Body::new(
+            "hot",
+            "copper",
+            env_of("copper"),
+            [0.05; 3],
+            [0.0, 0.05, 0.0],
+            None,
+            600.0,
+            env.pressure,
+        ));
         a.step();
         let b = &a.bodies[0];
         let area = 0.06f64;
-        let q = 10.0 * area * (288.15 - 600.0) + 0.04 * SIGMA * area * (288.15f64.powi(4) - 600f64.powi(4));
+        let q = 10.0 * area * (288.15 - 600.0)
+            + 0.04 * SIGMA * area * (288.15f64.powi(4) - 600f64.powi(4));
         let dt_expect = q * DT as f64 / (b.mass as f64 * 385.0);
-        assert!(((b.temp as f64 - 600.0) - dt_expect).abs() < 1e-4, "{} vs {}", b.temp - 600.0, dt_expect);
+        assert!(
+            ((b.temp - 600.0) - dt_expect).abs() < 1e-4,
+            "{} vs {}",
+            b.temp - 600.0,
+            dt_expect
+        );
         // in vacuum there is no convection, only radiation: cools slower
         let mut v = Arena::new(Environment::vacuum());
-        v.add(Body::new("hot", "copper", env_of("copper"), [0.05; 3], [0.0, 0.05, 0.0], None, 600.0, 0.0));
+        v.add(Body::new(
+            "hot",
+            "copper",
+            env_of("copper"),
+            [0.05; 3],
+            [0.0, 0.05, 0.0],
+            None,
+            600.0,
+            0.0,
+        ));
         for _ in 0..240 * 60 {
             v.step();
         }
@@ -938,9 +1280,18 @@ mod tests {
             a.step();
             max_e = max_e.max(a.total_kinetic() + a.total_potential());
         }
-        assert!(max_e <= e0 * 1.001 + 1.0, "mechanical energy never increases: {} > {}", max_e, e0);
+        assert!(
+            max_e <= e0 * 1.001 + 1.0,
+            "mechanical energy never increases: {} > {}",
+            max_e,
+            e0
+        );
         let top = a.body("top").unwrap();
-        assert!((top.pos[1] - 1.5).abs() < 0.02, "rests on the bottom cube: {}", top.pos[1]);
+        assert!(
+            (top.pos[1] - 1.5).abs() < 0.02,
+            "rests on the bottom cube: {}",
+            top.pos[1]
+        );
         assert!(top.vel[1].abs() < 0.05);
     }
 
@@ -948,7 +1299,16 @@ mod tests {
     fn scale_of(a: &Arena) -> f64 {
         let e = a.energy();
         let l = &a.ledger;
-        [e.kinetic, e.potential.abs(), l.heater_in.abs(), l.exchange_in.abs(), l.drag_work.abs(), l.dissipated].into_iter().fold(1.0, f64::max)
+        [
+            e.kinetic,
+            e.potential.abs(),
+            l.heater_in.abs(),
+            l.exchange_in.abs(),
+            l.drag_work.abs(),
+            l.dissipated,
+        ]
+        .into_iter()
+        .fold(1.0, f64::max)
     }
 
     #[test]
@@ -959,7 +1319,16 @@ mod tests {
         let mut a = Arena::new(env.clone());
         a.add(cube("bottom", "iron", 0.5, &env));
         a.add(cube("top", "copper", 3.0, &env));
-        let mut ice = Body::new("ice", "water", env_of("water"), [0.1; 3], [3.0, 2.0, 0.0], None, 268.15, env.pressure);
+        let mut ice = Body::new(
+            "ice",
+            "water",
+            env_of("water"),
+            [0.1; 3],
+            [3.0, 2.0, 0.0],
+            None,
+            268.15,
+            env.pressure,
+        );
         ice.heater = 300_000.0;
         a.add(ice);
         let mut worst = 0.0f64;
@@ -967,8 +1336,15 @@ mod tests {
             a.step();
             worst = worst.max(a.energy_residual().abs() / scale_of(&a));
         }
-        assert!(a.body("ice").unwrap().phase == Phase::Liquid, "the ice melted");
-        assert!(a.ledger.dissipated > 1000.0, "impacts made heat: {}", a.ledger.dissipated);
+        assert!(
+            a.body("ice").unwrap().phase == Phase::Liquid,
+            "the ice melted"
+        );
+        assert!(
+            a.ledger.dissipated > 1000.0,
+            "impacts made heat: {}",
+            a.ledger.dissipated
+        );
         assert!(a.ledger.drag_work < 0.0 && a.ledger.exchange_in != 0.0);
         // conserved up to f32 position/velocity rounding (m·g·δy with
         // δy ≈ 1e-7 m per step): ~1e-6 of the largest term
@@ -992,8 +1368,16 @@ mod tests {
         let b = &a.bodies[0];
         let expect = G0 as f64 * 10.0 / b.specific_heat();
         assert!(b.vel[1].abs() < 1e-3);
-        assert!(((b.temp - t0) - expect).abs() / expect < 1e-3, "ΔT {} vs {}", b.temp - t0, expect);
-        assert!((a.ledger.dissipated - b.mass as f64 * G0 as f64 * 10.0).abs() / a.ledger.dissipated < 1e-3);
+        assert!(
+            ((b.temp - t0) - expect).abs() / expect < 1e-3,
+            "ΔT {} vs {}",
+            b.temp - t0,
+            expect
+        );
+        assert!(
+            (a.ledger.dissipated - b.mass as f64 * G0 as f64 * 10.0).abs() / a.ledger.dissipated
+                < 1e-3
+        );
     }
 
     #[test]
@@ -1005,8 +1389,26 @@ mod tests {
         a.ground = false;
         a.exchange = false;
         let h = 0.05;
-        let mut hot = Body::new("hot", "copper", env_of("copper"), [h; 3], [-h, 0.0, 0.0], None, 400.0, 0.0);
-        let mut cold = Body::new("cold", "copper", env_of("copper"), [h; 3], [h, 0.0, 0.0], None, 300.0, 0.0);
+        let mut hot = Body::new(
+            "hot",
+            "copper",
+            env_of("copper"),
+            [h; 3],
+            [-h, 0.0, 0.0],
+            None,
+            400.0,
+            0.0,
+        );
+        let mut cold = Body::new(
+            "cold",
+            "copper",
+            env_of("copper"),
+            [h; 3],
+            [h, 0.0, 0.0],
+            None,
+            300.0,
+            0.0,
+        );
         hot.fixed = true;
         cold.fixed = true;
         a.add(hot);
@@ -1022,7 +1424,12 @@ mod tests {
         }
         let dt_now = a.bodies[0].temp - a.bodies[1].temp;
         let expect = 100.0 * (-(a.time) / tau).exp();
-        assert!((dt_now - expect).abs() < 1e-6 * 100.0 + 1e-6, "{} vs {}", dt_now, expect);
+        assert!(
+            (dt_now - expect).abs() < 1e-6 * 100.0 + 1e-6,
+            "{} vs {}",
+            dt_now,
+            expect
+        );
         // the mean temperature is unchanged and nothing is lost
         assert!(((a.bodies[0].temp + a.bodies[1].temp) / 2.0 - 350.0).abs() < 1e-6);
         assert!(a.energy_residual().abs() < 1e-3, "{}", a.energy_residual());
@@ -1050,4 +1457,3 @@ mod tests {
         assert!(rel < 1e-4, "{}", rel);
     }
 }
-

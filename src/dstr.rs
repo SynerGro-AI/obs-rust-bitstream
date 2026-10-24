@@ -17,7 +17,9 @@ impl Dstr {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self { data: bytes.to_vec() }
+        Self {
+            data: bytes.to_vec(),
+        }
     }
 
     /// Safe replace. Empty `find` is a no-op (original loops forever).

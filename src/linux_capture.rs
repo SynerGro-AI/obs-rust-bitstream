@@ -152,7 +152,10 @@ impl LinuxCapture {
         };
         let rc = unsafe { libc::ioctl(fd, VIDIOC_REQBUFS, &mut req) };
         if rc != 0 || req.count == 0 {
-            return Err(format!("VIDIOC_REQBUFS: {}", std::io::Error::last_os_error()));
+            return Err(format!(
+                "VIDIOC_REQBUFS: {}",
+                std::io::Error::last_os_error()
+            ));
         }
 
         // Map each buffer and queue it.
@@ -164,7 +167,10 @@ impl LinuxCapture {
                 bytesused: 0,
                 flags: 0,
                 field: 0,
-                timestamp: libc::timeval { tv_sec: 0, tv_usec: 0 },
+                timestamp: libc::timeval {
+                    tv_sec: 0,
+                    tv_usec: 0,
+                },
                 timecode: [0; 16],
                 sequence: 0,
                 memory: V4L2_MEMORY_MMAP,
@@ -175,7 +181,11 @@ impl LinuxCapture {
             };
             let rc = unsafe { libc::ioctl(fd, VIDIOC_QUERYBUF, &mut buf) };
             if rc != 0 {
-                return Err(format!("VIDIOC_QUERYBUF {}: {}", i, std::io::Error::last_os_error()));
+                return Err(format!(
+                    "VIDIOC_QUERYBUF {}: {}",
+                    i,
+                    std::io::Error::last_os_error()
+                ));
             }
             let ptr = unsafe {
                 libc::mmap(
@@ -193,7 +203,11 @@ impl LinuxCapture {
             buffers.push((ptr as *mut u8, buf.length as usize));
             let rc = unsafe { libc::ioctl(fd, VIDIOC_QBUF, &mut buf) };
             if rc != 0 {
-                return Err(format!("VIDIOC_QBUF {}: {}", i, std::io::Error::last_os_error()));
+                return Err(format!(
+                    "VIDIOC_QBUF {}: {}",
+                    i,
+                    std::io::Error::last_os_error()
+                ));
             }
         }
 
@@ -201,7 +215,10 @@ impl LinuxCapture {
         let mut typ = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         let rc = unsafe { libc::ioctl(fd, VIDIOC_STREAMON, &mut typ) };
         if rc != 0 {
-            return Err(format!("VIDIOC_STREAMON: {}", std::io::Error::last_os_error()));
+            return Err(format!(
+                "VIDIOC_STREAMON: {}",
+                std::io::Error::last_os_error()
+            ));
         }
 
         Ok(Self {
@@ -230,7 +247,10 @@ impl crate::capture::Capture for LinuxCapture {
             bytesused: 0,
             flags: 0,
             field: 0,
-            timestamp: libc::timeval { tv_sec: 0, tv_usec: 0 },
+            timestamp: libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            },
             timecode: [0; 16],
             sequence: 0,
             memory: V4L2_MEMORY_MMAP,

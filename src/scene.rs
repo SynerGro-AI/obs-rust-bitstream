@@ -36,7 +36,11 @@ impl Scene {
 
     /// Remember which audio source this scene uses.
     pub fn set_audio(&mut self, name: &str) {
-        self.audio = if name.is_empty() { None } else { Some(name.to_string()) };
+        self.audio = if name.is_empty() {
+            None
+        } else {
+            Some(name.to_string())
+        };
     }
 
     /// Audio source name this scene prefers, if any.

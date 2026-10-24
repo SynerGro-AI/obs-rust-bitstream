@@ -7,10 +7,10 @@
 //!
 //! Differential: elapsed time is non-negative and ordered.
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 #[cfg(test)]
 use crate::diff::assert_equal;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Default)]
 pub struct Profiler {
@@ -31,7 +31,10 @@ impl Profiler {
     pub fn end(&mut self, name: &str) -> Option<Duration> {
         let start = self.starts.remove(name)?;
         let delta = start.elapsed();
-        *self.totals.entry(name.to_string()).or_insert(Duration::ZERO) += delta;
+        *self
+            .totals
+            .entry(name.to_string())
+            .or_insert(Duration::ZERO) += delta;
         *self.counts.entry(name.to_string()).or_insert(0) += 1;
         Some(delta)
     }

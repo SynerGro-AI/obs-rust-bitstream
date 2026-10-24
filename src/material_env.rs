@@ -21,6 +21,7 @@ pub const R_GAS: f64 = 8.314_462_618;
 pub const P_ATM: f64 = 101_325.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum Phase {
     Solid,
     Liquid,
@@ -38,6 +39,7 @@ impl Phase {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum Flammability {
     NonFlammable,
     /// Burns when strongly heated / finely divided (e.g. Mg, Al, Fe powders).
@@ -48,6 +50,7 @@ pub enum Flammability {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum Reactivity {
     Inert,
     Low,
@@ -57,6 +60,7 @@ pub enum Reactivity {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct EnvMeta {
     /// g/mol of the formula unit that evaporates (H₂, N₂, O₂, halogens are
     /// diatomic, so twice the atomic mass).
@@ -91,6 +95,7 @@ pub struct EnvMeta {
     pub radioactive: bool,
     pub half_life_s: Option<f64>,
     /// Which values are estimates rather than measurements.
+    #[cfg_attr(feature = "ui", serde(deserialize_with = "crate::serde_static::vec"))]
     pub notes: Vec<&'static str>,
 }
 
@@ -102,13 +107,19 @@ impl EnvMeta {
         if p <= 0.0 {
             return Some(0.0);
         }
-        let Some(lv) = self.latent_vaporization else { return Some(tb as f32) };
+        let Some(lv) = self.latent_vaporization else {
+            return Some(tb as f32);
+        };
         let dh = lv as f64 * self.molar_mass as f64 / 1000.0; // J/mol
         if dh <= 0.0 {
             return Some(tb as f32);
         }
         let inv = 1.0 / tb - R_GAS * (p / P_ATM).ln() / dh;
-        Some(if inv <= 0.0 { f32::INFINITY } else { (1.0 / inv) as f32 })
+        Some(if inv <= 0.0 {
+            f32::INFINITY
+        } else {
+            (1.0 / inv) as f32
+        })
     }
 
     /// Phase at temperature `t` (K) and pressure `p` (Pa).
@@ -139,7 +150,9 @@ impl EnvMeta {
         match phase {
             Phase::Solid => self.density,
             Phase::Liquid => self.density_liquid.or(self.density),
-            Phase::Gas => Some((p * self.molar_mass as f64 / 1000.0 / (R_GAS * t.max(1.0) as f64)) as f32),
+            Phase::Gas => {
+                Some((p * self.molar_mass as f64 / 1000.0 / (R_GAS * t.max(1.0) as f64)) as f32)
+            }
         }
     }
 }
@@ -177,9 +190,15 @@ pub fn element_env(z: u32) -> Option<EnvMeta> {
     notes.push("emissivity, restitution and friction are category estimates");
     let flammability = match e.symbol {
         "P" | "Cs" | "Rb" | "Fr" | "Pu" => Flammability::Pyrophoric,
-        "H" | "C" | "S" | "Li" | "Na" | "K" | "Mg" | "Ca" | "Sr" | "Ba" | "B" | "Si" | "Se" => Flammability::Flammable,
-        "Al" | "Fe" | "Ti" | "Zr" | "Hf" | "Zn" | "Mn" | "U" | "Th" | "Ce" | "La" | "Nd" => Flammability::Combustible,
-        _ if e.category == Category::Lanthanide || e.category == Category::Actinide => Flammability::Combustible,
+        "H" | "C" | "S" | "Li" | "Na" | "K" | "Mg" | "Ca" | "Sr" | "Ba" | "B" | "Si" | "Se" => {
+            Flammability::Flammable
+        }
+        "Al" | "Fe" | "Ti" | "Zr" | "Hf" | "Zn" | "Mn" | "U" | "Th" | "Ce" | "La" | "Nd" => {
+            Flammability::Combustible
+        }
+        _ if e.category == Category::Lanthanide || e.category == Category::Actinide => {
+            Flammability::Combustible
+        }
         _ => Flammability::NonFlammable,
     };
     let reactivity = match e.category {
@@ -187,11 +206,15 @@ pub fn element_env(z: u32) -> Option<EnvMeta> {
         Category::AlkaliMetal => Reactivity::Violent,
         Category::Halogen if e.symbol == "F" => Reactivity::Violent,
         Category::Halogen => Reactivity::High,
-        Category::AlkalineEarthMetal if e.symbol == "Be" || e.symbol == "Mg" => Reactivity::Moderate,
+        Category::AlkalineEarthMetal if e.symbol == "Be" || e.symbol == "Mg" => {
+            Reactivity::Moderate
+        }
         Category::AlkalineEarthMetal => Reactivity::High,
         _ if NOBLE_METALS.contains(&e.symbol) => Reactivity::Inert,
         Category::Lanthanide | Category::Actinide => Reactivity::High,
-        Category::TransitionMetal | Category::PostTransitionMetal | Category::Metalloid => Reactivity::Low,
+        Category::TransitionMetal | Category::PostTransitionMetal | Category::Metalloid => {
+            Reactivity::Low
+        }
         _ if e.symbol == "O" => Reactivity::High,
         _ if e.symbol == "N" => Reactivity::Low,
         _ => Reactivity::Moderate,
@@ -201,7 +224,11 @@ pub fn element_env(z: u32) -> Option<EnvMeta> {
         density,
         density_liquid,
         melting_k: if sublimes { None } else { e.melting_k },
-        boiling_k: if sublimes { e.boiling_k.or(e.melting_k) } else { e.boiling_k },
+        boiling_k: if sublimes {
+            e.boiling_k.or(e.melting_k)
+        } else {
+            e.boiling_k
+        },
         sublimes,
         specific_heat: p.specific_heat.map(|c| c * 1000.0),
         thermal_conductivity: p.thermal_conductivity,
@@ -238,10 +265,18 @@ mod tests {
         assert_eq!(env("Hg").phase_at(room, P_ATM), Phase::Liquid);
         assert_eq!(env("Br").phase_at(room, P_ATM), Phase::Liquid);
         assert_eq!(env("O").phase_at(room, P_ATM), Phase::Gas);
-        assert_eq!(env("Ga").phase_at(310.0, P_ATM), Phase::Liquid, "gallium melts in the hand (302.9 K)");
+        assert_eq!(
+            env("Ga").phase_at(310.0, P_ATM),
+            Phase::Liquid,
+            "gallium melts in the hand (302.9 K)"
+        );
         assert_eq!(env("Al").phase_at(933.0, P_ATM), Phase::Solid);
         assert_eq!(env("Al").phase_at(934.0, P_ATM), Phase::Liquid);
-        assert_eq!(env("C").phase_at(3000.0, P_ATM), Phase::Solid, "carbon sublimes, never liquid at 1 atm");
+        assert_eq!(
+            env("C").phase_at(3000.0, P_ATM),
+            Phase::Solid,
+            "carbon sublimes, never liquid at 1 atm"
+        );
     }
 
     #[test]
@@ -261,7 +296,11 @@ mod tests {
         assert!((cu.density.unwrap() - 8960.0).abs() < 40.0);
         assert!((cu.specific_heat.unwrap() - 385.0).abs() < 5.0);
         // Cu heat of fusion 13.26 kJ/mol → ~209 kJ/kg (CRC: 208.7)
-        assert!((cu.latent_fusion.unwrap() - 2.09e5).abs() < 0.06e5, "{:?}", cu.latent_fusion);
+        assert!(
+            (cu.latent_fusion.unwrap() - 2.09e5).abs() < 0.06e5,
+            "{:?}",
+            cu.latent_fusion
+        );
         assert!(!cu.radioactive && cu.reactivity == Reactivity::Low);
         assert_eq!(env("Au").reactivity, Reactivity::Inert);
         assert_eq!(env("Na").reactivity, Reactivity::Violent);

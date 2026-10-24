@@ -32,7 +32,9 @@ impl ToolRouter {
         if let Some(key) = input.last_key() {
             if let Some(name) = Self::hotkey_tool(key) {
                 active.activate(name, ToolSource::Photoshop);
-                return ToolAction::Switched { to: name.to_string() };
+                return ToolAction::Switched {
+                    to: name.to_string(),
+                };
             }
             return ToolAction::Key {
                 tool: active.name().to_string(),

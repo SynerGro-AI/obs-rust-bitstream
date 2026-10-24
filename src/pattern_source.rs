@@ -29,7 +29,11 @@ impl PatternSource {
         if width == 0 || height == 0 {
             return Err(PatternError::ZeroSize);
         }
-        Ok(Self { kind, width, height })
+        Ok(Self {
+            kind,
+            width,
+            height,
+        })
     }
 
     pub fn width(&self) -> u32 {

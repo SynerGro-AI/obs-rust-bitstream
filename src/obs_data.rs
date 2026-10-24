@@ -208,7 +208,11 @@ impl ObsData {
 
 fn unquote(s: &str) -> Option<String> {
     if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
-        Some(s[1..s.len() - 1].replace("\\\"", "\"").replace("\\\\", "\\"))
+        Some(
+            s[1..s.len() - 1]
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\"),
+        )
     } else {
         None
     }
@@ -222,7 +226,9 @@ fn parse_value(s: &str) -> Option<DataValue> {
     } else if s.starts_with('"') {
         unquote(s).map(DataValue::String)
     } else if s.starts_with('{') {
-        ObsData::from_json(s).ok().map(|o| DataValue::Object(Box::new(o)))
+        ObsData::from_json(s)
+            .ok()
+            .map(|o| DataValue::Object(Box::new(o)))
     } else if s.starts_with('[') && s.ends_with(']') {
         let inner = &s[1..s.len() - 1];
         if inner.trim().is_empty() {
@@ -284,7 +290,13 @@ fn value_to_json(v: &DataValue) -> String {
         DataValue::String(s) => format!("\"{}\"", escape_json(s)),
         DataValue::Int(n) => n.to_string(),
         DataValue::Double(n) => n.to_string(),
-        DataValue::Bool(b) => if *b { "true".into() } else { "false".into() },
+        DataValue::Bool(b) => {
+            if *b {
+                "true".into()
+            } else {
+                "false".into()
+            }
+        }
         DataValue::Object(o) => o.to_json(),
         DataValue::Array(a) => {
             let items: Vec<String> = a.iter().map(value_to_json).collect();
@@ -305,7 +317,7 @@ mod tests {
         d.set_bool("visible", true).unwrap();
         assert_eq!(d.get_string("name").unwrap(), "cam");
         assert_eq!(d.get_int("width").unwrap(), 1920);
-        assert_eq!(d.get_bool("visible").unwrap(), true);
+        assert!(d.get_bool("visible").unwrap());
     }
 
     #[test]
@@ -361,7 +373,11 @@ mod tests {
         let mut d = ObsData::new();
         d.set_array(
             "items",
-            vec![DataValue::Int(1), DataValue::Int(2), DataValue::String("a".into())],
+            vec![
+                DataValue::Int(1),
+                DataValue::Int(2),
+                DataValue::String("a".into()),
+            ],
         )
         .unwrap();
         let a = d.get_array("items").unwrap();
@@ -394,7 +410,9 @@ mod tests {
         child.set_int("h", 720).unwrap();
         let mut parent = ObsData::new();
         parent.set_obj("video", child).unwrap();
-        parent.set_array("ids", vec![DataValue::Int(1), DataValue::Int(2)]).unwrap();
+        parent
+            .set_array("ids", vec![DataValue::Int(1), DataValue::Int(2)])
+            .unwrap();
         let json = parent.to_json();
         assert!(json.contains("\"video\":{"));
         assert!(json.contains("\"ids\":[1,2]"));
@@ -409,7 +427,7 @@ mod tests {
         let parsed = ObsData::from_json(&d.to_json()).unwrap();
         assert_eq!(parsed.get_string("name").unwrap(), "cam");
         assert_eq!(parsed.get_int("w").unwrap(), 1280);
-        assert_eq!(parsed.get_bool("on").unwrap(), false);
+        assert!(!parsed.get_bool("on").unwrap());
     }
 
     #[test]
@@ -429,6 +447,6 @@ mod tests {
         base.apply(&patch);
         assert_eq!(base.get_string("name").unwrap(), "new");
         assert_eq!(base.get_int("w").unwrap(), 1280);
-        assert_eq!(base.get_bool("on").unwrap(), true);
+        assert!(base.get_bool("on").unwrap());
     }
 }

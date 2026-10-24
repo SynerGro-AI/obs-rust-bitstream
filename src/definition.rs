@@ -101,7 +101,14 @@ impl Definition {
 
     /// One line: "WxH q=N pixels=N bitrate=N"
     pub fn line(&self) -> String {
-        format!("{}x{} q={:.0} pixels={} bitrate={}", self.width, self.height, self.quality, self.pixels(), self.bitrate_kbps())
+        format!(
+            "{}x{} q={:.0} pixels={} bitrate={}",
+            self.width,
+            self.height,
+            self.quality,
+            self.pixels(),
+            self.bitrate_kbps()
+        )
     }
 }
 

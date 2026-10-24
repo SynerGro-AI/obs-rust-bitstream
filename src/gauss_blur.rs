@@ -35,8 +35,8 @@ mod tests {
     #[test]
     fn differential() {
         let mut f = VideoFrame::new(VideoFormat::Y800, 4, 4).unwrap();
-        f.planes[0][1 * 4 + 1] = 255;
+        f.planes[0][4 + 1] = 255;
         GaussBlur::apply(&mut f, 2).unwrap();
-        assert!(f.planes[0][1 * 4 + 1] < 200);
+        assert!(f.planes[0][4 + 1] < 200);
     }
 }

@@ -10,7 +10,7 @@ started as a Rust port of OBS's `bitstream_reader` (still here as
 A single egui/eframe window with six workspaces, a gold-on-black theme (plus
 a light theme), a custom title bar, collapsible tool sections, a Maya-style
 shelf and a live status bar. Windows is the primary target; it also runs on
-Linux and macOS.
+Linux (the CI tests run there). macOS is untested.
 
 | Mode | What is real today | Stubbed / not built yet |
 |------|--------------------|-------------------------|
@@ -170,8 +170,8 @@ approximate.
   "Online learning: N updates". It is stored in
   `~/.seraphina/studio/mercy_bank.json`.
 * **Provider today: Grok (xAI).** Seraphina.AGI integration, with
-  Seraphina.AGI running as a separate local process, is planned (M4b,
-  proposed; see "Planned (not built)").
+  Seraphina.AGI running as a separate local process, is planned for
+  after v0.2.0 (proposed; see "Planned (not built)").
 * **Seraphina.AGI CLI bridge (optional, today).** If `seraphina`
   (`pip install seraphina-agi`) is on PATH, or set via `SERAPHINA_CLI`, its
   native intents (`remember …`, `recall`, `triad …`, `help`, `version`) are
@@ -364,21 +364,28 @@ and has unit tests. Two tests hold this list to the code:
 
 ### Planned (not built)
 
-Targets are milestones from the fix plan (M4b is the rest of M4 after
-M4a; M5 repo and release; M6 physics; M7+ one mode per milestone), not
-dates. Each item is removed from the code until a real implementation
-lands with tests.
+Dates are targets, not promises, in America/Edmonton time. Milestones
+come from the fix plan: M4b is the rest of M4 after M4a; M5 is repo and
+release; M6 is physics; M7+ is one mode per milestone. Work after the
+v0.2.0 release has no date yet and says "after v0.2.0". Planned items
+stay out of the code until a real implementation lands with tests.
+
+| Milestone | Target |
+|-----------|--------|
+| v1 cleanup and M4 part 2 (M4b) | Wed Oct 28, 2026 (target) |
+| First green CI run, with the CI steps run locally | Sun Nov 1, 2026 (target). The GitHub Actions run happens whenever the organisation's billing lock lifts; it does not unlock automatically |
+| v0.2.0 release | Fri Nov 6, 2026 (target, pending the owner's approval) |
 
 | Item | Target |
 |------|--------|
-| Seraphina.AGI integration: the app talks to Seraphina.AGI as a separate local process. Today the provider is Grok (xAI) through `src/bin/ui/llm.rs`; the only link now is the optional CLI bridge for memory intents | M4b (proposed; not yet in the fix plan) |
-| Seraphina drives every mode, one learning system, chat saved with the project (C1, C4, C5/C6) | M4b |
-| Remove `dist/` binaries and root clutter (G5–G7) | M5 |
-| 64-bit physics, rotating bodies, contact graph (F1–F3) | M6 |
-| Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture (Media Foundation, AVFoundation, V4L2); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | M7+ (Stream) |
-| A Composite effects library: levels, tone curves, hue/saturation, colour balance, drop shadow, inner glow, blur, sharpen, posterize, threshold, crossfade (the old unused modules are deleted; the app's own filters live in `src/bin/ui/`) (E3) | M7+ (Composite) |
-| Microphone capture verified on real hardware on Windows (dshow) | M3 follow-up on your PC |
-| Team features (organisation, invite, roles, presence) | Not scheduled |
+| Seraphina.AGI integration: the app talks to Seraphina.AGI as a separate local process. Today the provider is Grok (xAI) through `src/bin/ui/llm.rs`; the only link now is the optional CLI bridge for memory intents | after v0.2.0 (proposed; not yet in the fix plan) |
+| Seraphina drives every mode, one learning system, chat saved with the project (C1, C4, C5/C6) | M4b: Wed Oct 28, 2026 (target) |
+| Remove `dist/` binaries and root clutter (G5–G7) | after v0.2.0 (M5) |
+| 64-bit physics, rotating bodies, contact graph (F1–F3) | after v0.2.0 (M6) |
+| Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture (Media Foundation, AVFoundation, V4L2); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | after v0.2.0 (M7+, Stream) |
+| A Composite effects library: levels, tone curves, hue/saturation, colour balance, drop shadow, inner glow, blur, sharpen, posterize, threshold, crossfade (the old unused modules are deleted; the app's own filters live in `src/bin/ui/`) (E3) | after v0.2.0 (M7+, Composite) |
+| Microphone capture verified on real hardware on Windows (dshow) | after v0.2.0 (needs a run on a Windows PC with a microphone) |
+| Team features (organisation, invite, roles, presence) | after v0.2.0 |
 
 Removed and not planned, because the app already does the real thing:
 
@@ -420,8 +427,8 @@ cargo test --features ui --bin ui
 
 ## Roadmap
 
-See "Planned (not built)" above. Targets are fix-plan milestones (M4b,
-M5, M6, M7+), not dates.
+See "Planned (not built)" above for the target dates (America/Edmonton)
+and what comes after v0.2.0.
 
 AI-assisted contributions and PRs welcome.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to start.
@@ -436,7 +443,7 @@ GPL-2.0-or-later (matching OBS Studio).
 
 `dist/obs-rust` and `dist/obs-rust-ui` are stale builds of an earlier
 terminal demo and an older UI. They do not match this source; build from
-source instead (see above). They are removed in M5 (G5).
+source instead (see above). They are removed in M5 (G5), after v0.2.0.
 
 ## Windows release
 

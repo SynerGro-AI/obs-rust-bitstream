@@ -147,3 +147,94 @@ fn every_library_module_is_reached_from_a_binary_or_example() {
         "lib modules no binary or example reaches: {unused:?}"
     );
 }
+
+/// Day of the week for a Gregorian date (Sakamoto's method), 0 = Sunday.
+fn weekday(y: i32, m: usize, d: i32) -> usize {
+    const T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let y = if m < 3 { y - 1 } else { y };
+    ((y + y / 4 - y / 100 + y / 400 + T[m - 1] + d) % 7) as usize
+}
+
+/// Every "Ddd Mmm D, YYYY" in `s`, checked: the weekday must match the date
+/// and the date must be labelled "(target".
+fn checked_dates(s: &str) -> Vec<String> {
+    const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let mut out = Vec::new();
+    for (wd, day) in DAYS.iter().enumerate() {
+        for (i, _) in s.match_indices(&format!("{day} ")) {
+            let rest = &s[i + 4..];
+            let Some(m) = MONTHS
+                .iter()
+                .position(|m| rest.starts_with(&format!("{m} ")))
+            else {
+                continue;
+            };
+            let Some((d, rest)) = rest[4..].split_once(", ") else {
+                continue;
+            };
+            let (Ok(d), Ok(y)) = (d.parse::<i32>(), rest.get(..4).unwrap_or("").parse::<i32>())
+            else {
+                continue;
+            };
+            assert_eq!(
+                weekday(y, m + 1, d),
+                wd,
+                "wrong weekday: {}",
+                &s[i..].chars().take(16).collect::<String>()
+            );
+            assert!(
+                rest[4..].starts_with(" (target"),
+                "date not labelled as a target: {}",
+                &s[i..].chars().take(16).collect::<String>()
+            );
+            out.push(format!("{day} {} {d}, {y}", MONTHS[m]));
+        }
+    }
+    out
+}
+
+/// The Planned section carries the agreed target dates, each labelled as a
+/// target with the right weekday, and every other row says "after v0.2.0".
+#[test]
+fn planned_tables_have_target_dates_or_after_v0_2_0() {
+    let readme = include_str!("../README.md");
+    let planned = readme
+        .split("### Planned (not built)")
+        .nth(1)
+        .and_then(|r| r.split("Removed and not planned").next())
+        .expect("README.md has a Planned (not built) section");
+    let rows: Vec<&str> = planned
+        .lines()
+        .filter(|l| {
+            l.starts_with("| ") && !l.starts_with("| Item ") && !l.starts_with("| Milestone ")
+        })
+        .collect();
+    assert!(rows.len() >= 10, "{rows:?}");
+    for r in &rows {
+        let target = r.trim_end_matches('|').rsplit(" | ").next().unwrap_or("");
+        assert!(
+            target.starts_with("after v0.2.0") || !checked_dates(target).is_empty(),
+            "row has neither a target date nor \"after v0.2.0\": {r}"
+        );
+    }
+    let dates = checked_dates(planned);
+    for want in ["Wed Oct 28, 2026", "Sun Nov 1, 2026", "Fri Nov 6, 2026"] {
+        assert!(dates.iter().any(|d| d == want), "missing {want}: {dates:?}");
+    }
+    assert!(planned.contains("America/Edmonton"));
+    assert!(planned.contains("pending the owner's approval"));
+    assert!(planned.contains("does not unlock automatically"));
+    for (name, text) in [
+        ("README.md", readme),
+        ("PLAN.md", include_str!("../PLAN.md")),
+    ] {
+        assert!(
+            !text.contains("not dates"),
+            "{name} still says \"not dates\""
+        );
+        checked_dates(text);
+    }
+}

@@ -21,11 +21,18 @@ behind it.
 The v1 cleanup removed modules that the app and examples never used
 (the `every_library_module_is_reached_from_a_binary_or_example` test
 keeps it that way). They come back only as real implementations, each
-with a test. Targets are fix-plan milestones, not dates; the table in
-README.md ("Planned (not built)") is the list:
+with a test. The tables in README.md ("Planned (not built)") hold the
+target dates (America/Edmonton; targets, not promises):
+
+* v1 cleanup and M4 part 2: Wed Oct 28, 2026 (target).
+* First green CI run, run locally: Sun Nov 1, 2026 (target). The GitHub
+  run waits for the billing lock to lift; it does not unlock by itself.
+* v0.2.0 release: Fri Nov 6, 2026 (target, pending the owner's approval).
+
+Everything below comes after v0.2.0 and has no date yet:
 
 1. Seraphina.AGI as a separate local process (Grok is today's
-   provider): M4b, proposed.
+   provider): proposed.
 2. Remove `dist/` and root clutter: M5.
 3. Physics foundation: M6.
 4. OBS sources, scenes and the rest of Stream (E6): M7+.

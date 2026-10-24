@@ -277,8 +277,13 @@ fn checked_dates(s: &str) -> Vec<String> {
     out
 }
 
+/// The agreed ship targets. README's Planned section and PLAN.md both carry
+/// every one of them.
+const TARGET_DATES: [&str; 3] = ["Wed Oct 28, 2026", "Sun Nov 1, 2026", "Fri Nov 6, 2026"];
+
 /// The Planned section carries the agreed target dates, each labelled as a
 /// target with the right weekday, and every other row says "after v0.2.0".
+/// PLAN.md carries the same dates.
 #[test]
 fn planned_tables_have_target_dates_or_after_v0_2_0() {
     let readme = include_str!("../README.md");
@@ -301,17 +306,20 @@ fn planned_tables_have_target_dates_or_after_v0_2_0() {
             "row has neither a target date nor \"after v0.2.0\": {r}"
         );
     }
-    let dates = checked_dates(planned);
-    for want in ["Wed Oct 28, 2026", "Sun Nov 1, 2026", "Fri Nov 6, 2026"] {
-        assert!(dates.iter().any(|d| d == want), "missing {want}: {dates:?}");
+    let plan = include_str!("../PLAN.md");
+    for (name, text) in [("README.md Planned", planned), ("PLAN.md", plan)] {
+        let dates = checked_dates(text);
+        for want in TARGET_DATES {
+            assert!(
+                dates.iter().any(|d| d == want),
+                "{name} is missing {want}: {dates:?}"
+            );
+        }
     }
     assert!(planned.contains("America/Edmonton"));
     assert!(planned.contains("pending the owner's approval"));
     assert!(planned.contains("does not unlock automatically"));
-    for (name, text) in [
-        ("README.md", readme),
-        ("PLAN.md", include_str!("../PLAN.md")),
-    ] {
+    for (name, text) in [("README.md", readme), ("PLAN.md", plan)] {
         assert!(
             !text.contains("not dates"),
             "{name} still says \"not dates\""

@@ -7,6 +7,14 @@ started as a Rust port of OBS's `bitstream_reader` (still here as
 The GitHub repo is [SynerGro-AI/seraphina-studio](https://github.com/SynerGro-AI/seraphina-studio)
 (formerly `obs-rust-bitstream`, which is still the crate's name).
 
+**Local compute first.** The project's rule is to "use Python scripts
+whenever they are more efficient than spending API credits, and let the
+CPU do the work instead of burning credits", and to prefer local compute
+over paid API calls wherever the CPU can handle it faster or cheaper.
+Paid xAI calls happen only when an xAI key is set and you use chat or
+Grok Imagine. Billed tests are opt-in (`#[ignore]`). See
+"Local compute first" in [PLAN.md](PLAN.md).
+
 ## Desktop app: Seraphina Studio
 
 A single egui/eframe window with six workspaces, a gold-on-black theme (plus
@@ -180,12 +188,14 @@ approximate.
   forwarded to it. Recent `recall` notes are added to the prompt.
 * **Topic backgrounds (planned, not built).** Off by default. When you
   turn it on, the stream background can follow the chat topic (spoken
-  topics come right after, through speech-to-text). Examples: a live ECCC
-  weather radar map of the place being talked about, a previewed and
+  topics come right after, through speech-to-text). Topics are matched locally
+  first; the model is asked only for unclear chat topics, on the chat
+  turn already being made. Real sources come first: a live ECCC weather
+  radar map of the place being talked about, or a previewed and
   licence-checked Wikimedia Commons photo for "sunny" (a beach unless a
-  place is named), or a Grok Imagine image that you approve one at a
-  time ($0.02 each with `grok-imagine-image`). Seraphina can only suggest
-  a background. Changes need a threshold, a cooldown and hysteresis.
+  place is named). A Grok Imagine image is the last resort, and you
+  approve each one ($0.02 each with `grok-imagine-image`). Seraphina can
+  only suggest a background. Changes need a threshold, a cooldown and hysteresis.
   Third-party images carry on-screen credit. "Live" is shown only for
   radar data under 18 minutes old. A failure keeps the current background
   and says why. Spec: "E7: Topic backgrounds" in [PLAN.md](PLAN.md).

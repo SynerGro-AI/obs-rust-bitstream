@@ -5,6 +5,20 @@ animation, streaming and a materials lab, and the tested library
 behind it.
 **Work smarter, not harder.**
 
+## Local compute first (design principle)
+
+The owner's rule: "Use Python scripts whenever they are more efficient
+than spending API credits, and let the CPU do the work instead of
+burning credits. Prefer local compute over paid API calls wherever the
+CPU can handle it faster or cheaper."
+
+* Each spec has a "Paid calls still needed" list. For every paid call
+  it says what the call is for and why the CPU can't do the job.
+* Tests make no paid calls by default. Billed checks are `#[ignore]` and
+  are run by hand, as `live_xai_*` and `live_imagine` already are.
+* Offline tooling, such as fixtures, test values and doc checks, is a
+  local Python script.
+
 ## Where things stand
 
 * The library modules that exist are listed in README.md (the list is
@@ -57,7 +71,8 @@ kind of source, and the background changes only when the topic calls for
 it and a setting allows it.
 
 **Milestone:** E7, its own milestone after v0.2.0 (it builds on Stream
-work, E6). It gets a date once M4b merges. It depends on a compositor
+work, E6). It gets a date once M4b merges. This is the Auditor's
+recommendation (BG-8), pending user confirmation. It depends on a compositor
 layer that does not exist yet, so step 1 below builds that layer, with
 its own tests, before anything else.
 
@@ -133,7 +148,8 @@ or an image you pick, before any topic logic.
 ### Suggesting is not applying: two separate names
 
 * **`suggest_studio_background(topic, kind, place, confidence)`** is the
-  AI's only tool. It is a suggestion: it feeds the threshold,
+  AI's only tool, offered on an existing chat turn only when the local
+  matcher can't settle the topic. It is a suggestion: it feeds the threshold,
   hysteresis and cooldown logic and changes nothing by itself. `kind` is
   `live_weather`, `photo`, `generated` or `none`. `confidence` is the
   model's own number. It is uncalibrated, so the README makes no
@@ -145,33 +161,63 @@ or an image you pick, before any topic logic.
   fetched, licence-checked and cached, so applying it is synchronous and
   one undo step. A failed fetch never reaches it.
 
-### Topic detection
+### Topic detection: local first, the model only when it's unclear
 
-* **Chat text (first):** the model that already answers the chat turn
-  may call `suggest_studio_background`, so there is no extra call.
-* **Speech (right after, decided):** the REST endpoint `POST
-  https://api.x.ai/v1/stt` ($0.10 per hour of audio, model
-  `grok-voice-transcribe-2.0`; prices checked on docs.x.ai). It does
-  not use the $0.20/h websocket stream.
-  * A second ffmpeg reads the same microphone as the output settings
-    (`dshow` on Windows, `pulse` on Linux) and writes 30 s WAV chunks
-    (16 kHz mono).
-  * Each chunk is sent as multipart over the existing `ureq`, so no new
-    crate is needed.
-  * Each 30 s of transcript gets one small classification chat call that
-    returns the same fields as the tool. That is about 120 calls per
-    hour, and the cost shown before you turn speech on includes both the
-    audio and those calls.
-  * It is opt-in, shows "Transcribing your mic" while it runs, and is
-    billed through the existing meter. No audio is stored, and the
-    transcript is kept in memory for 2 minutes only.
-  * A 30 s delay is well inside the 120 s cooldown.
-* There are no keyword lists. If no model is configured, the feature
-  says so and stays off.
+**Local first** (no model, no network, no cost):
+
+* Every chat message, and every speech transcript window, first goes
+  through a local matcher.
+* **Places:** the offline GeoNames lookup (see Location) finds the place
+  names.
+* **Topics:** a small table that ships with the app maps clear words to
+  a kind. For example, "weather", "rain", "snow", "storm" and "radar"
+  map to `live_weather`, and "sunny", "beach" and "summer" map to
+  `photo` (beach).
+* **A clear case** is exactly one topic-table kind and at most one place
+  that resolves without ambiguity. A clear case becomes a suggestion at
+  once, with confidence 1.0, and still goes through the agreement,
+  hysteresis and cooldown rules below.
+* The table is a constant in one file, and tests check it.
+
+**The model only when it's ambiguous, and only on a call you are
+already making:**
+
+* For chat text, the chat model already answering the turn is offered
+  `suggest_studio_background`, but only when the local matcher found a
+  possible topic it couldn't settle. That is two kinds in the table, an
+  ambiguous place, or a topic word with no table entry.
+* The tool rides on that existing turn. Background detection never makes
+  a separate model call.
+* For speech, there is no chat turn to ride on, so speech uses the local
+  matcher only. An unclear speech window changes nothing. In Ask me mode
+  it can show a card with the candidates for you to pick. There is no
+  per-window classification call.
+
+**Speech (right after chat, decided):** the REST endpoint `POST
+https://api.x.ai/v1/stt` ($0.10 per hour of audio, model
+`grok-voice-transcribe-2.0`; prices checked on docs.x.ai). It does not
+use the $0.20/h websocket stream.
+
+* A second ffmpeg reads the same microphone as the output settings
+  (`dshow` on Windows, `pulse` on Linux) and writes 30 s WAV chunks
+  (16 kHz mono).
+* Each chunk is sent as multipart over the existing `ureq`, so no new
+  crate is needed.
+* The cost shown before you turn speech on is the audio only, $0.10 per
+  hour. There are no extra classification calls.
+* It is opt-in, shows "Transcribing your mic" while it runs, and is
+  billed through the existing meter. No audio is stored, and the
+  transcript is kept in memory for 2 minutes only.
+* A 30 s delay is well inside the 120 s cooldown.
+
+**Without an xAI key,** chat-text topics still work for the clear cases
+through the local matcher. Unclear cases and speech are off, and the
+settings say why.
 
 ### When the background changes
 
-* **Threshold:** a suggestion counts only if `confidence ≥ 0.75`.
+* **Threshold:** a model suggestion counts only if `confidence ≥ 0.75`.
+  A clear local match counts as 1.0.
 * **Agreement:** the same `kind` and resolved place in two consecutive
   suggestions.
 * **Hysteresis:** the new topic must beat the current one's confidence by
@@ -391,6 +437,44 @@ per-site terms check.
 * A failed attempt counts toward the cooldown, with one retry after 60
   s.
 
+### Local compute first, and the paid calls still needed
+
+**The order of sources:** a real map or photo always comes before a
+generated one.
+
+1. **Live radar and the map:** free ECCC and OSM fetches. Stitching,
+   drawing and compositing are done locally with the `image` crate.
+2. **A curated Commons photo:** a free fetch, then local scaling,
+   cropping and drawing of the credit.
+3. **Grok Imagine:** only when no licensed real image fits, or when you
+   pick Generated yourself. Each image needs your approval on the Run
+   card.
+
+**Done on your own CPU:**
+
+* the topic and place matching;
+* the GeoNames lookup;
+* the gating rules;
+* the radar time and coverage checks;
+* tile stitching, compositing and the attribution strip;
+* the Commons filters and the credit line.
+
+**Tests:** no test makes a paid call by default. The only billed test,
+`xai_stt_live_transcribes_a_recorded_wav`, is `#[ignore]` and run by
+hand. The other network tests are free (GeoMet, OSM, Commons) and are
+also skipped by default.
+
+**Paid calls still needed:**
+
+| Paid call | What it is for | Why the CPU can't do it (today) |
+|---|---|---|
+| xAI speech-to-text, `POST /v1/stt`, $0.10 per hour of audio | Turning your mic audio into text, so spoken topics can be matched locally | The app ships no local speech model. A local engine (for example whisper.cpp) could do this on a fast enough PC, at the cost of a model download of hundreds of MB and CPU or GPU time during a stream. It is worth measuring later; the owner chose REST speech for now. |
+| Grok Imagine, `grok-imagine-image`, $0.02 per image | A background image when no licensed real photo or map fits | Making a new picture needs a large image model and usually a GPU, which the target PCs may not have. It is the last resort, and every image needs approval. |
+| The chat turn you already make (no new call) | Settling unclear topics with `suggest_studio_background` | Understanding free text that the topic table doesn't cover needs a language model. It rides on the existing turn and adds only the tool's schema and arguments, a few hundred tokens. |
+
+GeoMet, the OSM tiles and Commons are free network calls, not paid
+ones.
+
 ### Keys
 
 * v1 sources need no key (GeoMet, OSM tiles, Commons, offline
@@ -473,6 +557,16 @@ recorded real responses):
 * `generated_background_is_cached_per_prompt`
 * `keys_never_reach_project_settings_chat_or_logs`
 
+**Local first:**
+
+* `clear_topic_is_matched_locally_without_the_model`
+* `suggest_tool_is_offered_only_when_the_local_match_is_unclear`
+* `background_detection_never_makes_its_own_model_call`: a real local
+  HTTP listener standing in as the API base counts exactly one request
+  per chat turn.
+* `speech_windows_make_no_classification_call`
+* `real_sources_are_tried_before_imagine`
+
 **Speech:** `stt_fixture_transcript_feeds_topic_detection` (a recorded
 real response from xAI's speech-to-text endpoint) and
 `stt_chunk_is_a_valid_30_s_wav`.
@@ -509,6 +603,7 @@ pending confirmation. Still to settle:
 - Fix the bugs in the safe path
 - Delete before you add: no placeholder modules
 - Every README claim is backed by a test or a measurement
+- Local compute first: the CPU and local Python scripts before paid API calls
 
 ## How to contribute
 Clone, run `cargo test --lib` and `cargo test --bin ui`,

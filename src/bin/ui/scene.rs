@@ -734,6 +734,11 @@ impl SceneState {
             C::TimelinePlay { .. } | C::TimelineScrub { .. } => {
                 return timeline::apply(&mut self.clock, cmd)
             }
+            C::SceneVisibility { object, visible } => self.find(object.as_deref()).map(|i| {
+                let o = &mut self.objs[i];
+                o.visible = visible.unwrap_or(!o.visible);
+                format!("{} {}", if o.visible { "showed" } else { "hid" }, o.name)
+            }),
             C::SceneDelete { object } => self.find(object.as_deref()).map(|i| {
                 self.selected = Some(i);
                 let n = self.objs[i].name.clone();
@@ -1750,7 +1755,10 @@ impl SceneState {
                     });
             }
             if let Some(i) = vis {
-                self.objs[i].visible = !self.objs[i].visible;
+                bus.push(AppCommand::SceneVisibility {
+                    object: Some(self.objs[i].name.clone()),
+                    visible: None,
+                });
             }
             if let Some(i) = pick {
                 bus.push(AppCommand::SceneSelect {

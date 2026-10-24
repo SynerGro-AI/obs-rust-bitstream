@@ -2,8 +2,8 @@
 //! The real ffmpeg record / live output card lives in `output.rs`.
 
 use crate::commands::AppCommand;
+use crate::resolve_asset;
 use crate::theme::{self, Palette, R_SM, SP_MD, SP_SM, SP_XS};
-use crate::{resolve_asset, ToastKind, Toasts};
 use eframe::egui::{self, Color32, CornerRadius, Stroke, Vec2};
 use egui_phosphor::regular as ic;
 use obs_rust_bitstream::stream_inspect::{sample_stream, to_binary, CounterMode, StreamInspector};
@@ -36,33 +36,25 @@ impl StreamState {
         }
     }
 
-    pub fn open(&mut self, toasts: &mut Toasts) {
-        let path = self.path.trim().to_string();
-        if path.is_empty() {
-            toasts.push(ToastKind::Error, "Enter a file path to open.");
-            return;
-        }
-        match std::fs::read(resolve_asset(&path)) {
-            Ok(d) if d.is_empty() => toasts.push(ToastKind::Error, &format!("{} is empty.", path)),
-            Ok(d) => {
-                let n = d.len();
-                self.insp = StreamInspector::new(d, self.insp.mode());
-                self.source = path.clone();
-                self.follow = true;
-                toasts.push(
-                    ToastKind::Success,
-                    &format!("Loaded {} ({} bytes)", path, n),
-                );
-            }
-            Err(e) => toasts.push(ToastKind::Error, &format!("Couldn't open {}: {}", path, e)),
-        }
-    }
-
-    pub fn load_sample(&mut self, toasts: &mut Toasts) {
-        self.insp = StreamInspector::new(sample_stream(), self.insp.mode());
-        self.source = "Built-in sample (320 bytes)".to_string();
+    /// Load a file, or the built-in sample when `path` is `None`.
+    fn load(&mut self, path: Option<&str>) -> Result<String, String> {
+        let (data, source) = match path.map(str::trim) {
+            None => (sample_stream(), "Built-in sample (320 bytes)".to_string()),
+            Some("") => return Err("enter a file path to open".into()),
+            Some(p) => match std::fs::read(resolve_asset(p)) {
+                Ok(d) if d.is_empty() => return Err(format!("{} is empty", p)),
+                Ok(d) => (d, p.to_string()),
+                Err(e) => return Err(format!("couldn't open {}: {}", p, e)),
+            },
+        };
+        let n = data.len();
+        self.insp = StreamInspector::new(data, self.insp.mode());
+        self.source = source;
         self.follow = true;
-        toasts.push(ToastKind::Info, "Loaded the built-in 320-byte sample.");
+        Ok(match path {
+            None => "loaded the built-in 320-byte sample".into(),
+            Some(p) => format!("loaded {} ({} bytes)", p.trim(), n),
+        })
     }
 
     pub fn step(&mut self, times: usize) {
@@ -123,6 +115,7 @@ impl StreamState {
                     }
                 ))
             }
+            AppCommand::LoadStream { path } => self.load(path.as_deref()),
             AppCommand::ResetReader => {
                 self.insp.reset();
                 self.follow = true;
@@ -177,7 +170,7 @@ impl StreamState {
 
     // ---- panels -------------------------------------------------------
 
-    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, toasts: &mut Toasts) {
+    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Source", |ui| {
             ui.label(egui::RichText::new(&self.source).color(p.text).strong());
             ui.label(theme::muted(
@@ -193,14 +186,16 @@ impl StreamState {
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             ui.horizontal(|ui| {
                 if ui.add(theme::primary_button(p, "Open")).clicked() || enter {
-                    self.open(toasts);
+                    bus.push(AppCommand::LoadStream {
+                        path: Some(self.path.clone()),
+                    });
                 }
                 if ui
                     .add(theme::toggle_button(p, "Sample", false))
                     .on_hover_text("Load a 320-byte sample that crosses byte 255")
                     .clicked()
                 {
-                    self.load_sample(toasts);
+                    bus.push(AppCommand::LoadStream { path: None });
                 }
             });
             ui.label(theme::muted(

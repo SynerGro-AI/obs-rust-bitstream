@@ -253,6 +253,10 @@ pub enum AppCommand {
     SceneQuadDraw {
         points: Vec<[f32; 3]>,
     },
+    SceneVisibility {
+        object: Option<String>,
+        visible: Option<bool>,
+    },
     SceneShading {
         mode: String,
     },
@@ -366,7 +370,32 @@ pub enum AppCommand {
     },
     SetKeyframe,
     DeleteKeyframe,
+    // ---- animate
+    /// `action`: "new" (blank frame after `frame`), "clear" or "go".
+    AnimFrame {
+        action: String,
+        /// 1-based; omit for the current frame.
+        frame: Option<usize>,
+    },
+    AnimStroke {
+        points: Vec<[f32; 2]>,
+        frame: Option<usize>,
+    },
+    AnimPencil {
+        erase: Option<bool>,
+        color: Option<String>,
+        size: Option<f32>,
+    },
+    AnimSettings {
+        fps: Option<f32>,
+        onion: Option<bool>,
+        onion_range: Option<usize>,
+    },
     // ---- stream
+    /// Load a stream into the inspector: a file, or the built-in sample.
+    LoadStream {
+        path: Option<String>,
+    },
     RunReader {
         width: Option<u32>,
         reads: Option<usize>,
@@ -388,6 +417,13 @@ pub enum AppCommand {
     },
     SetStreamTarget {
         url: String,
+    },
+    SetOutputSettings {
+        width: Option<u32>,
+        height: Option<u32>,
+        fps: Option<u32>,
+        video_kbps: Option<u32>,
+        stream_delay_sec: Option<u32>,
     },
     /// UI only: never exposed as a tool, never logged with its value.
     SetStreamKey {
@@ -454,6 +490,7 @@ impl AppCommand {
         matches!(
             self,
             AppCommand::OpenFile { .. }
+                | AppCommand::LoadStream { path: Some(_) }
                 | AppCommand::SavePsd { .. }
                 | AppCommand::ExportPng { .. }
                 | AppCommand::SaveProject { .. }
@@ -562,7 +599,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "pen_stroke", description: "Stroke the pen path with the brush on the selected layer.", params: obj(json!({}), &[]) },
         ToolSpec { name: "pen_to_selection", description: "Turn the pen path into a selection.", params: obj(json!({}), &[]) },
         ToolSpec { name: "pen_clear", description: "Clear the pen path.", params: obj(json!({}), &[]) },
-        ToolSpec { name: "undo", description: "Undo the last Paint edit.", params: obj(json!({}), &[]) },
+        ToolSpec { name: "undo", description: "Undo the last edit in the current mode (Paint, Animate, Composite, 3D or Materials).", params: obj(json!({}), &[]) },
         ToolSpec { name: "redo", description: "Redo.", params: obj(json!({}), &[]) },
         ToolSpec { name: "zoom", description: "Set Paint zoom.", params: obj(json!({ "percent": n("5-1600"), "fit": b("fit to window") }), &[]) },
         ToolSpec { name: "pan", description: "Pan the Paint view in screen points.", params: obj(json!({ "dx": n("dx"), "dy": n("dy") }), &["dx", "dy"]) },
@@ -584,6 +621,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "scene_bridge", description: "Merge another mesh into this one and bridge their two facing faces with quads.", params: obj(json!({ "object": s("object; omit for selected"), "with": s("other mesh; omit for the previously selected one") }), &[]) },
         ToolSpec { name: "scene_boolean", description: "Boolean of two meshes (the result replaces `object`; `with` is removed).", params: obj(json!({ "op": { "type": "string", "enum": ["union", "difference", "intersection"] }, "object": s("object; omit for selected"), "with": s("other mesh; omit for the previously selected one") }), &["op"]) },
         ToolSpec { name: "scene_quad_draw", description: "Add a quad (4 world-space points) to the quad-draw mesh, welding shared corners.", params: obj(json!({ "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }, "minItems": 4, "maxItems": 4 } }), &["points"]) },
+        ToolSpec { name: "scene_visibility", description: "Show or hide a 3D object (hidden meshes are left out of the physics arena).", params: obj(json!({ "object": s("object name; omit for selected"), "visible": b("omit to toggle") }), &[]) },
         ToolSpec { name: "scene_shading", description: "Viewport display mode.", params: obj(json!({ "mode": { "type": "string", "enum": ["shaded", "wireframe", "shaded_wire"] } }), &["mode"]) },
         ToolSpec { name: "materials_select", description: "Show an element's detail card in the Materials Lab.", params: obj(json!({ "element": s("symbol, name or atomic number") }), &["element"]) },
         ToolSpec { name: "materials_search", description: "Filter the periodic table.", params: obj(json!({ "query": s("symbol, name fragment or atomic number; empty clears") }), &["query"]) },
@@ -613,6 +651,11 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "timeline_scrub", description: "Move the playhead (seconds).", params: obj(json!({ "time": n("seconds") }), &["time"]) },
         ToolSpec { name: "set_keyframe", description: "Key the selected 3D object's Y / composite layer opacity / animate frame at the playhead.", params: obj(json!({}), &[]) },
         ToolSpec { name: "delete_keyframe", description: "Delete the key at the playhead.", params: obj(json!({}), &[]) },
+        ToolSpec { name: "anim_frame", description: "Animate frames: add a blank frame after a frame, clear a frame's drawing, or go to a frame.", params: obj(json!({ "action": { "type": "string", "enum": ["new", "clear", "go"] }, "frame": n("1-based frame; omit for the current frame (required for go)") }), &["action"]) },
+        ToolSpec { name: "anim_stroke", description: "Draw one stroke with the Animate pencil (or eraser) through points on a frame, then show that frame. The frame is 640 × 360.", params: obj(json!({ "points": pts.clone(), "frame": n("1-based frame; omit for the current frame") }), &["points"]) },
+        ToolSpec { name: "anim_pencil", description: "Animate drawing tool: pencil or eraser, colour and size. Any subset.", params: obj(json!({ "erase": b("true = eraser, false = pencil"), "color": s("#RRGGBB"), "size": n("1-60 px") }), &[]) },
+        ToolSpec { name: "anim_settings", description: "Animate playback rate and onion skin. Any subset.", params: obj(json!({ "fps": n("frames per second 1-60"), "onion": b("show neighbouring frames"), "onion_range": n("frames each side 1-3") }), &[]) },
+        ToolSpec { name: "load_stream", description: "Load a stream into the bitstream inspector: a file (user approval required) or, without a path, the built-in 320-byte sample.", params: obj(json!({ "path": s("file path; omit for the sample") }), &[]) },
         ToolSpec { name: "run_reader", description: "Run the bitstream reader over the loaded stream.", params: obj(json!({ "width": n("bits per read 1-16"), "reads": n("number of reads, default 32"), "wrap": b("true = u8 wrapping counter, false = safe usize") }), &[]) },
         ToolSpec { name: "reset_reader", description: "Rewind the bitstream reader.", params: obj(json!({}), &[]) },
         ToolSpec { name: "set_streaming", description: "Go live to the RTMP target from Settings via ffmpeg, or end the stream. Starting needs the user.", params: obj(json!({ "live": b("live") }), &["live"]) },
@@ -620,6 +663,7 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "retry_stream", description: "Reconnect the live stream now (after a dropped connection).", params: obj(json!({}), &[]) },
         ToolSpec { name: "set_output_source", description: "What recording/streaming captures: the canvas, the screen, or a camera (webcam).", params: obj(json!({ "source": { "type": "string", "enum": ["canvas", "screen", "camera"] }, "device": s("camera source: the camera's name or device path; omit to keep the current one (empty = first camera found)") }), &["source"]) },
         ToolSpec { name: "set_stream_target", description: "RTMP server URL (the stream key is set by the user in Settings).", params: obj(json!({ "url": s("rtmp://host/app") }), &["url"]) },
+        ToolSpec { name: "set_output_settings", description: "Recording/streaming quality: frame size, frame rate, video bitrate and stream delay. Any subset; refused while recording or live.", params: obj(json!({ "width": n("64-3840 px"), "height": n("64-2160 px"), "fps": n("1-60"), "video_kbps": n("200-20000"), "stream_delay_sec": n("0-300 s; viewers see the stream this late") }), &[]) },
         ToolSpec { name: "generate_image", description: "Generate an image with Grok Imagine and add it to Paint as a new layer (user approval required; billed per image).", params: obj(json!({ "prompt": s("prompt") }), &["prompt"]) },
         ToolSpec { name: "video_generate", description: "Queue a Grok Imagine video generation (user approval required).", params: obj(json!({ "prompt": s("prompt"), "duration": n("seconds 1-15") }), &["prompt"]) },
         ToolSpec { name: "video_extend", description: "Extend a generated clip (user approval required).", params: obj(json!({ "clip": n("clip index"), "prompt": s("prompt") }), &["clip", "prompt"]) },
@@ -647,7 +691,7 @@ mod tests {
     use super::*;
 
     /// The number of AI tools. README.md and docs/AI_TOOLS.md must agree.
-    const TOOL_COUNT: usize = 101;
+    const TOOL_COUNT: usize = 108;
 
     /// docs/AI_TOOLS.md, generated from tool_specs().
     fn ai_tools_markdown() -> String {
@@ -810,6 +854,12 @@ mod tests {
         }
         .needs_user());
         assert!(!AppCommand::SetStreaming { live: false }.needs_user());
+        // reading a file needs the user; the built-in sample does not
+        assert!(AppCommand::LoadStream {
+            path: Some("x.bin".into())
+        }
+        .needs_user());
+        assert!(!AppCommand::LoadStream { path: None }.needs_user());
         assert!(!AppCommand::Zoom {
             percent: Some(50.0),
             fit: None

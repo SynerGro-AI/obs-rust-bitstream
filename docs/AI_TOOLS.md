@@ -2,7 +2,7 @@
 
 Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --features ui --bin ui ai_tools_doc` checks it. Regenerate with `cargo test --features ui --bin ui -- --ignored regenerate_ai_tools_doc`.
 
-101 tools.
+108 tools.
 
 | Tool | What it does |
 |------|--------------|
@@ -45,7 +45,7 @@ Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --feature
 | `pen_stroke` | Stroke the pen path with the brush on the selected layer. |
 | `pen_to_selection` | Turn the pen path into a selection. |
 | `pen_clear` | Clear the pen path. |
-| `undo` | Undo the last Paint edit. |
+| `undo` | Undo the last edit in the current mode (Paint, Animate, Composite, 3D or Materials). |
 | `redo` | Redo. |
 | `zoom` | Set Paint zoom. |
 | `pan` | Pan the Paint view in screen points. |
@@ -67,6 +67,7 @@ Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --feature
 | `scene_bridge` | Merge another mesh into this one and bridge their two facing faces with quads. |
 | `scene_boolean` | Boolean of two meshes (the result replaces `object`; `with` is removed). |
 | `scene_quad_draw` | Add a quad (4 world-space points) to the quad-draw mesh, welding shared corners. |
+| `scene_visibility` | Show or hide a 3D object (hidden meshes are left out of the physics arena). |
 | `scene_shading` | Viewport display mode. |
 | `materials_select` | Show an element's detail card in the Materials Lab. |
 | `materials_search` | Filter the periodic table. |
@@ -96,6 +97,11 @@ Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --feature
 | `timeline_scrub` | Move the playhead (seconds). |
 | `set_keyframe` | Key the selected 3D object's Y / composite layer opacity / animate frame at the playhead. |
 | `delete_keyframe` | Delete the key at the playhead. |
+| `anim_frame` | Animate frames: add a blank frame after a frame, clear a frame's drawing, or go to a frame. |
+| `anim_stroke` | Draw one stroke with the Animate pencil (or eraser) through points on a frame, then show that frame. The frame is 640 × 360. |
+| `anim_pencil` | Animate drawing tool: pencil or eraser, colour and size. Any subset. |
+| `anim_settings` | Animate playback rate and onion skin. Any subset. |
+| `load_stream` | Load a stream into the bitstream inspector: a file (user approval required) or, without a path, the built-in 320-byte sample. |
 | `run_reader` | Run the bitstream reader over the loaded stream. |
 | `reset_reader` | Rewind the bitstream reader. |
 | `set_streaming` | Go live to the RTMP target from Settings via ffmpeg, or end the stream. Starting needs the user. |
@@ -103,6 +109,7 @@ Generated from `tool_specs()` in `src/bin/ui/commands.rs`; `cargo test --feature
 | `retry_stream` | Reconnect the live stream now (after a dropped connection). |
 | `set_output_source` | What recording/streaming captures: the canvas, the screen, or a camera (webcam). |
 | `set_stream_target` | RTMP server URL (the stream key is set by the user in Settings). |
+| `set_output_settings` | Recording/streaming quality: frame size, frame rate, video bitrate and stream delay. Any subset; refused while recording or live. |
 | `generate_image` | Generate an image with Grok Imagine and add it to Paint as a new layer (user approval required; billed per image). |
 | `video_generate` | Queue a Grok Imagine video generation (user approval required). |
 | `video_extend` | Extend a generated clip (user approval required). |

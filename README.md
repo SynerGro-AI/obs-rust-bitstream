@@ -152,13 +152,20 @@ approximate.
   `AppCommand` (`src/bin/ui/commands.rs`) and goes through `App::dispatch`.
   The AI can only do what a command allows; a few commands, such as
   `set_stream_key`, are UI-only and not offered to it.
-* **Tool calling.** The 101 commands are exposed as JSON-schema tools to an
+* **Tool calling.** The 108 commands are exposed as JSON-schema tools to an
   OpenAI-compatible chat API (list: [docs/AI_TOOLS.md](docs/AI_TOOLS.md)). Calls run through a Triad gate:
   * the call must parse;
-  * file I/O (open, save PSD, export PNG), billed generation (video, image,
+  * file I/O (open, open a stream file, save PSD, export PNG), billed generation (video, image,
     extend, stitch), going live and starting a recording need the user to
     press **Run** on the action card;
   * dispatch must succeed, and failures are reported back to the model.
+* **Every mode.** Seraphina drives Paint, Composite, 3D, Animate (frames,
+  pencil/eraser strokes, colour, size, fps, onion skin), Stream (load the
+  sample or a file, run the reader), Materials, output quality (size, fps,
+  bitrate, stream delay; refused while recording or live) and the project
+  (save/open/new, with approval). The UI buttons for these send the same
+  commands. A test runs one multi-step AI task in every mode. AI undo does
+  not restore Stream reader state, output settings or the Animate pencil.
 * **Multi-step turns.** The results go back to the model, which may call
   more tools: up to 8 tool rounds per turn. Each round is a billed request,
   so the loop also ends on the provider's per-request timeout, on **Stop**
@@ -463,7 +470,7 @@ stay out of the code until a real implementation lands with tests.
 | Item | Target |
 |------|--------|
 | Seraphina.AGI integration: the app talks to Seraphina.AGI as a separate local process. Today the provider is Grok (xAI) through `src/bin/ui/llm.rs`; the only link now is the optional CLI bridge for memory intents | after v0.2.0 (proposed; not yet in the fix plan) |
-| Seraphina drives every mode, one learning system, chat saved with the project (C1, C4, C5/C6) | M4b: Wed Oct 28, 2026 (target) |
+| One learning system shared by every mode (C4) | M4b: Wed Oct 28, 2026 (target) |
 | Remove `dist/` binaries and root clutter (G5–G7) | after v0.2.0 (M5) |
 | 64-bit physics, rotating bodies, contact graph (F1–F3) | after v0.2.0 (M6) |
 | Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture on macOS (AVFoundation; Linux V4L2 and Windows Media Foundation are built, as the Camera output source); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | after v0.2.0 (M7+, Stream) |

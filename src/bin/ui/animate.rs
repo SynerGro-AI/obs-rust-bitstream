@@ -91,11 +91,7 @@ impl AnimState {
         let n = frames.len();
         self.edits += 1;
         self.frames = frames;
-        self.ink = self
-            .frames
-            .iter()
-            .map(|f| f.data.as_chunks::<4>().0.iter().any(|p| p[3] > 0))
-            .collect();
+        self.ink = self.frames.iter().map(has_ink).collect();
         self.texs = vec![None; n];
         self.dirty = vec![true; n];
         self.resize_clock();
@@ -143,8 +139,153 @@ impl AnimState {
                 r
             }
             AppCommand::TimelinePlay { .. } => crate::timeline::apply(&mut self.clock, cmd),
+            AppCommand::AnimFrame { action, frame } => Some(self.frame_cmd(action, *frame, toasts)),
+            AppCommand::AnimStroke { points, frame } => Some(self.stroke(points, *frame)),
+            AppCommand::AnimPencil { erase, color, size } => {
+                Some(self.pencil(*erase, color.as_deref(), *size))
+            }
+            AppCommand::AnimSettings {
+                fps,
+                onion,
+                onion_range,
+            } => Some(self.settings(*fps, *onion, *onion_range)),
             _ => None,
         }
+    }
+
+    /// 0-based index of a 1-based `frame`, or the current frame.
+    fn frame_index(&self, frame: Option<usize>) -> Result<usize, String> {
+        match frame {
+            None => Ok(self.current()),
+            Some(n) if (1..=self.frames.len()).contains(&n) => Ok(n - 1),
+            Some(n) => Err(format!("there is no frame {} (1-{})", n, self.frames.len())),
+        }
+    }
+
+    fn frame_cmd(
+        &mut self,
+        action: &str,
+        frame: Option<usize>,
+        toasts: &mut Toasts,
+    ) -> Result<String, String> {
+        let i = self.frame_index(frame)?;
+        match action.trim().to_ascii_lowercase().as_str() {
+            "new" => {
+                if self.frames.len() >= MAX_FRAMES {
+                    return Err(format!("frame limit reached ({})", MAX_FRAMES));
+                }
+                self.insert(i + 1, Raster::new(W, H), toasts);
+                Ok(format!(
+                    "new blank frame {} of {}",
+                    i + 2,
+                    self.frames.len()
+                ))
+            }
+            "clear" => {
+                self.snapshot();
+                self.frames[i] = Raster::new(W, H);
+                self.ink[i] = false;
+                self.dirty[i] = true;
+                Ok(format!("cleared frame {}", i + 1))
+            }
+            "go" if frame.is_none() => Err("go needs a frame number".into()),
+            "go" => {
+                self.goto(i);
+                Ok(format!("frame {} of {}", i + 1, self.frames.len()))
+            }
+            a => Err(format!("unknown frame action '{}' (new, clear, go)", a)),
+        }
+    }
+
+    fn stroke(&mut self, points: &[[f32; 2]], frame: Option<usize>) -> Result<String, String> {
+        let i = self.frame_index(frame)?;
+        if points.is_empty() {
+            return Err("a stroke needs at least one point".into());
+        }
+        if points.iter().flatten().any(|v| !v.is_finite()) {
+            return Err("stroke points must be numbers".into());
+        }
+        self.snapshot();
+        self.goto(i);
+        self.last_dab = None;
+        for p in points {
+            self.draw_to(i, (p[0], p[1]));
+        }
+        self.last_dab = None;
+        if self.erase {
+            self.ink[i] = has_ink(&self.frames[i]);
+        }
+        Ok(format!(
+            "{} stroke through {} point{} on frame {}",
+            if self.erase { "eraser" } else { "pencil" },
+            points.len(),
+            if points.len() == 1 { "" } else { "s" },
+            i + 1
+        ))
+    }
+
+    fn pencil(
+        &mut self,
+        erase: Option<bool>,
+        color: Option<&str>,
+        size: Option<f32>,
+    ) -> Result<String, String> {
+        let color = match color {
+            Some(c) => Some(
+                crate::commands::parse_hex(c).ok_or_else(|| format!("'{}' is not #RRGGBB", c))?,
+            ),
+            None => None,
+        };
+        if size.is_some_and(|s| !s.is_finite()) {
+            return Err("size must be a number".into());
+        }
+        if let Some(e) = erase {
+            self.erase = e;
+        }
+        if let Some(c) = color {
+            self.brush.color = c;
+        }
+        if let Some(s) = size {
+            self.brush.size = s.clamp(1.0, 60.0);
+        }
+        let [r, g, b] = self.brush.color;
+        Ok(if self.erase {
+            format!("eraser, {:.0} px", self.brush.size)
+        } else {
+            format!(
+                "pencil #{:02x}{:02x}{:02x}, {:.0} px",
+                r, g, b, self.brush.size
+            )
+        })
+    }
+
+    fn settings(
+        &mut self,
+        fps: Option<f32>,
+        onion: Option<bool>,
+        onion_range: Option<usize>,
+    ) -> Result<String, String> {
+        if fps.is_some_and(|f| !f.is_finite()) {
+            return Err("fps must be a number".into());
+        }
+        if let Some(f) = fps {
+            self.set_fps(f);
+        }
+        if let Some(o) = onion {
+            self.onion = o;
+        }
+        if let Some(r) = onion_range {
+            self.onion_range = r.clamp(1, 3);
+        }
+        Ok(format!(
+            "{} fps, onion skin {}",
+            self.fps,
+            if self.onion {
+                format!("on ({} each side)", self.onion_range)
+            } else {
+                "off".into()
+            }
+        ))
     }
 
     pub fn context(&self) -> String {
@@ -189,18 +330,13 @@ impl AnimState {
             return;
         }
         self.snapshot();
-        let ink = r.data.as_chunks::<4>().0.iter().any(|p| p[3] > 0);
+        let ink = has_ink(&r);
         self.frames.insert(at, r);
         self.ink.insert(at, ink);
         self.texs.insert(at, None);
         self.dirty.insert(at, true);
         self.resize_clock();
         self.goto(at);
-    }
-
-    pub fn add_frame(&mut self, toasts: &mut Toasts) {
-        let at = self.current() + 1;
-        self.insert(at, Raster::new(W, H), toasts);
     }
 
     pub fn duplicate(&mut self, toasts: &mut Toasts) {
@@ -224,16 +360,7 @@ impl AnimState {
         self.goto(cur.min(self.frames.len() - 1));
     }
 
-    pub fn clear(&mut self) {
-        self.snapshot();
-        let cur = self.current();
-        self.frames[cur] = Raster::new(W, H);
-        self.ink[cur] = false;
-        self.dirty[cur] = true;
-    }
-
-    pub fn draw_to(&mut self, pt: (f32, f32)) {
-        let cur = self.current();
+    fn draw_to(&mut self, cur: usize, pt: (f32, f32)) {
         let b = self.brush;
         match self.last_dab {
             Some(from) => {
@@ -270,18 +397,18 @@ impl AnimState {
             }
             self.dirty[i] = false;
             if self.erase {
-                self.ink[i] = self.frames[i]
-                    .data
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .any(|p| p[3] > 0);
+                self.ink[i] = has_ink(&self.frames[i]);
             }
         }
         self.texs[i].as_ref().map(|t| t.id())
     }
 
-    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette) {
+    pub fn tools(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
+        let pencil = |erase, color: Option<[u8; 3]>, size| AppCommand::AnimPencil {
+            erase,
+            color: color.map(|[r, g, b]: [u8; 3]| format!("#{:02x}{:02x}{:02x}", r, g, b)),
+            size,
+        };
         theme::card(ui, p, "Tools", |ui| {
             if ui
                 .add_sized(
@@ -295,7 +422,7 @@ impl AnimState {
                 .on_hover_text("B")
                 .clicked()
             {
-                self.erase = false;
+                bus.push(pencil(Some(false), None, None));
             }
             if ui
                 .add_sized(
@@ -309,26 +436,47 @@ impl AnimState {
                 .on_hover_text("E")
                 .clicked()
             {
-                self.erase = true;
+                bus.push(pencil(Some(true), None, None));
             }
         });
         theme::card(ui, p, "Pencil", |ui| {
             ui.horizontal(|ui| {
                 ui.label(theme::muted(p, "Colour"));
-                egui::color_picker::color_edit_button_srgb(ui, &mut self.brush.color);
+                let mut c = self.brush.color;
+                if egui::color_picker::color_edit_button_srgb(ui, &mut c).changed() {
+                    bus.push(pencil(None, Some(c), None));
+                }
             });
-            ui.add(
-                egui::Slider::new(&mut self.brush.size, 1.0..=60.0)
-                    .suffix(" px")
-                    .text("Size"),
-            );
+            let mut size = self.brush.size;
+            if ui
+                .add(
+                    egui::Slider::new(&mut size, 1.0..=60.0)
+                        .suffix(" px")
+                        .text("Size"),
+                )
+                .changed()
+            {
+                bus.push(pencil(None, None, Some(size)));
+            }
         });
         theme::card(ui, p, "Onion skin", |ui| {
-            ui.checkbox(&mut self.onion, "Show neighbouring frames");
-            ui.add_enabled(
-                self.onion,
-                egui::Slider::new(&mut self.onion_range, 1..=3).text("Frames"),
-            );
+            let (mut onion, mut range) = (self.onion, self.onion_range);
+            let on = ui
+                .checkbox(&mut onion, "Show neighbouring frames")
+                .changed();
+            let ranged = ui
+                .add_enabled(
+                    self.onion,
+                    egui::Slider::new(&mut range, 1..=3).text("Frames"),
+                )
+                .changed();
+            if on || ranged {
+                bus.push(AppCommand::AnimSettings {
+                    fps: None,
+                    onion: on.then_some(onion),
+                    onion_range: ranged.then_some(range),
+                });
+            }
             ui.label(theme::muted(p, "Red = before, green = after."));
         });
     }
@@ -407,7 +555,7 @@ impl AnimState {
         if resp.dragged_by(egui::PointerButton::Primary) || resp.clicked() {
             if let Some(pp) = resp.interact_pointer_pos() {
                 self.clock.playing = false;
-                self.draw_to(view.to_image(pp.x, pp.y));
+                self.draw_to(cur, view.to_image(pp.x, pp.y));
             }
         }
         if resp.drag_stopped() || resp.clicked() {
@@ -423,13 +571,7 @@ impl AnimState {
         }
     }
 
-    pub fn inspector(
-        &mut self,
-        ui: &mut egui::Ui,
-        p: &Palette,
-        toasts: &mut Toasts,
-        bus: &mut Vec<AppCommand>,
-    ) {
+    pub fn inspector(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         theme::card(ui, p, "Sequence", |ui| {
             theme::kv(
                 ui,
@@ -449,13 +591,17 @@ impl AnimState {
                 )
                 .changed()
             {
-                self.set_fps(fps);
+                bus.push(AppCommand::AnimSettings {
+                    fps: Some(fps),
+                    onion: None,
+                    onion_range: None,
+                });
             }
         });
         theme::card(ui, p, "Frame", |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.add(theme::toggle_button(p, "+ New", false)).clicked() {
-                    self.add_frame(toasts);
+                    bus.push(new_frame());
                 }
                 if ui
                     .add(theme::toggle_button(p, "Duplicate", false))
@@ -465,7 +611,10 @@ impl AnimState {
                     bus.push(AppCommand::SetKeyframe);
                 }
                 if ui.add(theme::toggle_button(p, "Clear", false)).clicked() {
-                    self.clear();
+                    bus.push(AppCommand::AnimFrame {
+                        action: "clear".into(),
+                        frame: None,
+                    });
                 }
                 if ui
                     .add_enabled(
@@ -485,18 +634,12 @@ impl AnimState {
         });
     }
 
-    pub fn timeline(
-        &mut self,
-        ui: &mut egui::Ui,
-        p: &Palette,
-        toasts: &mut Toasts,
-        bus: &mut Vec<AppCommand>,
-    ) {
+    pub fn timeline(&mut self, ui: &mut egui::Ui, p: &Palette, bus: &mut Vec<AppCommand>) {
         ui.horizontal(|ui| {
             crate::timeline::transport(ui, p, &mut self.clock, bus);
             ui.add_space(SP_MD);
             if ui.add(theme::toggle_button(p, "+ Frame", false)).clicked() {
-                self.add_frame(toasts);
+                bus.push(new_frame());
             }
         });
         ui.add_space(SP_XS);
@@ -558,6 +701,17 @@ impl AnimState {
                 });
             });
     }
+}
+
+fn new_frame() -> AppCommand {
+    AppCommand::AnimFrame {
+        action: "new".into(),
+        frame: None,
+    }
+}
+
+fn has_ink(r: &Raster) -> bool {
+    r.data.as_chunks::<4>().0.iter().any(|p| p[3] > 0)
 }
 
 // ---- project files ------------------------------------------------------------

@@ -293,6 +293,7 @@ pub struct Snapshot {
     scene_assign: obs_rust_bitstream::material_assign::MaterialAssign,
     mats: materials::MatSnap,
     anim_frames: Vec<Raster>,
+    anim_fps: f32,
     live: bool,
     rec: bool,
 }
@@ -659,6 +660,7 @@ impl App {
             scene_assign: self.scene.assign.clone(),
             mats: self.materials.snap(),
             anim_frames: self.anim.frames.clone(),
+            anim_fps: self.anim.fps,
             live: self.output.is_live(),
             rec: self.output.is_recording(),
         }
@@ -678,6 +680,7 @@ impl App {
         self.scene.arena_start = None;
         self.materials.restore(s.mats);
         self.anim.restore(s.anim_frames);
+        self.anim.set_fps(s.anim_fps);
         // undoing an AI batch that started output really stops it
         if !s.live && self.output.is_live() {
             let _ = self.output.stop_live();
@@ -754,7 +757,8 @@ impl App {
             | C::SceneMultiCut { .. }
             | C::SceneBridge { .. }
             | C::SceneBoolean { .. }
-            | C::SceneQuadDraw { .. } => Some((Mode::Scene, format!("!{}", cmd.name()))),
+            | C::SceneQuadDraw { .. }
+            | C::SceneVisibility { .. } => Some((Mode::Scene, format!("!{}", cmd.name()))),
             C::MaterialAssign { .. } => Some((Mode::Scene, "!material_assign".into())),
             // starting a simulation is one undo step (back to the pre-sim scene)
             C::ArenaPlay { .. } | C::ArenaStep { .. } if self.scene.arena.is_none() => {
@@ -1003,7 +1007,16 @@ impl App {
                 self.dock_tab = 1;
                 self.video.stitch(clips.clone())
             }
-            C::RunReader { .. } | C::ResetReader => {
+            C::AnimFrame { .. }
+            | C::AnimStroke { .. }
+            | C::AnimPencil { .. }
+            | C::AnimSettings { .. } => {
+                self.mode = Mode::Animate;
+                self.anim
+                    .apply(cmd, &mut self.toasts)
+                    .unwrap_or(Err("unsupported".into()))
+            }
+            C::RunReader { .. } | C::ResetReader | C::LoadStream { .. } => {
                 self.mode = Mode::Stream;
                 self.stream.apply(cmd).unwrap_or(Err("unsupported".into()))
             }
@@ -1071,6 +1084,40 @@ impl App {
                     })
                 }
             }
+            C::SetOutputSettings {
+                width,
+                height,
+                fps,
+                video_kbps,
+                stream_delay_sec,
+            } => {
+                if self.output.is_live() || self.output.is_recording() {
+                    return Err(
+                        "stop recording and streaming before changing output settings".into(),
+                    );
+                }
+                let c = &mut self.output.cfg;
+                if let Some(v) = width {
+                    c.width = (*v).clamp(64, 3840);
+                }
+                if let Some(v) = height {
+                    c.height = (*v).clamp(64, 2160);
+                }
+                if let Some(v) = fps {
+                    c.fps = (*v).clamp(1, 60);
+                }
+                if let Some(v) = video_kbps {
+                    c.video_kbps = (*v).clamp(200, 20_000);
+                }
+                if let Some(v) = stream_delay_sec {
+                    c.stream_delay_sec = (*v).min(output::MAX_DELAY_SEC);
+                }
+                let what = format!(
+                    "output {}×{} at {} fps, {} kb/s, stream delay {} s",
+                    c.width, c.height, c.fps, c.video_kbps, c.stream_delay_sec
+                );
+                self.output.save_config().map(|_| what)
+            }
             C::SetStreamKey { key } => self.output.set_key(key, true),
             C::SceneAdd { .. }
             | C::SceneSelect { .. }
@@ -1084,6 +1131,7 @@ impl App {
             | C::SceneBridge { .. }
             | C::SceneBoolean { .. }
             | C::SceneQuadDraw { .. }
+            | C::SceneVisibility { .. }
             | C::SceneShading { .. } => {
                 self.mode = Mode::Scene;
                 self.scene
@@ -1375,6 +1423,7 @@ impl App {
                         AppCommand::SavePsd { .. }
                             | AppCommand::ExportPng { .. }
                             | AppCommand::OpenFile { .. }
+                            | AppCommand::LoadStream { .. }
                             | AppCommand::VideoGenerate { .. }
                             | AppCommand::GenerateImage { .. }
                             | AppCommand::VideoExtend { .. }
@@ -1845,11 +1894,14 @@ impl App {
                                 / self.anim.fps,
                         });
                     }
-                    if pressed(Key::B) {
-                        self.anim.erase = false;
-                    }
-                    if pressed(Key::E) {
-                        self.anim.erase = true;
+                    for (key, erase) in [(Key::B, false), (Key::E, true)] {
+                        if pressed(key) {
+                            out.push(AppCommand::AnimPencil {
+                                erase: Some(erase),
+                                color: None,
+                                size: None,
+                            });
+                        }
                     }
                 }
             }
@@ -2810,7 +2862,7 @@ impl App {
             .frame(padded)
             .show_animated(ctx, show_tl, |ui| match self.mode {
                 Mode::Scene => self.scene.timeline(ui, &p, &mut self.bus),
-                Mode::Animate => self.anim.timeline(ui, &p, &mut self.toasts, &mut self.bus),
+                Mode::Animate => self.anim.timeline(ui, &p, &mut self.bus),
                 Mode::Composite => self.comp.timeline(ui, &p, &mut self.bus),
                 _ => {}
             });
@@ -2867,9 +2919,7 @@ impl App {
                                 .show(ui, |ui| match m {
                                     Mode::Stream => self.stream.inspector(ui, &p),
                                     Mode::Scene => self.scene.inspector(ui, &p, &mut self.bus),
-                                    Mode::Animate => {
-                                        self.anim.inspector(ui, &p, &mut self.toasts, &mut self.bus)
-                                    }
+                                    Mode::Animate => self.anim.inspector(ui, &p, &mut self.bus),
                                     Mode::Composite => self.comp.inspector(ui, &p, &mut self.bus),
                                     Mode::Materials if self.lab.tab > 0 => {
                                         self.lab.inspector(ui, &p, &mut self.bus)
@@ -2933,7 +2983,7 @@ impl App {
                                 .inner_margin(egui::Margin::same(SP_MD as i8))
                                 .show(ui, |ui| match m {
                                     Mode::Stream => {
-                                        self.stream.tools(ui, &p, &mut self.toasts);
+                                        self.stream.tools(ui, &p, &mut self.bus);
                                         self.output.panel(
                                             ui,
                                             &p,
@@ -2942,7 +2992,7 @@ impl App {
                                         );
                                     }
                                     Mode::Scene => self.scene.tools(ui, &p, &mut self.bus),
-                                    Mode::Animate => self.anim.tools(ui, &p),
+                                    Mode::Animate => self.anim.tools(ui, &p, &mut self.bus),
                                     Mode::Composite => self.comp.tools(ui, &p, &mut self.bus),
                                     Mode::Materials if self.lab.tab > 0 => {
                                         self.lab.tools(ui, &p, &mut self.bus)
@@ -4600,7 +4650,8 @@ mod tests {
     fn stream_commands_and_status() {
         let ctx = egui::Context::default();
         let mut app = app_with(&ctx, None);
-        app.stream.load_sample(&mut app.toasts);
+        app.dispatch(&AppCommand::LoadStream { path: None }, Origin::User)
+            .unwrap();
         app.dispatch(
             &AppCommand::RunReader {
                 width: Some(8),
@@ -4679,6 +4730,20 @@ mod tests {
             .unwrap();
         assert!(msg.contains("recording 320×180"), "{}", msg);
         assert!(app.output.is_recording());
+        assert!(app
+            .dispatch(
+                &AppCommand::SetOutputSettings {
+                    width: None,
+                    height: None,
+                    fps: Some(5),
+                    video_kbps: None,
+                    stream_delay_sec: None,
+                },
+                Origin::User
+            )
+            .unwrap_err()
+            .contains("stop recording"));
+        assert_ne!(app.output.cfg.fps, 5, "refused while recording");
         let t0 = std::time::Instant::now();
         while t0.elapsed() < std::time::Duration::from_millis(1500) {
             run(&mut app, &ctx, 1, 0.0);
@@ -4745,8 +4810,14 @@ mod tests {
     fn open_missing_file_is_error_not_panic() {
         let ctx = egui::Context::default();
         let mut app = app_with(&ctx, None);
-        app.stream.path = "definitely/missing.bin".into();
-        app.stream.open(&mut app.toasts);
+        assert!(app
+            .dispatch(
+                &AppCommand::LoadStream {
+                    path: Some("definitely/missing.bin".into())
+                },
+                Origin::User
+            )
+            .is_err());
         assert!(app.toasts.items.iter().any(|t| t.kind == ToastKind::Error));
         assert!(app
             .dispatch(
@@ -5536,6 +5607,405 @@ mod tests {
         app.assistant.want_send = true;
         wait_idle(&mut app, &ctx, 10);
         assert_ne!(action_lines(&app).last().unwrap().0, lines[0].0);
+    }
+
+    /// Runs one Seraphina turn: each call is its own tool round, then a reply.
+    /// Returns the action lines of that turn.
+    fn seraphina_turn(
+        app: &mut App,
+        ctx: &egui::Context,
+        mock: &MockProvider,
+        calls: Vec<ToolCall>,
+    ) -> Vec<ActionLine> {
+        let before = action_lines(app).len();
+        {
+            let mut r = mock.replies.lock().unwrap();
+            r.push(LlmReply {
+                content: "Done.".into(),
+                ..Default::default()
+            });
+            for c in calls.into_iter().rev() {
+                r.push(tool_reply(vec![c]));
+            }
+        }
+        app.assistant.input = "do the task".into();
+        app.assistant.want_send = true;
+        wait_idle(app, ctx, 20);
+        action_lines(app)
+            .into_iter()
+            .skip(before)
+            .map(|(_, l)| l)
+            .collect()
+    }
+
+    fn red_px(r: &obs_rust_bitstream::ui_canvas::Raster) -> usize {
+        r.data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[3] > 0 && p[0] > 200 && p[1] < 60 && p[2] < 60)
+            .count()
+    }
+
+    /// C1 "done when": Seraphina completes one multi-step task in each mode,
+    /// through the same commands as the UI. The match has no wildcard, so a
+    /// new mode does not compile until it has AI tool coverage here.
+    #[test]
+    fn seraphina_completes_a_multi_step_task_in_every_mode() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(Vec::new()));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let names: std::collections::HashSet<_> =
+            commands::tool_specs().into_iter().map(|t| t.name).collect();
+        let pts = r#"[[120,120],[200,140],[280,160]]"#;
+        for m in Mode::ALL {
+            // start each task from another mode: the task itself must get there
+            app.mode = if m == Mode::Paint {
+                Mode::Stream
+            } else {
+                Mode::Paint
+            };
+            let calls = match m {
+                Mode::Paint => vec![
+                    call("switch_mode", r#"{"mode":"paint"}"#),
+                    call("add_layer", r#"{"name":"Ink"}"#),
+                    call("set_brush", r##"{"color":"#ff0000","size":12}"##),
+                    call("select_tool", r#"{"tool":"brush"}"#),
+                    call("brush_stroke", &format!(r#"{{"points":{pts}}}"#)),
+                ],
+                Mode::Composite => vec![
+                    call("switch_mode", r#"{"mode":"composite"}"#),
+                    call("timeline_scrub", r#"{"time":3}"#),
+                    call(
+                        "set_layer_opacity",
+                        r#"{"layer":"Gold Grade","opacity":60}"#,
+                    ),
+                    call(
+                        "set_layer_blend",
+                        r#"{"layer":"Gold Grade","mode":"screen"}"#,
+                    ),
+                ],
+                Mode::Scene => vec![
+                    call("switch_mode", r#"{"mode":"3d"}"#),
+                    call("scene_add", r#"{"kind":"cube"}"#),
+                    call("scene_transform", r#"{"translate":[2,0,0]}"#),
+                    call("scene_visibility", r#"{"visible":false}"#),
+                ],
+                Mode::Animate => vec![
+                    call("switch_mode", r#"{"mode":"animate"}"#),
+                    call("anim_pencil", r##"{"color":"#ff0000","size":8}"##),
+                    call("anim_frame", r#"{"action":"new","frame":1}"#),
+                    call("anim_stroke", &format!(r#"{{"points":{pts},"frame":2}}"#)),
+                    call("anim_settings", r#"{"fps":24,"onion":false}"#),
+                ],
+                Mode::Stream => vec![
+                    call("switch_mode", r#"{"mode":"stream"}"#),
+                    call("load_stream", "{}"),
+                    call("run_reader", r#"{"width":8,"reads":4,"wrap":false}"#),
+                ],
+                Mode::Materials => vec![
+                    call("switch_mode", r#"{"mode":"materials"}"#),
+                    call("materials_build", r#"{"formula":"Fe2O3"}"#),
+                    call("materials_save", r#"{"name":"Rust Red"}"#),
+                ],
+            };
+            for c in &calls {
+                assert!(names.contains(c.name.as_str()), "{} is not a tool", c.name);
+            }
+            let n = calls.len();
+            let anim0 = app.anim.frames.len();
+            let objs0 = app.scene.objs.len();
+            let layers0 = app.paint.doc.layers.len();
+            let lines = seraphina_turn(&mut app, &ctx, &mock, calls);
+            assert_eq!(lines.len(), n, "{m:?}: {lines:?}");
+            assert!(
+                lines.iter().all(|l| l.status == LineStatus::Done),
+                "{m:?}: {lines:?}"
+            );
+            assert_eq!(app.mode, m);
+            match m {
+                Mode::Paint => {
+                    assert_eq!(app.paint.doc.layers.len(), layers0 + 1);
+                    let i = app.paint.find_layer(Some("Ink")).unwrap();
+                    assert!(red_px(&app.paint.doc.layers[i].raster) > 100);
+                }
+                Mode::Composite => {
+                    let g = app
+                        .comp
+                        .layers
+                        .iter()
+                        .find(|l| l.layer.name == "Gold Grade")
+                        .unwrap();
+                    assert_eq!(g.layer.blend, BlendMode::Screen);
+                    assert!(g
+                        .opacity
+                        .keys()
+                        .iter()
+                        .any(|(t, v)| (t - 3.0).abs() < 1e-3 && (v - 0.6).abs() < 1e-4));
+                }
+                Mode::Scene => {
+                    assert_eq!(app.scene.objs.len(), objs0 + 1);
+                    let o = app.scene.objs.last().unwrap();
+                    assert!(!o.visible && o.pos[0] >= 2.0, "{:?}", o.pos);
+                }
+                Mode::Animate => {
+                    assert_eq!(app.anim.frames.len(), anim0 + 1);
+                    assert_eq!(app.anim.current(), 1);
+                    assert!(red_px(&app.anim.frames[1]) > 100);
+                    assert_eq!(red_px(&app.anim.frames[0]), 0, "frame 1 untouched");
+                    assert_eq!(app.anim.fps, 24.0);
+                    assert!(!app.anim.onion);
+                }
+                Mode::Stream => {
+                    assert_eq!(app.stream.insp.data().len(), 320);
+                    assert_eq!(app.stream.insp.cursor(), (4, 0));
+                }
+                Mode::Materials => {
+                    assert!(app.materials.lib.profiles.contains_key("Rust Red"));
+                }
+            }
+        }
+        assert_eq!(actions_cards(&app), Mode::ALL.len(), "one card per task");
+    }
+
+    /// C1: output settings and the project are driven through the bus too.
+    #[test]
+    fn seraphina_sets_output_quality_and_saves_the_project_with_approval() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(Vec::new()));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let dir = project::test_dir("c1-project");
+        let path = dir.join("task.seraphina");
+        let lines = seraphina_turn(
+            &mut app,
+            &ctx,
+            &mock,
+            vec![
+                call(
+                    "set_output_settings",
+                    r#"{"width":1280,"height":720,"fps":99,"video_kbps":6000,"stream_delay_sec":9999}"#,
+                ),
+                call(
+                    "save_project",
+                    &serde_json::json!({ "path": path.to_string_lossy() }).to_string(),
+                ),
+            ],
+        );
+        let c = &app.output.cfg;
+        assert_eq!(
+            (c.width, c.height, c.fps, c.video_kbps, c.stream_delay_sec),
+            (1280, 720, 60, 6000, output::MAX_DELAY_SEC),
+            "clamped to the Settings ranges"
+        );
+        assert_eq!(
+            output::OutputConfig::load_from(&output::OutputConfig::path())
+                .0
+                .fps,
+            60,
+            "saved to disk"
+        );
+        assert_eq!(lines[0].status, LineStatus::Done);
+        assert!(lines[0].text.contains("1280×720 at 60 fps"), "{lines:?}");
+        assert_eq!(lines[1].status, LineStatus::NeedsUser);
+        assert!(!path.exists(), "the save waits for the user");
+        let all = action_lines(&app);
+        let k = all.len() - 1;
+        let (batch, l) = all[k].clone();
+        app.assistant.requests.push(PanelRequest::Run {
+            cmd: l.cmd.unwrap(),
+            batch,
+            line: k,
+        });
+        run(&mut app, &ctx, 1, 0.0);
+        assert!(path.exists(), "approved save wrote the project");
+    }
+
+    #[test]
+    fn animate_commands_check_frames_and_undo() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let d = |app: &mut App, c: AppCommand| app.dispatch(&c, Origin::User);
+        let n = app.anim.frames.len();
+        let frame = |action: &str, frame: Option<usize>| AppCommand::AnimFrame {
+            action: action.into(),
+            frame,
+        };
+        assert!(d(&mut app, frame("go", None))
+            .unwrap_err()
+            .contains("needs a frame"));
+        assert!(d(&mut app, frame("go", Some(n + 1)))
+            .unwrap_err()
+            .contains(&format!("no frame {}", n + 1)));
+        assert!(d(&mut app, frame("go", Some(0))).is_err());
+        assert!(d(&mut app, frame("spin", None)).is_err());
+        d(&mut app, frame("go", Some(3))).unwrap();
+        assert_eq!((app.mode, app.anim.current()), (Mode::Animate, 2));
+        assert!(d(
+            &mut app,
+            AppCommand::AnimPencil {
+                erase: None,
+                color: Some("red".into()),
+                size: None
+            }
+        )
+        .is_err());
+        let r = d(
+            &mut app,
+            AppCommand::AnimPencil {
+                erase: Some(false),
+                color: Some("#ff0000".into()),
+                size: Some(500.0),
+            },
+        )
+        .unwrap();
+        assert_eq!(r, "pencil #ff0000, 60 px");
+        assert!(d(
+            &mut app,
+            AppCommand::AnimStroke {
+                points: vec![],
+                frame: None
+            }
+        )
+        .is_err());
+        let stroke = AppCommand::AnimStroke {
+            points: vec![[100.0, 100.0], [300.0, 200.0]],
+            frame: Some(1),
+        };
+        d(&mut app, stroke.clone()).unwrap();
+        assert_eq!(app.anim.current(), 0, "the stroke shows its frame");
+        assert!(red_px(&app.anim.frames[0]) > 500);
+        d(&mut app, AppCommand::Undo).unwrap();
+        assert_eq!(red_px(&app.anim.frames[0]), 0, "one undo per stroke");
+        d(&mut app, stroke).unwrap();
+        let drawn = red_px(&app.anim.frames[0]);
+        // the eraser removes what the pencil drew
+        d(
+            &mut app,
+            AppCommand::AnimPencil {
+                erase: Some(true),
+                color: None,
+                size: None,
+            },
+        )
+        .unwrap();
+        d(
+            &mut app,
+            AppCommand::AnimStroke {
+                points: vec![[100.0, 100.0], [300.0, 200.0]],
+                frame: None,
+            },
+        )
+        .unwrap();
+        let left = red_px(&app.anim.frames[0]);
+        assert!(left * 2 < drawn, "{left} of {drawn} red px left");
+        d(&mut app, AppCommand::Undo).unwrap();
+        assert!(red_px(&app.anim.frames[0]) > 500);
+        d(&mut app, frame("clear", Some(1))).unwrap();
+        assert_eq!(red_px(&app.anim.frames[0]), 0);
+        d(&mut app, AppCommand::Undo).unwrap();
+        assert!(red_px(&app.anim.frames[0]) > 500, "clear undoes");
+        // new inserts a blank frame after the given one
+        d(&mut app, frame("new", Some(1))).unwrap();
+        assert_eq!(app.anim.frames.len(), n + 1);
+        assert_eq!(red_px(&app.anim.frames[1]), 0);
+        assert!(red_px(&app.anim.frames[0]) > 500);
+        while app.anim.frames.len() < 48 {
+            d(&mut app, frame("new", None)).unwrap();
+        }
+        assert!(d(&mut app, frame("new", None))
+            .unwrap_err()
+            .contains("frame limit"));
+        let r = d(
+            &mut app,
+            AppCommand::AnimSettings {
+                fps: Some(24.0),
+                onion: Some(true),
+                onion_range: Some(9),
+            },
+        )
+        .unwrap();
+        assert_eq!(r, "24 fps, onion skin on (3 each side)");
+        assert!(d(
+            &mut app,
+            AppCommand::AnimSettings {
+                fps: Some(f32::NAN),
+                onion: None,
+                onion_range: None
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn ai_undo_restores_the_animate_frame_rate() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(Vec::new()));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        let fps0 = app.anim.fps;
+        seraphina_turn(
+            &mut app,
+            &ctx,
+            &mock,
+            vec![call("anim_settings", r#"{"fps":3}"#)],
+        );
+        assert_eq!(app.anim.fps, 3.0);
+        let batch = action_lines(&app)[0].0;
+        assert!(app.undo_batch(batch));
+        assert_eq!(app.anim.fps, fps0);
+    }
+
+    #[test]
+    fn animate_e_and_b_keys_go_through_the_bus() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Animate;
+        run(&mut app, &ctx, 2, 0.0);
+        let mut t = 1.0;
+        for (k, erase) in [(egui::Key::E, true), (egui::Key::B, false)] {
+            let mut i = input(t);
+            i.events.push(egui::Event::Key {
+                key: k,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+            let _ = ctx.run(i, |ctx| app.frame(ctx));
+            run(&mut app, &ctx, 1, t + 0.05);
+            t += 0.2;
+            assert_eq!(app.anim.erase, erase, "{k:?}");
+            let (o, n, _) = app.log.last().unwrap();
+            assert_eq!((*o, n.as_str()), (Origin::User, "anim_pencil"));
+        }
+    }
+
+    #[test]
+    fn scene_visibility_is_a_command_with_user_undo() {
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let name = app.scene.objs[0].name.clone();
+        let vis = |v: Option<bool>| AppCommand::SceneVisibility {
+            object: Some(name.clone()),
+            visible: v,
+        };
+        assert!(app.scene.objs[0].visible);
+        let r = app.dispatch(&vis(None), Origin::User).unwrap();
+        assert_eq!(r, format!("hid {}", name));
+        assert!(!app.scene.objs[0].visible);
+        assert_eq!(app.mode, Mode::Scene);
+        app.dispatch(&AppCommand::Undo, Origin::User).unwrap();
+        assert!(app.scene.objs[0].visible, "user undo restores visibility");
+        app.dispatch(&vis(Some(true)), Origin::User).unwrap();
+        assert!(app.scene.objs[0].visible, "explicit show keeps it shown");
+        assert!(app
+            .dispatch(
+                &AppCommand::SceneVisibility {
+                    object: Some("nope".into()),
+                    visible: None
+                },
+                Origin::User
+            )
+            .is_err());
     }
 
     #[test]

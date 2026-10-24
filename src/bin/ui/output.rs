@@ -2072,34 +2072,42 @@ impl Output {
                 ui.label(theme::muted(p, &self.masked_key()));
             }
         });
+        // quality goes through the bus (C1): one path for the user and Seraphina
+        let busy = self.is_live() || self.is_recording();
+        let q0 = (
+            self.cfg.width,
+            self.cfg.height,
+            self.cfg.fps,
+            self.cfg.video_kbps,
+            self.cfg.stream_delay_sec,
+        );
+        let mut q = q0;
         egui::Grid::new("out-grid")
             .num_columns(2)
             .spacing([8.0, 4.0])
             .show(ui, |ui| {
                 ui.label(theme::muted(p, "Size"));
                 ui.horizontal(|ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut self.cfg.width)
-                            .range(64..=3840)
-                            .suffix(" w"),
+                    ui.add_enabled(
+                        !busy,
+                        egui::DragValue::new(&mut q.0).range(64..=3840).suffix(" w"),
                     );
-                    ui.add(
-                        egui::DragValue::new(&mut self.cfg.height)
-                            .range(64..=2160)
-                            .suffix(" h"),
+                    ui.add_enabled(
+                        !busy,
+                        egui::DragValue::new(&mut q.1).range(64..=2160).suffix(" h"),
                     );
                 });
                 ui.end_row();
                 ui.label(theme::muted(p, "Frame rate"));
-                ui.add(
-                    egui::DragValue::new(&mut self.cfg.fps)
-                        .range(1..=60)
-                        .suffix(" fps"),
+                ui.add_enabled(
+                    !busy,
+                    egui::DragValue::new(&mut q.2).range(1..=60).suffix(" fps"),
                 );
                 ui.end_row();
                 ui.label(theme::muted(p, "Video bitrate"));
-                ui.add(
-                    egui::DragValue::new(&mut self.cfg.video_kbps)
+                ui.add_enabled(
+                    !busy,
+                    egui::DragValue::new(&mut q.3)
                         .range(200..=20000)
                         .speed(50.0)
                         .suffix(" kb/s"),
@@ -2144,8 +2152,9 @@ impl Output {
                 });
                 ui.end_row();
                 ui.label(theme::muted(p, "Stream delay"));
-                ui.add(
-                    egui::DragValue::new(&mut self.cfg.stream_delay_sec)
+                ui.add_enabled(
+                    !busy,
+                    egui::DragValue::new(&mut q.4)
                         .range(0..=MAX_DELAY_SEC)
                         .suffix(" s"),
                 )
@@ -2155,6 +2164,15 @@ impl Output {
                 );
                 ui.end_row();
             });
+        if q != q0 {
+            bus.push(AppCommand::SetOutputSettings {
+                width: Some(q.0),
+                height: Some(q.1),
+                fps: Some(q.2),
+                video_kbps: Some(q.3),
+                stream_delay_sec: Some(q.4),
+            });
+        }
         if self.cfg.source == Source::Camera {
             self.camera_ui(ui, p, bus);
         }

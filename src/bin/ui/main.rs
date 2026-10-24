@@ -6,7 +6,7 @@
 //! command bus (`commands::AppCommand`, dispatched by `App::dispatch`).
 //! Seraphina (assistant_panel) drives the same bus through an LLM
 //! provider (xAI by default), the Seraphina.AGI CLI for memory, or a
-//! labelled offline stub.
+//! labelled offline help mode.
 
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
@@ -5210,7 +5210,7 @@ mod tests {
         assert!(last
             .text
             .contains("Offline: no language model is configured"));
-        assert_eq!(app.assistant.backend_label(), "Offline stub");
+        assert_eq!(app.assistant.backend_label(), "Offline help");
     }
 
     #[test]

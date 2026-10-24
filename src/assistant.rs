@@ -2,7 +2,7 @@
 //!
 //! Backend trait for chat replies plus an online-learning hook for
 //! small, incremental weight updates. The shipped backend is an
-//! offline stub: it does not call any model and says so. The shipped
+//! offline help table: it does not call any model and says so. The shipped
 //! learner nudges `LiveWeights` by bounded deltas (no full rewrites).
 //! No unwraps.
 //!
@@ -60,14 +60,14 @@ pub trait AssistantBackend {
     ) -> Result<String, AssistantError>;
 }
 
-/// Offline stub. Answers from a fixed help table and states that no
+/// Offline help. Answers from a fixed help table and states that no
 /// model is connected.
 #[derive(Clone, Debug, Default)]
 pub struct OfflineBackend;
 
 impl AssistantBackend for OfflineBackend {
     fn name(&self) -> &str {
-        "Seraphina (offline stub)"
+        "Seraphina (offline help)"
     }
 
     fn is_connected(&self) -> bool {
@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[test]
-    fn stub_says_offline() {
+    fn offline_help_says_it_is_offline() {
         let mut b = OfflineBackend;
         assert!(!b.is_connected());
         let r = b

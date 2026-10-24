@@ -215,7 +215,9 @@ stdout instead of RTMP; `encoder_packet` splits it into tags,
 (`-c copy`, no re-encode) sends them to the server. Stream mode ▸ Output
 shows where viewers are. Stopping ends the stream at once and drops the
 unsent part. If either ffmpeg dies the other is killed and the whole stream
-reconnects. The delay is held in memory (300 s at 4.5 Mb/s is about
+reconnects. While the delay holds the stream back, health (for *Retry now*
+and for counting a reconnect as a success) is judged by the encoder feeding
+the delay queue, since nothing is on air yet. The delay is held in memory (300 s at 4.5 Mb/s is about
 170 MB). Recordings are never delayed.
 
 * ffmpeg lookup: `SERAPHINA_FFMPEG`, next to the exe (or `./ffmpeg/bin/`), then

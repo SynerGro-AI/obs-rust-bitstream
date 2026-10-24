@@ -573,6 +573,9 @@ pub struct Stats {
     /// Stream delay only: the stream time (s) of the last packet sent on to
     /// the RTMP server, i.e. where viewers are.
     pub sent_time: f64,
+    /// Stream delay only: the stream time (s) of the newest packet the
+    /// encoder handed to the delay queue.
+    pub queued_time: f64,
     pub last_error: Option<String>,
     pub ended: bool,
 }
@@ -852,6 +855,18 @@ impl Session {
         }
     }
 
+    /// How far the stream has got (s), for telling a healthy stream from a
+    /// stuck one. With a stream delay nothing is sent for the whole delay,
+    /// so this is the encoder's intake into the delay queue instead.
+    pub fn progress(&self) -> f64 {
+        let st = self.stats();
+        if self.delay.is_some() {
+            st.queued_time
+        } else {
+            st.out_time
+        }
+    }
+
     /// `Some(success)` once ffmpeg has exited. With a stream delay both
     /// processes count: if one dies the other is killed.
     pub fn exited(&mut self) -> Option<bool> {
@@ -1075,7 +1090,12 @@ fn spawn_relay(
                         return;
                     }
                 }
-                Ok(Ok(FlvItem::Packet(p))) => queue.push(p, Instant::now()),
+                Ok(Ok(FlvItem::Packet(p))) => {
+                    if let Ok(mut s) = stats.lock() {
+                        s.queued_time = p.dts_ms as f64 / 1000.0;
+                    }
+                    queue.push(p, Instant::now());
+                }
                 Ok(Err(e)) => {
                     fail(format!("stream delay: {e}"));
                     return;
@@ -1489,7 +1509,7 @@ impl Output {
             let healthy = self
                 .live
                 .as_ref()
-                .map(|s| s.on_air() > 0.0)
+                .map(|s| s.progress() > 0.0)
                 .unwrap_or(false);
             if healthy {
                 return Ok("stream is connected; nothing to retry".into());
@@ -1607,7 +1627,7 @@ impl Output {
                         .last_error
                         .unwrap_or_else(|| "connection closed".into()),
                 );
-            } else if self.reconnect.attempts() > 0 && s.on_air() > 2.0 {
+            } else if self.reconnect.attempts() > 0 && s.progress() > 2.0 {
                 self.reconnect.success();
                 self.events
                     .push((ToastKind::Success, "Stream reconnected.".into()));
@@ -2763,6 +2783,110 @@ mod tests {
             "key leaked into a message"
         );
         let _ = std::fs::remove_file(&got);
+    }
+
+    /// A live Output with a 10 s stream delay, aimed at a free port with
+    /// no server: inside the delay window the relay has nothing to send, so
+    /// it never connects and the stream is healthy but not yet on air.
+    fn delayed_output(retry_sec: u32) -> Output {
+        let port = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a free port");
+            l.local_addr().expect("local addr").port()
+        };
+        let cfg = OutputConfig {
+            rtmp_url: format!("rtmp://127.0.0.1:{port}/live"),
+            width: 320,
+            height: 180,
+            fps: 30,
+            video_kbps: 600,
+            stream_delay_sec: 10,
+            retry_max: 20,
+            retry_sec,
+            ..Default::default()
+        };
+        let mut o = Output::new(cfg, String::new());
+        o.set_key("delay_test_key", false).expect("set key");
+        o.push_frame(moving_frame(0));
+        o
+    }
+
+    /// Ticks (pushing frames) until `done`, failing after `limit`.
+    fn tick_until(o: &mut Output, limit: Duration, what: &str, done: impl Fn(&Output) -> bool) {
+        let t0 = Instant::now();
+        let mut i = 0;
+        while !done(o) {
+            assert!(t0.elapsed() < limit, "{what} within {limit:?}");
+            o.push_frame(moving_frame(i));
+            i += 1;
+            o.tick();
+            std::thread::sleep(Duration::from_millis(33));
+        }
+    }
+
+    /// Retry now inside the delay window must not kill a healthy stream:
+    /// nothing is on air yet, but the encoder is feeding the delay queue.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn retry_now_during_the_delay_keeps_a_healthy_stream() {
+        find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let mut o = delayed_output(2);
+        o.start_live().expect("start live");
+        tick_until(
+            &mut o,
+            Duration::from_secs(8),
+            "the encoder fed the delay queue",
+            |o| o.live.as_ref().is_some_and(|s| s.progress() > 1.0),
+        );
+        let s = o.live.as_ref().expect("live");
+        assert_eq!(s.on_air(), 0.0, "nothing should be on air inside the delay");
+        let pid = s.child.id();
+        let msg = o.retry().expect("retry");
+        assert!(msg.contains("nothing to retry"), "{msg}");
+        let s = o.live.as_ref().expect("still live");
+        assert_eq!(s.child.id(), pid, "Retry now restarted a healthy stream");
+        assert!(o.is_live());
+        o.stop_live().expect("stop live");
+    }
+
+    /// After a reconnect with a stream delay, the stream counts as back once
+    /// the encoder is flowing again, not after delay + 2 s on air. So a
+    /// second drop soon after is attempt 1 again, not attempt 2.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn a_reconnect_inside_the_delay_window_resets_the_attempt_count() {
+        find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let mut o = delayed_output(1);
+        o.start_live().expect("start live");
+        let reconnected = |o: &Output| {
+            o.reconnect.attempts() == 1 && o.reconnect_at.is_none() && o.live.is_some()
+        };
+        assert!(o.drop_connection());
+        tick_until(
+            &mut o,
+            Duration::from_secs(8),
+            "reconnect attempt 1",
+            reconnected,
+        );
+        tick_until(
+            &mut o,
+            Duration::from_secs(8),
+            "the reconnect counted as a success",
+            |o| o.reconnect.attempts() == 0,
+        );
+        assert_eq!(
+            o.live.as_ref().expect("live").on_air(),
+            0.0,
+            "this must happen inside the delay window"
+        );
+        assert!(o.drop_connection());
+        tick_until(
+            &mut o,
+            Duration::from_secs(8),
+            "reconnect after the second drop",
+            |o| o.reconnect_at.is_none() && o.live.is_some() && o.reconnect.attempts() > 0,
+        );
+        assert_eq!(o.reconnect.attempts(), 1, "the earlier drop still counted");
+        o.stop_live().expect("stop live");
     }
 
     /// Stream delay: the encoder runs at once, but nothing reaches the RTMP

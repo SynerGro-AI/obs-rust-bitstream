@@ -28,6 +28,18 @@ jobs:
           components: clippy
       - run: cargo clippy --locked --all-targets --features ui
 
+  audit:
+    # RustSec advisories against Cargo.lock. Unmaintained/yanked crates are
+    # reported as warnings; vulnerabilities fail the job. Documented
+    # exceptions (if any) live in .cargo/audit.toml.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+
   test:
     runs-on: ubuntu-latest
     steps:

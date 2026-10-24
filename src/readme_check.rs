@@ -25,9 +25,53 @@ fn readme_lists_every_library_module() {
     assert_eq!(a, b, "README.md module list differs from src/lib.rs");
 }
 
-/// Source text before the first `#[cfg(test)]`, so tests don't count as users.
-fn non_test(src: &str) -> &str {
-    src.split("#[cfg(test)]").next().unwrap_or(src)
+/// `src` without its `#[cfg(test)]` items, so tests don't count as users.
+/// An item ends at a `;` or `,` outside brackets, or at the `}` that closes
+/// its body: a test module, a `mod x;`, a struct field or a `let` all go,
+/// and the code after them stays.
+fn non_test(src: &str) -> String {
+    const ATTR: &str = "#[cfg(test)]";
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(at) = rest.find(ATTR) {
+        out.push_str(&rest[..at]);
+        let item = &rest[at + ATTR.len()..];
+        let mut depth = 0i32;
+        let mut end = item.len();
+        for (i, c) in item.char_indices() {
+            match c {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' => depth -= 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = i + 1;
+                        break;
+                    }
+                }
+                ';' | ',' if depth == 0 => {
+                    end = i + 1;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        rest = &item[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+#[test]
+fn non_test_drops_test_items_and_keeps_the_code_after_them() {
+    let src = "mod a;\n#[cfg(test)]\nmod test_dir;\nmod b;\nstruct S {\n    x: u8,\n    #[cfg(test)]\n    dir: Vec<(u8, u8)>,\n    y: b::Y,\n}\nfn f() {\n    #[cfg(test)]\n    let d = format!(\"{}\", 1);\n    c::go();\n}\n#[cfg(test)]\nmod tests {\n    fn t() { d::x(); }\n}\nfn g() { e::y(); }\n";
+    let kept = non_test(src);
+    for used in ["mod a;", "mod b;", "b::Y", "c::go()", "e::y()"] {
+        assert!(kept.contains(used), "{used} dropped:\n{kept}");
+    }
+    for gone in ["test_dir", "dir:", "format!", "d::x"] {
+        assert!(!kept.contains(gone), "{gone} kept:\n{kept}");
+    }
 }
 
 /// `src` with `//` and `/* */` comments dropped and the contents of string
@@ -221,7 +265,7 @@ fn every_library_module_is_reached_from_a_binary_or_example() {
                 .expect("read module"),
         );
         for m in &mods {
-            if !reached.contains(m) && refers(non_test(&src), m) {
+            if !reached.contains(m) && refers(&non_test(&src), m) {
                 reached.push(m);
             }
         }

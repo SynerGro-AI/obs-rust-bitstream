@@ -1,0 +1,61 @@
+{
+  "generator": "tools/lesson_pack_vectors.py",
+  "pack_domain": "seraphina/lesson-pack/v1\\0",
+  "beacon_domain": "seraphina/lan-beacon/v1\\0",
+  "max_pack_bytes": 8953,
+  "key_a": {
+    "seed": "RFC 8032 7.1 TEST 1 secret key",
+    "public": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    "fingerprint": "21fe31dfa154a261626bf854046fd227"
+  },
+  "key_b": {
+    "seed": "sha256(b'seraphina lesson pack test key B')",
+    "public": "bb38357aebd196813245bea26dbb716156166806ddc1bc6833a5923e8fcbf076",
+    "fingerprint": "605224003b887110efb42f07932ea59b"
+  },
+  "files": {
+    "a_seq1.bin": {
+      "bytes": 176,
+      "sha256": "baadb2d68dfa5f7d9ba86aaeb61c3b010822c5bdcba830c5d3eea8dacf1a02eb",
+      "verify": "ok"
+    },
+    "a_seq2.bin": {
+      "bytes": 144,
+      "sha256": "c1ae73f41713f8ae4729e8e90f8fce660c265cb73c9636d1224e3b90a84552da",
+      "verify": "ok"
+    },
+    "b_seq1.bin": {
+      "bytes": 138,
+      "sha256": "2c9212c4008e17c1f171d9926d87d47ca435292d0cd5bd95a905ce3fab0187a3",
+      "verify": "ok"
+    },
+    "bad_flipped_byte.bin": {
+      "bytes": 176,
+      "sha256": "d926da4db202ee5bc617497a3350fa70c2d38139982ad685f917264953be5b6e",
+      "verify": "signature"
+    },
+    "bad_unsorted.bin": {
+      "bytes": 176,
+      "sha256": "de5b1bb9ec06a2e0e0f3d9ccfe86ae94db2178e49b420e5f520994c473654fc0",
+      "verify": "order"
+    },
+    "bad_weight_10001.bin": {
+      "bytes": 144,
+      "sha256": "7fad56f5dba81ad98cc65d44093a1531b32107c8189f22903c69610fee49537c",
+      "verify": "weight"
+    },
+    "bad_wrong_domain.bin": {
+      "bytes": 144,
+      "sha256": "ebe23a11a0103782d07987808e5508fcc371236ed0826787d98d44322ed04db4",
+      "verify": "signature"
+    },
+    "beacon_a.bin": {
+      "bytes": 107,
+      "sha256": "21a2e35b6e9a2c29b69d3deeee4d8961d4c231bb9ebf0a002c3a43bbf5390cfe"
+    },
+    "glyph_a_seq1.png": {
+      "bytes": 259,
+      "sha256": "33903b814cb576934967ba4a84e7564134e3d8cb027b7d3a0585839db79bb590"
+    }
+  }
+}

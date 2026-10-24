@@ -33,6 +33,9 @@ target dates (America/Edmonton; targets, not promises):
   run waits for the billing lock to lift; it does not unlock by itself.
 * v0.2.0 release: Fri Nov 6, 2026 (target, pending the owner's approval).
 
+Shared learning by file (C7.1) is part of the v0.2.0 release; see
+"C7: Shared learning" below.
+
 Everything below comes after v0.2.0 and has no date yet:
 
 1. Seraphina.AGI as a separate local process (Grok is today's
@@ -42,8 +45,9 @@ Everything below comes after v0.2.0 and has no date yet:
 4. OBS sources, scenes and the rest of Stream (E6): M7+.
 5. The rest of the Photoshop / After Effects / Maya tools listed as
    `[ ]` in TOOLS.md: M7+.
+6. Shared learning over the LAN (C7.2): the release after v0.2.0.
 
-## C4: Shared learning (spec; planned, not built)
+## C7: Shared learning (spec; planned, not built)
 
 The owner's words: "Build shared learning into v1." The learning rule:
 "Live weights, that learn by not using full re writes, but instead store
@@ -51,14 +55,34 @@ learned or updated lessons not stored yet." The vision: copies of the
 app share learned lessons over a mesh gossip network, using glyph data
 transfer, where a glyph image carries the data.
 
-This section is the spec. No code lands until it has been reviewed.
-Everything here is planned; the "Later" items are not part of v1.
+This section is the spec. It was revised after the Auditor's review
+(`spec-review-c4-bg.md`). It is called C7 because C4 already names the
+M4b local learner ("One learning system shared by every mode (C4)").
+Everything here is planned.
+
+**Scope and dates (decided by the owner, Oct 24 2026: "Yes, go with all
+four recommendations"):**
+
+* **C7.1 is in v0.2.0:** file-based glyph-card packs only, meaning the
+  pack format, signing, the glyph PNG, export and import by file or
+  drag-and-drop, preview and consent, trust, replay protection, import
+  limits, derived-state undo, and their tests. Target: v0.2.0,
+  Fri Nov 6, 2026 (target, pending the owner's approval of the release).
+* **C7.2 is LAN sharing, in the release after v0.2.0.** It covers the
+  beacon, the TCP offers, the inbox and the firewall handling, with the
+  hardening below. It has no date yet.
+* **Hard dependency:** no C7 code lands until M4b is merged with its open
+  review findings fixed. C7 builds on `Lesson`, `LessonStore` and the
+  delta log, which exist only as M4b work in progress (they are not in
+  `prefs.rs` at cfb1cad). If M4b slips past its
+  Wed Oct 28, 2026 (target), the C7.1 date is re-planned with the owner
+  rather than squeezed.
 
 ### What it builds on
 
 The local learner (`src/bin/ui/prefs.rs`, `Prefs`, `MercyBank`) is the
 only learner. At cfb1cad it keeps EMA weights (α = 0.382) and event
-counts in `mercy_bank.json`. The M4b learner work in progress adds:
+counts in `mercy_bank.json`. The M4b work in progress adds:
 
 * a lesson unit `Lesson { v, key, weight, count }` with
   `LESSON_VERSION = 1`;
@@ -67,9 +91,8 @@ counts in `mercy_bank.json`. The M4b learner work in progress adds:
 * key families: `tool.<mode>.<tool>`, `cmd.<user|ai>.<mode>.<command>`,
   `param.<key>`, `ai.<command>`, `ai.acceptance` and
   `reply.helpfulness`;
-* an append-only delta log (`mercy_bank.lessons.jsonl`), where each line
-  holds only the lessons that are new or changed since the last save,
-  and compaction into a new base at 256 KiB;
+* an append-only delta log (`mercy_bank.lessons.jsonl`) with compaction
+  at 256 KiB;
 * the `LessonStore` trait as the seam for Seraphina.AGI.
 
 Shared learning reuses that lesson unit and that log. It adds no second
@@ -77,374 +100,366 @@ learner and no second store.
 
 ### Which lessons are shared
 
-Only lessons whose weight means something to another user are shared.
-Each one is keyed by names from compiled allow-lists: `Mode::ALL`
-(paint, composite, scene, animate, stream, materials) and the AppCommand
-names the bus already exposes (the same list as `docs/AI_TOOLS.md`).
+Only lessons whose weight means something to another user are shared,
+keyed by names from compiled allow-lists (`Mode::ALL` and the AppCommand
+names in `docs/AI_TOOLS.md`). This is allow-list revision 1.
 
 | Shared key (on the wire) | Weight sent | Imported as |
 |---|---|---|
 | `ai.<command>` | the sender's EMA: how often they keep Seraphina's `<command>` rather than undo it (0..=1) | `peer.ai.<command>` |
 | `cmd.user.<mode>.<command>` | the command's share of the sender's own commands in that mode: `count / Σ count(cmd.user.<mode>.*)` (0..=1) | `peer.cmd.<mode>.<command>` |
 
-These stay local and are never exported in v1:
+These stay local and are never exported: `param.*` (can identify a
+user), `tool.*` (overlaps `cmd.user.*`), `cmd.ai.*` (Seraphina's own
+usage, so sharing it would feed back on itself), and the aggregates
+`ai.acceptance` and `reply.helpfulness`.
 
-* `param.*`: raw values in mixed units, such as canvas sizes, which can
-  identify a user;
-* `tool.*`: overlaps `cmd.user.*`;
-* `cmd.ai.*`: Seraphina's own usage, so sharing it would feed back on
-  itself;
-* `ai.acceptance` and `reply.helpfulness`: whole-user aggregates.
-
-Imported lessons go to their own `peer.` keys. They never change the
-user's own weights or counts, so the user's own learning always wins,
-and an import can be undone exactly. `peer.*` weights start at 0.5
-(neutral). They change only by bounded additive deltas, never by EMA.
-
-**Export is incremental, like the log.** A pack holds only the shared
-lessons that are new, or whose quantized weight changed, since the last
-pack this install exported. The bank is never sent whole.
+Imported lessons only ever affect `peer.*` values, never the user's own
+weights or counts, so the user's own learning always wins. Export is
+incremental: a pack holds only the shared lessons that are new, or whose
+quantized weight changed, since this install's last pack.
 
 ### Lesson pack format (v1)
 
-A lesson pack is a fixed binary layout. It is canonical, so one meaning
-has exactly one encoding and the signature covers it byte for byte. It
-is not JSON: field order, whitespace and float formatting would make
-the signed bytes ambiguous. All integers are little-endian.
+The byte layout, the signing domains, and the test keys and values are
+published in [docs/LESSON_PACK.md](docs/LESSON_PACK.md), so that
+Seraphina.AGI, RWN and Glyph OS can check their own readers byte for
+byte. In short:
 
-| Offset | Size | Field | Rule |
-|---|---|---|---|
-| 0 | 4 | magic | `SSLP` |
-| 4 | 1 | format version | `1`; any other value is refused |
-| 5 | 1 | flags | `0`; any other value is refused |
-| 6 | 2 | allow-list revision | the sender's allow-list revision; shown in the preview only |
-| 8 | 32 | sender public key | Ed25519 |
-| 40 | 8 | sequence | starts at 1 and goes up by 1 per export from this install |
-| 48 | 8 | created | Unix seconds, rounded down to the day (less fingerprinting) |
-| 56 | 16 | nonce | random (`getrandom`) |
-| 72 | 1 | entry count | 1..=128 |
-| 73 | n | entries | see below |
-| end − 64 | 64 | signature | Ed25519 over `b"seraphina-studio/lesson-pack/v1\0"` followed by bytes `0..end−64` |
+* **Header:** `SSLP`, the version `1`, the flags `0`, the allow-list
+  revision `u16`, the origin public key (32 bytes), the sequence `u64`,
+  and `created` as a `u64` rounded down to the UTC day.
+* **Entries:** 1..=128 of them, each a `key_len` byte, the key,
+  `weight_q` (0..=10000) and `evidence`. Keys are sorted strictly.
+* **Signature:** Ed25519 over `seraphina/lesson-pack/v1\0` followed by
+  the body.
+* **Size:** `MAX_PACK_BYTES` = 8,953. There is no random nonce: the
+  origin key and sequence make each pack unique, and identical content
+  gives identical bytes.
+* **No code, no text:** a pack holds a magic number, integers, keys from
+  the allow-list grammar and a signature. It has no field that can hold
+  a script, a prompt, a tool call, a path, a URL, a name or an address.
+  One bad key refuses the whole pack, and packs are never partly
+  applied.
+* **Test values:** `tools/lesson_pack_vectors.py` (Python with the
+  `cryptography` package, checked against RFC 8032 TEST 1) computed the
+  files in `tests/fixtures/lesson_pack/`. Running it with `--check`
+  recomputes them and compares byte for byte. The Rust reader's tests
+  will load the same files.
 
-Each entry is `key_len: u8` (1..=64), then `key` (ASCII), then
-`weight_q: u16` (0..=10000, where weight = `weight_q / 10000`), then
-`evidence: u16` (the sender's event count, saturating at 65535).
-Entries are sorted strictly by key: an unsorted or duplicate key is
-refused.
+### Import: derived state, bounded and exactly undoable
 
-* **Maximum size: 8,969 bytes** (`MAX_PACK_BYTES` = 73 + 128 × 69 + 64).
-  The size is checked before anything is parsed. Bytes after the
-  signature are refused.
-* **No code, no text.** A pack holds a magic number, integers, one key
-  and 64 bytes of signature. Each key must match the wire grammar
-  (`^(ai\.[a-z0-9_]+|cmd\.user\.[a-z]+\.[a-z0-9_]+)$`, at most 64
-  bytes). It must also be in this build's allow-list, with a known
-  mode and a known AppCommand. There is no field that can hold a script,
-  a prompt, a tool call, a file path, a URL, a name or an address. One
-  bad key refuses the whole pack. Packs are never partly applied.
-* **Pack id**: SHA-256 of the whole pack, signature included. It is
-  used for the seen-set, the ledger and quarantine names.
-* **Versioning**: a new layout gets a new format version and a new
-  signing domain string. v1 readers refuse every other version, and the
-  preview says "made by a newer Seraphina Studio". A key added to the
-  allow-list in a newer release is refused by older readers for the
-  same reason. Nothing is dropped silently.
+The pack carries quantized weights, not deltas, because a sender's
+delta means nothing against the receiver's own baseline. The receiver
+works out a bounded change and stores only that change. This is
+receiver policy, not part of the wire format, so RWN can fuse the same
+numbers in log-odds instead.
 
-### Import: bounded deltas with clamping
-
-The pack carries quantized weights, not raw deltas, because a sender's
-raw delta means nothing against the receiver's different baseline. The
-change the importer applies is a bounded delta, computed and clamped on
-import. For each entry, with `p` the current `peer.*` weight (0.5 if it
-is absent):
-
-* Entries with `evidence < 3` are skipped, and the preview lists them as
-  "too little evidence".
-* `β = 0.382 × min(evidence, 32) / 32`
-* `Δ = clamp(β × (w − p), −0.05, +0.05)`, so one pack moves a key by at
-  most 0.05.
-* Per-sender cap: the sum of one sender's applied Δ on one key stays
-  within ±0.15, recorded in the ledger. One sender alone can never move
-  a key more than 0.15 from where everyone else left it.
-* `p' = clamp(p + Δ, 0, 1)`. The Δ that was actually applied, after
-  clamping, is recorded.
-
-An imported lesson can only change `peer.*` numbers. They reach
-Seraphina in one line of the system-prompt summary, built only from
-allow-listed command names and numbers, for example "other Studio users
-often undo: set_layer_blend (peer lessons from 4 senders)". No text
-from a pack ever reaches the model. A pack cannot add tools, run
-commands or change settings.
+* **Ledger of changes:** each approved import appends one record
+  `{ pack, origin, deltas: { key: Δ } }`. Nothing else is written.
+* **Derived value:** `peer.k = clamp(0.5 + Σ Δ over live records, 0.2,
+  0.8)`, computed when it is read. A revert appends `{ revert: pack }`,
+  which removes that record from the sum, so the value afterwards is
+  exactly what the remaining records give, even when a value sat at a
+  limit. No subtract-and-clamp is ever stored. (A later import's Δ was
+  worked out against the value at its own time and is not recomputed.)
+* **Computing Δ for one entry**, with `p` the current derived value:
+  * an entry with `evidence < 3` is skipped and listed in the preview;
+  * `β = 0.382 × min(evidence, 32) / 32`;
+  * `Δ = clamp(β × (w − p), −0.05, +0.05)`;
+  * **per-origin cap:** Δ is cut so that one origin key's live Δ on one
+    key sums to within ±0.15;
+  * **per-key cap across all peers:** Δ is cut so that `0.5 + ΣΔ`
+    stays within 0.2..=0.8 (`|peer.k − 0.5| ≤ 0.3`). New keys are free to
+    make, so this cap, not the per-origin one, bounds what any one
+    person can do.
+* **To the prompt:** only allow-listed names and numbers, for example
+  "other Studio users often undo: set_layer_blend (peer lessons from 2
+  trusted senders)". The count includes only senders the user trusted.
+  No text from a pack reaches the model, and a pack can't add tools,
+  run commands or change settings.
+* **Future convergence gate (Seraphina's mesh):** only peers whose
+  fingerprint the user compared and marked verified count toward it.
+  Senders trusted on first use only never count.
 
 ### Glyph PNG: export and import
 
-**Real for v1: a private PNG chunk.** The exported file is a real PNG,
-a 512 × 512 "glyph card". It is drawn with the existing text rasteriser
-and shows the sender's key fingerprint, the date, the number of lessons
-and a summary in plain words. The pack itself is stored in one private
-ancillary chunk of type `seLp`:
+**v1: a private PNG chunk.** The exported file is a real 512 × 512 PNG
+"glyph card", drawn with the existing text rasteriser. It shows the
+fingerprint, the date, the number of lessons and a plain-words summary.
+The visual glyph is a label only in v1 (pending owner confirmation, see
+the open questions): the data rides in one private ancillary `seLp`
+chunk, written with the `png` crate's `Writer::write_chunk` after `IHDR`
+and before the image data.
 
-* `s`: ancillary;
-* `e`: private;
-* `L`: the reserved bit, which must be upper case;
-* `p`: safe to copy.
+Reading does not decode pixels. The file is read through `take(1 MiB +
+1)`, so a file over 1 MiB is refused from the stream without reading it
+all. A small chunk walker then requires:
 
-Writing uses the `png` crate (0.18, already in `Cargo.lock` through
-`image`). `Writer::write_chunk` writes the `seLp` chunk before the image
-data.
-
-Reading does not decode pixels. A small chunk walker checks:
-
-* the PNG signature;
-* each chunk's length and CRC (`crc32fast`, already in `Cargo.lock`);
-* that there is exactly one `seLp` chunk, and that it comes before
-  `IDAT`;
-* that `seLp` is at most `MAX_PACK_BYTES` long.
-
-It also refuses:
-
-* a file over 1 MiB;
-* a declared chunk length longer than the bytes that remain (no
-  allocation from an untrusted length);
-* a missing `IEND`.
+* the PNG signature, then `IHDR` as the first chunk;
+* each chunk length at most 2^31 − 1 (the PNG limit) and no longer than
+  the bytes that remain, so no buffer is allocated from an untrusted
+  length;
+* each chunk type made of ASCII letters only (`A–Z`, `a–z`);
+* each CRC correct (`crc32fast`);
+* exactly one `seLp`, placed before the first `IDAT`, and no longer than
+  `MAX_PACK_BYTES`;
+* an `IEND` chunk, with nothing after it.
 
 Only then is the pack parsed and verified.
 
-* **Round trip**: export, then import, gives byte-identical pack bytes.
-  The card decodes as a normal image with the `image` crate.
-* **Known limit**: sites that re-encode images (social networks, many
-  chat apps) strip private chunks. v1 says this in the export dialog.
-  Files sent as attachments, on USB or over the LAN keep the chunk.
-* **Later: the visual glyph.** This means data encoded in the pixels,
-  so it survives a re-encode or a screenshot. It needs a fully specified
-  code: cell size, colours, error correction and a capacity of at least
-  `MAX_PACK_BYTES`, which is beyond a QR code's 2,953 bytes. Until that
-  spec exists and has tests, it is labelled later, and the card's
-  pixels carry no data.
+* **Round trip:** export, then import, gives byte-identical pack bytes.
+  `tests/fixtures/lesson_pack/glyph_a_seq1.png` is a reference file.
+* **Known limit:** sites that re-encode images strip private chunks.
+  The export dialog says so. Files sent as attachments or on USB keep
+  the chunk.
+* **Later: a visual glyph** with the data in the pixels. It needs its own
+  spec (cells, colours, error correction, a capacity of at least
+  `MAX_PACK_BYTES`, and JPEG round-trip tests).
 
-### Transport and discovery
+### Transport
 
-**Real and testable in v1:**
+**C7.1 (v0.2.0): manual file share.** Export through a Save dialog
+(`rfd`), and import through an Open dialog or by dropping a `.png` on
+the window. The app binds no sockets. Gossip is user-driven: a pack you
+imported can be passed on with "Share again", which is a new,
+user-approved share that writes the original pack unchanged, with the
+original signature (re-sharing is pending owner confirmation).
 
-1. **Manual file share.** Export through a Save dialog (`rfd`), and
-   import through an Open dialog or by dropping a `.png` on the window.
-   How the file travels (email, USB, a shared folder) is up to the user.
-2. **LAN transport over real sockets.** This is a separate toggle, off
-   by default. Nothing is bound while it is off.
-   * Discovery: a UDP beacon on port 47310, sent to the subnet broadcast
-     address every 10 s and on demand. It holds `SSLB`, the version,
-     the public key, the TCP port and the day, signed with the install
-     key. It is 107 bytes: magic 4, version 1, key 32, port 2, day as `u32`
-     4, signature 64. There is no hostname or user name. A beacon with
-     a bad signature is ignored and counted.
-   * Offer: a TCP connection to port 47311. One frame holds a `u32`
-     length (≤ `MAX_PACK_BYTES`) and the pack. There is a 5 s timeout,
-     at most 8 connections at once, and at most 64 KiB read per
-     connection.
-   * Received packs go to an import inbox. They are never applied
-     automatically.
-   * Gossip in v1 is user-driven. "Share" sends a pack to the LAN peers
-     the user picks. A pack the user imported can be passed on with
-     "Share again", which is a new share and needs the same approval.
-     The pack keeps its original signature, so every hop verifies the
-     origin.
-   * Windows asks for a firewall exception the first time the toggle
-     is turned on. The setting says so beforehand.
+**C7.2 (the release after v0.2.0): LAN, with the Auditor's hardening.**
+It has its own toggle, off by default.
 
-**Later (not in v1):**
+* **Discovery on demand only.** Beacons are sent only while the "Find
+  peers" panel is open, at most every 10 s, and for at most 2 minutes.
+  Nothing is sent continuously. The setting says that your public key
+  is visible to everyone on the network.
+* **Beacon:** 107 bytes, signed with its own domain
+  `seraphina/lan-beacon/v1\0` (see `docs/LESSON_PACK.md`), sent to UDP
+  47310. A beacon only says that a peer may be there. It is never proof
+  of identity.
+* **The app never replies to a UDP datagram**, so it can't be used for
+  amplification.
+* **Order of limits:** per source IP first (1 beacon per IP per 5 s, at
+  most 64 tracked IPs), then a global Ed25519 verify budget of at most 50
+  per second, and only then signature checks. Anything over a limit is
+  dropped and counted.
+* **Signed challenge, both ways:** a TCP connection to 47311 starts
+  with a 32-byte random challenge from each side. Each claimed key must
+  sign the other side's challenge over `seraphina/lan-challenge/v1\0`
+  (with both public keys bound in). Only then is an offer accepted or a
+  pack sent. A replayed beacon from another IP gets nothing.
+* **Read limit:** one frame per connection, a `u32` length that must be
+  ≤ `MAX_PACK_BYTES`, then the pack. The connection reads at most `4 +
+  MAX_PACK_BYTES` bytes after the challenge exchange. It has a 5 s
+  timeout, at most 8 connections at once, and 1 offer per verified
+  sender per 10 s. The inbox holds at most 16 packs, which are never
+  applied automatically.
+* **Binding:** the beacon and the listener bind to the one private
+  interface the user chose (RFC 1918 or link-local), never `0.0.0.0`.
+  VPN, Hyper-V, WSL and other virtual adapters are not offered and get
+  no broadcasts.
+* **Network profile:** on a Windows "Public" network, LAN sharing
+  refuses to start and says why.
+* **Firewall detection:** if the panel has been open for 30 s with no
+  peer and no inbound connection, it shows "No peers seen. Windows
+  Firewall may be blocking Seraphina Studio". The Windows Defender
+  prompt appears at the first non-loopback listen, and if it is
+  dismissed, inbound traffic is blocked silently, so this message is
+  the visible state. This behaviour can't be automated, so it is a
+  manual Windows check, like `signing_key_is_private` on Windows.
+  Neither can run in CI today: there is no Windows runner, and the
+  organisation is billing-locked.
+* **LAN packs skip the PNG checks.** Their checks start at the pack
+  size.
 
-* automatic epidemic gossip (relaying without a click), hop limits and
-  fan-out;
-* an internet mesh, NAT traversal, relays or rendezvous servers, and a
-  DHT;
-* mDNS/DNS-SD discovery;
-* transport over the Seraphina Glyph OS mesh.
+**Later:** automatic gossip (after C7.2 ships and a convergence metric
+is specified; pending owner confirmation), an internet mesh, NAT
+traversal, relays, a DHT, mDNS, and transport over the Seraphina Glyph
+OS mesh.
 
 ### Consent
 
-* **Off by default.** Settings → Learning has "Share lessons" (export
-  and import) and, under it, "LAN sharing". Both are off. A test checks
-  the defaults and that no socket is bound while they are off.
-* **Each share is approved.** The export preview lists every lesson in
-  plain words, with its value and evidence. The user can untick lines
-  before choosing "Sign and save" or "Sign and send".
-* **Each import is approved, with a preview of the change.** The
-  preview shows:
-  * the sender's fingerprint and nickname, and whether it is trusted,
-    new or blocked;
-  * every change as before → after, for example
-    `peer.ai.set_layer_blend 0.50 → 0.45`;
+* **Off by default.** Settings → Learning has "Share lessons". In C7.2 it
+  gets a "LAN sharing" option under it. Both are off. A test checks the
+  defaults.
+* **Each share is approved.** The preview lists every lesson in plain
+  words, with its value and evidence, and you can untick lines before
+  "Sign and save".
+* **Each import is approved, with a preview.** It shows:
+  * the origin fingerprint (always shown in full), the nickname, and
+    whether the sender is new, trusted, verified or blocked;
+  * every change as before → after (`peer.ai.set_layer_blend 0.50 →
+    0.45`), including any change that was cut by a cap;
   * skipped entries and the reason for each.
 
-  Then the user picks Approve, Reject or Block sender.
-* **Seraphina cannot share or import.** These actions are not
-  AppCommands and are not in her tool list. A test checks that.
+  Then you choose Approve, Reject or Block sender.
+* **Seraphina can't share or import.** These actions are not
+  AppCommands, and a test checks her tool list.
 
-### Integrity, signing, replay and rate limits
+### Integrity, signing, replay and limits
 
-* **Identity.** Each install has an Ed25519 keypair, generated on first
-  use from `getrandom`. The fingerprint is the first 16 bytes of
-  SHA-256(public key), shown as 8 groups of 4 hex digits. "New identity"
-  makes a fresh key: old packs stay valid, and peers see a new sender.
-* **Checks, in order.** Each check refuses on failure and never
-  half-applies:
-  1. size;
-  2. PNG structure and CRC;
-  3. layout;
-  4. key grammar and allow-list;
-  5. weight range (`weight_q` ≤ 10000);
-  6. signature (`verify_strict`, which refuses weak keys and
-     non-canonical signatures);
-  7. replay;
-  8. trust.
-* **Trust.** The first pack from an unknown key needs an explicit
-  "Trust this sender" in the preview (trust on first use, decided by
-  the user). Blocked keys are refused before the preview opens.
-* **Replay.** Each sender has a sliding window: a sequence at or below
-  `max_seq − 64`, or one already seen, is refused. The pack-id seen-set
-  is persisted in the ledger and survives restarts.
-* **Rate limits.**
-  * LAN offers: 1 per sender per 10 s, 16 packs in the inbox, 8
-    connections, and 1 beacon per sender per 5 s. Anything over a limit
-    is dropped and counted.
-  * The UI shows "N offers dropped".
-  * Imports: at most 20 per hour, even when approved, so a click-through
-    flood can't move many keys quickly.
-* **Quarantine.** A refused pack is copied to
-  `lessons/quarantine/<pack-id>.png`, next to a `.txt` file that gives
-  the reason. It is never applied.
-* **Rollback through the delta log.** An approved import is written as
-  one line in `mercy_bank.lessons.jsonl` that records the pack id, the
-  sender and each key's applied Δ, and as one ledger line.
-  * "Undo import" appends a line that subtracts that pack's Δ from each
-    key and clamps to 0..=1, then marks the ledger line reverted.
-  * "Block sender" offers to undo all of that sender's imports.
-  * Compaction keeps the ledger, so an import can still be undone after
-    the log has been folded into the base.
-  * This needs one new log record kind in `prefs.rs`
-    (`{ "import": { pack, sender, deltas } }` and
-    `{ "revert": pack }`), versioned with `LESSON_VERSION`.
+* **Identity:** each install has an Ed25519 keypair, generated on first
+  use from `getrandom`. "New identity" makes a fresh key. The export
+  dialog says that a key links your packs to each other.
+* **Trust (TOFU, pending owner confirmation):** the first pack from an
+  unknown key needs "Trust this sender", with the full fingerprint on
+  screen. An optional "Compare fingerprints" step marks a sender
+  verified. Blocked keys are refused before the preview opens.
+* **Replay protection, strictly increasing:** the ledger keeps the
+  highest sequence accepted from each origin key. A pack with `seq <=
+  max_seq` is refused ("older than a pack already imported from this
+  sender"), even after a restart. There is no window. On the sending
+  side, the next sequence number is written to the ledger and fsynced
+  before the pack file is written, so a crash can never reuse a
+  sequence.
+* **Checks, in order (each refuses on failure, never half-applies):**
+  1. file size through `take(1 MiB + 1)`, for files only;
+  2. PNG structure and CRCs, for files only;
+  3. pack size;
+  4. layout and key order;
+  5. key grammar and allow-list;
+  6. weight range;
+  7. signature (`verify_strict`);
+  8. replay;
+  9. trust.
+* **Import limit:** at most 20 approved imports per hour, so clicking
+  through a flood can't move many keys fast.
+* **Refused packs:** the ledger records the pack id and the reason. A
+  copy goes to `lessons/quarantine/`, capped at the newest 32 files and
+  8 MiB in total, with the oldest deleted first, so attacker files
+  can't fill the disk.
+* **Undo:** "Undo import" appends `{ revert: pack }`. "Block sender"
+  offers to revert every live record from that origin. Compaction keeps
+  the ledger, so undo still works after the log is folded. Both record
+  kinds are versioned with `LESSON_VERSION`.
 
-**Proposed crates.** These were checked on Sat 24 Oct 2026 by resolving
-them into a copy of `Cargo.lock`, with no build:
+**Proposed crates.** These were checked on Oct 24 2026 by resolving
+them into a copy of `Cargo.lock`, with no build.
 
 | Crate | Version | MSRV | Why |
 |---|---|---|---|
 | `ed25519-dalek` | 2.2 (`default-features = false`, `std`, `zeroize`, `fast`) | 1.81 | keys, `verify_strict` |
-| `sha2` | 0.10 | below 1.88 (edition 2018); already required by `ed25519-dalek` 2.2 | pack id, fingerprint |
-| `getrandom` | 0.3 (already in `Cargo.lock`) | 1.63 | key seed, nonce |
+| `sha2` | 0.10 | already required by `ed25519-dalek` 2.2 | pack id, fingerprint |
+| `getrandom` | 0.3 (already in `Cargo.lock`) | 1.63 | key seed; C7.2 challenges |
 | `png` | 0.18 (already in `Cargo.lock`) | 1.73 | write the `seLp` chunk |
 | `crc32fast` | 1.5 (already in `Cargo.lock`) | 1.63 | verify chunk CRCs |
 
-* All of them are within MSRV 1.88. `curve25519-dalek` 4.1.3 is 1.60,
-  and `ed25519` and `signature` 2.2 are 1.60.
-* `cargo audit` on the resolved lock: no vulnerabilities, and the same 5
-  allowed warnings as today. The past advisories are patched in these
-  versions:
-  * RUSTSEC-2022-0093 (`ed25519-dalek` < 2);
-  * RUSTSEC-2024-0344 (`curve25519-dalek` < 4.1.3);
-  * RUSTSEC-2021-0100 (`sha2` < 0.9.8).
-* The cost is 19 new crates in the lock.
-* `ed25519-dalek` 3.0 (MSRV 1.85) is also out. 2.2 is proposed because
+* All of them fit within MSRV 1.88.
+* `cargo audit` on the resolved lock found no vulnerabilities, and the
+  same 5 allowed warnings as today. These past advisories are patched:
+  * RUSTSEC-2022-0093;
+  * RUSTSEC-2024-0344;
+  * RUSTSEC-2021-0100.
+* They add 19 crates to the lock, all optional behind the `ui` feature.
+* `ed25519-dalek` 3.0 (MSRV 1.85) also exists. 2.2 is proposed because
   it is the long-reviewed line.
-* They are all optional and behind the `ui` feature, like the other app
-  dependencies.
 
 ### Privacy and key storage
 
 * Packs hold only allow-listed keys, quantized numbers, a pseudonymous
-  public key and a day-rounded date. A test fills the learner with
-  `param.*`, path-like and sentence-like inputs and checks that no
+  public key and a date rounded to the day. A test fills the learner
+  with `param.*`, path-like and sentence-like inputs and checks that no
   export contains them.
-* The public key links a user's packs to each other. "New identity"
-  breaks that link, and the export dialog says so.
-* **Secret key storage.** The 32-byte seed is stored as a new
+* **Secret key:** the 32-byte seed is stored as a new
   `secrets::Secret::LessonSigningKey`.
   * On Windows it goes in Credential Manager as
     `SeraphinaStudio/lesson_signing_key`. Elsewhere, or if Credential
-    Manager refuses, it goes in the studio folder in a file that only
-    the user can read (0600), the same as the xAI key.
-  * It is registered with `crash::register_secret`, so it is never
-    logged or put in a crash report.
+    Manager refuses, it goes in a file only the user can read (0600).
+  * It is registered with `crash::register_secret`.
 * **Plain files** live under `~/.seraphina/studio/lessons/`:
   * `identity.pub`;
-  * `peers.json` (trusted and blocked keys, nicknames);
-  * `ledger.jsonl` (accepted and refused pack ids, sequences, applied
-    deltas, reverts);
-  * `quarantine/`.
+  * `peers.json`;
+  * `ledger.jsonl` (import, revert and refusal records, the highest
+    sequence per origin, and this install's own next sequence);
+  * `quarantine/` (capped).
 
-  None of them is secret. `SERAPHINA_HOME` moves them, as it moves the
-  bank.
+  `SERAPHINA_HOME` moves them.
 
 ### Adversarial tests (planned)
 
-Every test uses real files and real sockets on 127.0.0.1. The two peers
-are two real installs, each with its own temporary `SERAPHINA_HOME` and
-keypair. One test runs the peer as a second process. There are no
-simulated peers. Each test must fail if its check is removed.
+Every test uses real files, and the C7.2 tests use real sockets on
+127.0.0.1, with two real installs, each with its own temporary
+`SERAPHINA_HOME`. Each test must fail if its check is removed.
+
+**C7.1 (v0.2.0):**
 
 | Test | Proves |
 |---|---|
+| `pack_matches_published_vectors` | the Rust writer, given the test keys from `docs/LESSON_PACK.md`, produces the fixture bytes exactly; the reader accepts the good files and refuses each `bad_*` file for its stated reason |
 | `glyph_png_round_trips_a_pack` | export then import gives identical pack bytes; the card decodes as a PNG |
-| `tampered_png_is_refused` | a flipped byte in `seLp` is refused by the CRC; with the CRC recomputed, it is refused by the signature; the pack is quarantined |
-| `every_single_byte_flip_is_refused` | a real pack with each of its bytes flipped in turn is never accepted |
-| `oversized_payload_is_refused` | an 8,970-byte chunk, a 2 MiB PNG and a 4 GiB declared length are refused with no large allocation |
-| `truncated_chunk_is_refused` | a file cut inside `seLp`, inside `IDAT` and before `IEND` is refused |
-| `two_lesson_chunks_are_refused` | two `seLp` chunks, or `seLp` after `IDAT`, are refused |
-| `replayed_pack_is_refused` | importing the same file twice, including after a restart, is refused the second time |
-| `old_sequence_is_refused` | a sequence outside the window is refused |
-| `bad_signature_is_refused` | a body signed by another key, a zeroed signature and a non-canonical signature are refused |
+| `tampered_png_is_refused` | a flipped byte in `seLp` is refused by the CRC; with the CRC recomputed, it is refused by the signature; the refusal is recorded |
+| `every_single_byte_flip_is_refused` | a real pack with each byte flipped in turn is never accepted |
+| `oversized_payload_is_refused` | an 8,954-byte chunk, a 2 MiB PNG (refused after reading 1 MiB + 1 bytes) and a declared length of 2^31 are refused with no large allocation |
+| `truncated_chunk_is_refused` | a file cut inside `seLp`, inside `IDAT` or before `IEND` is refused |
+| `png_structure_rules_are_enforced` | `IHDR` not first, a non-letter chunk type byte, two `seLp` chunks, `seLp` after `IDAT`, and bytes after `IEND` are each refused |
+| `replayed_pack_is_refused` | the same file imported twice, including after a restart, is refused the second time |
+| `older_sequence_is_refused` | after `a_seq2`, `a_seq1` is refused |
+| `sender_sequence_survives_a_crash` | the process is killed between persisting the counter and writing the file; the next export uses a fresh, higher sequence |
+| `bad_signature_is_refused` | another key's signature, a zeroed signature, a non-canonical `S` and the old domain string are refused |
 | `unknown_key_needs_explicit_trust` | a valid pack from an unknown key changes nothing until it is trusted; a blocked key is refused |
-| `out_of_range_weight_is_refused` | a correctly signed pack with `weight_q = 10001` is refused |
-| `import_delta_is_clamped` | a pack at weight 1.0 with full evidence moves a key by 0.05 at most; repeated packs from one sender stop at 0.15 |
+| `out_of_range_weight_is_refused` | `bad_weight_10001.bin` is refused |
+| `import_delta_is_clamped` | one pack moves a key by 0.05 at most; one origin stops at 0.15 |
+| `many_origins_hit_the_per_key_cap` | 20 fresh keys each importing weight 1.0 leave `peer.k` at 0.8, not higher |
+| `revert_is_exact_at_the_bounds` | import A pushes a key to the 0.8 cap, import B follows, A is reverted: the value equals `clamp(0.5 + Δ_B)` exactly, also after a restart and after compaction |
+| `blocking_sender_reverts_its_imports` | blocking removes exactly that origin's records |
+| `prompt_counts_only_trusted_senders` | untrusted or refused senders never raise the sender count |
 | `non_allow_listed_key_is_refused` | `param.canvas.width`, `ai.C:/users/x`, an unknown command, an unknown mode and an upper-case key each refuse the whole pack |
-| `unsorted_or_duplicate_keys_are_refused` | canonical order is enforced |
-| `lan_flood_is_rate_limited` | 1,000 offers from one sender over real TCP give at most 1 inbox entry per 10 s and 16 in total; the drops are counted; the listener keeps its connection cap |
-| `beacon_with_bad_signature_is_ignored` | real UDP beacons with bad signatures never become peers |
-| `lan_offer_between_two_processes` | a pack sent by a second process arrives in the inbox and is not applied until approved |
-| `nothing_listens_while_sharing_is_off` | connecting to the LAN ports is refused with both toggles at their defaults |
-| `revert_import_restores_weights` | "Undo import" restores every `peer.*` key, and still does after a restart and after compaction |
-| `blocking_sender_reverts_its_imports` | blocking offers to undo the sender's imports, and the undo is exact |
-| `export_contains_only_new_or_changed_lessons` | a second export holds only lessons that changed since the first |
+| `unsorted_or_duplicate_keys_are_refused` | `bad_unsorted.bin` and a duplicate key are refused |
+| `quarantine_is_capped` | 40 refused 1 MiB files leave at most 32 files and 8 MiB in total |
+| `export_contains_only_new_or_changed_lessons` | a second export holds only the changes |
 | `export_never_holds_private_lessons` | `param.*`, `tool.*`, `cmd.ai.*`, aggregates and invalid keys are never exported |
+| `reshare_keeps_the_original_signature` | "Share again" writes the original pack bytes |
 | `seraphina_cannot_share_or_import` | the AI tool list has no share or import command |
-| `peer_lessons_reach_the_prompt_only_as_names_and_numbers` | the summary line contains only allow-listed names and numbers |
-| `signing_key_is_private` | Unix: the key file is 0600 and its value is scrubbed from crash reports. Windows: it is in Credential Manager (Windows-only, run on a Windows PC) |
+| `peer_lessons_reach_the_prompt_only_as_names_and_numbers` | the summary holds only allow-listed names and numbers |
+| `nothing_is_bound_in_c7_1` | no socket is open with sharing on or off |
+| `signing_key_is_private` | Unix: the key file is 0600 and scrubbed from crash reports. Windows: it is in Credential Manager (a manual check on a Windows PC) |
 
-### How Seraphina and Glyph OS plug in (later)
+**C7.2 (the release after v0.2.0):** `beacon_with_bad_signature_is_ignored`,
+`replayed_beacon_from_another_ip_gets_no_pack` (the challenge fails),
+`udp_datagrams_are_never_answered`, `per_ip_limit_runs_before_verify`
+(a flood of 10,000 forged beacons from one IP costs at most 1 verify per
+5 s), `verify_budget_caps_cpu`, `oversized_length_prefix_is_refused`
+(a length of `MAX_PACK_BYTES + 1` closes the connection having read 4
+bytes), `lan_flood_is_rate_limited`, `beacons_stop_when_the_panel_closes`,
+`listener_binds_only_the_chosen_interface`,
+`nothing_listens_while_lan_is_off`, `lan_offer_between_two_processes`.
+Two more are manual Windows checks: `public_profile_refuses_lan` and
+`firewall_block_shows_the_warning`.
 
-* **Seraphina.AGI provider (later).** It reads and teaches lessons
-  through the `LessonStore` trait, under the same allow-list. Lessons it
-  learns can be exported as packs signed by the studio's install key.
-  It gets no extra rights: its imports go through the same preview.
-* **Seraphina Glyph OS mesh (later).** The lesson pack is the payload
-  unit. Glyph OS supplies the transport (mesh gossip, data moved as
-  glyphs) and, once it is specified, the visual glyph encoding. The pack
-  format, signature, replay window and clamping stay the same, so
-  Studio and Glyph OS can trade packs. Glyph OS streaming and rendering
-  Seraphina herself belong to Glyph OS, not to this spec.
+### How Seraphina, RWN and Glyph OS plug in (later)
 
-### Open questions for the owner
+* **Seraphina.AGI (later)** reads and teaches lessons through
+  `LessonStore`, under the same allow-list. It gets no extra rights: its
+  imports go through the same preview.
+* **RWN:** the `{key, weight_q, evidence}` unit maps onto RWN's
+  per-source reliability with an evidence count. A later allow-list
+  revision may add an `rwn.source.<id>` family. Raw model weights do not
+  fit this unit.
+* **Glyph OS mesh (later):** the pack is the payload unit, and its
+  domain is product-neutral, so Studio and Glyph OS trade the same
+  bytes.
 
-1. **When:** "v1" could mean v0.2.0, with a target of
-   Fri Nov 6, 2026 (target). This work (crypto, PNG, LAN, UI) is larger than the local
-   learner, which stays on the M4b target of Wed Oct 28, 2026 (target).
-   Ship shared learning in v0.2.0 and move the release date, or ship it
-   in the first release after?
-2. **What is shared:** keep/undo outcomes for Seraphina's commands, and
-   which commands people use in each mode. Should brush and other
-   settings (`param.*`) ever be shared? They are left out because they
-   can identify a user.
-3. **Peer lessons:** they are kept separate (`peer.*`), so the user's own
-   habits always win. Or should they blend into the user's own weights?
-4. **Trust:** the first import from a new sender needs "Trust this
-   sender". Or should a one-off import be allowed without trusting the
-   key?
-5. **Gossip:** in v1 a pack is only passed on when the user clicks
-   Share. Automatic relaying is later. Is that acceptable for v1?
-6. **The glyph card:** what should it look like? And is a visual glyph
-   that survives social-media re-encoding needed in v1? That would need
-   its own spec first.
+### Decisions and open questions
+
+Decided by the owner (Oct 24 2026): C7.1 (file packs) ships in v0.2.0,
+and C7.2 (LAN) comes in the next release.
+
+These are proposed by the Auditor and written into this spec as the
+design, **pending user confirmation**:
+
+1. **Trust:** TOFU, with the fingerprint always shown and an optional
+   "Compare fingerprints" step. Only verified peers count toward any
+   convergence gate.
+2. **Key families:** none beyond allow-list revision 1 in v1. An
+   `rwn.source.<id>` family comes when Seraphina.AGI wires up RWN.
+3. **Automatic gossip:** only after C7.2 ships and a convergence metric
+   is specified, tied to Seraphina's mesh milestone.
+4. **Visual glyph:** a label only in v1. The data rides in the PNG
+   `seLp` chunk.
+5. **Re-sharing:** allowed, as a new user-approved share that keeps the
+   original signature. Receivers count by origin key.
+
+Still open: what the glyph card should look like (layout and colours).
 
 ## Principles
 - Foundation first

@@ -315,6 +315,9 @@ impl LlmProvider for OpenAiCompat {
         on_note: &mut dyn FnMut(&str),
         cancel: &AtomicBool,
     ) -> Result<LlmReply, String> {
+        if self.key.is_some() {
+            crate::net::key_allowed(&self.endpoint)?;
+        }
         let mut body = json!({
             "model": self.model,
             "messages": messages.iter().map(|m| m.to_json()).collect::<Vec<_>>(),
@@ -822,6 +825,30 @@ mod tests {
             if u.estimated { " (estimated)" } else { "" }
         );
         assert!(u.prompt_tokens > 0);
+    }
+
+    #[test]
+    fn a_key_is_never_sent_over_plain_http_to_another_host() {
+        let cancel = AtomicBool::new(false);
+        let p = OpenAiCompat {
+            endpoint: "http://192.0.2.1/v1/chat/completions".into(),
+            model: "m".into(),
+            key: Some("xai-NOT-A-REAL-KEY-0123456789".into()),
+            stream: false,
+        };
+        let e = p
+            .complete(
+                &[ChatMsg::new("user", "hi")],
+                &json!([]),
+                &mut |_| {},
+                &mut |_| {},
+                &cancel,
+            )
+            .unwrap_err();
+        assert!(
+            e.contains("unencrypted") && e.contains("192.0.2.1") && !e.contains("xai-"),
+            "{e}"
+        );
     }
 
     #[test]

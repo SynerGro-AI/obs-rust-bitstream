@@ -157,6 +157,39 @@ pub fn with_retry(
     }
 }
 
+/// Host part of an http(s) URL, without userinfo or port.
+pub fn host(url: &str) -> &str {
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let auth = auth.rsplit('@').next().unwrap_or(auth);
+    if let Some(v6) = auth.strip_prefix('[') {
+        return v6.split(']').next().unwrap_or(v6);
+    }
+    auth.split(':').next().unwrap_or(auth)
+}
+
+fn loopback(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    h == "localhost" || h.ends_with(".localhost") || h == "::1" || h.starts_with("127.")
+}
+
+/// B7: an API key only goes over https, or plain http to this machine
+/// (local model servers).
+pub fn key_allowed(url: &str) -> Result<(), String> {
+    let lower = url.trim().to_ascii_lowercase();
+    if lower.starts_with("https://") {
+        return Ok(());
+    }
+    let h = host(url.trim());
+    if lower.starts_with("http://") && loopback(h) {
+        return Ok(());
+    }
+    Err(format!(
+        "refusing to send your API key to {} over an unencrypted connection; use an https:// URL (plain http is only allowed for localhost)",
+        if h.is_empty() { url.trim() } else { h }
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,5 +355,21 @@ mod tests {
         );
         assert!(matches!(r, Err(Failure::Stopped)));
         assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn api_keys_only_over_https_or_localhost() {
+        assert!(key_allowed("https://api.x.ai/v1/chat/completions").is_ok());
+        assert!(key_allowed("HTTPS://API.X.AI/v1").is_ok());
+        assert!(key_allowed("http://localhost:11434/v1/chat/completions").is_ok());
+        assert!(key_allowed("http://127.0.0.1:8080/v1").is_ok());
+        assert!(key_allowed("http://[::1]:8080/v1").is_ok());
+        let e = key_allowed("http://api.x.ai/v1/chat/completions").unwrap_err();
+        assert!(e.contains("api.x.ai") && e.contains("https"), "{}", e);
+        assert!(key_allowed("http://localhost.evil.com/v1").is_err());
+        assert!(key_allowed("http://127.0.0.1@evil.com/v1").is_err());
+        assert!(key_allowed("ftp://x").is_err());
+        assert_eq!(host("http://user:pw@example.com:8080/a?b"), "example.com");
+        assert_eq!(host("http://[::1]:80/"), "::1");
     }
 }

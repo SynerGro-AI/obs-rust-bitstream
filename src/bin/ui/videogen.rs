@@ -183,6 +183,7 @@ impl GrokImagine {
 
     fn post(&self, path: &str, body: Value, cancel: &AtomicBool) -> Result<Value, String> {
         let url = format!("{}{}", self.base, path);
+        net::key_allowed(&url)?;
         let a = net::agent(API_TIMEOUT);
         let payload = body.to_string();
         net::with_retry(
@@ -314,6 +315,7 @@ impl VideoGenProvider for GrokImagine {
 
     fn poll(&self, id: &str, cancel: &AtomicBool) -> Result<JobStatus, String> {
         let url = format!("{}/videos/{}", self.base, id);
+        net::key_allowed(&url)?;
         let a = net::agent(API_TIMEOUT);
         let v: Value = net::with_retry(
             cancel,
@@ -1065,6 +1067,21 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         v.clips[0].status.clone()
+    }
+
+    #[test]
+    fn imagine_refuses_plain_http_to_another_host() {
+        let g = GrokImagine {
+            base: "http://192.0.2.1/v1".into(),
+            key: "xai-NOT-A-REAL-KEY-0123456789".into(),
+            model: "m".into(),
+            resolution: "480p".into(),
+            image_model: "i".into(),
+        };
+        let cancel = AtomicBool::new(false);
+        let e = g.start_generate("a cat", 1, &cancel).unwrap_err();
+        assert!(e.contains("unencrypted") && !e.contains("xai-"), "{e}");
+        assert!(g.poll("id", &cancel).unwrap_err().contains("unencrypted"));
     }
 
     #[test]

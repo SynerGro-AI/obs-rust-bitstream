@@ -44,6 +44,10 @@ impl MaterialAssign {
         self.map.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.map.len()
     }

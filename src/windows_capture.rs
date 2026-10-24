@@ -24,11 +24,8 @@ pub fn yuyv_to_y800(yuyv: &[u8], width: u32, height: u32) -> Option<VideoFrame> 
     let mut frame = VideoFrame::new(crate::video_fourcc::VideoFormat::Y800, width, height)?;
     let plane = frame.planes.get_mut(0)?;
     let pixels = (width as usize) * (height as usize);
-    for i in 0..pixels {
-        let src = i * 2;
-        if src < yuyv.len() {
-            plane[i] = yuyv[src];
-        }
+    for (dst, px) in plane.iter_mut().zip(yuyv.as_chunks::<2>().0).take(pixels) {
+        *dst = px[0];
     }
     Some(frame)
 }

@@ -17,7 +17,7 @@ impl Resample {
             return Err(RateError::Zero);
         }
         let mut out = TimedSequence::new(new_fps)?;
-        if src.len() == 0 {
+        if src.is_empty() {
             return Ok(out);
         }
         let ratio = new_fps / src.fps();

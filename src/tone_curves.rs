@@ -41,10 +41,12 @@ impl Curves {
         if pts[0].0 != 0 {
             pts.insert(0, (0, pts[0].1));
         }
-        if pts.last().unwrap().0 != 255 {
-            pts.push((255, pts.last().unwrap().1));
+        if let Some(&(lx, ly)) = pts.last() {
+            if lx != 255 {
+                pts.push((255, ly));
+            }
         }
-        for i in 0..256 {
+        for (i, slot) in lut.iter_mut().enumerate() {
             let x = i as u8;
             let mut out = pts[0].1;
             for w in pts.windows(2) {
@@ -61,7 +63,7 @@ impl Curves {
                     break;
                 }
             }
-            lut[i] = out;
+            *slot = out;
         }
         lut
     }

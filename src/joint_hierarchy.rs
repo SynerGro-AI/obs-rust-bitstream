@@ -104,6 +104,10 @@ impl JointHierarchy {
         self.joints.get_mut(name).ok_or(JointError::Missing)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.joints.len()
     }

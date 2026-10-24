@@ -172,7 +172,7 @@ impl EffectedWrite {
 
     /// Write the frames from a timed sequence.
     pub fn write_timed<W: Write>(timed: &TimedSequence, out: W) -> Result<(), WriteError> {
-        if timed.len() == 0 {
+        if timed.is_empty() {
             return Err(WriteError::Empty);
         }
         RawWriter::write(timed.frames(), out)
@@ -180,7 +180,7 @@ impl EffectedWrite {
 
     /// Write the frames and append the fps trailer.
     pub fn write_timed_fps<W: Write>(timed: &TimedSequence, mut out: W) -> Result<(), WriteError> {
-        if timed.len() == 0 {
+        if timed.is_empty() {
             return Err(WriteError::Empty);
         }
         RawWriter::write(timed.frames(), &mut out)?;
@@ -472,30 +472,6 @@ impl EffectedWrite {
         Self::write_h264_bundle_status(&processed, controls, weights, sync, bundle_out, status_out)
     }
 
-    /// Apply an effect, encode with progress, and write both.
-    pub fn write_effected_bundle_progress<W: Write, S: Write>(
-        frames: &[VideoFrame],
-        effect: &SceneEffect,
-        controls: &EncoderControls,
-        weights: &mut LiveWeights,
-        sync: &AudioSync,
-        progress: &mut EncodeProgress,
-        bundle_out: W,
-        status_out: S,
-    ) -> Result<AvBundle, WriteError> {
-        if frames.is_empty() {
-            return Err(WriteError::Empty);
-        }
-        let mut processed = Vec::new();
-        for f in frames {
-            let mut p = f.clone();
-            let _ = effect.apply(&mut p, weights);
-            processed.push(p);
-            progress.tick();
-        }
-        Self::write_h264_bundle_status(&processed, controls, weights, sync, bundle_out, status_out)
-    }
-
     /// Apply an effect, encode with progress and cancel, and write both.
     pub fn write_effected_bundle_cancellable<W: Write, S: Write>(
         frames: &[VideoFrame],
@@ -503,10 +479,8 @@ impl EffectedWrite {
         controls: &EncoderControls,
         weights: &mut LiveWeights,
         sync: &AudioSync,
-        progress: &mut EncodeProgress,
-        cancel: &EncodeCancel,
-        bundle_out: W,
-        status_out: S,
+        (progress, cancel): (&mut EncodeProgress, &EncodeCancel),
+        (bundle_out, status_out): (W, S),
     ) -> Result<AvBundle, WriteError> {
         if frames.is_empty() {
             return Err(WriteError::Empty);

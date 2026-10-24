@@ -326,7 +326,7 @@ pub fn blend_into(base: &mut Raster, top: &Raster, mode: BlendMode, opacity: f32
         .as_chunks_mut::<4>()
         .0
         .iter_mut()
-        .zip(top.data.chunks_exact(4))
+        .zip(top.data.as_chunks::<4>().0)
     {
         let a = (t[3] as f32 / 255.0) * op;
         if a <= 0.0 {
@@ -412,10 +412,9 @@ impl Brush {
                     px[3] = ((a * (1.0 - cov)) * 255.0).round() as u8;
                 } else {
                     let out_a = cov + a * (1.0 - cov);
-                    for c in 0..3 {
-                        let v = (self.color[c] as f32 * cov + px[c] as f32 * a * (1.0 - cov))
-                            / out_a.max(1e-6);
-                        px[c] = v.round().clamp(0.0, 255.0) as u8;
+                    for (p, &sc) in px.iter_mut().zip(&self.color).take(3) {
+                        let v = (sc as f32 * cov + *p as f32 * a * (1.0 - cov)) / out_a.max(1e-6);
+                        *p = v.round().clamp(0.0, 255.0) as u8;
                     }
                     px[3] = (out_a * 255.0).round().clamp(0.0, 255.0) as u8;
                 }

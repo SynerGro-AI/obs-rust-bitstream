@@ -20,7 +20,7 @@ impl MenuApply {
                 stack.add(&name).is_ok()
             }
             MenuAction::DuplicateLayer => {
-                if stack.len() == 0 {
+                if stack.is_empty() {
                     return false;
                 }
                 let name = format!("Layer {} copy", stack.len());

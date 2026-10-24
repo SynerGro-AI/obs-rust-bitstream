@@ -138,6 +138,11 @@ unsafe fn with_reader<T>(r: *mut bitstream_reader, f: impl FnOnce(&mut Reader<'_
     out
 }
 
+/// Initialise `*r` to read `len` bytes from `data`.
+///
+/// # Safety
+/// `r` must be valid for writes. `data` must be null or point to `len`
+/// readable bytes that outlive every read through `r`.
 #[no_mangle]
 pub unsafe extern "C" fn bitstream_reader_init(
     r: *mut bitstream_reader,
@@ -154,17 +159,32 @@ pub unsafe extern "C" fn bitstream_reader_init(
     }
 }
 
+/// Read `bits` bits (0 if `bits` is negative).
+///
+/// # Safety
+/// `r` must point to a reader set up by [`bitstream_reader_init`] whose
+/// buffer is still alive.
 #[no_mangle]
 pub unsafe extern "C" fn bitstream_reader_read_bits(r: *mut bitstream_reader, bits: c_int) -> u8 {
     let bits = u32::try_from(bits).unwrap_or(0);
     unsafe { with_reader(r, |reader| reader.read_bits(bits)) }
 }
 
+/// Read one byte.
+///
+/// # Safety
+/// `r` must point to a reader set up by [`bitstream_reader_init`] whose
+/// buffer is still alive.
 #[no_mangle]
 pub unsafe extern "C" fn bitstream_reader_r8(r: *mut bitstream_reader) -> u8 {
     unsafe { with_reader(r, |reader| reader.r8()) }
 }
 
+/// Read a big-endian u16.
+///
+/// # Safety
+/// `r` must point to a reader set up by [`bitstream_reader_init`] whose
+/// buffer is still alive.
 #[no_mangle]
 pub unsafe extern "C" fn bitstream_reader_r16(r: *mut bitstream_reader) -> u16 {
     unsafe { with_reader(r, |reader| reader.r16()) }

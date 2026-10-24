@@ -627,7 +627,7 @@ impl App {
             None => "not configured (no key)".into(),
         };
         format!(
-            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream, Materials). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\n{}\nGrok Imagine video: {}.",
+            "Active mode: {} (modes: Paint, Composite, 3D, Animate, Stream, Materials). Theme {}. Panels: tools {}, inspector {}, timeline {}, shelf {}, assistant {}.\nPaint: {}\n{}\n{}\n{}\n{}\n{}\n{} {}\nGrok Imagine video: {}.",
             self.mode.label(),
             if self.dark { "dark" } else { "light" },
             self.show_tools,
@@ -641,7 +641,8 @@ impl App {
             self.comp.context(),
             self.stream.context(),
             self.output.context(),
-            format!("{} {}", self.materials.context(), self.lab.context()),
+            self.materials.context(),
+            self.lab.context(),
             vid
         )
     }
@@ -2417,7 +2418,7 @@ impl App {
                     .as_chunks_mut::<4>()
                     .0
                     .iter_mut()
-                    .zip(r.data.chunks_exact(4))
+                    .zip(r.data.as_chunks::<4>().0)
                 {
                     let a = s[3] as u32;
                     for c in 0..3 {
@@ -2526,10 +2527,12 @@ impl App {
                 menv,
                 half,
                 c,
-                vol,
                 pr.temp.unwrap_or(env.temperature),
                 env.pressure,
             );
+            if let Some(v) = vol {
+                b = b.with_volume(v);
+            }
             b.heater = pr.heater;
             // open meshes (planes) are static floors
             b.fixed = pr.fixed || !m.is_closed();

@@ -26,10 +26,9 @@ pub fn yuyv_to_y800(yuyv: &[u8], width: u32, height: u32) -> Option<VideoFrame> 
     let mut frame = VideoFrame::new(VideoFormat::Y800, width, height)?;
     let plane = frame.planes.get_mut(0)?;
     let pixels = (width as usize) * (height as usize);
-    for i in 0..pixels {
-        let src = i * 2;
-        if src < yuyv.len() {
-            plane[i] = yuyv[src];
+    for (i, p) in plane.iter_mut().enumerate().take(pixels) {
+        if let Some(&v) = yuyv.get(i * 2) {
+            *p = v;
         }
     }
     Some(frame)

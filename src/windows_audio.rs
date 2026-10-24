@@ -25,7 +25,7 @@ pub enum WasapiKind {
 /// WASAPI is always float. Returns None if the length is not
 /// a multiple of channels.
 pub fn wasapi_float_to_f32(raw: &[f32], channels: u16) -> Option<Vec<f32>> {
-    if channels == 0 || raw.len() % channels as usize != 0 {
+    if channels == 0 || !raw.len().is_multiple_of(channels as usize) {
         return None;
     }
     Some(raw.to_vec())

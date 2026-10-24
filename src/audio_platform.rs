@@ -26,13 +26,12 @@ pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
     }
     #[cfg(windows)]
     {
-        return crate::windows_audio::WindowsAudio::open(48000, 2)
-            .map(|a| Box::new(a) as Box<dyn AudioCapture>);
+        crate::windows_audio::WindowsAudio::open(48000, 2)
+            .map(|a| Box::new(a) as Box<dyn AudioCapture>)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
-        return crate::apple_audio::AppleAudio::open(48000, 2)
-            .map(|a| Box::new(a) as Box<dyn AudioCapture>);
+        crate::apple_audio::AppleAudio::open(48000, 2).map(|a| Box::new(a) as Box<dyn AudioCapture>)
     }
     #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
     {
@@ -45,7 +44,7 @@ pub fn open_default_audio() -> Result<Box<dyn AudioCapture>, String> {
 pub fn backend_name() -> &'static str {
     #[cfg(feature = "audio")]
     {
-        return "cpal";
+        "cpal"
     }
     #[cfg(not(feature = "audio"))]
     {
@@ -55,15 +54,15 @@ pub fn backend_name() -> &'static str {
         }
         #[cfg(windows)]
         {
-            return "wasapi";
+            "wasapi"
         }
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         {
-            return "coreaudio";
+            "coreaudio"
         }
         #[cfg(not(any(target_os = "linux", windows, target_os = "macos", target_os = "ios")))]
         {
-            return "none";
+            "none"
         }
     }
 }

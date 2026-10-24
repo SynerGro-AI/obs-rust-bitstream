@@ -67,8 +67,7 @@ fn main() {
             count: 0,
             supported: false,
         },
-        &Reconnect::new(),
-        &OutputPause::new(),
+        (&Reconnect::new(), &OutputPause::new()),
         &AvStatus {
             pixels: 64 * 64,
             rate: 48000,

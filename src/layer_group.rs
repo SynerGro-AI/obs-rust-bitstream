@@ -71,6 +71,10 @@ impl GroupSet {
         self.groups.get(name).ok_or(GroupError::Missing)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.groups.len()
     }

@@ -388,7 +388,7 @@ unit tests. The list is checked against `src/lib.rs` by the
 - `timeline_tools`: Safe pure TimelineTools (AE timeline tool set).
 - `timestamp_stamp`: Safe pure TimestampStamp (burn time into a frame).
 - `tool_pipeline`: Safe pure ToolPipeline (named effect chain core).
-- `vec3`: Safe pure Vec3 (OBS graphics/vec3.h core).
+- `vec3`: Vec3: three floats. The materials use it as a linear RGB colour.
 - `video_fourcc`: Safe pure video fourcc mapping (OBS video-fourcc.c).
 - `video_frame`: Safe pure video frame (OBS video-frame.h core).
 - `video_output_info`: Safe pure VideoOutputInfo (OBS video_output_info).

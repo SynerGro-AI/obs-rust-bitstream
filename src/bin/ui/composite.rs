@@ -19,12 +19,15 @@ pub struct CompLayer {
     pub opacity: KeyTrack,
 }
 
+/// What the cached preview was rendered from: time, opacities, visibility, blends.
+type PreviewKey = (f32, Vec<f32>, Vec<bool>, Vec<BlendMode>);
+
 pub struct CompState {
     pub layers: Vec<CompLayer>,
     pub selected: usize,
     pub clock: Clock,
     tex: Option<egui::TextureHandle>,
-    last: Option<(f32, Vec<f32>, Vec<bool>, Vec<BlendMode>)>,
+    last: Option<PreviewKey>,
 }
 
 fn load_preview(path: &str) -> Option<Raster> {

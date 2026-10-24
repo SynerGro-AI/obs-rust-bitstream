@@ -535,8 +535,8 @@ impl SceneState {
                 let o = &mut self.objs[i];
                 let mut parts = Vec::new();
                 if let Some(d) = translate {
-                    for k in 0..3 {
-                        o.pos[k] += d[k];
+                    for (p, dk) in o.pos.iter_mut().zip(d) {
+                        *p += dk;
                     }
                     if d[1] != 0.0 && !o.track_y.is_empty() {
                         o.track_y.set(t, o.pos[1]);

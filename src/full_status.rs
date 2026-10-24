@@ -37,8 +37,7 @@ impl FullStatus {
         keyframe: &KeyframeStatus,
         caption: &CaptionStatus,
         roi: &RoiStatus,
-        reconnect: &Reconnect,
-        pause: &OutputPause,
+        (reconnect, pause): (&Reconnect, &OutputPause),
         av: &AvStatus,
         service: &ServiceStatus,
     ) -> Self {
@@ -122,7 +121,7 @@ mod tests {
             name: "twitch".to_string(),
             id: "rtmp_common".to_string(),
         };
-        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av, &svc);
+        let s = FullStatus::from(&p, &k, &c, &r, (&rc, &pause), &av, &svc);
         assert_eq!(s.held, 1);
         assert_eq!(s.attempts, 1);
         assert!(s.paused);
@@ -163,7 +162,7 @@ mod tests {
             name: String::new(),
             id: String::new(),
         };
-        let s = FullStatus::from(&p, &k, &c, &r, &rc, &pause, &av, &svc);
+        let s = FullStatus::from(&p, &k, &c, &r, (&rc, &pause), &av, &svc);
         assert_eq!(s.held, 0);
         assert!(!s.paused);
         assert!(!s.av_matches);
@@ -218,8 +217,8 @@ mod tests {
             name: String::new(),
             id: String::new(),
         };
-        let sa = FullStatus::from(&p, &k, &c, &r, &rc, &unpaused, &av_a, &svc);
-        let sb = FullStatus::from(&p, &k, &c, &r, &rc, &paused, &av_b, &svc);
+        let sa = FullStatus::from(&p, &k, &c, &r, (&rc, &unpaused), &av_a, &svc);
+        let sb = FullStatus::from(&p, &k, &c, &r, (&rc, &paused), &av_b, &svc);
         assert!(!sa.paused);
         assert!(sb.paused);
         assert!(!sa.av_matches);

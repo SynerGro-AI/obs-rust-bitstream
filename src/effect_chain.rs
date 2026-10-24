@@ -35,6 +35,10 @@ impl EffectChain {
         Ok(())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.effects.len()
     }

@@ -64,10 +64,8 @@ fn main() {
         &controls,
         &mut weights,
         &sync,
-        &mut progress,
-        &cancel,
-        bundle_file,
-        status_file,
+        (&mut progress, &cancel),
+        (bundle_file, status_file),
     )
     .expect("write");
     println!(

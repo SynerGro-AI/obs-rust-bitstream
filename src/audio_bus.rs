@@ -53,6 +53,10 @@ impl AudioBus {
         self.channels.remove(name).is_some()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.channels.len()
     }

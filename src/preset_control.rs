@@ -22,15 +22,6 @@ impl PresetKind {
             PresetKind::Quality => "quality",
         }
     }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "fast" => Some(PresetKind::Fast),
-            "balanced" => Some(PresetKind::Balanced),
-            "quality" => Some(PresetKind::Quality),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]

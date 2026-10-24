@@ -27,6 +27,7 @@ mod scene;
 mod stream;
 mod text_raster;
 mod theme;
+mod tiled_tex;
 mod timeline;
 mod videogen;
 mod workspace;
@@ -3186,6 +3187,133 @@ mod tests {
             "{n} bodies, {frames} frames: before mean {:.2} ms / median {:.2} / p95 {:.2}; after mean {:.2} ms / median {:.2} / p95 {:.2}; simulation ran {:.2} s in {:.2} s wall ({:.0}% of real time)",
             b.0, b.1, b.2, a.0, a.1, a.2, sim, wall, 100.0 * sim / wall
         );
+    }
+
+    #[test]
+    fn a_document_wider_than_the_gpu_texture_limit_draws_from_tiles() {
+        use obs_rust_bitstream::paint_engine::PaintLayer;
+        use obs_rust_bitstream::ui_canvas::Raster;
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        app.mode = Mode::Paint;
+        run(&mut app, &ctx, 2, 0.0);
+        assert_eq!(app.paint.gpu_tile_count(), 1);
+        // the test context reports egui's default 2048 px texture limit
+        let (w, h) = (9000u32, 700u32);
+        let mut r = Raster::new(w, h);
+        for (i, px) in r.data.chunks_mut(4).enumerate() {
+            px.copy_from_slice(&[(i % 251) as u8, 90, 160, 255]);
+        }
+        app.paint.set_doc(crate::paint::PaintDoc {
+            layers: vec![PaintLayer::new(1, "Wide", r)],
+            groups: Vec::new(),
+            width: w,
+            height: h,
+            selection: None,
+            selected: 0,
+            next_id: 2,
+        });
+        let out = ctx.run(input(1.0), |ctx| app.frame(ctx));
+        let tiles = crate::tiled_tex::plan(w, h, 2048);
+        assert_eq!(app.paint.gpu_tile_count(), tiles.len());
+        assert_eq!(tiles.len(), 5);
+        // nothing uploaded is over the limit
+        for (_, d) in &out.textures_delta.set {
+            assert!(d.image.width() <= 2048 && d.image.height() <= 2048);
+        }
+        // a stroke updates the tiles it crosses and the frame still draws
+        app.dispatch(
+            &AppCommand::BrushStroke {
+                points: vec![[3900.0, 300.0], [4300.0, 340.0]],
+            },
+            Origin::User,
+        )
+        .unwrap();
+        let out = ctx.run(input(1.1), |ctx| app.frame(ctx));
+        assert!(out
+            .textures_delta
+            .set
+            .iter()
+            .all(|(_, d)| d.image.width() <= 2048 && d.image.height() <= 2048));
+    }
+
+    #[test]
+    fn opening_an_image_over_the_megapixel_cap_is_refused_with_a_message() {
+        fn crc32(b: &[u8]) -> u32 {
+            let mut c = !0u32;
+            for &x in b {
+                c ^= x as u32;
+                for _ in 0..8 {
+                    c = if c & 1 != 0 {
+                        0xEDB8_8320 ^ (c >> 1)
+                    } else {
+                        c >> 1
+                    };
+                }
+            }
+            !c
+        }
+        let dir = std::env::temp_dir().join(format!("seraphina-mp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // a PNG header claiming 20000×20000 (400 MP) and no pixel data
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        let mut ihdr = b"IHDR".to_vec();
+        ihdr.extend(20000u32.to_be_bytes());
+        ihdr.extend(20000u32.to_be_bytes());
+        ihdr.extend([8, 6, 0, 0, 0]);
+        png.extend(13u32.to_be_bytes());
+        png.extend(&ihdr);
+        png.extend(crc32(&ihdr).to_be_bytes());
+        for c in [&b"IDAT"[..], &b"IEND"[..]] {
+            png.extend(0u32.to_be_bytes());
+            png.extend(c);
+            png.extend(crc32(c).to_be_bytes());
+        }
+        let big_png = dir.join("huge.png");
+        std::fs::write(&big_png, &png).unwrap();
+        // a PSD header claiming 30000×30000
+        let mut psd = b"8BPS".to_vec();
+        psd.extend([0, 1, 0, 0, 0, 0, 0, 0, 0, 3]);
+        psd.extend(30000u32.to_be_bytes());
+        psd.extend(30000u32.to_be_bytes());
+        psd.extend([0, 8, 0, 3]);
+        let big_psd = dir.join("huge.psd");
+        std::fs::write(&big_psd, &psd).unwrap();
+
+        let ctx = egui::Context::default();
+        let mut app = app_with(&ctx, None);
+        let doc = (
+            app.paint.doc.width,
+            app.paint.doc.height,
+            app.paint.doc.layers.len(),
+        );
+        for (f, mp) in [(&big_png, "400 megapixels"), (&big_psd, "900 megapixels")] {
+            let e = app
+                .dispatch(
+                    &AppCommand::OpenFile {
+                        path: f.display().to_string(),
+                    },
+                    Origin::User,
+                )
+                .unwrap_err();
+            assert!(e.contains(mp) && e.contains("MP limit"), "{}", e);
+            assert!(e.contains("SERAPHINA_MAX_MEGAPIXELS"), "{}", e);
+        }
+        assert_eq!(
+            doc,
+            (
+                app.paint.doc.width,
+                app.paint.doc.height,
+                app.paint.doc.layers.len()
+            ),
+            "nothing changed"
+        );
+        assert!(crate::paint::check_open_size(7680, 4320).is_ok());
+        assert!(
+            crate::paint::check_open_size(16384, 8192).is_err()
+                == (16384u64 * 8192 > crate::paint::max_megapixels() * 1_000_000)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -319,7 +319,7 @@ pub struct PaintState {
     move_origin: Option<(i32, i32)>,
     stroking: bool,
     flat: Raster,
-    tex: Option<egui::TextureHandle>,
+    tex: Option<crate::tiled_tex::TiledTexture>,
     dirty: Option<PixelRect>,
     thumb_gen: u64,
     thumbs: HashMap<u32, (u64, egui::TextureHandle)>,
@@ -337,8 +337,60 @@ pub struct PaintState {
     pub source_ppi: Option<f32>,
 }
 
+/// Largest image Paint opens, in megapixels (A9). 128 MP is 512 MB per
+/// full RGBA layer (a 16384×8192 or 11585² canvas); bigger files are
+/// refused with a message instead of exhausting memory. Override with
+/// `SERAPHINA_MAX_MEGAPIXELS`.
+pub const DEFAULT_MAX_MEGAPIXELS: u64 = 128;
+
+pub fn max_megapixels() -> u64 {
+    std::env::var("SERAPHINA_MAX_MEGAPIXELS")
+        .ok()
+        .and_then(|v| v.trim().parse().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(DEFAULT_MAX_MEGAPIXELS)
+}
+
+/// Refuse images over the megapixel cap, before decoding their pixels.
+pub fn check_open_size(w: u32, h: u32) -> Result<(), String> {
+    let px = w as u64 * h as u64;
+    let cap = max_megapixels();
+    if px > cap * 1_000_000 {
+        return Err(format!(
+            "{}×{} is {:.0} megapixels, over the {} MP limit (each layer would need {:.1} GB); downscale it first, or raise SERAPHINA_MAX_MEGAPIXELS",
+            w,
+            h,
+            px as f64 / 1e6,
+            cap,
+            px as f64 * 4.0 / 1e9
+        ));
+    }
+    Ok(())
+}
+
+/// Width and height from a PSD header (bytes 14..22, big-endian).
+fn psd_dimensions(path: &std::path::Path) -> Option<(u32, u32)> {
+    use std::io::Read;
+    let mut b = [0u8; 22];
+    std::fs::File::open(path).ok()?.read_exact(&mut b).ok()?;
+    (&b[..4] == b"8BPS").then(|| {
+        (
+            u32::from_be_bytes([b[18], b[19], b[20], b[21]]),
+            u32::from_be_bytes([b[14], b[15], b[16], b[17]]),
+        )
+    })
+}
+
 fn load_raster(path: &str) -> Result<Raster, String> {
-    let img = image::open(resolve_asset(path)).map_err(|e| e.to_string())?;
+    let file = resolve_asset(path);
+    let (w, h) = image::ImageReader::open(&file)
+        .map_err(|e| e.to_string())?
+        .with_guessed_format()
+        .map_err(|e| e.to_string())?
+        .into_dimensions()
+        .map_err(|e| e.to_string())?;
+    check_open_size(w, h)?;
+    let img = image::open(file).map_err(|e| e.to_string())?;
     let rgba = img.to_rgba8();
     let (w, h) = (rgba.width(), rgba.height());
     Raster::from_rgba(w, h, rgba.into_raw()).ok_or_else(|| "bad pixel buffer".to_string())
@@ -712,6 +764,11 @@ impl PaintState {
     }
 
     /// Replace the whole document (AI-batch undo).
+    /// How many GPU textures the canvas is drawn from (0 before the first frame).
+    pub fn gpu_tile_count(&self) -> usize {
+        self.tex.as_ref().map_or(0, |t| t.tile_count())
+    }
+
     pub fn set_doc(&mut self, d: PaintDoc) {
         self.checkpoint();
         self.restore(d);
@@ -1054,6 +1111,13 @@ impl PaintState {
 
     /// Decode image bytes into a new layer above the active one.
     pub fn add_image_layer(&mut self, name: &str, bytes: &[u8]) -> Result<String, String> {
+        if let Ok((w, h)) = image::ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format()
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.into_dimensions().map_err(|e| e.to_string()))
+        {
+            check_open_size(w, h)?;
+        }
         let img =
             image::load_from_memory(bytes).map_err(|e| format!("couldn't decode image: {}", e))?;
         let img = img
@@ -1077,6 +1141,9 @@ impl PaintState {
     /// Decode a layered PSD (pixels, opacity, visibility, blend, groups) into the document.
     pub fn open_psd(&mut self, path: &str) -> Result<String, String> {
         let file = resolve_asset(path);
+        if let Some((w, h)) = psd_dimensions(&file) {
+            check_open_size(w, h)?;
+        }
         let d = match PsdPixels::load(&file) {
             Ok(d) => d,
             Err(e) => {
@@ -1942,7 +2009,7 @@ fn selection_outline(s: &Selection) -> Raster {
 #[derive(Default)]
 pub struct SelOverlay {
     src: Option<Selection>,
-    tex: Option<egui::TextureHandle>,
+    tex: Option<crate::tiled_tex::TiledTexture>,
 }
 
 impl PaintState {
@@ -1968,22 +2035,18 @@ impl PaintState {
                 [0, 0, 0],
                 Some(r),
             );
-            let full = r.x == 0 && r.y == 0 && r.w == self.flat.width && r.h == self.flat.height;
-            match (&mut self.tex, full) {
-                (Some(t), false) => {
-                    if let Some(sub) = self.flat.cropped(r) {
-                        t.set_partial(
-                            [r.x as usize, r.y as usize],
-                            color_image(&sub),
-                            egui::TextureOptions::LINEAR,
-                        );
-                    }
+            // tiled, so documents bigger than the GPU's texture limit draw
+            let side = crate::tiled_tex::tile_side(ctx);
+            match &mut self.tex {
+                Some(t) if t.size() == (self.flat.width, self.flat.height) => {
+                    t.update(&self.flat, r)
                 }
-                (Some(t), true) => t.set(color_image(&self.flat), egui::TextureOptions::LINEAR),
-                (None, _) => {
-                    self.tex = Some(ctx.load_texture(
+                _ => {
+                    self.tex = Some(crate::tiled_tex::TiledTexture::new(
+                        ctx,
                         "paint-flat",
-                        color_image(&self.flat),
+                        &self.flat,
+                        side,
                         egui::TextureOptions::LINEAR,
                     ))
                 }
@@ -2031,10 +2094,13 @@ impl PaintState {
         }
         if ov.src != self.doc.selection {
             ov.src = self.doc.selection.clone();
+            let side = crate::tiled_tex::tile_side(ctx);
             ov.tex = ov.src.as_ref().map(|s| {
-                ctx.load_texture(
+                crate::tiled_tex::TiledTexture::new(
+                    ctx,
                     "sel-outline",
-                    color_image(&selection_outline(s)),
+                    &selection_outline(s),
+                    side,
                     egui::TextureOptions::NEAREST,
                 )
             });
@@ -2432,9 +2498,8 @@ impl PaintState {
             CornerRadius::same(3),
             Color32::from_black_alpha(if p.dark { 140 } else { 50 }),
         );
-        let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
         if let Some(t) = &self.tex {
-            clip.image(t.id(), img_rect, uv, Color32::WHITE);
+            t.paint(&clip, img_rect, Color32::WHITE);
         }
         clip.rect_stroke(
             img_rect.expand(0.5),
@@ -2443,7 +2508,7 @@ impl PaintState {
             egui::StrokeKind::Middle,
         );
         if let Some(t) = &ov.tex {
-            clip.image(t.id(), img_rect, uv, Color32::WHITE);
+            t.paint(&clip, img_rect, Color32::WHITE);
         }
         let hover = resp.hover_pos();
         self.cursor_px = hover.and_then(|hp| {
@@ -3685,6 +3750,9 @@ impl PaintState {
                 steps
             ),
         );
+        if let Some(n) = Some(self.gpu_tile_count()).filter(|n| *n > 1) {
+            theme::prop(ui, p, "GPU Tiles:", format!("{} (over texture limit)", n));
+        }
         theme::prop(ui, p, "Bit Depth:", "8-bit/Channel");
         theme::prop(ui, p, "Channels:", "RGB + Alpha");
         theme::prop(
@@ -3827,6 +3895,7 @@ impl PaintState {
         if w == 0 || h == 0 {
             return Err("paint document has no size".into());
         }
+        check_open_size(w, h)?;
         let mut layers = Vec::with_capacity(f.layers.len());
         for l in f.layers {
             let mut p = PaintLayer::new(l.id, &l.name, a.raster(&l.raster)?);

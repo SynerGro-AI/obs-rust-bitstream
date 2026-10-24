@@ -173,6 +173,11 @@ fn loopback(host: &str) -> bool {
     h == "localhost" || h.ends_with(".localhost") || h == "::1" || h.starts_with("127.")
 }
 
+/// True for an http(s) URL on this machine (a local model server).
+pub fn is_local(url: &str) -> bool {
+    loopback(host(url.trim()))
+}
+
 /// B7: an API key only goes over https, or plain http to this machine
 /// (local model servers).
 pub fn key_allowed(url: &str) -> Result<(), String> {
@@ -371,5 +376,6 @@ mod tests {
         assert!(key_allowed("ftp://x").is_err());
         assert_eq!(host("http://user:pw@example.com:8080/a?b"), "example.com");
         assert_eq!(host("http://[::1]:80/"), "::1");
+        assert!(is_local("http://localhost:11434/v1") && !is_local("https://api.x.ai/v1"));
     }
 }

@@ -77,6 +77,10 @@ pub trait LlmProvider: Send + Sync {
     fn billing_model(&self) -> Option<String> {
         None
     }
+    /// Whether chat leaves this machine (B3 consent applies).
+    fn off_device(&self) -> bool {
+        self.billing_model().is_some()
+    }
     /// Blocking call (run it off the UI thread). `on_token` receives
     /// streamed content deltas when the provider streams; `on_note` gets
     /// status lines such as retry notices. Raising `cancel` ends the call
@@ -305,6 +309,10 @@ impl LlmProvider for OpenAiCompat {
 
     fn billing_model(&self) -> Option<String> {
         self.key.as_ref().map(|_| self.model.clone())
+    }
+
+    fn off_device(&self) -> bool {
+        !crate::net::is_local(&self.endpoint)
     }
 
     fn complete(

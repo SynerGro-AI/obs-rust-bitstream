@@ -80,6 +80,9 @@ pub struct AssistantPanel {
     pending_calls: Option<Vec<ToolCall>>,
     pub input: String,
     pub want_send: bool,
+    /// B3 (from Settings ▸ Privacy): what goes into the prompt.
+    pub share_app_state: bool,
+    pub share_memory: bool,
     pub requests: Vec<PanelRequest>,
     next_batch: u64,
     remember_rx: Option<Receiver<AgentEvent>>,
@@ -143,6 +146,8 @@ impl AssistantPanel {
             pending_calls: None,
             input: String::new(),
             want_send: false,
+            share_app_state: true,
+            share_memory: true,
             requests: Vec::new(),
             next_batch: 1,
             remember_rx: None,
@@ -174,6 +179,15 @@ impl AssistantPanel {
     }
 
     fn system(&self, app_ctx: &str) -> ChatMsg {
+        if !self.share_app_state {
+            return ChatMsg::new(
+                "system",
+                &format!(
+                    "{}\n\nCurrent app state: not shared (the user turned this off in Settings > Privacy). Ask for any names or details you need; the tools still work.",
+                    persona()
+                ),
+            );
+        }
         ChatMsg::new(
             "system",
             &format!(
@@ -183,6 +197,28 @@ impl AssistantPanel {
                 self.prefs.summary()
             ),
         )
+    }
+
+    /// B3: sending `input` now would go to an off-device model (the local
+    /// CLI intents stay on this PC).
+    pub fn would_leave_device(&self) -> bool {
+        let text = self.input.trim();
+        !text.is_empty()
+            && !self.is_busy()
+            && self
+                .provider
+                .as_ref()
+                .map(|p| p.off_device())
+                .unwrap_or(false)
+            && !(self.cli.is_some() && SeraphinaCli::is_native_intent(text))
+    }
+
+    pub fn note(&mut self, text: &str) {
+        self.items.push(ChatItem {
+            kind: ItemKind::Note,
+            text: text.into(),
+            rated: None,
+        });
     }
 
     /// Mark earlier un-undone AI batches as accepted (one update each).
@@ -331,7 +367,7 @@ impl AssistantPanel {
             p,
             msgs,
             tools_json(),
-            self.cli.clone(),
+            self.cli.clone().filter(|_| self.share_memory),
             self.cancel.clone(),
             self.spent_tx.clone(),
         ));

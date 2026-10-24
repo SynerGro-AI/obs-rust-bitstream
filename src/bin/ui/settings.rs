@@ -44,6 +44,12 @@ pub struct AppSettings {
     pub ui_scale: f32,
     /// Most xAI spend allowed in any 24 hours, in USD; 0 = no cap (C3).
     pub spend_cap_usd: f64,
+    /// B3: the user agreed to send chat to an off-device model.
+    pub ai_consent: bool,
+    /// B3: include app state (mode, layer and object names) in the prompt.
+    pub share_app_state: bool,
+    /// B3: include recent Seraphina.AGI memory notes in the prompt.
+    pub share_memory: bool,
 }
 
 impl Default for AppSettings {
@@ -53,6 +59,9 @@ impl Default for AppSettings {
             auto_fallback: None,
             ui_scale: 1.0,
             spend_cap_usd: 0.0,
+            ai_consent: false,
+            share_app_state: true,
+            share_memory: true,
         }
     }
 }

@@ -70,6 +70,14 @@ pub fn resolve_asset(path: &str) -> std::path::PathBuf {
 
 // ---- toasts -------------------------------------------------------------
 
+/// B3: answers to the first-send privacy prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Consent {
+    All,
+    MessagesOnly,
+    No,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToastKind {
     Info,
@@ -407,6 +415,8 @@ pub struct App {
     pub project: workspace::ProjectState,
     /// Crash reports from an earlier run, shown once (D1).
     pub crash_notice: Option<crash::CrashNotice>,
+    /// B3: the first-send privacy prompt is showing.
+    pub consent_open: bool,
     /// Settings read before the window opens (renderer, UI scale).
     pub app_settings: settings::AppSettings,
     /// The window is too small for the chosen UI scale right now.
@@ -525,6 +535,7 @@ impl App {
             last_time: None,
             project: workspace::ProjectState::new(project::Session::default()),
             crash_notice: None,
+            consent_open: false,
             app_settings: settings::AppSettings::default(),
             ui_scale_capped: false,
             ui_zoom_seen: 1.0,
@@ -1498,6 +1509,16 @@ impl App {
 
     pub fn pump_assistant(&mut self) {
         self.assistant.blocked = self.meter.check(0.0).err();
+        self.assistant.share_app_state = self.app_settings.share_app_state;
+        self.assistant.share_memory = self.app_settings.share_memory;
+        if self.assistant.want_send
+            && !self.app_settings.ai_consent
+            && self.assistant.would_leave_device()
+        {
+            // B3: ask first; the message stays in the input box
+            self.assistant.want_send = false;
+            self.consent_open = true;
+        }
         if self.assistant.want_send {
             let ctx = self.app_context();
             let w = self.workspace_ctx();
@@ -1509,6 +1530,119 @@ impl App {
             self.run_tool_calls(calls);
         }
         self.handle_panel_requests();
+    }
+
+    /// B3: the answer to the first-send privacy prompt.
+    pub fn consent_choice(&mut self, c: Consent) {
+        self.consent_open = false;
+        match c {
+            Consent::All | Consent::MessagesOnly => {
+                let all = c == Consent::All;
+                self.app_settings.ai_consent = true;
+                self.app_settings.share_app_state = all;
+                self.app_settings.share_memory = all;
+                self.save_settings();
+                self.assistant.want_send = true;
+            }
+            Consent::No => self.assistant.note(
+                "Nothing was sent. Your message is still in the box; Seraphina will ask again when you send.",
+            ),
+        }
+    }
+
+    fn save_settings(&mut self) {
+        if cfg!(test) {
+            return; // never touch the real settings file from tests
+        }
+        if let Err(e) = self.app_settings.save() {
+            self.toasts
+                .push(ToastKind::Error, &format!("Couldn't save settings: {}", e));
+        }
+    }
+
+    fn consent_modal(&mut self, ctx: &egui::Context) {
+        if !self.consent_open {
+            return;
+        }
+        let p = self.pal;
+        let to = self.assistant.backend_label();
+        let mut choice = None;
+        let r = egui::Modal::new(egui::Id::new("ai-consent"))
+            .frame(
+                egui::Frame::NONE
+                    .fill(p.panel)
+                    .stroke(egui::Stroke::new(1.0_f32, p.line))
+                    .corner_radius(egui::CornerRadius::same(theme::R_LG as u8))
+                    .inner_margin(egui::Margin::same(SP_LG as i8)),
+            )
+            .show(ctx, |ui| {
+                ui.set_width(500.0);
+                ui.label(egui::RichText::new("Send your chat outside this PC?").size(16.0).strong().color(p.text));
+                ui.add_space(SP_SM);
+                ui.add(egui::Label::new(egui::RichText::new(format!("Seraphina's chat runs on {}, outside this PC. Each message you send goes there over HTTPS together with:", to)).color(p.text)).wrap());
+                ui.add_space(SP_SM);
+                for line in [
+                    "• this conversation (your messages, Seraphina's replies and the results of her actions)",
+                    "• app state: the current mode, layer and object names, and panel layout",
+                    "• your most recent Seraphina.AGI memory notes, if the CLI is installed",
+                ] {
+                    ui.add(egui::Label::new(egui::RichText::new(line).color(p.muted)).wrap());
+                }
+                ui.add_space(SP_SM);
+                ui.add(egui::Label::new(theme::muted(&p, "Pixels, files and your API key are not sent with chat. The service bills your key for every message; set a spend cap and change these choices any time in Settings ▸ Privacy.")).wrap());
+                ui.add_space(SP_MD);
+                ui.horizontal(|ui| {
+                    if ui.add(theme::primary_button(&p, "Allow and send")).clicked() {
+                        choice = Some(Consent::All);
+                    }
+                    if ui.button("Send only my messages").on_hover_text("Leave out app state and memory notes").clicked() {
+                        choice = Some(Consent::MessagesOnly);
+                    }
+                    if ui.button("Don't send").clicked() {
+                        choice = Some(Consent::No);
+                    }
+                });
+            });
+        if r.should_close() && choice.is_none() {
+            choice = Some(Consent::No);
+        }
+        if let Some(c) = choice {
+            self.consent_choice(c);
+        }
+    }
+
+    /// Settings ▸ Privacy (B3).
+    fn privacy_ui(&mut self, ui: &mut egui::Ui, p: &theme::Palette) {
+        ui.label(theme::section(p, "Privacy"));
+        let s = &mut self.app_settings;
+        let before = (s.ai_consent, s.share_app_state, s.share_memory);
+        theme::kv(
+            ui,
+            p,
+            "Chat to xAI",
+            if s.ai_consent {
+                "allowed"
+            } else {
+                "asks before the first message"
+            },
+        );
+        ui.checkbox(
+            &mut s.share_app_state,
+            "Send app state (mode, layer and object names)",
+        )
+        .on_hover_text(
+            "Seraphina works better with it; without it she has to ask what is in your project.",
+        );
+        ui.checkbox(
+            &mut s.share_memory,
+            "Send recent Seraphina.AGI memory notes",
+        );
+        if s.ai_consent && ui.small_button("Ask me again before sending").clicked() {
+            s.ai_consent = false;
+        }
+        if before != (s.ai_consent, s.share_app_state, s.share_memory) {
+            self.save_settings();
+        }
     }
 
     /// Count what the workers spent and toast a round the cap held back.
@@ -2153,6 +2287,8 @@ impl App {
             ui.add_space(SP_SM);
             ui.label(theme::section(&p, "Grok Imagine"));
             theme::kv(ui, &p, "Video provider", if self.video.provider.is_some() { "configured" } else { "no key" });
+            ui.add_space(SP_SM);
+            self.privacy_ui(ui, &p);
             ui.add_space(SP_SM);
             self.spending_ui(ui, &p);
             ui.add_space(SP_SM);
@@ -2848,6 +2984,7 @@ impl App {
         self.windows(ctx);
         self.project_modals(ctx);
         self.crash_modal(ctx);
+        self.consent_modal(ctx);
         self.toasts.show(ctx, &p);
         // everything the UI queued this frame runs now, through the bus
         let had = !self.bus.is_empty();
@@ -3009,12 +3146,7 @@ impl App {
         if (cap - self.meter.cap_usd).abs() > f64::EPSILON {
             self.meter.cap_usd = cap;
             self.app_settings.spend_cap_usd = cap;
-            if let Err(e) = self.app_settings.save() {
-                self.toasts.push(
-                    ToastKind::Error,
-                    &format!("Couldn't save the spend cap: {}", e),
-                );
-            }
+            self.save_settings();
         }
         ui.add(
             egui::Label::new(theme::muted(
@@ -3419,7 +3551,8 @@ mod tests {
     fn app_with(ctx: &egui::Context, provider: Option<Arc<dyn llm::LlmProvider>>) -> App {
         let a = assistant_panel::AssistantPanel::with_provider(provider, prefs::Prefs::ephemeral());
         let mut app = App::with(ctx, a, videogen::VideoGenPanel::unconfigured());
-        // never touch the user's saved output settings or stream key
+        app.app_settings.ai_consent = true; // tests that need the prompt clear it
+                                            // never touch the user's saved output settings or stream key
         let dir = std::env::temp_dir().join(format!("seraphina_app_rec_{}", std::process::id()));
         app.output = output::Output::new(
             output::OutputConfig {
@@ -5101,6 +5234,69 @@ mod tests {
         app.assistant.want_send = true;
         wait_idle(&mut app, &ctx, 10);
         assert!(app.assistant.items.iter().any(|i| i.text.contains("Okay.")));
+    }
+
+    fn system_prompt(m: &MockProvider, round: usize) -> String {
+        m.seen.lock().unwrap()[round][0].content.clone()
+    }
+
+    #[test]
+    fn first_send_asks_for_consent_and_respects_the_choice() {
+        let ctx = egui::Context::default();
+        let reply = |t: &str| LlmReply {
+            content: t.into(),
+            ..Default::default()
+        };
+        let mock = billed_mock(vec![reply("b"), reply("a")]);
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.app_settings = settings::AppSettings::default();
+        app.assistant.input = "hello".into();
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(app.consent_open && mock.seen.lock().unwrap().is_empty());
+        assert_eq!(app.assistant.input, "hello", "the message is kept");
+        app.consent_choice(Consent::No);
+        run(&mut app, &ctx, 3, 0.0);
+        assert!(!app.consent_open && mock.seen.lock().unwrap().is_empty());
+        assert!(app
+            .assistant
+            .items
+            .iter()
+            .any(|i| i.text.starts_with("Nothing was sent")));
+        // asked again; this time only the messages go
+        app.assistant.want_send = true;
+        run(&mut app, &ctx, 2, 0.0);
+        assert!(app.consent_open);
+        app.consent_choice(Consent::MessagesOnly);
+        wait_idle(&mut app, &ctx, 10);
+        let sys = system_prompt(&mock, 0);
+        assert!(
+            !sys.contains("Active mode") && sys.contains("not shared"),
+            "{sys}"
+        );
+        assert!(app.app_settings.ai_consent && !app.app_settings.share_app_state);
+        // turning app state back on (Settings ▸ Privacy) sends it, no prompt
+        app.app_settings.share_app_state = true;
+        app.assistant.input = "again".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(!app.consent_open);
+        assert!(system_prompt(&mock, 1).contains("Active mode"));
+    }
+
+    #[test]
+    fn local_models_need_no_consent() {
+        let ctx = egui::Context::default();
+        let mock = Arc::new(MockProvider::new(vec![LlmReply {
+            content: "hi".into(),
+            ..Default::default()
+        }]));
+        let mut app = app_with(&ctx, Some(mock.clone()));
+        app.app_settings = settings::AppSettings::default();
+        app.assistant.input = "hello".into();
+        app.assistant.want_send = true;
+        wait_idle(&mut app, &ctx, 10);
+        assert!(!app.consent_open && mock.seen.lock().unwrap().len() == 1);
     }
 
     fn billed_mock(replies: Vec<LlmReply>) -> Arc<MockProvider> {

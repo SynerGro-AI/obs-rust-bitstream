@@ -1209,12 +1209,9 @@ mod tests {
     /// Live, billed: run explicitly with `cargo test --features ui --bin ui -- --ignored live_imagine`.
     /// Writes into SERAPHINA_LIVE_OUT (default: temp dir).
     #[test]
-    #[ignore]
+    #[ignore = "live, billed: needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"]
     fn live_imagine_video_and_image() {
-        let Some(g) = GrokImagine::from_env() else {
-            eprintln!("SKIPPED live_imagine_video_and_image: no XAI_API_KEY");
-            return;
-        };
+        let g = GrokImagine::from_env().expect("live_imagine_video_and_image needs XAI_API_KEY");
         let out = std::env::var("SERAPHINA_LIVE_OUT")
             .map(PathBuf::from)
             .unwrap_or_else(|_| std::env::temp_dir());

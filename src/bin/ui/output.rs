@@ -1829,11 +1829,9 @@ mod tests {
     /// Records 5 s from the frame pipe and verifies the file with ffprobe.
     /// Set `RECORD_TEST_OUT` to keep a copy of the MP4.
     #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
     fn records_five_seconds_to_mp4_verified_by_ffprobe() {
-        let Ok(ff) = find_ffmpeg() else {
-            eprintln!("skipped: ffmpeg not installed");
-            return;
-        };
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
         let cfg = OutputConfig {
             width: 640,
             height: 360,
@@ -1877,6 +1875,101 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// Goes live against `ffmpeg -listen 1` acting as the RTMP server: the
+    /// listener writes what it receives to an FLV, which ffprobe must read
+    /// back as H.264 at the configured size. Needs only ffmpeg; no network
+    /// beyond 127.0.0.1.
+    #[test]
+    #[cfg_attr(windows, ignore = "the Windows runners and Wine have no ffmpeg.exe")]
+    fn goes_live_to_an_ffmpeg_rtmp_listener() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let port = {
+            let l = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a free port");
+            l.local_addr().expect("local addr").port()
+        };
+        let got =
+            std::env::temp_dir().join(format!("seraphina_rtmp_rx_{}.flv", std::process::id()));
+        let _ = std::fs::remove_file(&got);
+        let mut server = Command::new(&ff)
+            .args(["-hide_banner", "-loglevel", "error", "-listen", "1", "-i"])
+            .arg(format!("rtmp://127.0.0.1:{port}/live/rx_test_key"))
+            .args(["-c", "copy", "-y"])
+            .arg(&got)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn the ffmpeg RTMP listener");
+        // Wait until the one-shot listener is bound. Connecting to check
+        // would use up its only accept, so read the socket table instead.
+        let hex = format!(":{port:04X} ");
+        let t0 = Instant::now();
+        loop {
+            match std::fs::read_to_string("/proc/net/tcp") {
+                Ok(t) if t.lines().any(|l| l.contains(&hex) && l.contains(" 0A ")) => break,
+                Ok(_) => {}
+                Err(_) => {
+                    std::thread::sleep(Duration::from_secs(1));
+                    break;
+                }
+            }
+            assert!(
+                t0.elapsed() < Duration::from_secs(10),
+                "listener never came up"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let cfg = OutputConfig {
+            rtmp_url: format!("rtmp://127.0.0.1:{port}/live"),
+            width: 320,
+            height: 180,
+            fps: 30,
+            video_kbps: 600,
+            ..Default::default()
+        };
+        let mut o = Output::new(cfg, String::new());
+        o.set_key("rx_test_key", false).expect("set key");
+        o.push_frame(moving_frame(0));
+        o.start_live().expect("start live");
+        let mut ev = Vec::new();
+        let t0 = Instant::now();
+        let mut i = 0;
+        while t0.elapsed() < Duration::from_secs(3) {
+            o.push_frame(moving_frame(i));
+            i += 1;
+            ev.extend(o.tick());
+            std::thread::sleep(Duration::from_millis(33));
+        }
+        assert!(o.is_live(), "dropped: {:?}", ev);
+        o.stop_live().expect("stop live");
+        let t0 = Instant::now();
+        let status = loop {
+            if let Some(st) = server.try_wait().expect("listener status") {
+                break st;
+            }
+            assert!(
+                t0.elapsed() < Duration::from_secs(10),
+                "listener did not finish"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        let mut err = String::new();
+        if let Some(mut e) = server.stderr.take() {
+            use std::io::Read;
+            let _ = e.read_to_string(&mut err);
+        }
+        assert!(status.success(), "listener failed: {err}");
+        let p = probe(&ff, &got.to_string_lossy()).expect("ffprobe");
+        assert!(
+            p.contains("codec_name=h264") && p.contains("width=320") && p.contains("height=180"),
+            "listener did not receive the stream: {p}"
+        );
+        assert!(
+            ev.iter().all(|(_, m)| !m.contains("rx_test_key")),
+            "key leaked into a message"
+        );
+        let _ = std::fs::remove_file(&got);
+    }
+
     fn mediamtx_bin() -> Option<PathBuf> {
         let c = std::env::var_os("MEDIAMTX")
             .map(PathBuf::from)
@@ -1905,11 +1998,14 @@ mod tests {
     /// ffprobe, then kills the server and checks that the app reconnects
     /// with backoff once it is back.
     #[test]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        ignore = "mediamtx is installed on the Linux runner only"
+    )]
     fn streams_to_local_rtmp_and_reconnects_with_backoff() {
-        let (Ok(ff), Some(mtx)) = (find_ffmpeg(), mediamtx_bin()) else {
-            eprintln!("skipped: needs ffmpeg and mediamtx");
-            return;
-        };
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let mtx = mediamtx_bin()
+            .expect("mediamtx not found: set MEDIAMTX or install it at ~/opt/mediamtx/mediamtx");
         let port = 19350 + (std::process::id() % 500) as u16;
         let mut server = start_mediamtx(&mtx, port);
         let cfg = OutputConfig {

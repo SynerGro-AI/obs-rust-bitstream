@@ -254,29 +254,35 @@ cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
 ### Tests
 
 ```bash
-cargo test                         # library (1700+ tests)
-cargo test --features ui --bin ui  # UI, command bus, AI agent (mock provider), headless
+cargo test --lib                       # library
+cargo test --features ui --bin ui      # UI, command bus, AI agent (mock provider), headless
 ```
 
-With `ffmpeg`/`ffprobe` installed, `output::tests` records 5 s to MP4 and checks
-it with ffprobe; with mediamtx at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) it
-also streams to a local RTMP server, confirms receipt with ffprobe, kills the
-server and checks the reconnect. With the Seraphina.AGI CLI on PATH
-(`pip install seraphina-agi`), `real_cli_intents_end_to_end` runs
-remember / recall / triad / help / version (and a live `plan-grok` when a key
-is set).
+Tests that need an outside program fail with a message saying what is
+missing; they never pass silently.
 
-With `XAI_API_KEY` set, the same command also runs two live smoke tests:
-* `live_xai_tool_calling_smoke` asks Seraphina to "set Mist Overlay opacity
-  to 55% and switch to Composite" and checks that both commands ran through
-  the bus.
-* `live_xai_smoke_test_if_key_present`.
+* **ffmpeg** (or `SERAPHINA_FFMPEG`) is required by
+  `records_five_seconds_to_mp4_verified_by_ffprobe` (5 s to MP4, checked with
+  ffprobe) and `goes_live_to_an_ffmpeg_rtmp_listener` (goes live to
+  `ffmpeg -listen 1` on 127.0.0.1 and checks the received FLV with ffprobe).
+* **mediamtx** at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) is required on
+  Linux by `streams_to_local_rtmp_and_reconnects_with_backoff`: it streams to a
+  local RTMP server, confirms receipt under the stream key, kills the server
+  and checks the reconnect.
 
-The billed Grok Imagine test is ignored by default. It makes a 1 s 480p clip
-plus one image:
+On Windows (and under Wine) the ffmpeg and mediamtx tests are reported as
+ignored with the reason. Every other opt-in test is `#[ignore]` with its
+reason in the attribute, and fails if what it needs is missing:
 
 ```bash
-SERAPHINA_LIVE_OUT=/tmp cargo test --features ui --bin ui live_imagine -- --ignored
+# live, billed: need XAI_API_KEY
+cargo test --features ui --bin ui -- --ignored live_xai_tool_calling_smoke
+cargo test --features ui --bin ui -- --ignored live_xai_smoke_test
+SERAPHINA_LIVE_OUT=/tmp cargo test --features ui --bin ui -- --ignored live_imagine
+# live, free (/models): needs XAI_API_KEY
+cargo test --features ui --bin ui -- --ignored live_xai_key_test
+# needs the Seraphina.AGI CLI (pip install seraphina-agi)
+cargo test --features ui --bin ui -- --ignored real_cli_intents_end_to_end chat_routes_memory
 ```
 
 ### Shortcuts

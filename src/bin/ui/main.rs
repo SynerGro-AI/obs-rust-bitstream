@@ -3799,7 +3799,7 @@ mod tests {
     /// the worker). `cargo test --release --features ui --bin ui -- --ignored
     /// measure_ui_frame_time --nocapture` (SERAPHINA_BENCH_BODIES, default 1500).
     #[test]
-    #[ignore]
+    #[ignore = "benchmark: run with --release and --nocapture"]
     fn measure_ui_frame_time_with_a_heavy_arena() {
         use obs_rust_bitstream::arena::{stress_pile, Collide, Environment};
         let n: usize = std::env::var("SERAPHINA_BENCH_BODIES")
@@ -4550,7 +4550,7 @@ mod tests {
 
     /// Rewrites assets/mountain_spire.psd from the built-in sample document.
     #[test]
-    #[ignore]
+    #[ignore = "tool, not a test: rewrites assets/mountain_spire.psd"]
     fn regenerate_sample_psd() {
         let mut t = Toasts {
             now: 0.0,
@@ -4605,13 +4605,11 @@ mod tests {
         }
     }
 
-    /// The chat panel routes CLI intents to the real `seraphina` CLI (skipped if not installed).
+    /// The chat panel routes CLI intents to the real `seraphina` CLI.
     #[test]
+    #[ignore = "needs the seraphina CLI on PATH (pip install seraphina-agi)"]
     fn chat_routes_memory_intents_to_the_real_cli() {
-        let Some(mut cli) = llm::SeraphinaCli::detect() else {
-            eprintln!("skipped: seraphina not on PATH");
-            return;
-        };
+        let mut cli = llm::SeraphinaCli::detect().expect("seraphina CLI not found on PATH");
         let home = std::env::temp_dir().join(format!("seraphina_chat_cli_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         cli.home = Some(home.clone());
@@ -5440,12 +5438,15 @@ mod tests {
     /// Live, billed: real xAI tool calling through the bus. Run with
     /// `cargo test --features ui --bin ui -- --ignored live_xai_tool_calling_smoke`.
     #[test]
-    #[ignore]
+    #[ignore = "live, billed: needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"]
     fn live_xai_tool_calling_smoke() {
-        let Some(p) = llm::OpenAiCompat::from_env() else {
-            eprintln!("SKIPPED live_xai_tool_calling_smoke: no XAI_API_KEY");
-            return;
-        };
+        assert!(
+            ["XAI_API_KEY", "SERAPHINA_GROK_API_KEY"]
+                .iter()
+                .any(|k| std::env::var_os(k).is_some()),
+            "live_xai_tool_calling_smoke needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"
+        );
+        let p = llm::OpenAiCompat::from_env().expect("provider from env");
         let ctx = egui::Context::default();
         let mut app = app_with(&ctx, Some(Arc::new(p)));
         app.assistant.input =

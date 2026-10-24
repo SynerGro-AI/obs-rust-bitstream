@@ -5121,12 +5121,12 @@ mod tests {
         {
             let seen = mock.seen.lock().unwrap();
             assert_eq!(seen.len(), 2);
+            assert!(seen[1].iter().any(|m| m.role == "tool"
+                && m.content.starts_with("<<<DATA tool result ")
+                && m.content.contains("\nok: ")));
             assert!(seen[1]
                 .iter()
-                .any(|m| m.role == "tool" && m.content.starts_with("ok: ")));
-            assert!(seen[1]
-                .iter()
-                .any(|m| m.role == "tool" && m.content.starts_with("blocked: ")));
+                .any(|m| m.role == "tool" && m.content.contains("\nblocked: ")));
             assert!(seen[0][0].content.contains("Current app state"));
         }
         assert!(app

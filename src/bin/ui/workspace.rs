@@ -1382,7 +1382,7 @@ pub(crate) mod tests {
             .items
             .iter()
             .any(|i| i.text == "Make the sky bluer" && matches!(i.kind, ItemKind::User)));
-        assert_eq!(b.assistant.convo_len(), 2);
+        assert_eq!(b.assistant.convo_len(), 1, "one fenced transcript");
 
         let ctx = egui::Context::default();
         let mut a = test_app(&ctx);

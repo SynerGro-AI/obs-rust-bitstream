@@ -192,6 +192,12 @@ approximate.
   A summary is injected into the system prompt. The status bar shows
   "Online learning: N updates". It is stored in
   `~/.seraphina/studio/mercy_bank.json`.
+* **Shared learning (planned, not built).** Copies of the app will be able
+  to swap signed lesson packs: keep/undo outcomes and per-mode command
+  usage only, never settings, text, paths or keys. Each pack is carried in
+  a PNG "glyph card" and shared by file or over the LAN. It is off by
+  default, and each share and each import needs your approval after a
+  preview. See PLAN.md "C4: Shared learning" and the Planned table.
 * **Provider today: Grok (xAI).** Seraphina.AGI integration, with
   Seraphina.AGI running as a separate local process, is planned for
   after v0.2.0 (proposed; see "Planned (not built)").
@@ -471,6 +477,7 @@ stay out of the code until a real implementation lands with tests.
 |------|--------|
 | Seraphina.AGI integration: the app talks to Seraphina.AGI as a separate local process. Today the provider is Grok (xAI) through `src/bin/ui/llm.rs`; the only link now is the optional CLI bridge for memory intents | after v0.2.0 (proposed; not yet in the fix plan) |
 | One learning system shared by every mode (C4) | M4b: Wed Oct 28, 2026 (target) |
+| Shared learning between copies of the app (C4 v1): signed lesson packs carried in a glyph PNG chunk, shared by file or over the LAN, off by default, with each share and each import approved by the user after a preview. Spec: PLAN.md "C4: Shared learning". The internet mesh, automatic gossip and the visual glyph come later | after v0.2.0 (planned; the owner asked for it in v1, and whether that means v0.2.0 is open question 1 in PLAN.md) |
 | Remove `dist/` binaries and root clutter (G5–G7) | after v0.2.0 (M5) |
 | 64-bit physics, rotating bodies, contact graph (F1–F3) | after v0.2.0 (M6) |
 | Scenes and sources: window, game, browser, media, image, text and group sources; webcam capture on macOS (AVFoundation; Linux V4L2 and Windows Media Foundation are built, as the Camera output source); the OBS source/scene/filter/encoder/service registries, transitions, hotkeys, profiles, replay buffer, virtual camera, studio mode; a frame pipe and per-source profiler; NVENC/QSV/AMF (E6) | after v0.2.0 (M7+, Stream) |

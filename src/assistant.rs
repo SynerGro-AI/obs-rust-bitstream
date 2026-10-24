@@ -91,7 +91,7 @@ impl AssistantBackend for OfflineBackend {
         let tip = match ctx.mode.as_str() {
             "Stream" => "Stream mode steps the real bitstream reader. Pick a read width, press Step, and compare No-wrap with Wrap past byte 255.",
             "Paint" => "Paint mode: V move, M marquee, L lasso, W quick select, C crop, J healing, S clone (Alt-click source), B brush, E eraser, G gradient, O dodge / Shift+O burn, P pen, T type, H hand, Z zoom, I eyedropper. Ctrl+Z undoes.",
-            "3D" => "3D mode: pick Select/Move/Rotate/Scale on the shelf and drag in the viewport (Alt-drag orbits). Extrude and Bevel edit the selected cube's top face. Wireframe only; there is no renderer yet.",
+            "3D" => "3D mode renders with a z-buffered software rasterizer: Display offers Shaded (5), Wireframe (4) and Shaded + wire (6). Pick Select/Move/Rotate/Scale on the shelf and drag in the viewport (Alt-drag orbits). Extrude and Bevel edit the selected cube's top face.",
             "Animate" => "Animate mode draws frame by frame. Turn on onion skin to see neighbouring frames; Space plays.",
             "Composite" => "Composite mode keys layer opacity over time. Move the playhead, set opacity, press Add Key.",
             _ => "Pick a mode at the top to get started.",

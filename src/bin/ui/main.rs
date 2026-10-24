@@ -4635,13 +4635,18 @@ mod tests {
             )
             .is_err());
         assert!(!app.output.is_live());
-        if output::find_ffmpeg().is_err() {
+        // Windows runners and Wine have no ffmpeg.exe: there the bus must
+        // refuse clearly. Everywhere else ffmpeg is required and the real
+        // recording below must run; a missing ffmpeg fails the test.
+        if cfg!(windows) && output::find_ffmpeg().is_err() {
             assert!(app
                 .dispatch(&AppCommand::SetRecording { recording: true }, Origin::User)
                 .unwrap_err()
                 .contains("ffmpeg was not found"));
             return;
         }
+        output::find_ffmpeg()
+            .expect("stream_commands_and_status needs ffmpeg (on PATH or SERAPHINA_FFMPEG)");
         // real recording of the Stream-mode bit view through the bus
         app.mode = Mode::Stream;
         let msg = app

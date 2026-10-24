@@ -264,6 +264,8 @@ missing; they never pass silently.
   `records_five_seconds_to_mp4_verified_by_ffprobe` (5 s to MP4, checked with
   ffprobe) and `goes_live_to_an_ffmpeg_rtmp_listener` (goes live to
   `ffmpeg -listen 1` on 127.0.0.1 and checks the received FLV with ffprobe).
+  `concat_runs_off_thread` (stitches two clips) and
+  `stream_commands_and_status` (records through the command bus) need it too.
 * **mediamtx** at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) is required on
   Linux by `streams_to_local_rtmp_and_reconnects_with_backoff`: it streams to a
   local RTMP server, confirms receipt under the stream key, kills the server
@@ -282,6 +284,8 @@ SERAPHINA_LIVE_OUT=/tmp cargo test --features ui --bin ui -- --ignored live_imag
 cargo test --features ui --bin ui -- --ignored live_xai_key_test
 # needs the Seraphina.AGI CLI (pip install seraphina-agi)
 cargo test --features ui --bin ui -- --ignored real_cli_intents_end_to_end chat_routes_memory
+# billed: the CLI's plan-grok, needs the CLI and XAI_API_KEY
+cargo test --features ui --bin ui -- --ignored real_cli_plan_grok
 ```
 
 ### Shortcuts

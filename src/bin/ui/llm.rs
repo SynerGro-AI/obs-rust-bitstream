@@ -777,8 +777,8 @@ mod tests {
     }
 
     /// End to end against the real `seraphina` CLI. Uses a temp
-    /// SERAPHINA_HOME. `plan-grok` (billed) runs only with
-    /// SERAPHINA_LIVE_TESTS=1 and a key.
+    /// SERAPHINA_HOME. Free intents only; `plan-grok` (billed) is
+    /// `real_cli_plan_grok`.
     #[test]
     #[ignore = "needs the seraphina CLI on PATH (pip install seraphina-agi)"]
     fn real_cli_intents_end_to_end() {
@@ -806,17 +806,28 @@ mod tests {
         let t = cli.intent("triad keep the layers tidy").unwrap();
         assert!(t.contains("consensus:") && t.contains("response:"), "{}", t);
         assert!(cli.intent("build glyph 179").is_err());
-        // plan-grok is a billed xAI call: opt in with SERAPHINA_LIVE_TESTS=1.
-        if std::env::var("SERAPHINA_LIVE_TESTS").as_deref() == Ok("1") {
-            let p = cli
-                .intent("plan-grok three steps to add a gold vignette")
-                .unwrap();
-            eprintln!(
-                "LIVE plan-grok: {}",
-                p.lines().take(4).collect::<Vec<_>>().join(" | ")
-            );
-            assert!(p.contains("grok plan"), "{}", p);
-        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// `plan-grok` through the real CLI is a billed xAI call, so it is its
+    /// own opt-in test: `-- --ignored real_cli_plan_grok`.
+    #[test]
+    #[ignore = "live, billed: needs the seraphina CLI and XAI_API_KEY or SERAPHINA_GROK_API_KEY"]
+    fn real_cli_plan_grok() {
+        assert!(
+            ["XAI_API_KEY", "SERAPHINA_GROK_API_KEY"]
+                .iter()
+                .any(|v| std::env::var(v).is_ok_and(|k| !k.is_empty())),
+            "real_cli_plan_grok needs XAI_API_KEY or SERAPHINA_GROK_API_KEY"
+        );
+        let mut cli = SeraphinaCli::detect().expect("seraphina CLI not found on PATH");
+        let home = std::env::temp_dir().join(format!("seraphina_plan_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        cli.home = Some(home.clone());
+        let p = cli
+            .intent("plan-grok three steps to add a gold vignette")
+            .expect("plan-grok");
+        assert!(p.contains("grok plan"), "{}", p);
         let _ = std::fs::remove_dir_all(&home);
     }
 

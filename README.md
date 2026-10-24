@@ -179,16 +179,16 @@ approximate.
   native intents (`remember …`, `recall`, `triad …`, `help`, `version`) are
   forwarded to it. Recent `recall` notes are added to the prompt.
 * **Topic backgrounds (planned, not built).** Off by default. When you
-  turn it on, the stream background follows the topic, for example a
-  live weather radar map of the place being talked about, a photo for
-  "sunny" (a beach unless a place is named), or a Grok Imagine image
-  after you approve it on the **Run** card. Changes need a confidence
-  threshold, a cooldown and hysteresis. Third-party images carry on-screen
-  attribution. A failure keeps the current background and says why, and
-  nothing that isn't live is labelled live. Chat text comes first. Speech
-  needs speech-to-text, which the app does not have yet. Spec, sources and
-  licences, tests and open questions: "Topic backgrounds" in
-  [PLAN.md](PLAN.md).
+  turn it on, the stream background can follow the chat topic (spoken
+  topics come right after, through speech-to-text). Examples: a live ECCC
+  weather radar map of the place being talked about, a previewed and
+  licence-checked Wikimedia Commons photo for "sunny" (a beach unless a
+  place is named), or a Grok Imagine image that you approve one at a
+  time ($0.02 each with `grok-imagine-image`). Seraphina can only suggest
+  a background. Changes need a threshold, a cooldown and hysteresis.
+  Third-party images carry on-screen credit. "Live" is shown only for
+  radar data under 18 minutes old. A failure keeps the current background
+  and says why. Spec: "E7: Topic backgrounds" in [PLAN.md](PLAN.md).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -410,6 +410,16 @@ cargo test --bin ui -- --ignored real_cli_intents_end_to_end chat_routes_memory
 cargo test --bin ui -- --ignored real_cli_plan_grok
 ```
 
+Planned, not built yet: Topic backgrounds (E7) will add network tests
+that are skipped by default (`#[ignore]`):
+`geomet_live_getmap_returns_a_png_for_edmonton`,
+`geomet_live_valid_time_is_recent`,
+`osm_live_tile_returns_200_with_cache_headers`,
+`commons_live_curated_search_returns_an_allowed_licence` and
+`xai_stt_live_transcribes_a_recorded_wav` (billed). A scheduled CI job
+for them is planned too; it can't run while the organisation's GitHub
+Actions are billing-locked.
+
 ### Shortcuts
 
 `Ctrl+1…6` switch mode · `F1` shortcut sheet · `Esc` closes windows · `Ctrl+.` toggle Seraphina ·
@@ -500,7 +510,7 @@ stay out of the code until a real implementation lands with tests.
 | Microphone capture verified on real hardware on Windows (dshow) | after v0.2.0 (needs a run on a Windows PC with a microphone) |
 | Camera source verified on real hardware: a Windows webcam through Media Foundation (`media_foundation_reads_frames_from_a_real_camera`) and a Linux V4L2 device or v4l2loopback (`v4l2_reads_frames_from_a_real_device`); both tests are `#[ignore]` because the dev box has neither | after v0.2.0 (needs a run with a camera) |
 | Team features (organisation, invite, roles, presence) | after v0.2.0 |
-| Topic backgrounds: an opt-in Studio background layer that follows the chat topic (later the spoken topic): live ECCC or NOAA radar maps over OpenStreetMap tiles, licence-checked Wikimedia Commons photos, approved Grok Imagine images, with attribution drawn into the frame, threshold, cooldown and hysteresis, and an offline GeoNames place lookup that asks when a place is ambiguous. No background layer, speech-to-text or map code exists today (spec: "Topic backgrounds" in PLAN.md) | after v0.2.0 (planned; milestone is open question 8 in PLAN.md) |
+| Topic backgrounds (E7): first a compositor background layer with camera picture-in-picture (none exists today), then topic suggestions from chat (speech right after, via xAI's $0.10/h REST speech-to-text), ECCC radar over switchable OpenStreetMap tiles, curated and previewed Commons photos, per-image-approved Grok Imagine, offline GeoNames places, credit drawn into the frame and an honest live/not-live label (spec: PLAN.md "E7: Topic backgrounds") | after v0.2.0 (E7, its own milestone; dated when M4b merges) |
 
 Removed and not planned, because the app already does the real thing:
 

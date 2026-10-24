@@ -36,6 +36,11 @@ pub struct FlvReader {
 
 const TAG_HEADER: usize = 11;
 
+/// The largest tag body accepted. FLV allows 16 MiB; a real encoder tag
+/// (even a 4K keyframe) is far smaller, so anything bigger means the
+/// stream is corrupt and would otherwise be buffered whole first.
+pub const MAX_TAG: usize = 8 << 20;
+
 impl FlvReader {
     pub fn new() -> Self {
         Self::default()
@@ -84,9 +89,24 @@ impl FlvReader {
             return Err(format!("unknown FLV tag type {kind}"));
         }
         let size = u32::from_be_bytes([0, b[1], b[2], b[3]]) as usize;
+        if size > MAX_TAG {
+            return Err(format!(
+                "FLV tag of {size} bytes is over the {MAX_TAG}-byte limit"
+            ));
+        }
+        if b[8..11] != [0, 0, 0] {
+            return Err("FLV tag with a nonzero stream id".into());
+        }
         let n = TAG_HEADER + size + 4;
         if b.len() < n {
             return Ok(None);
+        }
+        let prev = u32::from_be_bytes([b[n - 4], b[n - 3], b[n - 2], b[n - 1]]) as usize;
+        if prev != TAG_HEADER + size {
+            return Err(format!(
+                "FLV previous-tag-size {prev} doesn't match the tag ({})",
+                TAG_HEADER + size
+            ));
         }
         let dts_ms = u32::from_be_bytes([b[7], b[4], b[5], b[6]]);
         let bytes = b[..n].to_vec();
@@ -168,5 +188,68 @@ mod tests {
         r.push(&tag(7, 0, b"x"));
         assert_eq!(r.next_item().unwrap(), Some(FlvItem::Header(header())));
         assert!(r.next_item().unwrap_err().contains("tag type 7"));
+    }
+
+    /// A corrupt size is refused from the 11-byte header alone, before
+    /// anything is buffered for it.
+    #[test]
+    fn refuses_an_oversized_tag_without_waiting_for_its_body() {
+        let mut r = FlvReader::new();
+        r.push(&header());
+        let s = (MAX_TAG + 1) as u32;
+        r.push(&[
+            9,
+            (s >> 16) as u8,
+            (s >> 8) as u8,
+            s as u8,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]);
+        assert_eq!(r.next_item().unwrap(), Some(FlvItem::Header(header())));
+        let e = r.next_item().unwrap_err();
+        assert!(e.contains("over the 8388608-byte limit"), "{e}");
+        // the limit itself is allowed (it waits for the body)
+        let mut r = FlvReader::new();
+        r.push(&header());
+        let s = MAX_TAG as u32;
+        r.push(&[
+            9,
+            (s >> 16) as u8,
+            (s >> 8) as u8,
+            s as u8,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]);
+        r.next_item().unwrap();
+        assert_eq!(r.next_item(), Ok(None));
+    }
+
+    #[test]
+    fn refuses_a_nonzero_stream_id_and_a_wrong_previous_tag_size() {
+        let mut bad_id = tag(9, 0, &[0x17, 1]);
+        bad_id[10] = 1;
+        let mut bad_prev = tag(9, 0, &[0x17, 1]);
+        *bad_prev.last_mut().unwrap() += 1;
+        for (t, want) in [
+            (bad_id, "nonzero stream id"),
+            (bad_prev, "previous-tag-size 14"),
+        ] {
+            let mut r = FlvReader::new();
+            r.push(&header());
+            r.push(&t);
+            r.next_item().unwrap();
+            let e = r.next_item().unwrap_err();
+            assert!(e.contains(want), "{e}");
+        }
     }
 }

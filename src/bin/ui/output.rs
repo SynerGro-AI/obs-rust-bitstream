@@ -1980,18 +1980,157 @@ mod tests {
     }
 
     fn start_mediamtx(bin: &Path, port: u16) -> Child {
-        let dir = std::env::temp_dir().join(format!("mtx_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let c = spawn_mediamtx(
+            bin,
+            "reconnect",
+            &format!("rtmp: yes\nrtmpAddress: 127.0.0.1:{port}\napi: no\npaths:\n  all_others:\n"),
+        );
+        std::thread::sleep(Duration::from_millis(800));
+        c
+    }
+
+    /// mediamtx with only the given settings on top of a quiet base config
+    /// (no RTSP/HLS/WebRTC/SRT). `tag` keeps parallel tests' configs apart.
+    fn spawn_mediamtx(bin: &Path, tag: &str, settings: &str) -> Child {
+        let dir = std::env::temp_dir().join(format!("mtx_{}_{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mediamtx config dir");
         let yml = dir.join("mediamtx.yml");
-        std::fs::write(&yml, format!("logLevel: warn\napi: no\nmetrics: no\npprof: no\nplayback: no\nrtsp: no\nhls: no\nwebrtc: no\nsrt: no\nrtmp: yes\nrtmpAddress: 127.0.0.1:{}\npaths:\n  all_others:\n", port)).unwrap();
-        let c = Command::new(bin)
+        std::fs::write(&yml, format!("logLevel: warn\nmetrics: no\npprof: no\nplayback: no\nrtsp: no\nhls: no\nwebrtc: no\nsrt: no\n{settings}")).expect("write mediamtx.yml");
+        Command::new(bin)
             .arg(&yml)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .unwrap();
-        std::thread::sleep(Duration::from_millis(800));
-        c
+            .expect("spawn mediamtx")
+    }
+
+    fn free_port() -> u16 {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a free port");
+        l.local_addr().expect("local addr").port()
+    }
+
+    /// GET from the mediamtx control API: Ok(body) on 2xx, Err(status) else.
+    fn mtx_api(api: u16, path: &str) -> Result<String, u16> {
+        match ureq::get(&format!("http://127.0.0.1:{api}{path}"))
+            .timeout(Duration::from_secs(2))
+            .call()
+        {
+            Ok(r) => r.into_string().map_err(|_| 0),
+            Err(ureq::Error::Status(c, _)) => Err(c),
+            Err(_) => Err(0),
+        }
+    }
+
+    /// The app's real streaming path (Output::start_live → ffmpeg → RTMP)
+    /// publishes to mediamtx under the caller's stream key, and a wrong key
+    /// is rejected. mediamtx accepts only `live/good_key`; its control API
+    /// must report that path ready with an H.264 track and bytes received,
+    /// and ffprobe must read the stream back. Publishing with `wrong_key`
+    /// must be refused by the server and surface as an error in the app.
+    #[test]
+    #[cfg_attr(
+        not(target_os = "linux"),
+        ignore = "mediamtx is installed on the Linux runner only"
+    )]
+    fn publishes_to_mediamtx_under_the_callers_key_and_rejects_a_wrong_key() {
+        let ff = find_ffmpeg().expect("ffmpeg not found: install it or set SERAPHINA_FFMPEG");
+        let mtx = mediamtx_bin()
+            .expect("mediamtx not found: set MEDIAMTX or install it at ~/opt/mediamtx/mediamtx");
+        let (rtmp, api) = (free_port(), free_port());
+        let mut server = spawn_mediamtx(
+            &mtx,
+            "keys",
+            &format!("rtmp: yes\nrtmpAddress: 127.0.0.1:{rtmp}\napi: yes\napiAddress: 127.0.0.1:{api}\npaths:\n  live/good_key:\n"),
+        );
+        let t0 = Instant::now();
+        while mtx_api(api, "/v3/paths/list").is_err() {
+            assert!(
+                t0.elapsed() < Duration::from_secs(10),
+                "mediamtx API never came up"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let run = |key: &str, secs: u64| {
+            let cfg = OutputConfig {
+                rtmp_url: format!("rtmp://127.0.0.1:{rtmp}/live"),
+                width: 320,
+                height: 180,
+                fps: 30,
+                video_kbps: 600,
+                retry_sec: 1,
+                retry_max: 2,
+                ..Default::default()
+            };
+            let mut o = Output::new(cfg, String::new());
+            o.set_key(key, false).expect("set key");
+            o.push_frame(moving_frame(0));
+            o.start_live().expect("start live");
+            let mut ev = Vec::new();
+            let t0 = Instant::now();
+            let mut i = 0;
+            while t0.elapsed() < Duration::from_secs(secs) {
+                o.push_frame(moving_frame(i));
+                i += 1;
+                ev.extend(o.tick());
+                std::thread::sleep(Duration::from_millis(33));
+            }
+            (o, ev)
+        };
+
+        // Right key: the server has the path, ready, with video.
+        let (mut o, ev) = run("good_key", 3);
+        let body = mtx_api(api, "/v3/paths/get/live/good_key").unwrap_or_else(|c| {
+            panic!("live/good_key not on the server (HTTP {c}); app events: {ev:?}")
+        });
+        let j: serde_json::Value = serde_json::from_str(&body).expect("API JSON");
+        assert_eq!(j["ready"], true, "{body}");
+        assert!(
+            j["tracks"]
+                .as_array()
+                .is_some_and(|t| t.iter().any(|t| t == "H264")),
+            "no H264 track: {body}"
+        );
+        assert!(j["bytesReceived"].as_u64().unwrap_or(0) > 0, "{body}");
+        let p = probe(&ff, &format!("rtmp://127.0.0.1:{rtmp}/live/good_key")).expect("ffprobe");
+        assert!(
+            p.contains("codec_name=h264") && p.contains("width=320") && p.contains("height=180"),
+            "read-back failed: {p}"
+        );
+        assert!(
+            o.is_live() && o.status().error.is_none(),
+            "{:?} {ev:?}",
+            o.status()
+        );
+        assert!(
+            ev.iter()
+                .all(|(k, _)| *k == ToastKind::Info || *k == ToastKind::Success),
+            "{ev:?}"
+        );
+        o.stop_live().expect("stop live");
+
+        // Wrong key: the server refuses the path and the app says so.
+        let (mut o, ev) = run("wrong_key", 5);
+        assert_eq!(
+            mtx_api(api, "/v3/paths/get/live/wrong_key"),
+            Err(404),
+            "server accepted a wrong key"
+        );
+        let list = mtx_api(api, "/v3/paths/list").expect("paths list");
+        assert!(!list.contains("wrong_key"), "{list}");
+        assert!(
+            ev.iter()
+                .any(|(k, m)| *k == ToastKind::Warn && m.starts_with("Stream dropped")),
+            "a rejected key must surface: {ev:?}"
+        );
+        assert!(o.status().error.is_some(), "{:?}", o.status());
+        assert!(
+            ev.iter()
+                .all(|(_, m)| !m.contains("good_key") && !m.contains("wrong_key")),
+            "key leaked into a message: {ev:?}"
+        );
+        let _ = o.stop_live();
+        let _ = server.kill();
+        let _ = server.wait();
     }
 
     /// Streams to a local mediamtx RTMP server, confirms receipt with

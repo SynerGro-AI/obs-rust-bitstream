@@ -269,7 +269,11 @@ missing; they never pass silently.
 * **mediamtx** at `~/opt/mediamtx/mediamtx` (or `MEDIAMTX`) is required on
   Linux by `streams_to_local_rtmp_and_reconnects_with_backoff`: it streams to a
   local RTMP server, confirms receipt under the stream key, kills the server
-  and checks the reconnect.
+  and checks the reconnect. `publishes_to_mediamtx_under_the_callers_key_and_rejects_a_wrong_key`
+  runs mediamtx with only `live/good_key` allowed: the app's real path
+  (`Output::start_live` → ffmpeg) must show up in mediamtx's API as ready
+  with an H.264 track and read back with ffprobe, and `wrong_key` must be
+  refused by the server and reported in the app.
 
 On Windows (and under Wine) the ffmpeg and mediamtx tests are reported as
 ignored with the reason. Every other opt-in test is `#[ignore]` with its

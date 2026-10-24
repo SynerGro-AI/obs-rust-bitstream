@@ -1,6 +1,6 @@
 //! Seraphina Studio — unified creative-suite shell (egui / eframe).
 //!
-//! cargo run --release --features ui --bin ui
+//! cargo run --release
 //!
 //! Every button, shortcut and AI tool call goes through one typed
 //! command bus (`commands::AppCommand`, dispatched by `App::dispatch`).

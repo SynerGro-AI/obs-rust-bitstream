@@ -32,8 +32,10 @@ jobs:
           components: clippy
           targets: x86_64-pc-windows-gnu
       - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
-      - run: cargo clippy --locked --all-targets --features ui -- -D warnings
-      - run: cargo clippy --locked --all-targets --features ui --target x86_64-pc-windows-gnu -- -D warnings
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --locked --all-targets --target x86_64-pc-windows-gnu -- -D warnings
+      # the library alone, as a dependency without the app's crates
+      - run: cargo clippy --locked --lib --no-default-features -- -D warnings
 
   audit:
     # RustSec advisories against Cargo.lock. Unmaintained/yanked crates are
@@ -75,23 +77,27 @@ jobs:
           curl -fsSL -o mediamtx.tar.gz https://github.com/bluenviron/mediamtx/releases/download/v1.9.3/mediamtx_v1.9.3_linux_amd64.tar.gz
           echo "0b885dbfa4ef9c14cd00191c57d90d804255ff50403a28b85ceee7988c535b60  mediamtx.tar.gz" | sha256sum -c -
           tar -xzf mediamtx.tar.gz -C "$HOME/opt/mediamtx"
-      - run: cargo test --locked --verbose
-      # UI tests run headless against egui::Context; no display needed.
-      - run: cargo test --locked --features ui --bin ui
+      # the library alone (no app dependencies), its tests and examples
+      - run: cargo test --locked --verbose --no-default-features
+      # the library with the app's features, then the app; UI tests run
+      # headless against egui::Context, no display needed
+      - run: cargo test --locked --lib
+      - run: cargo test --locked --bin ui
       # The Windows build used for the release zip (mingw cross-compile).
-      - run: cargo build --locked --release --features ui --bin ui --target x86_64-pc-windows-gnu
+      - run: cargo build --locked --release --target x86_64-pc-windows-gnu
 
   windows-ui:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --locked --release --features ui --bin ui
+      # exactly the README's Windows steps: a plain release build makes the exe
+      - run: cargo build --locked --release
       # Library and app tests on real Windows. This job must be a REQUIRED
       # check in branch protection: some tests only fail here (e.g.
       # ui_canvas::save_target, which depends on Windows path rules).
       # ffmpeg and mediamtx tests are #[ignore]d on Windows (with the reason).
-      - run: cargo test --locked --features ui --lib --bins
+      - run: cargo test --locked --lib --bins
       - run: copy target\release\ui.exe SeraphinaStudio.exe
         shell: cmd
       - uses: actions/upload-artifact@v4
@@ -112,4 +118,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88
-      - run: cargo check --locked --all-targets --features ui
+      - run: cargo check --locked --all-targets
+      - run: cargo check --locked --lib --no-default-features

@@ -8,7 +8,8 @@ and the tested Rust library behind it. It is public, free and open:
 ## How to start
 
 1. Clone the repo.
-2. Run `cargo test` and `cargo test --features ui --lib --bins`.
+2. Run `cargo test` (library and app; the `ui` feature is on by default)
+   and `cargo test --no-default-features` (library alone).
 3. Pick an unchecked item from the "Planned (not built)" table in
    README.md or from TOOLS.md and open a pull request.
 
@@ -28,7 +29,7 @@ from the app or an example.
   or is `#[ignore = "reason"]`. It never passes silently.
 - No placeholder modules: a module lands with its first real caller.
 - One change per pull request; `cargo fmt`, `cargo clippy --all-targets
-  --features ui -- -D warnings` and `cargo machete` stay clean.
+  -- -D warnings` and `cargo machete` stay clean.
 
 ## Questions
 

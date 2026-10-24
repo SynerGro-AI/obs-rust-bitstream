@@ -373,3 +373,51 @@ fn an_unreadable_source_directory_fails_the_walk() {
         &mut Vec::new(),
     );
 }
+
+/// The README's Windows steps are a plain clone and `cargo build --release`,
+/// and that must build the app: `ui` is a default feature, the bin is `ui`
+/// (so the exe is target\release\ui.exe), and CI's Windows job runs the
+/// same plain build.
+#[test]
+fn a_plain_release_build_makes_the_exe_the_readme_names() {
+    let cargo = include_str!("../Cargo.toml");
+    let readme = include_str!("../README.md");
+    let ci = include_str!("../.github/workflows/ci.yml");
+
+    let features = cargo
+        .split("\n[features]\n")
+        .nth(1)
+        .expect("Cargo.toml has a [features] table");
+    let default = features
+        .lines()
+        .take_while(|l| !l.starts_with('['))
+        .find_map(|l| l.strip_prefix("default = "))
+        .expect("Cargo.toml [features] sets default");
+    assert!(
+        default.contains("\"ui\""),
+        "default features {default} leave out ui, so `cargo build --release` builds no exe"
+    );
+
+    let bin = cargo
+        .split("\n[[bin]]\n")
+        .nth(1)
+        .expect("Cargo.toml has a [[bin]]");
+    assert!(
+        bin.lines().next() == Some("name = \"ui\""),
+        "the app bin is not named ui, so it is not ui.exe"
+    );
+
+    let steps = "```bat\ngit clone https://github.com/SynerGro-AI/seraphina-studio\n\
+                 cd seraphina-studio\ncargo build --release\n```";
+    assert!(
+        readme.contains(steps),
+        "README lacks the plain Windows build steps:\n{steps}"
+    );
+    assert!(readme.contains("**`target\\release\\ui.exe`**"));
+    assert!(readme.contains("**ffmpeg** is not bundled"));
+    assert!(
+        ci.contains("- run: cargo build --locked --release\n"),
+        "CI does not run the README's plain release build"
+    );
+    assert!(ci.contains("copy target\\release\\ui.exe "));
+}

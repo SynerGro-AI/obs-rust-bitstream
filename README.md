@@ -251,11 +251,10 @@ Build, in a plain `cmd` window:
 ```bat
 git clone https://github.com/SynerGro-AI/seraphina-studio
 cd seraphina-studio
-cargo build --release --features ui --bin ui
+cargo build --release
 ```
 
-The app is behind the `ui` feature, so a bare `cargo build --release` only
-builds the library and produces no exe. The exe is
+The app (the `ui` feature) is on by default, so that builds the exe:
 **`target\release\ui.exe`**. Run it from the repo folder so it finds
 `assets\` and the sample streams (`out.h264`, `out.obsr`):
 
@@ -267,7 +266,7 @@ target\release\ui.exe
 The `set` line is optional and only lasts for that cmd window. It turns on
 the Seraphina assistant and Grok Imagine; you can also add the key in
 Settings. Without a key the assistant runs offline and says so.
-`cargo run --release --features ui --bin ui` builds and starts in one step.
+`cargo run --release` builds and starts in one step.
 
 The build needs no bash, pkg-config, CMake or NASM: there is no build
 script, the Linux-only crate (`libc`, for V4L2) is only pulled in on Linux,
@@ -298,7 +297,7 @@ run should confirm the Build Tools install, the
 ### Run on Linux / macOS
 
 ```bash
-cargo run --release --features ui --bin ui
+cargo run --release
 ```
 
 Linux needs an X11 or Wayland session with OpenGL. On minimal installs:
@@ -309,7 +308,7 @@ Linux needs an X11 or Wayland session with OpenGL. On minimal installs:
 ```bash
 sudo apt install mingw-w64
 rustup target add x86_64-pc-windows-gnu
-cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
+cargo build --release --target x86_64-pc-windows-gnu
 # -> target/x86_64-pc-windows-gnu/release/ui.exe
 ```
 
@@ -317,7 +316,8 @@ cargo build --release --features ui --bin ui --target x86_64-pc-windows-gnu
 
 ```bash
 cargo test --lib                       # library
-cargo test --features ui --bin ui      # UI, command bus, AI agent (mock provider), headless
+cargo test --bin ui                    # UI, command bus, AI agent (mock provider), headless
+cargo test --no-default-features       # library alone, without the app's dependencies
 ```
 
 Tests that need an outside program fail with a message saying what is
@@ -356,15 +356,15 @@ reason in the attribute, and fails if what it needs is missing:
 
 ```bash
 # live, billed: need XAI_API_KEY
-cargo test --features ui --bin ui -- --ignored live_xai_tool_calling_smoke
-cargo test --features ui --bin ui -- --ignored live_xai_smoke_test
-SERAPHINA_LIVE_OUT=/tmp cargo test --features ui --bin ui -- --ignored live_imagine
+cargo test --bin ui -- --ignored live_xai_tool_calling_smoke
+cargo test --bin ui -- --ignored live_xai_smoke_test
+SERAPHINA_LIVE_OUT=/tmp cargo test --bin ui -- --ignored live_imagine
 # live, free (/models): needs XAI_API_KEY
-cargo test --features ui --bin ui -- --ignored live_xai_key_test
+cargo test --bin ui -- --ignored live_xai_key_test
 # needs the Seraphina.AGI CLI (pip install seraphina-agi)
-cargo test --features ui --bin ui -- --ignored real_cli_intents_end_to_end chat_routes_memory
+cargo test --bin ui -- --ignored real_cli_intents_end_to_end chat_routes_memory
 # billed: the CLI's plan-grok, needs the CLI and XAI_API_KEY
-cargo test --features ui --bin ui -- --ignored real_cli_plan_grok
+cargo test --bin ui -- --ignored real_cli_plan_grok
 ```
 
 ### Shortcuts
@@ -493,7 +493,7 @@ tools/            the OBS C-to-Rust parser and the element-data generator
 
 ```bash
 cargo test --lib
-cargo test --features ui --bin ui
+cargo test --bin ui
 ```
 
 ## Roadmap

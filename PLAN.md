@@ -52,5 +52,5 @@ Everything below comes after v0.2.0 and has no date yet:
 - Every README claim is backed by a test or a measurement
 
 ## How to contribute
-Clone, run `cargo test --lib` and `cargo test --features ui --bin ui`,
+Clone, run `cargo test --lib` and `cargo test --bin ui`,
 open a PR.

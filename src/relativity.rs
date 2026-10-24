@@ -125,6 +125,7 @@ pub fn gps_drift_per_day(r: f64) -> (f64, f64, f64) {
 // ---- N-body ------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mass {
     pub name: String,
     /// GM (m³/s²) — gravitational parameters are known far better than G or M
@@ -136,6 +137,7 @@ pub struct Mass {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct NBody {
     pub bodies: Vec<Mass>,
     pub time: f64,

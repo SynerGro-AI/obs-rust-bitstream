@@ -379,6 +379,7 @@ impl LayerMask {
 
 /// Text layer source, re-rasterised whenever it changes.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct TextSpec {
     pub text: String,
     pub x: f32,
@@ -456,6 +457,7 @@ impl PaintLayer {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct LayerGroup {
     pub id: u32,
     pub name: String,

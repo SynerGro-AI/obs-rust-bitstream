@@ -41,6 +41,7 @@ use crate::vec3::Vec3;
 /// A composition: (Z, count) pairs in formula order; counts may be
 /// fractional-free integers only.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Composition(pub Vec<(u32, u32)>);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -193,14 +194,23 @@ fn parse_group(s: &[char], i: &mut usize, depth: u32) -> Result<Vec<(u32, u32)>,
 
 /// Result of running a composition through the lab.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Analysis {
     pub formula: String,
     pub molar_mass: f32,
     /// (symbol, protons, neutrons, stable) for each constituent element's
     /// most common isotope.
+    #[cfg_attr(
+        feature = "ui",
+        serde(deserialize_with = "crate::serde_static::nuclei")
+    )]
     pub nuclei: Vec<(&'static str, u32, u32, bool)>,
     pub all_stable: bool,
     /// Oxidation-state assignment that sums to zero, if one exists.
+    #[cfg_attr(
+        feature = "ui",
+        serde(deserialize_with = "crate::serde_static::oxidation")
+    )]
     pub oxidation: Option<Vec<(&'static str, i32)>>,
     /// Pure element or all-metal alloy (charge balance trivially satisfied).
     pub metallic_bond: bool,
@@ -275,6 +285,7 @@ pub fn analyze(c: &Composition) -> Analysis {
 
 /// Render parameters.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Pbr {
     /// Linear RGB, 0..1.
     pub base_color: [f32; 3],
@@ -684,6 +695,7 @@ pub fn preset(key: &str) -> Option<Preset> {
 
 /// Full derived profile for a composition.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Profile {
     pub name: String,
     pub formula: String,
@@ -691,8 +703,13 @@ pub struct Profile {
     pub pbr: Pbr,
     pub env: EnvMeta,
     pub notes: Vec<String>,
-    pub preset: Option<&'static str>,
+    #[cfg_attr(feature = "ui", serde(deserialize_with = "crate::serde_static::opt"))]
+    pub preset: Option<PresetKey>,
 }
+
+/// A preset key. (An alias, so serde's derive does not treat the field as
+/// borrowed from the input; it is interned on load instead.)
+pub type PresetKey = &'static str;
 
 /// Profile of a preset (measured values), whatever its formula collides with.
 pub fn preset_profile(p: &Preset) -> Profile {

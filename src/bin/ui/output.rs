@@ -487,6 +487,29 @@ pub struct Session {
     finished: bool,
 }
 
+/// `rtmp://user:pass@host/app/KEY?token=x` → `rtmp://host/app`.
+pub fn strip_url_secrets(url: &str, key: &str) -> String {
+    let mut u = url.trim().to_string();
+    if let Some(q) = u.find(['?', '#']) {
+        u.truncate(q);
+    }
+    if let Some(s) = u.find("://") {
+        let rest = &u[s + 3..];
+        let host_end = rest.find('/').unwrap_or(rest.len());
+        if let Some(at) = rest[..host_end].rfind('@') {
+            u = format!("{}{}", &u[..s + 3], &rest[at + 1..]);
+        }
+    }
+    let k = key.trim();
+    if !k.is_empty() {
+        u = u.replace(k, "");
+    }
+    while u.ends_with('/') && !u.ends_with("://") {
+        u.pop();
+    }
+    u
+}
+
 fn scrub(line: &str, secret: &str) -> String {
     if secret.len() >= 2 {
         line.replace(secret, "****")
@@ -778,6 +801,22 @@ impl Output {
                 self.key.chars().count()
             )
         })
+    }
+
+    /// Output settings for a project file: never the stream key (it stays in
+    /// its own file), URL credentials or query tokens.
+    pub fn project_cfg(&self) -> OutputConfig {
+        let mut c = self.cfg.clone();
+        c.rtmp_url = strip_url_secrets(&c.rtmp_url, &self.key);
+        c
+    }
+
+    /// Settings from an opened project (the local key is kept; nothing is
+    /// written to output.json until the user changes a setting).
+    pub fn load_project_cfg(&mut self, c: OutputConfig) {
+        self.cfg = c;
+        self.reconnect
+            .set_settings(self.cfg.retry_max, self.cfg.retry_sec);
     }
 
     pub fn save_config(&mut self) -> Result<(), String> {

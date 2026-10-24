@@ -24,6 +24,8 @@ pub struct AnimState {
     pub onion_range: usize,
     history: History<Vec<Raster>>,
     last_dab: Option<(f32, f32)>,
+    /// Bumped by every frame edit, undo and redo (dirty tracking).
+    pub edits: u64,
 }
 
 impl AnimState {
@@ -49,6 +51,7 @@ impl AnimState {
             onion_range: 1,
             history: History::new(6),
             last_dab: None,
+            edits: 0,
         }
     }
 
@@ -77,11 +80,13 @@ impl AnimState {
     }
 
     fn snapshot(&mut self) {
+        self.edits += 1;
         self.history.push(self.frames.clone());
     }
 
     pub fn restore(&mut self, frames: Vec<Raster>) {
         let n = frames.len();
+        self.edits += 1;
         self.frames = frames;
         self.ink = self
             .frames
@@ -543,5 +548,72 @@ impl AnimState {
                     }
                 });
             });
+    }
+}
+
+// ---- project files ------------------------------------------------------------
+
+use crate::project::{Assets, RasterRef};
+use serde::{Deserialize, Serialize};
+
+/// Animate mode in a `.seraphina` project.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AnimFile {
+    pub frames: Vec<RasterRef>,
+    pub fps: f32,
+    pub clock: Clock,
+    pub brush: Brush,
+    pub erase: bool,
+    pub onion: bool,
+    pub onion_range: usize,
+}
+
+impl AnimState {
+    pub fn to_file(&self, a: &mut Assets) -> AnimFile {
+        AnimFile {
+            frames: self
+                .frames
+                .iter()
+                .enumerate()
+                .map(|(i, f)| a.put_raster(&format!("frame {}", i + 1), f))
+                .collect(),
+            fps: self.fps,
+            clock: self.clock.clone(),
+            brush: self.brush,
+            erase: self.erase,
+            onion: self.onion,
+            onion_range: self.onion_range,
+        }
+    }
+
+    pub fn load_file(&mut self, f: AnimFile, a: &Assets) -> Result<(), String> {
+        let mut frames = Vec::with_capacity(f.frames.len());
+        for r in &f.frames {
+            let r = a.raster(r)?;
+            if (r.width, r.height) != (W, H) {
+                return Err(format!(
+                    "animation frame is {}×{}, expected {}×{}",
+                    r.width, r.height, W, H
+                ));
+            }
+            frames.push(r);
+        }
+        if frames.is_empty() || frames.len() > MAX_FRAMES {
+            return Err(format!(
+                "animation has {} frames (1-{})",
+                frames.len(),
+                MAX_FRAMES
+            ));
+        }
+        self.history = History::new(6);
+        self.last_dab = None;
+        self.fps = f.fps.clamp(1.0, 60.0);
+        self.restore(frames);
+        self.clock = f.clock;
+        self.brush = f.brush;
+        self.erase = f.erase;
+        self.onion = f.onion;
+        self.onion_range = f.onion_range;
+        Ok(())
     }
 }

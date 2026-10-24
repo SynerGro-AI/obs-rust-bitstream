@@ -16,6 +16,7 @@ pub enum JointError {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct Joint {
     name: String,
     x: f32,
@@ -59,6 +60,7 @@ impl Joint {
 }
 
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct JointHierarchy {
     joints: BTreeMap<String, Joint>,
     parents: BTreeMap<String, String>,

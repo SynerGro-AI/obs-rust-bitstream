@@ -478,3 +478,74 @@ impl CompState {
         }
     }
 }
+
+// ---- project files ------------------------------------------------------------
+
+use crate::project::{Assets, RasterRef};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompLayerFile {
+    pub name: String,
+    pub visible: bool,
+    pub opacity: f32,
+    pub blend: BlendMode,
+    pub raster: RasterRef,
+    pub track: KeyTrack,
+}
+
+/// Composite timeline in a `.seraphina` project.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompFile {
+    pub layers: Vec<CompLayerFile>,
+    pub selected: usize,
+    pub clock: Clock,
+}
+
+impl CompState {
+    pub fn to_file(&self, a: &mut Assets) -> CompFile {
+        CompFile {
+            layers: self
+                .layers
+                .iter()
+                .map(|l| CompLayerFile {
+                    name: l.layer.name.clone(),
+                    visible: l.layer.visible,
+                    opacity: l.layer.opacity,
+                    blend: l.layer.blend,
+                    raster: a.put_raster(&format!("comp {}", l.layer.name), &l.layer.raster),
+                    track: l.opacity.clone(),
+                })
+                .collect(),
+            selected: self.selected,
+            clock: self.clock.clone(),
+        }
+    }
+
+    pub fn load_file(&mut self, f: CompFile, a: &Assets) -> Result<(), String> {
+        let mut layers = Vec::with_capacity(f.layers.len());
+        for l in f.layers {
+            let r = a.raster(&l.raster)?;
+            if (r.width, r.height) != (PW, PH) {
+                return Err(format!(
+                    "composite layer is {}×{}, expected {}×{}",
+                    r.width, r.height, PW, PH
+                ));
+            }
+            let mut il = ImageLayer::new(&l.name, r);
+            il.visible = l.visible;
+            il.opacity = l.opacity;
+            il.blend = l.blend;
+            layers.push(CompLayer {
+                layer: il,
+                opacity: l.track,
+            });
+        }
+        self.selected = f.selected.min(layers.len().saturating_sub(1));
+        self.layers = layers;
+        self.clock = f.clock;
+        self.tex = None;
+        self.last = None;
+        Ok(())
+    }
+}

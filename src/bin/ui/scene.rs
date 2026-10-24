@@ -17,7 +17,7 @@ use obs_rust_bitstream::{Joint, JointHierarchy};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Kind {
     Cube,
     Mesh,
@@ -38,7 +38,7 @@ impl Kind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Gizmo {
     Select,
     Move,
@@ -88,7 +88,7 @@ impl Gizmo {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Shading {
     Shaded,
     Wireframe,
@@ -127,7 +127,7 @@ impl Shading {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Obj {
     pub name: String,
     pub kind: Kind,
@@ -2025,6 +2025,74 @@ fn energy_ledger(ui: &mut egui::Ui, p: &Palette, a: &obs_rust_bitstream::arena::
                 ),
         );
     });
+}
+
+// ---- project files ------------------------------------------------------------
+
+/// 3D scene in a `.seraphina` project.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SceneFile {
+    pub objs: Vec<Obj>,
+    pub selected: Option<usize>,
+    pub prev_selected: Option<usize>,
+    pub yaw: f32,
+    pub pitch: f32,
+    pub dist: f32,
+    pub grid: bool,
+    pub clock: Clock,
+    pub joints: JointHierarchy,
+    pub gizmo: Gizmo,
+    pub shading: Shading,
+    pub shelf_tab: usize,
+    pub assign: MaterialAssign,
+    /// Next auto-name number ("cube3").
+    pub counter: usize,
+}
+
+impl SceneState {
+    pub fn to_file(&self) -> SceneFile {
+        SceneFile {
+            objs: self.objs.clone(),
+            selected: self.selected,
+            prev_selected: self.prev_selected,
+            yaw: self.yaw,
+            pitch: self.pitch,
+            dist: self.dist,
+            grid: self.grid,
+            clock: self.clock.clone(),
+            joints: self.joints.clone(),
+            gizmo: self.gizmo,
+            shading: self.shading,
+            shelf_tab: self.shelf_tab,
+            assign: self.assign.clone(),
+            counter: self.counter,
+        }
+    }
+
+    pub fn load_file(&mut self, f: SceneFile) -> Result<(), String> {
+        let n = f.objs.len();
+        if let Some(bad) = f.objs.iter().find(|o| o.parent.is_some_and(|p| p >= n)) {
+            return Err(format!("3D object '{}' has a missing parent", bad.name));
+        }
+        *self = Self {
+            objs: f.objs,
+            selected: f.selected.filter(|i| *i < n),
+            prev_selected: f.prev_selected.filter(|i| *i < n),
+            yaw: f.yaw,
+            pitch: f.pitch,
+            dist: f.dist,
+            grid: f.grid,
+            clock: f.clock,
+            joints: f.joints,
+            gizmo: f.gizmo,
+            shading: f.shading,
+            shelf_tab: f.shelf_tab,
+            assign: f.assign,
+            counter: f.counter,
+            ..Self::new()
+        };
+        Ok(())
+    }
 }
 
 #[cfg(test)]

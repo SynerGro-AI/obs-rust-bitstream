@@ -61,6 +61,7 @@ fn ekey(a: usize, b: usize) -> (usize, usize) {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct PolyMesh {
     pub verts: Vec<V3>,
     pub faces: Vec<Vec<usize>>,

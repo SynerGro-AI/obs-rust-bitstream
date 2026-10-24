@@ -14,6 +14,7 @@ pub enum AssignError {
 }
 
 #[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub struct MaterialAssign {
     map: HashMap<String, String>,
 }

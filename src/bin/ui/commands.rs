@@ -175,6 +175,21 @@ pub enum AppCommand {
     },
     SavePsd,
     ExportPng,
+    /// Save the whole workspace as a `.seraphina` project. No path (or
+    /// `save_as`) asks the user where.
+    SaveProject {
+        #[serde(default)]
+        path: Option<String>,
+        #[serde(default)]
+        save_as: bool,
+    },
+    /// Open a `.seraphina` project (asks first if there are unsaved changes).
+    OpenProject {
+        #[serde(default)]
+        path: Option<String>,
+    },
+    /// Start a new, empty project (asks first if there are unsaved changes).
+    NewProject,
     // ---- 3D
     SceneAdd {
         kind: String,
@@ -410,6 +425,9 @@ impl AppCommand {
                 | AppCommand::SavePsd
                 | AppCommand::ExportPng
                 | AppCommand::OpenFile { .. }
+                | AppCommand::SaveProject { .. }
+                | AppCommand::OpenProject { .. }
+                | AppCommand::NewProject
         )
     }
 
@@ -421,6 +439,9 @@ impl AppCommand {
             AppCommand::OpenFile { .. }
                 | AppCommand::SavePsd
                 | AppCommand::ExportPng
+                | AppCommand::SaveProject { .. }
+                | AppCommand::OpenProject { .. }
+                | AppCommand::NewProject
                 | AppCommand::VideoGenerate { .. }
                 | AppCommand::GenerateImage { .. }
                 | AppCommand::VideoExtend { .. }
@@ -430,6 +451,16 @@ impl AppCommand {
                 | AppCommand::SetStreamTarget { .. }
                 | AppCommand::SetStreamKey { .. }
                 | AppCommand::RetryStream
+        )
+    }
+
+    /// Project save/open, which `--run` scripts may use when started with
+    /// `--allow-file-commands`.
+    pub fn is_project_file(&self) -> bool {
+        matches!(
+            self,
+            AppCommand::SaveProject { path: Some(_), .. }
+                | AppCommand::OpenProject { path: Some(_) }
         )
     }
 }
@@ -517,6 +548,9 @@ pub fn tool_specs() -> Vec<ToolSpec> {
         ToolSpec { name: "pan", description: "Pan the Paint view in screen points.", params: obj(json!({ "dx": n("dx"), "dy": n("dy") }), &["dx", "dy"]) },
         ToolSpec { name: "open_file", description: "Open an image as a new layer, or read a PSD header (user approval required).", params: obj(json!({ "path": s("file path") }), &["path"]) },
         ToolSpec { name: "save_psd", description: "Save the document as a layered PSD with pixels, <name>_edit.psd (user approval required).", params: obj(json!({}), &[]) },
+        ToolSpec { name: "save_project", description: "Save every mode (Paint, Animate, Composite, 3D, Materials, Stream settings, optionally this chat) as a .seraphina project (user approval required). Omit path to save to the current project or ask the user.", params: obj(json!({ "path": s("file path; .seraphina is added"), "save_as": b("always ask where to save") }), &[]) },
+        ToolSpec { name: "open_project", description: "Open a .seraphina project, replacing the workspace; the user is asked about unsaved changes (user approval required).", params: obj(json!({ "path": s("file path; omit to ask the user") }), &[]) },
+        ToolSpec { name: "new_project", description: "Start a new project; the user is asked about unsaved changes (user approval required).", params: obj(json!({}), &[]) },
         ToolSpec { name: "export_png", description: "Export a flattened PNG (user approval required).", params: obj(json!({}), &[]) },
         ToolSpec { name: "scene_add", description: "Add a 3D object.", params: obj(json!({ "kind": { "type": "string", "enum": ["cube", "plane", "cylinder", "joint", "light", "camera"] } }), &["kind"]) },
         ToolSpec { name: "scene_select", description: "Select a 3D object by name.", params: obj(json!({ "object": s("object name") }), &["object"]) },

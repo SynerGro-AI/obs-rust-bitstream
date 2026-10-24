@@ -12,6 +12,7 @@ use crate::bitstream::{Position, Reader};
 
 /// Which counter type drives the reader.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "ui", derive(serde::Serialize, serde::Deserialize))]
 pub enum CounterMode {
     /// `usize` counter. Stops at the end of the buffer.
     Safe,

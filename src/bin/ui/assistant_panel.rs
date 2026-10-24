@@ -616,3 +616,97 @@ impl AssistantPanel {
         }
     }
 }
+
+// ---- project files ------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChatItemFile {
+    /// "user", "assistant" or "note".
+    pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    pub text: String,
+    #[serde(default)]
+    pub rated: Option<bool>,
+}
+
+/// The Seraphina conversation in a `.seraphina` project (optional).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChatFile {
+    pub items: Vec<ChatItemFile>,
+}
+
+impl AssistantPanel {
+    /// Action logs are kept as notes: their one-click undo belongs to the
+    /// session that ran them.
+    pub fn to_file(&self) -> ChatFile {
+        let items = self
+            .items
+            .iter()
+            .map(|it| {
+                let (role, source, text) = match &it.kind {
+                    ItemKind::User => ("user", None, it.text.clone()),
+                    ItemKind::Assistant { source } => {
+                        ("assistant", Some(source.clone()), it.text.clone())
+                    }
+                    ItemKind::Actions { lines, .. } => {
+                        let l: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+                        let head = if it.text.is_empty() {
+                            "Seraphina ran".to_string()
+                        } else {
+                            it.text.clone()
+                        };
+                        ("note", None, format!("{}: {}", head, l.join("; ")))
+                    }
+                    ItemKind::Note => ("note", None, it.text.clone()),
+                };
+                ChatItemFile {
+                    role: role.into(),
+                    source,
+                    text,
+                    rated: it.rated,
+                }
+            })
+            .collect();
+        ChatFile { items }
+    }
+
+    /// Replace the conversation; the model context is rebuilt from the
+    /// user and assistant turns (the greeting is not part of it).
+    pub fn load_file(&mut self, f: ChatFile) {
+        self.rx = None;
+        self.pending_calls = None;
+        self.streaming.clear();
+        self.rounds = 0;
+        self.requests.clear();
+        self.convo.clear();
+        self.items = f
+            .items
+            .into_iter()
+            .map(|i| ChatItem {
+                kind: match i.role.as_str() {
+                    "user" => ItemKind::User,
+                    "assistant" => ItemKind::Assistant {
+                        source: i.source.unwrap_or_else(|| "Seraphina".into()),
+                    },
+                    _ => ItemKind::Note,
+                },
+                text: i.text,
+                rated: i.rated,
+            })
+            .collect();
+        for (n, it) in self.items.iter().enumerate() {
+            match it.kind {
+                ItemKind::User => self.convo.push(ChatMsg::new("user", &it.text)),
+                ItemKind::Assistant { .. } if n > 0 => {
+                    self.convo.push(ChatMsg::new("assistant", &it.text))
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn convo_len(&self) -> usize {
+        self.convo.len()
+    }
+}

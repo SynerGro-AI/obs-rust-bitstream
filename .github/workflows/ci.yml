@@ -83,7 +83,9 @@ jobs:
       # headless against egui::Context, no display needed
       - run: cargo test --locked --lib
       - run: cargo test --locked --bin ui
-      # The Windows build used for the release zip (mingw cross-compile).
+      # Keeps the mingw cross-build working. The exe that ships comes from
+      # the MSVC build (windows-ui here, the windows job in release.yml),
+      # with the C runtime linked in by .cargo/config.toml.
       - run: cargo build --locked --release --target x86_64-pc-windows-gnu
 
   windows-ui:

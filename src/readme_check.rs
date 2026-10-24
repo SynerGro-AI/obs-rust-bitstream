@@ -421,3 +421,106 @@ fn a_plain_release_build_makes_the_exe_the_readme_names() {
     );
     assert!(ci.contains("copy target\\release\\ui.exe "));
 }
+
+/// packaging/windows/README.txt promises the exe needs no Visual C++
+/// Redistributable. That holds only if the MSVC build links the C runtime
+/// in, which .cargo/config.toml does for every build (local, ci.yml,
+/// release.yml); a RUSTFLAGS variable in CI would silently replace it.
+#[test]
+fn the_msvc_build_links_the_c_runtime_the_package_readme_promises() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let readme = include_str!("../packaging/windows/README.txt");
+    let ci = include_str!("../.github/workflows/ci.yml");
+    let words = readme.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        words.contains("no Visual C++ Redistributable"),
+        "README.txt no longer makes the promise this test backs"
+    );
+    let path = root.join(".cargo/config.toml");
+    let config = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e}; without it the MSVC exe needs the VC++ Redistributable",
+            path.display()
+        )
+    });
+    let msvc = config
+        .split("[target.x86_64-pc-windows-msvc]")
+        .nth(1)
+        .expect(".cargo/config.toml has no [target.x86_64-pc-windows-msvc] table");
+    let rustflags = msvc
+        .lines()
+        .take_while(|l| !l.trim_start().starts_with('['))
+        .find(|l| l.trim_start().starts_with("rustflags"))
+        .expect("the msvc table sets rustflags");
+    assert!(
+        rustflags.contains("\"target-feature=+crt-static\""),
+        "{rustflags}"
+    );
+    assert!(
+        !ci.contains("RUSTFLAGS"),
+        "ci.yml sets RUSTFLAGS, which overrides .cargo/config.toml's rustflags"
+    );
+}
+
+/// The DLLs a PE image imports, read from its import directory.
+#[cfg(windows)]
+fn pe_imports(b: &[u8]) -> Vec<String> {
+    let u16_at = |o: usize| u16::from_le_bytes([b[o], b[o + 1]]) as usize;
+    let u32_at = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
+    let pe = u32_at(0x3c);
+    assert_eq!(&b[pe..pe + 4], b"PE\0\0", "not a PE image");
+    let sections = u16_at(pe + 6);
+    let opt = pe + 24;
+    let opt_size = u16_at(pe + 20);
+    // PE32+ (0x20b) puts the data directories at 112, PE32 at 96.
+    let dirs = opt + if u16_at(opt) == 0x20b { 112 } else { 96 };
+    let import_rva = u32_at(dirs + 8);
+    let table = opt + opt_size;
+    let file_offset = |rva: usize| {
+        (0..sections)
+            .map(|i| table + i * 40)
+            .find_map(|s| {
+                let (va, size, raw) = (
+                    u32_at(s + 12),
+                    u32_at(s + 8).max(u32_at(s + 16)),
+                    u32_at(s + 20),
+                );
+                (va..va + size).contains(&rva).then(|| rva - va + raw)
+            })
+            .expect("RVA outside every section")
+    };
+    let mut out = Vec::new();
+    let mut d = file_offset(import_rva);
+    while u32_at(d + 12) != 0 {
+        let name = file_offset(u32_at(d + 12));
+        let end = b[name..].iter().position(|&c| c == 0).expect("NUL") + name;
+        out.push(String::from_utf8_lossy(&b[name..end]).to_ascii_lowercase());
+        d += 20;
+    }
+    out
+}
+
+/// On Windows (the MSVC build in CI's windows-ui job, the mingw build
+/// under Wine): this test exe, built with the same flags as the app, must
+/// not import the VC++ / Universal C runtime DLLs.
+#[cfg(windows)]
+#[test]
+fn this_exe_does_not_import_the_vc_runtime() {
+    let exe = std::env::current_exe().expect("current_exe");
+    let imports = pe_imports(&std::fs::read(&exe).expect("read current exe"));
+    assert!(
+        imports.iter().any(|d| d == "kernel32.dll"),
+        "import table not read: {imports:?}"
+    );
+    let crt: Vec<&String> = imports
+        .iter()
+        .filter(|d| {
+            d.starts_with("vcruntime") || d.starts_with("api-ms-win-crt-") || *d == "ucrtbase.dll"
+        })
+        .collect();
+    assert!(
+        crt.is_empty(),
+        "{} imports {crt:?}: the C runtime is not linked in",
+        exe.display()
+    );
+}

@@ -300,7 +300,7 @@ mod tests {
                 layer,
                 density: Some(r.f(1.0)),
                 feather: Some(r.f(8.0)),
-                invert: Some(r.next() % 2 == 0),
+                invert: Some(r.next().is_multiple_of(2)),
                 enabled: None,
             },
             12 => C::SelectRect {

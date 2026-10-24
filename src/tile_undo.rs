@@ -563,7 +563,7 @@ mod tests {
         assert!(h.delta_bytes() <= 64 * 1024, "{}", h.delta_bytes());
         assert!(h.evicted() > 0);
         let kept = h.undo_len();
-        assert!(kept >= 1 && kept < 50);
+        assert!((1..50).contains(&kept));
         // What is kept is exact: the newest `kept` states, newest first.
         for want in states.iter().rev().take(kept) {
             live = h.undo(live).unwrap();

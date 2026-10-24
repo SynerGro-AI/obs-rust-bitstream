@@ -452,6 +452,7 @@ impl App {
 
     /// Write the project to `path` (atomically).
     pub fn save_project_to(&mut self, path: &Path) -> Result<String, String> {
+        self.arena_sync();
         if let Some(d) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(d).map_err(|e| format!("{}: {}", d.display(), e))?;
         }
@@ -470,6 +471,7 @@ impl App {
     }
 
     pub fn open_project_from(&mut self, path: &Path) -> Result<String, String> {
+        self.arena_run = None;
         let c = project::read(path)?;
         self.apply_container(&c)?;
         self.project.path = Some(path.to_path_buf());
@@ -481,6 +483,7 @@ impl App {
 
     /// Start over with the launch workspace.
     pub fn new_project(&mut self) -> String {
+        self.arena_run = None;
         self.paint = crate::paint::PaintState::new(&mut self.toasts);
         self.anim = crate::animate::AnimState::new();
         self.comp = crate::composite::CompState::new();
